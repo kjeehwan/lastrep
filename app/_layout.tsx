@@ -12,15 +12,18 @@ export default function RootLayout() {
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
   });
 
-  if (!loaded) {
-    // Async font loading only occurs in development.
-    return null;
-  }
+  if (!loaded) return null;
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <Stack>
+        {/* Main Tabs */}
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+
+        {/* WorkoutBuilder outside tabs */}
+        <Stack.Screen name="WorkoutBuilder" options={{ headerShown: false }} />
+
+        {/* Catch-all not-found screen */}
         <Stack.Screen name="+not-found" />
       </Stack>
       <StatusBar style="auto" />
