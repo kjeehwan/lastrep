@@ -50,10 +50,10 @@ It leverages **React Native** for a cross-platform frontend and **Firebase** for
 
 ```mermaid
 flowchart TD
-    A[User Device<br/>React Native (Expo) App<br/>• UI: shadcn/ui, Tailwind<br/>• Charts: Recharts<br/>• Animations: Framer<br/>• Offline cache (Firestore SDK)]
-    B[Firebase<br/>• Auth — Email/Google/Apple<br/>• Firestore — Workout Logs<br/>• Functions — AI Coach Calls<br/>• Storage — Optional uploads<br/>• Analytics — Usage metrics]
-    C[AI Coach Layer<br/>Hosted via Firebase Functions<br/>→ Calls external API<br/>→ Returns suggestions, next workout plans, feedback]
-    D[External APIs<br/>OpenAI / Local Model API<br/>(abstracted behind function)]
+    A["User Device\nReact Native (Expo) App\n• UI: shadcn/ui, Tailwind\n• Charts: Recharts\n• Animations: Framer\n• Offline cache (Firestore SDK)"]
+    B["Firebase\n• Auth — Email/Google/Apple\n• Firestore — Workout Logs\n• Functions — AI Coach Calls\n• Storage — Optional uploads\n• Analytics — Usage metrics"]
+    C["AI Coach Layer\nHosted via Firebase Functions\n→ Calls external API\n→ Returns suggestions, next workout plans, feedback"]
+    D["External APIs\nOpenAI / Local Model API\n(abstracted behind function)"]
 
     A --> B --> C --> D
 
