@@ -46,7 +46,7 @@ It leverages **React Native** for a cross-platform frontend and **Firebase** for
 
 ---
 
-## 🧭 System Flow (Mermaid Diagram)
+## 🧭 System Flow
 
 ```mermaid
 flowchart LR
@@ -58,6 +58,8 @@ flowchart LR
     A --> B --> C --> D
 ```
 
+---
+
 ## 🔒 Security & Privacy
 
 - End-to-end communication secured via HTTPS
@@ -67,6 +69,8 @@ flowchart LR
 - Firestore rules enforce per-user data isolation
 
 - AI API keys stored securely in Firebase environment variables
+
+---
 
 ## 🧰 Future Extensions
 
