@@ -1,93 +1,84 @@
-🧱 LastRep Tech Stack Decision Document
+# 🧱 LastRep Tech Stack Decision Document
 
-Date: October 2025
-Stage: Sprint 1 — Foundation
+**Date:** October 2025  
+**Stage:** Sprint 1 — Foundation  
 
-🔭 Overview
+---
 
-LastRep is a mobile fitness app focused on integrity, self-improvement, and holistic training.
-The MVP centers on workout logging, progress tracking, and a lightweight AI coach — built to be fast, stable, and easy to iterate.
+## 🔭 Overview
 
-This document records the selected technology stack for the MVP and the rationale behind each decision.
+LastRep is a mobile fitness app focused on **integrity, self-improvement, and holistic training**.  
+The MVP centers on **workout logging, progress tracking, and a lightweight AI coach** — built to be fast, stable, and easy to iterate.
 
-🖥️ Front-End
+This document records the selected **technology stack** for the MVP and the rationale behind each decision.
 
-Framework: React Native (Expo)
+---
 
-Enables cross-platform development (iOS + Android) with minimal configuration.
+## 🖥️ Front-End
 
-Excellent community support and rapid iteration speed.
+| Category | Technology | Rationale |
+|-----------|-------------|-----------|
+| **Framework** | React Native (Expo) | Enables cross-platform development (iOS + Android) with minimal setup and strong community support. |
+| **Language** | TypeScript | Adds type safety and scalability for future contributors. |
+| **Styling** | Tailwind CSS (via NativeWind) | Utility-first styling for rapid prototyping. |
+| **UI Components** | shadcn/ui | Provides a consistent, modern UI base. |
+| **Animations** | Framer Motion | Smooth, physics-based motion for a premium feel. |
+| **Charts** | Recharts | For weekly progress summaries and analytics visualizations. |
 
-Language: TypeScript
+---
 
-Adds type safety and improves scalability for future contributors.
+## ☁️ Back-End & Database
 
-UI & Styling:
+| Feature | Tool | Reason |
+|----------|------|--------|
+| **Auth** | Firebase Authentication | Simple, secure, and ready for email + Google/Apple sign-in. |
+| **Database** | Firestore (NoSQL) | Fast, scalable, and flexible for dynamic workout logs. |
+| **Functions** | Firebase Cloud Functions | Powers AI Coach API calls and custom logic. |
+| **Storage** | Firebase Storage | Optional for user uploads or exports. |
+| **Analytics** | Firebase Analytics + Crashlytics | Built-in insights and error tracking. |
 
-Tailwind CSS (via NativeWind) → utility-first styling for fast prototyping.
+---
 
-shadcn/ui → consistent, modern UI components.
+### 🧩 Rationale
 
-Framer Motion → smooth, physics-based animations.
+- Seamless integration with Expo and TypeScript.  
+- Excellent **offline support**, crucial for workouts in low-connectivity environments.  
+- Minimal DevOps overhead — focus on **UX and feature velocity**.  
+- Easily scalable for MVP and early-stage growth.
 
-Recharts → charts for weekly progress summaries.
+---
 
-☁️ Back-End & Database
+### ⚠️ Known Limitations
 
-Chosen Platform: Firebase
+- NoSQL (Firestore) is **less ideal for relational queries**.  
+- A future migration to SQL (e.g., Supabase/Postgres) may be needed for complex data models.
 
-Feature	Tool	Reason
-Auth	Firebase Authentication	Simple, secure, ready for email + Google/Apple.
-Database	Firestore (NoSQL)	Fast, scalable, perfect for flexible workout logs.
-Functions	Firebase Cloud Functions	Used for AI Coach API calls and custom logic.
-Storage	Firebase Storage	Optional for user photos or data exports.
-Analytics	Firebase Analytics + Crashlytics	Built-in app insights and error tracking.
+---
 
-Rationale:
+## 🧭 Future Considerations
 
-Seamless integration with Expo.
+| Area | Possible Upgrade | Reason |
+|-------|------------------|--------|
+| **Database** | Supabase / Postgres | For advanced analytics and relational structures (e.g., exercises, programs). |
+| **API Layer** | Express or Next.js Routes | To decouple AI logic from Firebase Functions. |
+| **Analytics** | Mixpanel or Amplitude | For deeper engagement and behavior tracking. |
 
-Excellent offline support — critical for workout logging in low-connectivity areas.
+---
 
-Minimal DevOps overhead; allows focus on UX and core logic.
+## 📁 Repository Structure (Initial)
 
-Scales adequately for MVP and early growth.
-
-Known Limitations:
-
-NoSQL structure less ideal for complex relational queries.
-
-Migrating to SQL (e.g., Supabase/Postgres) may be required in later versions.
-
-🧩 Future Considerations
-Area	Possible Upgrade	Reason
-Database	Supabase / Postgres	For advanced analytics and relational models (programs, exercises).
-API Layer	Express or Next.js API routes	To decouple AI logic from Firebase Functions.
-Analytics	Mixpanel or Amplitude	For deeper user engagement metrics.
-📁 Repository Structure (Initial)
-/lastrep-app
-  /src
-    /components
-    /screens
-    /services
-    /utils
-  app.json
-  package.json
-  firebaseConfig.ts
-/docs
-  tech-stack.md
-  architecture.md (future)
-
-✅ Next Action Items
-
-Initialize Firebase project.
-
-Connect Firebase SDK to Expo app.
-
-Implement test flow:
-
-Email/password sign-up
-
-Add & retrieve sample “workout log”
-
-Verify offline → online sync behavior.
+```plaintext
+/lastrep
+├── /docs
+│   ├── architecture.md
+│   └── tech-stack.md
+│
+├── /lastrep-app
+│   ├── /src
+│   │   ├── /components
+│   │   ├── /screens
+│   │   ├── /services
+│   │   └── /utils
+│   ├── app.json
+│   ├── package.json
+│   └── firebaseConfig.ts
