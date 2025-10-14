@@ -49,11 +49,11 @@ It leverages **React Native** for a cross-platform frontend and **Firebase** for
 ## 🧭 System Flow (Mermaid Diagram)
 
 ```mermaid
-flowchart TD
-    A["User Device<br/>React Native (Expo) App<br/>• UI: shadcn/ui, Tailwind<br/>• Charts: Recharts<br/>• Animations: Framer<br/>• Offline cache (Firestore SDK)"]
-    B["Firebase<br/>• Auth — Email/Google/Apple<br/>• Firestore — Workout Logs<br/>• Functions — AI Coach Calls<br/>• Storage — Optional uploads<br/>• Analytics — Usage metrics"]
-    C["AI Coach Layer<br/>Hosted via Firebase Functions<br/>→ Calls external API<br/>→ Returns suggestions, next workout plans, feedback"]
-    D["External APIs<br/>OpenAI / Local Model API<br/>(abstracted behind function)"]
+flowchart LR
+    A["User Device<br/>React Native (Expo) App<br/>• UI: shadcn/ui, Tailwind<br/>• Charts: Recharts<br/>• Animations: Framer<br/>• Offline cache (Firestore SDK)<br/><span style='opacity:0'>__________________________</span>"]
+    B["Firebase<br/>• Auth — Email/Google/Apple<br/>• Firestore — Workout Logs<br/>• Functions — AI Coach Calls<br/>• Storage — Optional uploads<br/>• Analytics — Usage metrics<br/><span style='opacity:0'>__________________________</span>"]
+    C["AI Coach Layer<br/>Hosted via Firebase Functions<br/>→ Calls external API<br/>→ Returns suggestions, next workout plans, feedback<br/><span style='opacity:0'>__________________________</span>"]
+    D["External APIs<br/>OpenAI / Local Model API<br/>(abstracted behind function)<br/><span style='opacity:0'>__________________________</span>"]
 
     A --> B --> C --> D
 ```
