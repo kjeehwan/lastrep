@@ -56,6 +56,7 @@ flowchart TD
     D["External APIs\nOpenAI / Local Model API\n(abstracted behind function)"]
 
     A --> B --> C --> D
+```
 
 🔒 Security & Privacy
 
