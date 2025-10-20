@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./assets/banner.svg" alt="LastRep – React Native + Expo + Firebase" width="100%" />
+  <img src="./assets/images/banner.svg" alt="LastRep – React Native + Expo + Firebase" width="100%" />
 </p>
 
 <h1 align="center">🏋️‍♂️ LastRep</h1>
