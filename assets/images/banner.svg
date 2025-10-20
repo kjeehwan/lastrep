@@ -1,0 +1,20 @@
+<svg width="1200" height="360" viewBox="0 0 1200 360" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0088A9"></stop>
+      <stop offset="100%" stop-color="#00C8FF"></stop>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="360" fill="url(#g)"></rect>
+  <g font-family="Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif">
+    <text x="60" y="140" font-size="64" fill="#FFFFFF" font-weight="800">LastRep</text>
+    <text x="60" y="200" font-size="28" fill="#FFFFFF" opacity="0.95">React Native + Expo + Firebase</text>
+    <rect x="60" y="240" rx="12" ry="12" width="360" height="56" fill="#FFFFFF" opacity="0.15"></rect>
+    <text x="78" y="277" font-size="22" fill="#FFFFFF" opacity="0.95">MVP: smart onboarding · quick logging</text>
+  </g>
+  <g transform="translate(820,40)" opacity="0.2">
+    <circle cx="120" cy="120" r="100" fill="#FFFFFF"></circle>
+    <circle cx="220" cy="220" r="60" fill="#FFFFFF"></circle>
+    <circle cx="40" cy="220" r="40" fill="#FFFFFF"></circle>
+  </g>
+</svg>

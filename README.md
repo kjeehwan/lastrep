@@ -1,50 +1,188 @@
-# Welcome to your Expo app 👋
+```markdown
+<p align="center">
+  <img src="./assets/banner.svg" alt="LastRep – React Native + Expo + Firebase" width="100%" />
+</p>
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+<h1 align="center">🏋️‍♂️ LastRep</h1>
 
-## Get started
+<p align="center">
+  <i>Your coach, partner, and guide for training, recovery, and growth.</i>
+</p>
 
-1. Install dependencies
+---
 
-   ```bash
-   npm install
-   ```
+## 🚀 Overview
 
-2. Start the app
+**LastRep** is a holistic fitness app built with **React Native + Expo + Firebase**.  
+It helps users train smarter — not just harder — by combining intelligent workout tracking, personalized planning, and mindful progress tracking.
 
-   ```bash
-   npx expo start
-   ```
+---
 
-In the output, you'll find options to open the app in a
+## 🧩 Tech Stack
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+| Category | Technology |
+|-----------|-------------|
+| Framework | React Native (Expo Router) |
+| Backend | Firebase Auth + Firestore |
+| Language | TypeScript |
+| UI | Tailwind / shadcn / custom teal-blue theme |
+| Deployment | Vercel (Web Preview) |
+| State | React Hooks + Firestore persistence |
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+---
 
-## Get a fresh project
+## 💡 Core Features
 
-When you're ready, run:
+✅ **Modern Onboarding Flow**  
+Guides users through goal selection, training experience, and weekly availability.
 
-```bash
-npm run reset-project
+✅ **Secure Authentication**  
+Email/password sign-up and login using Firebase Auth (Google/Apple coming soon).
+
+✅ **Profile Management**  
+Users can store nickname, age, gender, height, weight, and units (metric/imperial) — with auto-conversion.
+
+✅ **Workout Logging**  
+Log exercises, sets, reps, and weight — synced directly to Firestore.
+
+✅ **Dashboard**  
+Home screen with “Start Workout,” recent history, and quick navigation.
+
+✅ **Consistent Design Language**  
+Unified teal-blue palette, elegant typography, and modern minimal UI.
+
+---
+
+## 🧭 User Flow
+
+```mermaid
+flowchart TD
+    A[Launch Screen] --> B[Sign In / Sign Up]
+    B --> C[Onboarding Flow]
+    C --> D[Home Dashboard]
+    D --> E[Workout Logging]
+    D --> F[Profile Management]
+
+    classDef main fill:#00A9C9,stroke:#0088A9,stroke-width:2,color:#fff;
+    classDef secondary fill:#F0F9FF,stroke:#00A9C9,stroke-width:1.5,color:#111;
+
+    class A,B,C,D main;
+    class E,F secondary;
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+---
 
-## Learn more
+## 🏗️ App Architecture
 
-To learn more about developing your project with Expo, look at the following resources:
+```mermaid
+flowchart TB
+    subgraph Client["📱 User Device (Expo App)"]
+        A1["React Native (Expo Router)"]
+        A2["UI Layer\n• Tailwind / shadcn\n• Recharts / Framer Motion"]
+        A3["Async Storage\n(Local Cache)"]
+    end
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+    subgraph Backend["☁️ Firebase"]
+        B1["Authentication"]
+        B2["Firestore Database"]
+        B3["Storage (Future: Avatar, Plan Data)"]
+    end
 
-## Join the community
+    subgraph Deployment["🌍 Deployment & CI/CD"]
+        C1["Vercel (Web Preview)"]
+        C2["EAS Build (iOS / Android)"]
+        C3["GitHub Actions (Future)"]
+    end
 
-Join our community of developers creating universal apps.
+    A1 --> A2 --> A3
+    A1 -->|Auth & Data Sync| B1
+    A2 -->|Profile & Workout Data| B2
+    A3 -->|Offline Read/Write| B2
+    B2 -->|Static Export| C1
+    B2 -->|Mobile Builds| C2
+    C3 -->|Auto Deploy| C1
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+    classDef client fill:#00A9C9,stroke:#0088A9,stroke-width:2,color:#fff;
+    classDef backend fill:#F0F9FF,stroke:#00A9C9,stroke-width:1.5,color:#111;
+    classDef deploy fill:#E6FCFF,stroke:#00C8FF,stroke-width:1.5,color:#111;
+
+    class Client client;
+    class Backend backend;
+    class Deployment deploy;
+```
+
+---
+
+## 🛠️ Local Development
+
+### 1️⃣ Clone the repo
+
+```bash
+git clone https://github.com/kjeehwan/lastrep.git
+cd lastrep
+```
+
+### 2️⃣ Install dependencies
+
+```bash
+npm install
+```
+
+### 3️⃣ Start the development server
+
+```bash
+npx expo start
+```
+
+### 4️⃣ Run in Expo Go or on web
+
+Expo Go: Scan QR code from terminal
+Web: npx expo start --web
+
+---
+
+## 🌍 Web Demo
+
+Live Preview: https://lastrep.vercel.app
+Accessible on desktop and mobile browsers — no Expo Go required.
+
+---
+
+## 🧱 Project Sprints (from Trello)
+
+| Sprint            | Period          | Focus                                                           | Status         |
+| ----------------- | --------------- | --------------------------------------------------------------- | -------------- |
+| **Sprint 1**      | Oct 2 – 13      | Foundation – MVP scope, onboarding wireframes, tech stack setup | ✅ Complete     |
+| **Sprint 2**      | Oct 14 – 20     | Authentication + Firestore profile storage                      | ✅ Complete     |
+| **Sprint 3**      | Oct 21 – 27     | Profile polish + Settings + Offline cache                       | 🟡 In Progress |
+| **Sprint 4**      | Oct 28 – Nov 3  | Home dashboard core (AI coach “blob”, weekly summary)           | ⏳ Planned      |
+| **Sprint 5**      | Nov 4 – 10      | Workout detail logging and plan templates                       | ⏳ Planned      |
+| **Sprint 6 – 12** | Nov 11 – Dec 31 | Progressive enhancements, analytics, and MVP readiness          | 🧩 Future      |
+| **MVP Target**    | Dec 31          | Functional, data-driven fitness app ready for closed demo       | 🚀 Goal        |
+
+---
+
+## 🧭 Philosophy
+
+“The rep that defines you isn’t the first — it’s the last.”
+
+LastRep is built on integrity, discipline, and self-improvement —
+a guide that motivates without ego, helps without judgment, and grows alongside you.
+
+---
+
+## 🤝 Contributing
+
+Pull requests and feedback are welcome.
+If you’d like to contribute features or fix issues, open a PR or issue in GitHub.
+
+---
+
+## 🪪 License
+
+This project is licensed under the MIT License.
+
+---
+
+<p align="center"> <i>Built with integrity • Focused on growth • Powered by Expo</i> </p>
+```
