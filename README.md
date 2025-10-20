@@ -1,4 +1,3 @@
-```markdown
 <p align="center">
   <img src="./assets/banner.svg" alt="LastRep – React Native + Expo + Firebase" width="100%" />
 </p>
@@ -185,4 +184,3 @@ This project is licensed under the MIT License.
 ---
 
 <p align="center"> <i>Built with integrity • Focused on growth • Powered by Expo</i> </p>
-```
