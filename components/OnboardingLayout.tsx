@@ -1,5 +1,12 @@
 import React from "react";
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import {
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { useTheme } from "../contexts/ThemeContext";
 import { Colors } from "../styles/colors";
 
 type OnboardingLayoutProps = {
@@ -19,15 +26,38 @@ export default function OnboardingLayout({
   nextLabel = "Next",
   showNext = true,
 }: OnboardingLayoutProps) {
+  // ✅ Safe theme fallback — use ThemeContext if available, else fallback to static Colors
+  let activeTheme = Colors;
+  try {
+    const { theme } = useTheme();
+    if (theme) activeTheme = theme;
+  } catch {
+    // outside ThemeProvider (e.g., onboarding)
+    activeTheme = Colors;
+  }
+
   return (
-    <View style={styles.container}>
+    <View
+      style={[
+        styles.container,
+        { backgroundColor: activeTheme.background },
+      ]}
+    >
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.header}>
-          <Text style={styles.title}>{title}</Text>
-          {subtitle && <Text style={styles.subtitle}>{subtitle}</Text>}
+          <Text style={[styles.title, { color: activeTheme.textPrimary }]}>
+            {title}
+          </Text>
+          {subtitle && (
+            <Text
+              style={[styles.subtitle, { color: activeTheme.textSecondary }]}
+            >
+              {subtitle}
+            </Text>
+          )}
         </View>
 
         <View style={styles.content}>{children}</View>
@@ -35,11 +65,21 @@ export default function OnboardingLayout({
 
       {showNext && (
         <TouchableOpacity
-          style={styles.nextButton}
+          style={[
+            styles.nextButton,
+            { backgroundColor: activeTheme.primary, shadowColor: activeTheme.primary },
+          ]}
           onPress={onNext}
           activeOpacity={0.85}
         >
-          <Text style={styles.nextButtonText}>{nextLabel}</Text>
+          <Text
+            style={[
+              styles.nextButtonText,
+              { color: activeTheme.surface },
+            ]}
+          >
+            {nextLabel}
+          </Text>
         </TouchableOpacity>
       )}
     </View>
@@ -49,7 +89,6 @@ export default function OnboardingLayout({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
     paddingHorizontal: 24,
     paddingTop: 60,
     paddingBottom: 32,
@@ -65,13 +104,11 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 26,
     fontWeight: "700",
-    color: Colors.textPrimary,
     marginBottom: 8,
     textAlign: "center",
   },
   subtitle: {
     fontSize: 16,
-    color: Colors.textSecondary,
     textAlign: "center",
     lineHeight: 22,
   },
@@ -81,18 +118,15 @@ const styles = StyleSheet.create({
     justifyContent: "flex-start",
   },
   nextButton: {
-    backgroundColor: Colors.primary,
     paddingVertical: 16,
     borderRadius: 14,
     alignItems: "center",
-    shadowColor: Colors.primary,
     shadowOpacity: 0.25,
     shadowOffset: { width: 0, height: 3 },
     shadowRadius: 5,
     elevation: 3,
   },
   nextButtonText: {
-    color: Colors.surface,
     fontSize: 16,
     fontWeight: "700",
   },

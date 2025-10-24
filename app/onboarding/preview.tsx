@@ -50,7 +50,7 @@ export default function Preview() {
           samplePlan: plan,
         });
       }
-      router.replace("/home/index");
+      router.replace("/home");
     } catch (err) {
       console.error("Error finishing onboarding:", err);
     }
