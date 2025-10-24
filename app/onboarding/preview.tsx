@@ -4,18 +4,62 @@ import { doc, getDoc, updateDoc } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import OnboardingLayout from "../../components/OnboardingLayout";
+import { useTheme } from "../../contexts/ThemeContext";
 import { db } from "../../firebaseConfig"; // adjust path if needed
-import { Colors } from "../../styles/colors";
 
 type PlanDay = { day: string; focus: string; exercises: string[] };
 
 export default function Preview() {
   const router = useRouter();
+  const { theme } = useTheme();
+
+  /* ---- STYLES ---- */
+  const styles = StyleSheet.create({
+    cardContainer: { width: "100%", marginTop: 12 },
+    card: {
+      backgroundColor: theme.background,
+      borderRadius: 14,
+      paddingVertical: 16,
+      paddingHorizontal: 20,
+      marginBottom: 14,
+      borderWidth: 1,
+      borderColor: "#E5E7EB",
+      shadowColor: "#000",
+      shadowOpacity: 0.05,
+      shadowRadius: 5,
+      shadowOffset: { width: 0, height: 3 },
+      elevation: 2,
+    },
+    cardTitle: {
+      fontSize: 15,
+      fontWeight: "700",
+      color: theme.textPrimary,
+      marginBottom: 4,
+    },
+    cardFocus: {
+      fontSize: 14,
+      color: theme.primary,
+      marginBottom: 8,
+    },
+    exercise: {
+      fontSize: 14,
+      color: theme.textSecondary,
+      marginLeft: 6,
+      lineHeight: 20,
+    },
+    emptyText: {
+      textAlign: "center",
+      color: theme.textSecondary,
+      fontSize: 15,
+      marginTop: 20,
+    },
+  });
+  
   const [goal, setGoal] = useState<string | null>(null);
   const [experience, setExperience] = useState<string | null>(null);
   const [days, setDays] = useState<number | null>(null);
   const [plan, setPlan] = useState<PlanDay[]>([]);
-
+  
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -139,45 +183,3 @@ function generateSamplePlan(
 
   return plan;
 }
-
-/* ---- STYLES ---- */
-const styles = StyleSheet.create({
-  cardContainer: { width: "100%", marginTop: 12 },
-  card: {
-    backgroundColor: Colors.surface,
-    borderRadius: 14,
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 5,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 2,
-  },
-  cardTitle: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: Colors.textPrimary,
-    marginBottom: 4,
-  },
-  cardFocus: {
-    fontSize: 14,
-    color: Colors.primary,
-    marginBottom: 8,
-  },
-  exercise: {
-    fontSize: 14,
-    color: Colors.textSecondary,
-    marginLeft: 6,
-    lineHeight: 20,
-  },
-  emptyText: {
-    textAlign: "center",
-    color: Colors.textSecondary,
-    fontSize: 15,
-    marginTop: 20,
-  },
-});

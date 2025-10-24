@@ -1,6 +1,6 @@
 import { getAuth } from "firebase/auth";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   StyleSheet,
@@ -15,7 +15,8 @@ import { db } from "../../../firebaseConfig";
 export default function Profile() {
   const auth = getAuth();
   const user = auth.currentUser;
-  const { theme } = useTheme(); // ✅ theme context
+  const { theme } = useTheme();
+
   const [saved, setSaved] = useState(true);
   const [loading, setLoading] = useState(false);
 
@@ -26,11 +27,13 @@ export default function Profile() {
   const [weight, setWeight] = useState("");
   const [units, setUnits] = useState<"metric" | "imperial">("metric");
 
+  // Unit conversion helpers
   const cmToInches = (cm: number) => cm / 2.54;
   const inchesToCm = (inch: number) => inch * 2.54;
   const kgToLb = (kg: number) => kg * 2.20462;
   const lbToKg = (lb: number) => lb / 2.20462;
 
+  // Load user profile
   useEffect(() => {
     const loadProfile = async () => {
       if (!user) return;
@@ -85,73 +88,78 @@ export default function Profile() {
   const weightPlaceholder =
     units === "metric" ? "Enter weight in kg" : "Enter weight in lb";
 
-  const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: theme.background, padding: 24 },
-    title: {
-      fontSize: 24,
-      fontWeight: "700",
-      color: theme.textPrimary,
-      marginBottom: 24,
-    },
-    label: {
-      fontSize: 16,
-      color: theme.textSecondary,
-      marginBottom: 6,
-    },
-    input: {
-      backgroundColor: theme.surface,
-      borderRadius: 12,
-      borderWidth: 1,
-      borderColor: theme.border,
-      paddingVertical: 12,
-      paddingHorizontal: 16,
-      fontSize: 16,
-      color: theme.textPrimary,
-      marginBottom: 16,
-    },
-    row: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      marginBottom: 20,
-    },
-    option: {
-      flex: 1,
-      borderWidth: 1,
-      borderColor: theme.border,
-      borderRadius: 10,
-      paddingVertical: 10,
-      alignItems: "center",
-      marginHorizontal: 4,
-      backgroundColor: theme.surface,
-    },
-    optionActive: {
-      borderColor: theme.primary,
-      backgroundColor: theme.highlight,
-    },
-    optionText: {
-      fontSize: 14,
-      color: theme.textPrimary,
-    },
-    optionTextActive: {
-      color: theme.primary,
-      fontWeight: "700",
-    },
-    saveButton: {
-      backgroundColor: theme.primary,
-      borderRadius: 14,
-      paddingVertical: 16,
-      alignItems: "center",
-      marginTop: 10,
-    },
-    saveButtonSaved: {
-      backgroundColor: theme.success,
-    },
-    saveButtonText: {
-      color: theme.buttonText,
-      fontSize: 16,
-      fontWeight: "700",
-    },
-  });
+  // ✅ Memoized styles for smooth theme switching
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        container: { flex: 1, backgroundColor: theme.background, padding: 24 },
+        title: {
+          fontSize: 24,
+          fontWeight: "700",
+          color: theme.textPrimary,
+          marginBottom: 24,
+        },
+        label: {
+          fontSize: 16,
+          color: theme.textSecondary,
+          marginBottom: 6,
+        },
+        input: {
+          backgroundColor: theme.surface,
+          borderRadius: 12,
+          borderWidth: 1,
+          borderColor: theme.border,
+          paddingVertical: 12,
+          paddingHorizontal: 16,
+          fontSize: 16,
+          color: theme.textPrimary,
+          marginBottom: 16,
+        },
+        row: {
+          flexDirection: "row",
+          justifyContent: "space-between",
+          marginBottom: 20,
+        },
+        option: {
+          flex: 1,
+          borderWidth: 1,
+          borderColor: theme.border,
+          borderRadius: 10,
+          paddingVertical: 10,
+          alignItems: "center",
+          marginHorizontal: 4,
+          backgroundColor: theme.surface,
+        },
+        optionActive: {
+          borderColor: theme.primary,
+          backgroundColor: theme.highlight,
+        },
+        optionText: {
+          fontSize: 14,
+          color: theme.textPrimary,
+        },
+        optionTextActive: {
+          color: theme.primary,
+          fontWeight: "700",
+        },
+        saveButton: {
+          backgroundColor: theme.primary,
+          borderRadius: 14,
+          paddingVertical: 16,
+          alignItems: "center",
+          marginTop: 10,
+        },
+        saveButtonSaved: {
+          backgroundColor: theme.success,
+        },
+        saveButtonText: {
+          color: theme.onPrimary,
+          fontSize: 16,
+          fontWeight: "700",
+        },
+      }),
+    [theme]
+  );
 
   return (
     <View style={styles.container}>
@@ -187,20 +195,15 @@ export default function Profile() {
         {["Male", "Female", "Other"].map((g) => (
           <TouchableOpacity
             key={g}
-            style={[
-              styles.option,
-              gender === g && styles.optionActive,
-            ]}
+            style={[styles.option, gender === g && styles.optionActive]}
             onPress={() => {
               setGender(g);
               markEdited();
             }}
+            activeOpacity={0.85}
           >
             <Text
-              style={[
-                styles.optionText,
-                gender === g && styles.optionTextActive,
-              ]}
+              style={[styles.optionText, gender === g && styles.optionTextActive]}
             >
               {g}
             </Text>
@@ -213,10 +216,7 @@ export default function Profile() {
         {["metric", "imperial"].map((u) => (
           <TouchableOpacity
             key={u}
-            style={[
-              styles.option,
-              units === u && styles.optionActive,
-            ]}
+            style={[styles.option, units === u && styles.optionActive]}
             onPress={() => {
               if (units !== u) {
                 const h = parseFloat(height);
@@ -234,12 +234,10 @@ export default function Profile() {
                 markEdited();
               }
             }}
+            activeOpacity={0.85}
           >
             <Text
-              style={[
-                styles.optionText,
-                units === u && styles.optionTextActive,
-              ]}
+              style={[styles.optionText, units === u && styles.optionTextActive]}
             >
               {u === "metric" ? "Metric (kg/cm)" : "Imperial (lb/in)"}
             </Text>
@@ -281,6 +279,7 @@ export default function Profile() {
         ]}
         onPress={handleSave}
         disabled={loading}
+        activeOpacity={0.85}
       >
         <Text style={styles.saveButtonText}>
           {loading

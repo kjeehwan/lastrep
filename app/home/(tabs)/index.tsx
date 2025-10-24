@@ -1,6 +1,6 @@
 import { Stack, useRouter } from "expo-router";
 import { Settings } from "lucide-react-native";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   ScrollView,
   StyleSheet,
@@ -17,16 +17,77 @@ type WorkoutSummary = {
 
 export default function Home() {
   const router = useRouter();
-  const { theme } = useTheme(); // 🎨 use theme context
+  const { theme } = useTheme();
   const [history, setHistory] = useState<WorkoutSummary[]>([]);
 
   useEffect(() => {
     // Later: load history from Firestore or local cache
   }, []);
 
+  // ✅ Memoized styles to respond to theme changes efficiently
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        container: {
+          flexGrow: 1,
+          backgroundColor: theme.background,
+          padding: 24,
+        },
+        title: {
+          fontSize: 24,
+          fontWeight: "700",
+          color: theme.textPrimary,
+          marginBottom: 16,
+        },
+        subtitle: {
+          fontSize: 18,
+          fontWeight: "600",
+          color: theme.textPrimary,
+          marginTop: 24,
+          marginBottom: 10,
+        },
+        card: {
+          borderRadius: 14,
+          paddingVertical: 16,
+          paddingHorizontal: 20,
+          marginBottom: 14,
+          borderWidth: 1,
+          borderColor: theme.border,
+          backgroundColor: theme.surface,
+        },
+        cardDate: {
+          fontSize: 15,
+          fontWeight: "700",
+          color: theme.textPrimary,
+        },
+        cardDetails: {
+          fontSize: 14,
+          marginTop: 4,
+          color: theme.textSecondary,
+        },
+        emptyText: {
+          fontSize: 15,
+          color: theme.textSecondary,
+          marginTop: 10,
+        },
+        startButton: {
+          backgroundColor: theme.primary,
+          borderRadius: 14,
+          paddingVertical: 16,
+          alignItems: "center",
+        },
+        startButtonText: {
+          fontSize: 16,
+          fontWeight: "700",
+          color: theme.onPrimary,
+        },
+      }),
+    [theme]
+  );
+
   return (
     <>
-      {/* Header with gear icon */}
+      {/* 🧭 Header */}
       <Stack.Screen
         options={{
           title: "Home",
@@ -48,104 +109,38 @@ export default function Home() {
         }}
       />
 
-      {/* Main content */}
+      {/* 🏠 Main content */}
       <ScrollView
-        style={{ flex: 1, backgroundColor: theme.background }} // ✅ Add this line
-        contentContainerStyle={[
-          styles.container,
-          { backgroundColor: theme.background },
-        ]}
+        style={{ flex: 1, backgroundColor: theme.background }}
+        contentContainerStyle={styles.container}
       >
-        <Text style={[styles.title, { color: theme.textPrimary }]}>
-          Welcome back 👋
-        </Text>
+        <Text style={styles.title}>Welcome back 👋</Text>
 
         <TouchableOpacity
-          style={[
-            styles.startButton,
-            { backgroundColor: theme.primary, borderColor: theme.primary },
-          ]}
+          style={styles.startButton}
           onPress={() => router.push("/workout/start")}
           activeOpacity={0.85}
         >
-          <Text style={[styles.startButtonText, { color: theme.surface }]}>
-            Start Workout
-          </Text>
+          <Text style={styles.startButtonText}>Start Workout</Text>
         </TouchableOpacity>
 
-        <Text style={[styles.subtitle, { color: theme.textPrimary }]}>
-          Workout History
-        </Text>
+        <Text style={styles.subtitle}>Workout History</Text>
 
         {history.length > 0 ? (
           history.map((item, index) => (
-            <View
-              key={index}
-              style={[
-                styles.card,
-                {
-                  backgroundColor: theme.surface,
-                  borderColor: "#E5E7EB",
-                },
-              ]}
-            >
-              <Text style={[styles.cardDate, { color: theme.textPrimary }]}>
+            <View key={index} style={styles.card}>
+              <Text style={styles.cardDate}>
                 {new Date(item.date).toLocaleDateString()}
               </Text>
-              <Text style={[styles.cardDetails, { color: theme.textSecondary }]}>
+              <Text style={styles.cardDetails}>
                 {item.exercises.length} exercises logged
               </Text>
             </View>
           ))
         ) : (
-          <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
-            No workouts logged yet.
-          </Text>
+          <Text style={styles.emptyText}>No workouts logged yet.</Text>
         )}
       </ScrollView>
     </>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { padding: 24 },
-  title: {
-    fontSize: 24,
-    fontWeight: "700",
-    marginBottom: 16,
-  },
-  subtitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    marginTop: 24,
-    marginBottom: 10,
-  },
-  card: {
-    borderRadius: 14,
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    marginBottom: 14,
-    borderWidth: 1,
-  },
-  cardDate: {
-    fontSize: 15,
-    fontWeight: "700",
-  },
-  cardDetails: {
-    fontSize: 14,
-    marginTop: 4,
-  },
-  emptyText: {
-    fontSize: 15,
-    marginTop: 10,
-  },
-  startButton: {
-    paddingVertical: 16,
-    borderRadius: 14,
-    alignItems: "center",
-  },
-  startButtonText: {
-    fontSize: 16,
-    fontWeight: "700",
-  },
-});

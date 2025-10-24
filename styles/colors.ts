@@ -16,6 +16,10 @@ export const LightColors = {
   success: "#22C55E",
   buttonText: "#FFFFFF",
   placeholder: "#9CA3AF",
+
+  // ✨ Newly added for consistency
+  inputBackground: "#F3F4F6",
+  onPrimary: "#FFFFFF",
 };
 
 // 🌚 Dark mode palette
@@ -34,6 +38,10 @@ export const DarkColors = {
   success: "#16A34A",
   buttonText: "#FFFFFF",
   placeholder: "#64748B",
+
+  // ✨ Newly added for consistency
+  inputBackground: "#334155", // subtle contrast for inputs
+  onPrimary: "#FFFFFF",
 };
 
 // ✅ TypeScript type for both themes

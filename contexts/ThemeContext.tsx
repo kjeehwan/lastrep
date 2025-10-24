@@ -1,40 +1,45 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { Appearance } from "react-native";
-import { DarkColors, LightColors } from "../styles/colors";
+import { getTheme, Theme } from "../styles/colors";
 
 type ThemeMode = "light" | "dark" | "system";
 
-const ThemeContext = createContext({
-  theme: LightColors,
-  themeMode: "system" as ThemeMode,
-  setThemeMode: (_: ThemeMode) => {},
+interface ThemeContextValue {
+  themeMode: ThemeMode;
+  setThemeMode: (mode: ThemeMode) => void;
+  theme: Theme;
+}
+
+const ThemeContext = createContext<ThemeContextValue>({
+  themeMode: "system",
+  setThemeMode: () => {},
+  theme: getTheme("light"),
 });
 
 export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
   const [themeMode, setThemeMode] = useState<ThemeMode>("system");
-  const [theme, setTheme] = useState(LightColors);
+  const [theme, setTheme] = useState<Theme>(getTheme("light"));
 
   useEffect(() => {
-    (async () => {
-      const stored = await AsyncStorage.getItem("themeMode");
-      if (stored === "light" || stored === "dark" || stored === "system")
-        setThemeMode(stored);
-    })();
+    const loadTheme = async () => {
+      const saved = await AsyncStorage.getItem("themeMode");
+      const mode = (saved as ThemeMode) || "system";
+      applyTheme(mode);
+    };
+    loadTheme();
   }, []);
 
-  useEffect(() => {
-    const sys = Appearance.getColorScheme() === "dark" ? "dark" : "light";
-    const mode = themeMode === "system" ? sys : themeMode;
-    setTheme(mode === "dark" ? DarkColors : LightColors);
-  }, [themeMode]);
-
-  useEffect(() => {
-    AsyncStorage.setItem("themeMode", themeMode);
-  }, [themeMode]);
+  const applyTheme = (mode: ThemeMode) => {
+    setThemeMode(mode);
+    const colorScheme =
+      mode === "system" ? Appearance.getColorScheme() || "light" : mode;
+    setTheme(getTheme(colorScheme as "light" | "dark"));
+    AsyncStorage.setItem("themeMode", mode);
+  };
 
   return (
-    <ThemeContext.Provider value={{ theme, themeMode, setThemeMode }}>
+    <ThemeContext.Provider value={{ themeMode, setThemeMode: applyTheme, theme }}>
       {children}
     </ThemeContext.Provider>
   );
