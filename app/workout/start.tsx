@@ -7,7 +7,7 @@ import {
   serverTimestamp,
   updateDoc,
 } from "firebase/firestore";
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   Alert,
   ScrollView,
@@ -17,8 +17,8 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useTheme } from "../../contexts/ThemeContext"; // ✅ use theme context
 import { db } from "../../firebaseConfig";
-import { Colors } from "../../styles/colors";
 
 type ExerciseSet = { weight: string; reps: string };
 type Exercise = { name: string; sets: ExerciseSet[] };
@@ -27,6 +27,7 @@ export default function WorkoutStart() {
   const router = useRouter();
   const auth = getAuth();
   const user = auth.currentUser;
+  const { theme } = useTheme(); // ✅ get active theme
 
   const [workout, setWorkout] = useState<Exercise[]>([
     { name: "Bench Press", sets: [{ weight: "", reps: "" }] },
@@ -74,6 +75,85 @@ export default function WorkoutStart() {
     }
   };
 
+  // ✅ theme-aware styles
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        container: {
+          flex: 1,
+          backgroundColor: theme.background,
+          padding: 20,
+        },
+        title: {
+          fontSize: 22,
+          fontWeight: "700",
+          color: theme.textPrimary,
+          marginBottom: 16,
+        },
+        exerciseCard: {
+          backgroundColor: theme.surface,
+          borderRadius: 16,
+          padding: 16,
+          marginBottom: 18,
+          borderWidth: 1,
+          borderColor: theme.border,
+          shadowColor: "#000",
+          shadowOpacity: 0.05,
+          shadowOffset: { width: 0, height: 2 },
+          shadowRadius: 4,
+          elevation: 2,
+        },
+        exerciseName: {
+          fontSize: 18,
+          fontWeight: "700",
+          color: theme.primary,
+          marginBottom: 10,
+        },
+        setRow: {
+          flexDirection: "row",
+          alignItems: "center",
+          marginBottom: 8,
+        },
+        input: {
+          backgroundColor: theme.inputBackground,
+          borderRadius: 10,
+          paddingVertical: 8,
+          paddingHorizontal: 12,
+          width: 80,
+          fontSize: 16,
+          textAlign: "center",
+          color: theme.textPrimary,
+        },
+        x: {
+          fontSize: 18,
+          fontWeight: "700",
+          color: theme.textSecondary,
+          marginHorizontal: 8,
+        },
+        addSetButton: {
+          marginTop: 6,
+          alignItems: "center",
+        },
+        addSetText: {
+          color: theme.primary,
+          fontWeight: "600",
+        },
+        finishButton: {
+          backgroundColor: theme.primary,
+          borderRadius: 14,
+          paddingVertical: 16,
+          alignItems: "center",
+          marginTop: 20,
+        },
+        finishButtonText: {
+          color: theme.onPrimary,
+          fontSize: 18,
+          fontWeight: "700",
+        },
+      }),
+    [theme]
+  );
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Today's Workout</Text>
@@ -87,6 +167,7 @@ export default function WorkoutStart() {
               <View key={j} style={styles.setRow}>
                 <TextInput
                   placeholder="Weight"
+                  placeholderTextColor={theme.textSecondary}
                   value={set.weight}
                   onChangeText={(t) => handleSetChange(i, j, "weight", t)}
                   keyboardType="numeric"
@@ -95,6 +176,7 @@ export default function WorkoutStart() {
                 <Text style={styles.x}>x</Text>
                 <TextInput
                   placeholder="Reps"
+                  placeholderTextColor={theme.textSecondary}
                   value={set.reps}
                   onChangeText={(t) => handleSetChange(i, j, "reps", t)}
                   keyboardType="numeric"
@@ -119,76 +201,3 @@ export default function WorkoutStart() {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
-    padding: 20,
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: "700",
-    color: Colors.textPrimary,
-    marginBottom: 16,
-  },
-  exerciseCard: {
-    backgroundColor: Colors.surface,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 18,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  exerciseName: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: Colors.primary,
-    marginBottom: 10,
-  },
-  setRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  input: {
-    backgroundColor: "#F3F4F6",
-    borderRadius: 10,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    width: 80,
-    fontSize: 16,
-    textAlign: "center",
-  },
-  x: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: Colors.textSecondary,
-    marginHorizontal: 8,
-  },
-  addSetButton: {
-    marginTop: 6,
-    alignItems: "center",
-  },
-  addSetText: {
-    color: Colors.primary,
-    fontWeight: "600",
-  },
-  finishButton: {
-    backgroundColor: Colors.primary,
-    borderRadius: 14,
-    paddingVertical: 16,
-    alignItems: "center",
-    marginTop: 20,
-  },
-  finishButtonText: {
-    color: Colors.surface,
-    fontSize: 18,
-    fontWeight: "700",
-  },
-});

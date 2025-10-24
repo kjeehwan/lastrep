@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import {
   ScrollView,
   StyleSheet,
@@ -7,7 +7,6 @@ import {
   View,
 } from "react-native";
 import { useTheme } from "../contexts/ThemeContext";
-import { Colors } from "../styles/colors";
 
 type OnboardingLayoutProps = {
   title: string;
@@ -26,38 +25,74 @@ export default function OnboardingLayout({
   nextLabel = "Next",
   showNext = true,
 }: OnboardingLayoutProps) {
-  // ✅ Safe theme fallback — use ThemeContext if available, else fallback to static Colors
-  let activeTheme = Colors;
-  try {
-    const { theme } = useTheme();
-    if (theme) activeTheme = theme;
-  } catch {
-    // outside ThemeProvider (e.g., onboarding)
-    activeTheme = Colors;
-  }
+  const { theme } = useTheme();
+
+  // ✅ Memoized styles to update instantly on theme change
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        container: {
+          flex: 1,
+          paddingHorizontal: 24,
+          paddingTop: 60,
+          paddingBottom: 32,
+          justifyContent: "space-between",
+          backgroundColor: theme.background,
+        },
+        scrollContent: {
+          flexGrow: 1,
+          justifyContent: "flex-start",
+        },
+        header: {
+          marginBottom: 28,
+        },
+        title: {
+          fontSize: 26,
+          fontWeight: "700",
+          marginBottom: 8,
+          textAlign: "center",
+          color: theme.textPrimary,
+        },
+        subtitle: {
+          fontSize: 16,
+          textAlign: "center",
+          lineHeight: 22,
+          color: theme.textSecondary,
+        },
+        content: {
+          flex: 1,
+          alignItems: "center",
+          justifyContent: "flex-start",
+        },
+        nextButton: {
+          backgroundColor: theme.primary,
+          borderRadius: 14,
+          paddingVertical: 16,
+          alignItems: "center",
+          shadowColor: theme.primary,
+          shadowOpacity: 0.25,
+          shadowOffset: { width: 0, height: 3 },
+          shadowRadius: 5,
+          elevation: 3,
+        },
+        nextButtonText: {
+          fontSize: 16,
+          fontWeight: "700",
+          color: theme.onPrimary,
+        },
+      }),
+    [theme]
+  );
 
   return (
-    <View
-      style={[
-        styles.container,
-        { backgroundColor: activeTheme.background },
-      ]}
-    >
+    <View style={styles.container}>
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.header}>
-          <Text style={[styles.title, { color: activeTheme.textPrimary }]}>
-            {title}
-          </Text>
-          {subtitle && (
-            <Text
-              style={[styles.subtitle, { color: activeTheme.textSecondary }]}
-            >
-              {subtitle}
-            </Text>
-          )}
+          <Text style={styles.title}>{title}</Text>
+          {subtitle && <Text style={styles.subtitle}>{subtitle}</Text>}
         </View>
 
         <View style={styles.content}>{children}</View>
@@ -65,69 +100,13 @@ export default function OnboardingLayout({
 
       {showNext && (
         <TouchableOpacity
-          style={[
-            styles.nextButton,
-            { backgroundColor: activeTheme.primary, shadowColor: activeTheme.primary },
-          ]}
+          style={styles.nextButton}
           onPress={onNext}
           activeOpacity={0.85}
         >
-          <Text
-            style={[
-              styles.nextButtonText,
-              { color: activeTheme.surface },
-            ]}
-          >
-            {nextLabel}
-          </Text>
+          <Text style={styles.nextButtonText}>{nextLabel}</Text>
         </TouchableOpacity>
       )}
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    paddingHorizontal: 24,
-    paddingTop: 60,
-    paddingBottom: 32,
-    justifyContent: "space-between",
-  },
-  scrollContent: {
-    flexGrow: 1,
-    justifyContent: "flex-start",
-  },
-  header: {
-    marginBottom: 28,
-  },
-  title: {
-    fontSize: 26,
-    fontWeight: "700",
-    marginBottom: 8,
-    textAlign: "center",
-  },
-  subtitle: {
-    fontSize: 16,
-    textAlign: "center",
-    lineHeight: 22,
-  },
-  content: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "flex-start",
-  },
-  nextButton: {
-    paddingVertical: 16,
-    borderRadius: 14,
-    alignItems: "center",
-    shadowOpacity: 0.25,
-    shadowOffset: { width: 0, height: 3 },
-    shadowRadius: 5,
-    elevation: 3,
-  },
-  nextButtonText: {
-    fontSize: 16,
-    fontWeight: "700",
-  },
-});

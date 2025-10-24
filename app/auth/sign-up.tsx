@@ -1,16 +1,27 @@
 import { useRouter } from "expo-router";
 import { doc, serverTimestamp, setDoc } from "firebase/firestore";
-import React, { useState } from "react";
-import { StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import React, { useMemo, useState } from "react";
+import {
+  KeyboardAvoidingView,
+  Platform,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { useTheme } from "../../contexts/ThemeContext";
 import { db } from "../../firebaseConfig";
 import { isAuthError, signUpUser } from "../../lib/authUtils";
 
 export default function SignUpScreen() {
+  const router = useRouter();
+  const { theme } = useTheme();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const router = useRouter();
 
   const handleSignUp = async () => {
     setError("");
@@ -57,85 +68,119 @@ export default function SignUpScreen() {
     }
   };
 
+  // ✅ Memoized styles for instant theme switching
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        container: {
+          flex: 1,
+          backgroundColor: theme.background,
+        },
+        inner: {
+          flex: 1,
+          justifyContent: "center",
+          alignSelf: "center",
+          width: "100%",
+          maxWidth: 480,
+          padding: 20,
+        },
+        title: {
+          fontSize: 26,
+          fontWeight: "700",
+          textAlign: "center",
+          color: theme.textPrimary,
+          marginBottom: 24,
+        },
+        input: {
+          height: 50,
+          borderWidth: 1,
+          borderRadius: 10,
+          paddingHorizontal: 15,
+          marginBottom: 14,
+          fontSize: 16,
+          backgroundColor: theme.surface,
+          borderColor: theme.border,
+          color: theme.textPrimary,
+        },
+        error: {
+          textAlign: "center",
+          color: theme.primary,
+          marginBottom: 10,
+          fontSize: 14,
+        },
+        button: {
+          backgroundColor: theme.primary,
+          borderRadius: 10,
+          paddingVertical: 15,
+          marginTop: 8,
+          alignItems: "center",
+        },
+        buttonText: {
+          color: theme.onPrimary,
+          textAlign: "center",
+          fontSize: 16,
+          fontWeight: "700",
+        },
+        link: {
+          textAlign: "center",
+          color: theme.primary,
+          marginTop: 20,
+          fontSize: 14,
+          fontWeight: "500",
+        },
+      }),
+    [theme]
+  );
+
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Create Account</Text>
+    <KeyboardAvoidingView
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      style={styles.container}
+    >
+      <View style={styles.inner}>
+        <Text style={styles.title}>Create Account</Text>
 
-      <TextInput
-        placeholder="Email"
-        style={styles.input}
-        value={email}
-        onChangeText={setEmail}
-        keyboardType="email-address"
-        autoCapitalize="none"
-      />
+        <TextInput
+          placeholder="Email"
+          value={email}
+          onChangeText={setEmail}
+          keyboardType="email-address"
+          autoCapitalize="none"
+          autoComplete="email"
+          style={styles.input}
+          placeholderTextColor={theme.placeholder}
+        />
 
-      <TextInput
-        placeholder="Password"
-        style={styles.input}
-        value={password}
-        onChangeText={setPassword}
-        secureTextEntry
-      />
+        <TextInput
+          placeholder="Password"
+          value={password}
+          onChangeText={setPassword}
+          secureTextEntry
+          autoComplete="password"
+          style={styles.input}
+          placeholderTextColor={theme.placeholder}
+        />
 
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+        {error ? <Text style={styles.error}>{error}</Text> : null}
 
-      <TouchableOpacity
-        style={[styles.button, loading && { opacity: 0.7 }]}
-        onPress={handleSignUp}
-        disabled={loading}
-      >
-        <Text style={styles.buttonText}>
-          {loading ? "Signing Up..." : "Sign Up"}
-        </Text>
-      </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.button, loading && { opacity: 0.7 }]}
+          onPress={handleSignUp}
+          disabled={loading}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.buttonText}>
+            {loading ? "Signing Up..." : "Sign Up"}
+          </Text>
+        </TouchableOpacity>
 
-      <TouchableOpacity onPress={() => router.push("/auth/sign-in")}>
-        <Text style={styles.link}>Already have an account? Sign in</Text>
-      </TouchableOpacity>
-    </View>
+        <TouchableOpacity
+          onPress={() => router.push("/auth/sign-in")}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.link}>Already have an account? Sign in</Text>
+        </TouchableOpacity>
+      </View>
+    </KeyboardAvoidingView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: "center",
-    padding: 20,
-    backgroundColor: "#fff",
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: "700",
-    textAlign: "center",
-    marginBottom: 20,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 10,
-    padding: 12,
-    marginVertical: 8,
-  },
-  button: {
-    backgroundColor: "#222",
-    borderRadius: 10,
-    padding: 14,
-    marginTop: 12,
-  },
-  buttonText: {
-    color: "#fff",
-    fontWeight: "600",
-    textAlign: "center",
-  },
-  link: {
-    color: "#007AFF",
-    textAlign: "center",
-    marginTop: 18,
-  },
-  error: {
-    color: "red",
-    textAlign: "center",
-    marginTop: 8,
-  },
-});
