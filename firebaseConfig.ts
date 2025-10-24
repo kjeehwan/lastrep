@@ -1,9 +1,10 @@
-// Import the functions you need from the SDKs you use
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getApp, getApps, initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
+import { Auth, getAuth, initializeAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
+import { Platform } from "react-native";
 
-// Your web app's Firebase configuration
+// Firebase config (exactly as provided)
 const firebaseConfig = {
   apiKey: "AIzaSyCF40-CRIwMlw21ZasrFRbRShKp1R7CRR0",
   authDomain: "lastrep-6e04b.firebaseapp.com",
@@ -14,11 +15,34 @@ const firebaseConfig = {
   measurementId: "G-GCYPJ7GERF",
 };
 
-// Initialize Firebase (re-use if already initialized)
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
-// Export Firebase services for use in the app
-export const auth = getAuth(app);
+// 🧩 Custom React Native persistence shim (Firebase removed official helper)
+const reactNativePersistence = {
+  type: "LOCAL",
+  async getItem(key: string) {
+    return AsyncStorage.getItem(key);
+  },
+  async setItem(key: string, value: string) {
+    await AsyncStorage.setItem(key, value);
+  },
+  async removeItem(key: string) {
+    await AsyncStorage.removeItem(key);
+  },
+};
+
+let auth: Auth;
+
+if (Platform.OS === "web") {
+  // Web default persistence is fine
+  auth = getAuth(app);
+} else {
+  // ✅ Use custom AsyncStorage persistence
+  auth = initializeAuth(app, {
+    persistence: reactNativePersistence as any,
+  });
+}
+
 export const db = getFirestore(app);
-export { app };
+export { app, auth };
 

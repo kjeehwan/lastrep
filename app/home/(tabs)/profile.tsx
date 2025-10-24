@@ -9,12 +9,15 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { db } from "../../firebaseConfig";
-import { Colors } from "../../styles/colors";
+import { useTheme } from "../../../contexts/ThemeContext";
+import { db } from "../../../firebaseConfig";
 
 export default function Profile() {
   const auth = getAuth();
   const user = auth.currentUser;
+  const { theme } = useTheme(); // ✅ theme context
+  const [saved, setSaved] = useState(true);
+  const [loading, setLoading] = useState(false);
 
   const [displayName, setDisplayName] = useState("");
   const [age, setAge] = useState("");
@@ -22,7 +25,6 @@ export default function Profile() {
   const [height, setHeight] = useState("");
   const [weight, setWeight] = useState("");
   const [units, setUnits] = useState<"metric" | "imperial">("metric");
-  const [loading, setLoading] = useState(false);
 
   const cmToInches = (cm: number) => cm / 2.54;
   const inchesToCm = (inch: number) => inch * 2.54;
@@ -50,6 +52,8 @@ export default function Profile() {
     loadProfile();
   }, [user]);
 
+  const markEdited = () => setSaved(false);
+
   const handleSave = async () => {
     if (!user) return;
     try {
@@ -64,7 +68,8 @@ export default function Profile() {
           units,
         },
       });
-      Alert.alert("Success", "Profile updated successfully!");
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
     } catch (err) {
       console.error("Error updating profile:", err);
       Alert.alert("Error", "Failed to update profile");
@@ -73,12 +78,80 @@ export default function Profile() {
     }
   };
 
-  // Derived units for display
   const heightLabel = units === "metric" ? "cm" : "in";
   const weightLabel = units === "metric" ? "kg" : "lb";
+  const heightPlaceholder =
+    units === "metric" ? "Enter height in cm" : "Enter height in inches";
+  const weightPlaceholder =
+    units === "metric" ? "Enter weight in kg" : "Enter weight in lb";
 
-  const heightPlaceholder = units === "metric" ? "Enter height in cm" : "Enter height in inches";
-  const weightPlaceholder = units === "metric" ? "Enter weight in kg" : "Enter weight in lb";
+  const styles = StyleSheet.create({
+    container: { flex: 1, backgroundColor: theme.background, padding: 24 },
+    title: {
+      fontSize: 24,
+      fontWeight: "700",
+      color: theme.textPrimary,
+      marginBottom: 24,
+    },
+    label: {
+      fontSize: 16,
+      color: theme.textSecondary,
+      marginBottom: 6,
+    },
+    input: {
+      backgroundColor: theme.surface,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: theme.border,
+      paddingVertical: 12,
+      paddingHorizontal: 16,
+      fontSize: 16,
+      color: theme.textPrimary,
+      marginBottom: 16,
+    },
+    row: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginBottom: 20,
+    },
+    option: {
+      flex: 1,
+      borderWidth: 1,
+      borderColor: theme.border,
+      borderRadius: 10,
+      paddingVertical: 10,
+      alignItems: "center",
+      marginHorizontal: 4,
+      backgroundColor: theme.surface,
+    },
+    optionActive: {
+      borderColor: theme.primary,
+      backgroundColor: theme.highlight,
+    },
+    optionText: {
+      fontSize: 14,
+      color: theme.textPrimary,
+    },
+    optionTextActive: {
+      color: theme.primary,
+      fontWeight: "700",
+    },
+    saveButton: {
+      backgroundColor: theme.primary,
+      borderRadius: 14,
+      paddingVertical: 16,
+      alignItems: "center",
+      marginTop: 10,
+    },
+    saveButtonSaved: {
+      backgroundColor: theme.success,
+    },
+    saveButtonText: {
+      color: theme.buttonText,
+      fontSize: 16,
+      fontWeight: "700",
+    },
+  });
 
   return (
     <View style={styles.container}>
@@ -88,17 +161,25 @@ export default function Profile() {
       <TextInput
         style={styles.input}
         value={displayName}
-        onChangeText={setDisplayName}
+        onChangeText={(text) => {
+          setDisplayName(text);
+          markEdited();
+        }}
         placeholder="Enter nickname"
+        placeholderTextColor={theme.placeholder}
       />
 
       <Text style={styles.label}>Age</Text>
       <TextInput
         style={styles.input}
         value={age}
-        onChangeText={setAge}
+        onChangeText={(text) => {
+          setAge(text);
+          markEdited();
+        }}
         keyboardType="numeric"
         placeholder="Enter age"
+        placeholderTextColor={theme.placeholder}
       />
 
       <Text style={styles.label}>Gender</Text>
@@ -108,17 +189,17 @@ export default function Profile() {
             key={g}
             style={[
               styles.option,
-              gender === g && {
-                borderColor: Colors.primary,
-                backgroundColor: "#E8F9FD",
-              },
+              gender === g && styles.optionActive,
             ]}
-            onPress={() => setGender(g)}
+            onPress={() => {
+              setGender(g);
+              markEdited();
+            }}
           >
             <Text
               style={[
                 styles.optionText,
-                gender === g && { color: Colors.primary, fontWeight: "700" },
+                gender === g && styles.optionTextActive,
               ]}
             >
               {g}
@@ -127,7 +208,6 @@ export default function Profile() {
         ))}
       </View>
 
-      {/* Units now directly below Gender */}
       <Text style={styles.label}>Units</Text>
       <View style={styles.row}>
         {["metric", "imperial"].map((u) => (
@@ -135,34 +215,30 @@ export default function Profile() {
             key={u}
             style={[
               styles.option,
-              units === u && {
-                borderColor: Colors.primary,
-                backgroundColor: "#E8F9FD",
-              },
+              units === u && styles.optionActive,
             ]}
             onPress={() => {
               if (units !== u) {
-                // Convert existing numbers if possible
                 const h = parseFloat(height);
                 const w = parseFloat(weight);
-
                 if (!isNaN(h) && !isNaN(w)) {
                   if (u === "imperial" && units === "metric") {
-                    setHeight((cmToInches(h)).toFixed(1));
-                    setWeight((kgToLb(w)).toFixed(1));
+                    setHeight(cmToInches(h).toFixed(1));
+                    setWeight(kgToLb(w).toFixed(1));
                   } else if (u === "metric" && units === "imperial") {
-                    setHeight((inchesToCm(h)).toFixed(1));
-                    setWeight((lbToKg(w)).toFixed(1));
+                    setHeight(inchesToCm(h).toFixed(1));
+                    setWeight(lbToKg(w).toFixed(1));
                   }
                 }
                 setUnits(u as "metric" | "imperial");
+                markEdited();
               }
             }}
           >
             <Text
               style={[
                 styles.optionText,
-                units === u && { color: Colors.primary, fontWeight: "700" },
+                units === u && styles.optionTextActive,
               ]}
             >
               {u === "metric" ? "Metric (kg/cm)" : "Imperial (lb/in)"}
@@ -175,84 +251,45 @@ export default function Profile() {
       <TextInput
         style={styles.input}
         value={height}
-        onChangeText={setHeight}
+        onChangeText={(text) => {
+          setHeight(text);
+          markEdited();
+        }}
         keyboardType="numeric"
         placeholder={heightPlaceholder}
+        placeholderTextColor={theme.placeholder}
       />
 
       <Text style={styles.label}>Weight ({weightLabel})</Text>
       <TextInput
         style={styles.input}
         value={weight}
-        onChangeText={setWeight}
+        onChangeText={(text) => {
+          setWeight(text);
+          markEdited();
+        }}
         keyboardType="numeric"
         placeholder={weightPlaceholder}
+        placeholderTextColor={theme.placeholder}
       />
 
       <TouchableOpacity
-        style={[styles.saveButton, loading && { opacity: 0.7 }]}
+        style={[
+          styles.saveButton,
+          saved && !loading && styles.saveButtonSaved,
+          loading && { opacity: 0.7 },
+        ]}
         onPress={handleSave}
         disabled={loading}
       >
         <Text style={styles.saveButtonText}>
-          {loading ? "Saving..." : "Save Changes"}
+          {loading
+            ? "Saving..."
+            : saved
+            ? "Changes Saved!"
+            : "Save Changes"}
         </Text>
       </TouchableOpacity>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.background, padding: 24 },
-  title: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: Colors.textPrimary,
-    marginBottom: 24,
-  },
-  label: {
-    fontSize: 16,
-    color: Colors.textSecondary,
-    marginBottom: 6,
-  },
-  input: {
-    backgroundColor: Colors.surface,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    fontSize: 16,
-    marginBottom: 16,
-  },
-  row: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 20,
-  },
-  option: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    borderRadius: 10,
-    paddingVertical: 10,
-    alignItems: "center",
-    marginHorizontal: 4,
-  },
-  optionText: {
-    fontSize: 14,
-    color: Colors.textPrimary,
-  },
-  saveButton: {
-    backgroundColor: Colors.primary,
-    borderRadius: 14,
-    paddingVertical: 16,
-    alignItems: "center",
-    marginTop: 10,
-  },
-  saveButtonText: {
-    color: Colors.surface,
-    fontSize: 16,
-    fontWeight: "700",
-  },
-});
