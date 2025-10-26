@@ -1,4 +1,6 @@
 import { Stack, useRouter } from "expo-router";
+import { getAuth } from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
 import { Settings } from "lucide-react-native";
 import React, { useEffect, useMemo, useState } from "react";
 import {
@@ -9,6 +11,8 @@ import {
   View,
 } from "react-native";
 import { useTheme } from "../../../contexts/ThemeContext";
+import { db } from "../../../firebaseConfig";
+import { cacheGet, cacheSet } from "../../../lib/cache"; // 🧠 cache integration
 
 type WorkoutSummary = {
   date: string;
@@ -18,11 +22,41 @@ type WorkoutSummary = {
 export default function Home() {
   const router = useRouter();
   const { theme } = useTheme();
+  const auth = getAuth();
+  const user = auth.currentUser;
+
   const [history, setHistory] = useState<WorkoutSummary[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Later: load history from Firestore or local cache
-  }, []);
+    const loadWorkoutHistory = async () => {
+      if (!user) return;
+
+      // 1️⃣ Load from cache first for instant display
+      const cached = await cacheGet<WorkoutSummary[]>("workout_history", []);
+      if (cached && cached.length > 0) {
+        setHistory(cached);
+        setLoading(false);
+      }
+
+      // 2️⃣ Then fetch latest from Firestore (if online)
+      try {
+        const snap = await getDoc(doc(db, "users", user.uid));
+        if (snap.exists()) {
+          const data = snap.data();
+          const workouts = data.workoutHistory || [];
+          setHistory(workouts);
+          await cacheSet("workout_history", workouts); // 🆕 store updated cache
+        }
+      } catch (err) {
+        console.warn("Failed to fetch workout history:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadWorkoutHistory();
+  }, [user]);
 
   // ✅ Memoized styles to respond to theme changes efficiently
   const styles = useMemo(
@@ -79,7 +113,7 @@ export default function Home() {
         startButtonText: {
           fontSize: 16,
           fontWeight: "700",
-          color: theme.onPrimary,
+          color: theme.buttonText,
         },
       }),
     [theme]
@@ -126,7 +160,9 @@ export default function Home() {
 
         <Text style={styles.subtitle}>Workout History</Text>
 
-        {history.length > 0 ? (
+        {loading ? (
+          <Text style={styles.emptyText}>Loading...</Text>
+        ) : history.length > 0 ? (
           history.map((item, index) => (
             <View key={index} style={styles.card}>
               <Text style={styles.cardDate}>

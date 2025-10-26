@@ -17,8 +17,11 @@ export const LightColors = {
   buttonText: "#FFFFFF",
   placeholder: "#9CA3AF",
 
-  // ✨ Newly added for consistency
-  inputBackground: "#F3F4F6",
+  // 🪟 NEW — used for modal overlay backgrounds
+  modalOverlay: "rgba(0,0,0,0.3)",
+
+  // optional additions for consistency
+  inputBackground: "#FFFFFF",
   onPrimary: "#FFFFFF",
 };
 
@@ -39,8 +42,10 @@ export const DarkColors = {
   buttonText: "#FFFFFF",
   placeholder: "#64748B",
 
-  // ✨ Newly added for consistency
-  inputBackground: "#334155", // subtle contrast for inputs
+  // 🪟 NEW — darkened overlay for modal backgrounds
+  modalOverlay: "rgba(0,0,0,0.6)",
+
+  inputBackground: "#1E293B",
   onPrimary: "#FFFFFF",
 };
 

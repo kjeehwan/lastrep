@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { useTheme } from "../../../contexts/ThemeContext";
 import { db } from "../../../firebaseConfig";
+import { cacheGet, cacheSet } from "../../../lib/cache"; // 🆕 import cache utils
 
 export default function Profile() {
   const auth = getAuth();
@@ -33,10 +34,23 @@ export default function Profile() {
   const kgToLb = (kg: number) => kg * 2.20462;
   const lbToKg = (lb: number) => lb / 2.20462;
 
-  // Load user profile
+  // 🧠 Load profile (cache first, then Firestore)
   useEffect(() => {
     const loadProfile = async () => {
       if (!user) return;
+
+      // 1️⃣ Try cached version first for instant load
+      const cached = await cacheGet("user_profile");
+      if (cached) {
+        setDisplayName(cached.displayName || "");
+        setAge(cached.profile?.age?.toString() || "");
+        setGender(cached.profile?.gender || "");
+        setHeight(cached.profile?.height?.toString() || "");
+        setWeight(cached.profile?.weight?.toString() || "");
+        setUnits(cached.profile?.units || "metric");
+      }
+
+      // 2️⃣ Then try Firestore (update both UI + cache)
       try {
         const snap = await getDoc(doc(db, "users", user.uid));
         if (snap.exists()) {
@@ -47,9 +61,11 @@ export default function Profile() {
           setHeight(data.profile?.height?.toString() || "");
           setWeight(data.profile?.weight?.toString() || "");
           setUnits(data.profile?.units || "metric");
+
+          await cacheSet("user_profile", data); // 🆕 save to cache
         }
       } catch (err) {
-        console.error("Error loading profile:", err);
+        console.error("Error loading Firestore profile:", err);
       }
     };
     loadProfile();
@@ -57,11 +73,13 @@ export default function Profile() {
 
   const markEdited = () => setSaved(false);
 
+  // 🧾 Save to Firestore + update cache
   const handleSave = async () => {
     if (!user) return;
     try {
       setLoading(true);
-      await updateDoc(doc(db, "users", user.uid), {
+
+      const updatedData = {
         displayName,
         profile: {
           gender,
@@ -70,7 +88,14 @@ export default function Profile() {
           weight: weight ? parseFloat(weight) : null,
           units,
         },
-      });
+      };
+
+      // Save to Firestore
+      await updateDoc(doc(db, "users", user.uid), updatedData);
+
+      // Update local cache instantly
+      await cacheSet("user_profile", updatedData);
+
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (err) {
@@ -88,7 +113,7 @@ export default function Profile() {
   const weightPlaceholder =
     units === "metric" ? "Enter weight in kg" : "Enter weight in lb";
 
-  // ✅ Memoized styles for smooth theme switching
+  // ✅ Memoized styles for theme switching
   const styles = useMemo(
     () =>
       StyleSheet.create({
@@ -153,7 +178,7 @@ export default function Profile() {
           backgroundColor: theme.success,
         },
         saveButtonText: {
-          color: theme.onPrimary,
+          color: theme.buttonText,
           fontSize: 16,
           fontWeight: "700",
         },

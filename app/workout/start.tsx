@@ -1,63 +1,103 @@
 import { useRouter } from "expo-router";
 import { getAuth } from "firebase/auth";
-import {
-  arrayUnion,
-  doc,
-  increment,
-  serverTimestamp,
-  updateDoc,
-} from "firebase/firestore";
+import { arrayUnion, doc, increment, serverTimestamp, updateDoc } from "firebase/firestore";
 import React, { useMemo, useState } from "react";
-import {
-  Alert,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
-import { useTheme } from "../../contexts/ThemeContext"; // ✅ use theme context
+import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import ExerciseCard from "../../components/workout/ExerciseCard";
+import ExercisePickerModal from "../../components/workout/ExercisePickerModal";
+import { useTheme } from "../../contexts/ThemeContext";
 import { db } from "../../firebaseConfig";
+import { cacheGet, cacheSet } from "../../lib/cache";
 
-type ExerciseSet = { weight: string; reps: string };
+type ExerciseSet = { weight: string; reps: string; rpe: string; done: boolean };
 type Exercise = { name: string; sets: ExerciseSet[] };
 
 export default function WorkoutStart() {
   const router = useRouter();
   const auth = getAuth();
   const user = auth.currentUser;
-  const { theme } = useTheme(); // ✅ get active theme
+  const { theme } = useTheme();
 
-  const [workout, setWorkout] = useState<Exercise[]>([
-    { name: "Bench Press", sets: [{ weight: "", reps: "" }] },
-    { name: "Barbell Row", sets: [{ weight: "", reps: "" }] },
-    { name: "Squat", sets: [{ weight: "", reps: "" }] },
-  ]);
+  const [exercises, setExercises] = useState<Exercise[]>([]);
+  const [pickerVisible, setPickerVisible] = useState(false);
+  const [replaceIndex, setReplaceIndex] = useState<number | null>(null); // Track which exercise to replace
 
-  const handleSetChange = (
+  // ✅ Add or replace exercise
+  const handleAddExercise = (name: string) => {
+    if (replaceIndex !== null) {
+      // Replace an existing exercise
+      const updated = [...exercises];
+      updated[replaceIndex] = { name, sets: [{ weight: "", reps: "", rpe: "", done: false }] };
+      setExercises(updated);
+      setReplaceIndex(null);
+    } else {
+      // Add new exercise (avoid duplicates)
+      if (exercises.some((ex) => ex.name === name)) return;
+      setExercises((prev) => [
+        ...prev,
+        { name, sets: [{ weight: "", reps: "", rpe: "", done: false }] },
+      ]);
+    }
+    setPickerVisible(false);
+  };
+
+  // ✅ Update set fields
+  const updateSet = (
     exerciseIndex: number,
     setIndex: number,
-    field: "weight" | "reps",
+    field: keyof ExerciseSet,
     value: string
   ) => {
-    const updated = [...workout];
-    updated[exerciseIndex].sets[setIndex][field] = value;
-    setWorkout(updated);
+    const updated = [...exercises];
+    updated[exerciseIndex].sets[setIndex] = {
+      ...updated[exerciseIndex].sets[setIndex],
+      [field]: value,
+    };
+    setExercises(updated);
   };
 
+  // ✅ Toggle set done
+  const toggleSetDone = (exerciseIndex: number, setIndex: number) => {
+    const updated = [...exercises];
+    updated[exerciseIndex].sets[setIndex].done =
+      !updated[exerciseIndex].sets[setIndex].done;
+    setExercises(updated);
+  };
+
+  // ✅ Add new set
   const addSet = (exerciseIndex: number) => {
-    const updated = [...workout];
-    updated[exerciseIndex].sets.push({ weight: "", reps: "" });
-    setWorkout(updated);
+    const updated = [...exercises];
+    updated[exerciseIndex].sets.push({ weight: "", reps: "", rpe: "", done: false });
+    setExercises(updated);
   };
 
+  // ✅ Remove a specific set
+  const removeSet = (exerciseIndex: number, setIndex: number) => {
+    const updated = [...exercises];
+    updated[exerciseIndex].sets.splice(setIndex, 1);
+    setExercises(updated);
+  };
+
+  // ✅ Remove entire exercise
+  const removeExercise = (exerciseIndex: number) => {
+    const updated = [...exercises];
+    updated.splice(exerciseIndex, 1);
+    setExercises(updated);
+  };
+
+  // ✅ Replace exercise (open modal)
+  const replaceExercise = (exerciseIndex: number) => {
+    setReplaceIndex(exerciseIndex);
+    setPickerVisible(true);
+  };
+
+  // ✅ Save workout
   const finishWorkout = async () => {
     if (!user) return;
     try {
       const summary = {
         date: new Date().toISOString(),
-        exercises: workout,
+        exercises,
         createdAt: serverTimestamp(),
       };
 
@@ -67,7 +107,11 @@ export default function WorkoutStart() {
         "stats.lastWorkout": serverTimestamp(),
       });
 
-      Alert.alert("Workout logged", "Your session has been saved!");
+      const cached = (await cacheGet("workout_history", [])) || [];
+      const updatedHistory = [summary, ...cached];
+      await cacheSet("workout_history", updatedHistory);
+
+      Alert.alert("Workout saved!", "Your session has been logged.");
       router.replace("/home");
     } catch (err) {
       console.error("Error saving workout:", err);
@@ -75,78 +119,35 @@ export default function WorkoutStart() {
     }
   };
 
-  // ✅ theme-aware styles
   const styles = useMemo(
     () =>
       StyleSheet.create({
-        container: {
-          flex: 1,
-          backgroundColor: theme.background,
-          padding: 20,
-        },
+        container: { flex: 1, backgroundColor: theme.background, padding: 20 },
         title: {
           fontSize: 22,
           fontWeight: "700",
           color: theme.textPrimary,
           marginBottom: 16,
         },
-        exerciseCard: {
-          backgroundColor: theme.surface,
-          borderRadius: 16,
-          padding: 16,
-          marginBottom: 18,
+        addExerciseButton: {
           borderWidth: 1,
-          borderColor: theme.border,
-          shadowColor: "#000",
-          shadowOpacity: 0.05,
-          shadowOffset: { width: 0, height: 2 },
-          shadowRadius: 4,
-          elevation: 2,
-        },
-        exerciseName: {
-          fontSize: 18,
-          fontWeight: "700",
-          color: theme.primary,
-          marginBottom: 10,
-        },
-        setRow: {
-          flexDirection: "row",
+          borderColor: theme.primary,
+          borderRadius: 12,
+          paddingVertical: 14,
           alignItems: "center",
-          marginBottom: 8,
+          marginBottom: 20,
         },
-        input: {
-          backgroundColor: theme.inputBackground,
-          borderRadius: 10,
-          paddingVertical: 8,
-          paddingHorizontal: 12,
-          width: 80,
-          fontSize: 16,
-          textAlign: "center",
-          color: theme.textPrimary,
-        },
-        x: {
-          fontSize: 18,
-          fontWeight: "700",
-          color: theme.textSecondary,
-          marginHorizontal: 8,
-        },
-        addSetButton: {
-          marginTop: 6,
-          alignItems: "center",
-        },
-        addSetText: {
-          color: theme.primary,
-          fontWeight: "600",
-        },
+        addExerciseText: { color: theme.primary, fontWeight: "700" },
         finishButton: {
           backgroundColor: theme.primary,
           borderRadius: 14,
           paddingVertical: 16,
           alignItems: "center",
           marginTop: 20,
+          marginBottom: 40,
         },
         finishButtonText: {
-          color: theme.onPrimary,
+          color: theme.buttonText,
           fontSize: 18,
           fontWeight: "700",
         },
@@ -158,45 +159,47 @@ export default function WorkoutStart() {
     <View style={styles.container}>
       <Text style={styles.title}>Today's Workout</Text>
 
+      {/* Add exercise button */}
+      <TouchableOpacity
+        onPress={() => setPickerVisible(true)}
+        style={styles.addExerciseButton}
+        activeOpacity={0.85}
+      >
+        <Text style={styles.addExerciseText}>+ Add Exercise</Text>
+      </TouchableOpacity>
+
+      <ExercisePickerModal
+        visible={pickerVisible}
+        onClose={() => {
+          setPickerVisible(false);
+          setReplaceIndex(null);
+        }}
+        onSelect={handleAddExercise}
+      />
+
       <ScrollView showsVerticalScrollIndicator={false}>
-        {workout.map((exercise, i) => (
-          <View key={i} style={styles.exerciseCard}>
-            <Text style={styles.exerciseName}>{exercise.name}</Text>
-
-            {exercise.sets.map((set, j) => (
-              <View key={j} style={styles.setRow}>
-                <TextInput
-                  placeholder="Weight"
-                  placeholderTextColor={theme.textSecondary}
-                  value={set.weight}
-                  onChangeText={(t) => handleSetChange(i, j, "weight", t)}
-                  keyboardType="numeric"
-                  style={styles.input}
-                />
-                <Text style={styles.x}>x</Text>
-                <TextInput
-                  placeholder="Reps"
-                  placeholderTextColor={theme.textSecondary}
-                  value={set.reps}
-                  onChangeText={(t) => handleSetChange(i, j, "reps", t)}
-                  keyboardType="numeric"
-                  style={styles.input}
-                />
-              </View>
-            ))}
-
-            <TouchableOpacity
-              style={styles.addSetButton}
-              onPress={() => addSet(i)}
-            >
-              <Text style={styles.addSetText}>+ Add Set</Text>
-            </TouchableOpacity>
-          </View>
+        {exercises.map((exercise, i) => (
+          <ExerciseCard
+            key={i}
+            exercise={exercise}
+            onUpdateSet={(setIndex, field, value) => updateSet(i, setIndex, field, value)}
+            onToggleSetDone={(setIndex) => toggleSetDone(i, setIndex)}
+            onAddSet={() => addSet(i)}
+            onRemove={() => removeExercise(i)}
+            onRemoveSet={(setIndex) => removeSet(i, setIndex)}
+            onReplaceExercise={() => replaceExercise(i)}
+          />
         ))}
 
-        <TouchableOpacity style={styles.finishButton} onPress={finishWorkout}>
-          <Text style={styles.finishButtonText}>Finish Workout</Text>
-        </TouchableOpacity>
+        {exercises.length > 0 && (
+          <TouchableOpacity
+            style={styles.finishButton}
+            onPress={finishWorkout}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.finishButtonText}>Finish Workout</Text>
+          </TouchableOpacity>
+        )}
       </ScrollView>
     </View>
   );
