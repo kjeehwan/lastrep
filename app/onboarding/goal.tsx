@@ -1,16 +1,18 @@
 import { useRouter } from "expo-router";
+import { getAuth } from "firebase/auth";
+import { doc, getDoc, setDoc, updateDoc } from "firebase/firestore"; // Added setDoc
 import React, { useMemo, useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import OnboardingLayout from "../../components/OnboardingLayout";
 import { useTheme } from "../../contexts/ThemeContext";
+import { db } from "../../firebaseConfig";
 
 export default function Goal() {
   const router = useRouter();
-  const { theme } = useTheme(); // ✅ use dynamic theme
+  const { theme } = useTheme();
   const [selected, setSelected] = useState<string | null>(null);
   const goals = ["Build Muscle", "Get Stronger", "Lose Fat", "Improve Fitness"];
 
-  // ✅ Styles that update automatically when theme changes
   const styles = useMemo(
     () =>
       StyleSheet.create({
@@ -45,11 +47,62 @@ export default function Goal() {
     [theme]
   );
 
+  const handleNext = async () => {
+    if (!selected) return; // Ensure selection is made
+
+    try {
+      const user = getAuth().currentUser;
+      if (user) {
+        const userRef = doc(db, "users", user.uid);
+        
+        // Check if the user document exists
+        const snap = await getDoc(userRef);
+
+        if (!snap.exists()) {
+          // If no document exists, create the user document using setDoc
+          await setDoc(userRef, {
+            email: user.email,
+            displayName: null,
+            createdAt: new Date(),
+            hasCompletedOnboarding: false,
+            goal: selected,
+            experience: null,
+            trainingDays: null,
+            samplePlan: null,
+            profile: {
+              gender: null,
+              age: null,
+              height: null,
+              weight: null,
+              units: "metric",
+            },
+            stats: {
+              totalWorkouts: 0,
+              lastWorkout: null,
+            },
+          });
+          console.log("User document created in Firestore.");
+        } else {
+          // If document exists, update the goal
+          await updateDoc(userRef, {
+            goal: selected,
+          });
+          console.log("Goal updated in Firestore");
+        }
+
+        // Navigate to the next screen
+        router.push("/onboarding/experience");
+      }
+    } catch (err) {
+      console.error("Error saving goal to Firestore:", err);
+    }
+  };
+
   return (
     <OnboardingLayout
       title="What's your goal?"
       subtitle="Choose one that best matches your focus."
-      onNext={() => router.push("/onboarding/experience")}
+      onNext={handleNext}
       nextLabel="Next"
       showNext={!!selected}
     >
@@ -57,20 +110,14 @@ export default function Goal() {
         {goals.map((goal) => (
           <TouchableOpacity
             key={goal}
-            style={[
-              styles.option,
-              selected === goal && styles.optionSelected,
-            ]}
+            style={[styles.option, selected === goal && styles.optionSelected]}
             onPress={() => setSelected(goal)}
             activeOpacity={0.85}
           >
             <Text
-              style={[
-                styles.optionText,
-                selected === goal && styles.optionTextSelected,
-              ]}
+              style={[styles.optionText, selected === goal && styles.optionTextSelected]}
             >
-              {goal}
+              {goal || "Default Goal"}
             </Text>
           </TouchableOpacity>
         ))}

@@ -166,16 +166,19 @@ export default function Home() {
           history.map((item, index) => (
             <View key={index} style={styles.card}>
               <Text style={styles.cardDate}>
-                {new Date(item.date).toLocaleDateString()}
+                {item.date ? new Date(item.date).toLocaleDateString() : "No date available"}
               </Text>
               <Text style={styles.cardDetails}>
-                {item.exercises.length} exercises logged
+                {item.exercises && item.exercises.length > 0
+                  ? `${item.exercises.length} exercises logged`
+                  : "No exercises logged"}
               </Text>
             </View>
           ))
         ) : (
           <Text style={styles.emptyText}>No workouts logged yet.</Text>
         )}
+
       </ScrollView>
     </>
   );

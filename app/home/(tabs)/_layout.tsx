@@ -1,6 +1,6 @@
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons"; // or any other icon library
 import { Tabs } from "expo-router";
-import { useTheme } from "../../../contexts/ThemeContext";
+import { useTheme } from "../../../contexts/ThemeContext"; // Assuming useTheme is being used
 
 export default function HomeTabsLayout() {
   const { theme } = useTheme();
@@ -22,47 +22,40 @@ export default function HomeTabsLayout() {
         name="index"
         options={{
           title: "Home",
-          headerShown: true, // ✅ show header for gear icon
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="home-outline" size={size} color={color} />
           ),
         }}
       />
-
       <Tabs.Screen
         name="workouts"
         options={{
           title: "Workouts",
-          headerShown: false,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="barbell-outline" size={size} color={color} />
           ),
         }}
       />
-
       <Tabs.Screen
         name="progress"
         options={{
           title: "Progress",
-          headerShown: false,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="stats-chart-outline" size={size} color={color} />
           ),
         }}
       />
-
       <Tabs.Screen
         name="profile"
         options={{
           title: "Profile",
-          headerShown: false,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="person-outline" size={size} color={color} />
           ),
         }}
       />
-
-      {/* Hide Settings from the tab bar */}
+      
+      {/* Hiding Settings from the Tab Bar */}
       <Tabs.Screen name="settings" options={{ href: null }} />
     </Tabs>
   );

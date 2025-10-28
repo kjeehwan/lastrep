@@ -52,9 +52,9 @@ export default function Welcome() {
   return (
     <View style={styles.container}>
       <View style={styles.textContainer}>
-        <Text style={styles.title}>Welcome to LastRep</Text>
+        <Text style={styles.title}>{"Welcome to LastRep"}</Text>
         <Text style={styles.subtitle}>
-          Your coach, partner, and guide for training, recovery, and growth.
+          {"Your coach, partner, and guide for training, recovery, and growth."}
         </Text>
       </View>
 

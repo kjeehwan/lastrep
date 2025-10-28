@@ -12,7 +12,7 @@ export default function LastRepLogo({ size = 64, showText = true }: Props) {
   const { theme } = useTheme();
 
   const circleRadius = size / 2;
-  const strokeWidth = size * 0.08;
+  const strokeWidth = size * 0.08; // Default stroke width for the checkmark
 
   return (
     <View style={styles.container}>
@@ -39,13 +39,7 @@ export default function LastRepLogo({ size = 64, showText = true }: Props) {
 
       {showText && (
         <Text
-          style={[
-            styles.text,
-            {
-              color: theme.textPrimary,
-              fontSize: size * 0.5,
-            },
-          ]}
+          style={[styles.text, { color: theme.textPrimary, fontSize: size * 0.5 }]}
         >
           LastRep
         </Text>

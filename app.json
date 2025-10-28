@@ -2,6 +2,7 @@
   "expo": {
     "name": "lastrep",
     "slug": "lastrep",
+    "entryPoint": "./app/index.tsx",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -33,10 +34,14 @@
           "resizeMode": "contain",
           "backgroundColor": "#ffffff"
         }
-      ]
+      ],
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "webClientId": "600291060273-5393lfngle66lld7l4lbjnuguihftdgs.apps.googleusercontent.com"
     }
   }
 }

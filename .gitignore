@@ -20,6 +20,7 @@ Podfile.lock
 .env
 .env.local
 .env.*.local
+google-oauth-client.json
 
 # OS files
 .DS_Store

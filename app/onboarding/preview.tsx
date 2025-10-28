@@ -54,38 +54,66 @@ export default function Preview() {
       marginTop: 20,
     },
   });
-  
+
   const [goal, setGoal] = useState<string | null>(null);
   const [experience, setExperience] = useState<string | null>(null);
   const [days, setDays] = useState<number | null>(null);
   const [plan, setPlan] = useState<PlanDay[]>([]);
-  
+  const [isLoading, setIsLoading] = useState(true); // Track loading state
+
   useEffect(() => {
+    // Flag to check if the component is still mounted
+    let isMounted = true;
+
     const fetchData = async () => {
       try {
         const user = getAuth().currentUser;
         if (user) {
           const userRef = doc(db, "users", user.uid);
           const snap = await getDoc(userRef);
+
           if (snap.exists()) {
             const data = snap.data();
-            const g = data.goal || "Build Muscle";
-            const e = data.experience || "Intermediate";
-            const d = data.trainingDays || 4;
+            const g = data?.goal || "Build Muscle";
+            const e = data?.experience || "Intermediate";
+            const d = data?.trainingDays || 4;
+
             setGoal(g);
             setExperience(e);
             setDays(d);
-            setPlan(generateSamplePlan(g, e, d));
+
+            // Generate and set the plan
+            const generatedPlan = generateSamplePlan(g, e, d);
+            setPlan(generatedPlan);
+            setIsLoading(false); // Set loading to false when plan is ready
+
+            // If onboarding is completed, set 'hasCompletedOnboarding' to true
+            if (data?.hasCompletedOnboarding === false) {
+              await updateDoc(userRef, {
+                hasCompletedOnboarding: true,
+              });
+              console.log("Onboarding completed, user document updated.");
+            }
+          } else {
+            router.replace("/onboarding/ready"); // Redirect to onboarding if document is missing
           }
         }
       } catch (err) {
         console.error("Error loading preview data:", err);
+        setIsLoading(false);
       }
     };
+
     fetchData();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const handleFinish = async () => {
+    if (plan.length === 0) return; // Don't allow to finish until the plan is set
+
     try {
       const user = getAuth().currentUser;
       if (user) {
@@ -109,24 +137,32 @@ export default function Preview() {
       showNext
     >
       <View style={styles.cardContainer}>
-        {plan.length > 0 ? (
+        {isLoading ? (
+          <Text style={styles.emptyText}>Generating your sample plan...</Text>
+        ) : plan.length > 0 ? (
           plan.map((day) => (
             <View key={day.day} style={styles.card}>
-              <Text style={styles.cardTitle}>{day.day}</Text>
-              <Text style={styles.cardFocus}>{day.focus}</Text>
-              {day.exercises.map((ex) => (
-                <Text key={ex} style={styles.exercise}>
-                  • {ex}
-                </Text>
-              ))}
+              <Text style={styles.cardTitle}>{day.day || "Day"}</Text> {/* Fallback for day */}
+              <Text style={styles.cardFocus}>{day.focus || "Focus"}</Text> {/* Fallback for focus */}
+              
+              {Array.isArray(day.exercises) && day.exercises.length > 0 ? (
+                day.exercises.map((ex) => (
+                  <Text key={ex} style={styles.exercise}>
+                    • {ex || "Exercise"} {/* Fallback for exercises */}
+                  </Text>
+                ))
+              ) : (
+                <Text style={styles.emptyText}>No exercises available.</Text>
+              )}
             </View>
           ))
         ) : (
-          <Text style={styles.emptyText}>
-            Generating your sample plan...
-          </Text>
+          <Text style={styles.emptyText}>No plan generated yet.</Text>
         )}
       </View>
+
+
+
     </OnboardingLayout>
   );
 }

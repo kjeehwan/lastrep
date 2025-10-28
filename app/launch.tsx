@@ -11,6 +11,7 @@ export default function Launch() {
   const scaleAnim = useRef(new Animated.Value(0.9)).current;
 
   useEffect(() => {
+    console.log("Redirecting to sign-in...");
     // Smooth fade + slight scale-up
     Animated.parallel([
       Animated.timing(fadeAnim, {

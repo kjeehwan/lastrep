@@ -1,16 +1,18 @@
 import { useRouter } from "expo-router";
+import { getAuth } from "firebase/auth";
+import { doc, updateDoc } from "firebase/firestore";
 import React, { useMemo, useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import OnboardingLayout from "../../components/OnboardingLayout";
+import OnboardingLayout from "../../components/OnboardingLayout"; // Ensure this is imported
 import { useTheme } from "../../contexts/ThemeContext";
+import { db } from "../../firebaseConfig";
 
 export default function Experience() {
   const router = useRouter();
-  const { theme } = useTheme(); // ✅ get current theme
+  const { theme } = useTheme();
   const [selected, setSelected] = useState<string | null>(null);
   const levels = ["Beginner", "Intermediate", "Advanced"];
 
-  // ✅ Dynamic styles that change when theme changes
   const styles = useMemo(
     () =>
       StyleSheet.create({
@@ -45,11 +47,31 @@ export default function Experience() {
     [theme]
   );
 
+  const handleNext = async () => {
+    if (!selected) return; // Ensure selection is made
+
+    try {
+      const user = getAuth().currentUser;
+      if (user) {
+        // Save selected experience to Firestore
+        await updateDoc(doc(db, "users", user.uid), {
+          experience: selected,
+        });
+        console.log("Experience saved to Firestore");
+
+        // Navigate to the next screen
+        router.push("/onboarding/availability");
+      }
+    } catch (err) {
+      console.error("Error saving experience to Firestore:", err);
+    }
+  };
+
   return (
     <OnboardingLayout
       title="What's your experience level?"
       subtitle="Choose the option that best describes you."
-      onNext={() => router.push("/onboarding/availability")}
+      onNext={handleNext}
       nextLabel="Next"
       showNext={!!selected}
     >
@@ -57,20 +79,14 @@ export default function Experience() {
         {levels.map((level) => (
           <TouchableOpacity
             key={level}
-            style={[
-              styles.option,
-              selected === level && styles.optionSelected,
-            ]}
+            style={[styles.option, selected === level && styles.optionSelected]}
             onPress={() => setSelected(level)}
             activeOpacity={0.85}
           >
             <Text
-              style={[
-                styles.optionText,
-                selected === level && styles.optionTextSelected,
-              ]}
+              style={[styles.optionText, selected === level && styles.optionTextSelected]}
             >
-              {level}
+              {level || "Default Experience Level"}
             </Text>
           </TouchableOpacity>
         ))}

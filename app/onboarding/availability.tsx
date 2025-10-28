@@ -1,12 +1,15 @@
 import { useRouter } from "expo-router";
+import { getAuth } from "firebase/auth";
+import { doc, updateDoc } from "firebase/firestore";
 import React, { useMemo, useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import OnboardingLayout from "../../components/OnboardingLayout";
+import OnboardingLayout from "../../components/OnboardingLayout"; // Ensure this is imported
 import { useTheme } from "../../contexts/ThemeContext";
+import { db } from "../../firebaseConfig";
 
 export default function Availability() {
   const router = useRouter();
-  const { theme } = useTheme(); // ✅ theme from context
+  const { theme } = useTheme();
   const [selected, setSelected] = useState<number | null>(null);
   const days = [2, 3, 4, 5, 6];
 
@@ -27,7 +30,7 @@ export default function Availability() {
 
         optionSelected: {
           borderColor: theme.primary,
-          backgroundColor: theme.highlight, // ✅ subtle highlight for selected state
+          backgroundColor: theme.highlight,
         },
 
         optionText: {
@@ -44,11 +47,31 @@ export default function Availability() {
     [theme]
   );
 
+  const handleNext = async () => {
+    if (selected === null) return; // Ensure selection is made
+
+    try {
+      const user = getAuth().currentUser;
+      if (user) {
+        // Save availability to Firestore
+        await updateDoc(doc(db, "users", user.uid), {
+          trainingDays: selected,
+        });
+        console.log("Training days saved to Firestore");
+
+        // Navigate to the preview screen
+        router.push("/onboarding/preview");
+      }
+    } catch (err) {
+      console.error("Error saving availability to Firestore:", err);
+    }
+  };
+
   return (
     <OnboardingLayout
       title="How many days per week can you train?"
       subtitle="Pick the number of days you can realistically commit to."
-      onNext={() => router.push("/onboarding/preview")}
+      onNext={handleNext}
       showNext={!!selected}
       nextLabel="Next"
     >
@@ -56,20 +79,14 @@ export default function Availability() {
         {days.map((day) => (
           <TouchableOpacity
             key={day}
-            style={[
-              styles.option,
-              selected === day && styles.optionSelected,
-            ]}
+            style={[styles.option, selected === day && styles.optionSelected]}
             onPress={() => setSelected(day)}
             activeOpacity={0.85}
           >
             <Text
-              style={[
-                styles.optionText,
-                selected === day && styles.optionTextSelected,
-              ]}
+              style={[styles.optionText, selected === day && styles.optionTextSelected]}
             >
-              {day} Days / Week
+              {`${day} Days / Week`}
             </Text>
           </TouchableOpacity>
         ))}

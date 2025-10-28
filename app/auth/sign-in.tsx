@@ -1,5 +1,6 @@
 import { Link, useRouter } from "expo-router";
 import { signInWithEmailAndPassword } from "firebase/auth";
+import { doc, getDoc, setDoc } from "firebase/firestore";
 import React, { useMemo, useState } from "react";
 import {
   KeyboardAvoidingView,
@@ -11,7 +12,8 @@ import {
   View,
 } from "react-native";
 import { useTheme } from "../../contexts/ThemeContext";
-import { auth } from "../../firebaseConfig";
+import { auth, db } from "../../firebaseConfig";
+import { useGoogleAuth } from "../../lib/auth/googleAuth"; // Import Google sign-in hook
 
 export default function SignInScreen() {
   const { theme } = useTheme();
@@ -21,6 +23,8 @@ export default function SignInScreen() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  const { promptAsync } = useGoogleAuth(); // Get Google sign-in function from the hook
 
   const handleSignIn = async () => {
     if (!email || !password) {
@@ -32,7 +36,60 @@ export default function SignInScreen() {
       setError("");
       setLoading(true);
       await signInWithEmailAndPassword(auth, email.trim(), password.trim());
-      router.replace("/"); // ✅ Auth listener in _layout handles redirect
+
+      const user = auth.currentUser;
+      if (user) {
+        const userRef = doc(db, "users", user.uid);
+
+        // Check if the user document exists in Firestore
+        const snap = await getDoc(userRef);
+
+        if (!snap.exists()) {
+          // If no document exists, create the user document using setDoc()
+          await setDoc(userRef, {
+            email: user.email,
+            displayName: null,
+            createdAt: new Date(),
+            hasCompletedOnboarding: false,
+            goal: null,
+            experience: null,
+            trainingDays: null,
+            samplePlan: null,
+            profile: {
+              gender: null,
+              age: null,
+              height: null,
+              weight: null,
+              units: "metric",
+            },
+            stats: {
+              totalWorkouts: 0,
+              lastWorkout: null,
+            },
+          });
+          console.log("User document created in Firestore.");
+        }
+
+        // Now, safely access the data after ensuring the document exists
+        const data = snap.data();
+        if (!data) {
+          console.log("No data found in Firestore document.");
+          return;
+        }
+
+        // Check for missing data and redirect to appropriate screen
+        if (!data.goal) {
+          router.replace("/onboarding/goal"); // Redirect to goal screen if missing
+        } else if (!data.experience) {
+          router.replace("/onboarding/experience"); // Redirect to experience screen if missing
+        } else if (!data.trainingDays) {
+          router.replace("/onboarding/availability"); // Redirect to availability screen if missing
+        } else if (!data.hasCompletedOnboarding) {
+          router.replace("/onboarding/preview"); // Redirect to preview screen if onboarding incomplete
+        } else {
+          router.replace("/home"); // If everything is completed, redirect to home screen
+        }
+      }
     } catch (err: any) {
       console.error("Sign-in error:", err);
       let msg = "Failed to sign in.";
@@ -107,6 +164,18 @@ export default function SignInScreen() {
           fontSize: 14,
           fontWeight: "500",
         },
+        googleButton: {
+          backgroundColor: "#4285F4", // Google's Blue
+          borderRadius: 10,
+          paddingVertical: 15,
+          marginTop: 14,
+          alignItems: "center",
+        },
+        googleButtonText: {
+          color: "white",
+          fontWeight: "700",
+          fontSize: 16,
+        },
       }),
     [theme]
   );
@@ -151,6 +220,21 @@ export default function SignInScreen() {
           <Text style={styles.buttonText}>
             {loading ? "Signing in..." : "Sign In"}
           </Text>
+        </TouchableOpacity>
+
+        {/* Google Sign-In Button */}
+        <TouchableOpacity
+          style={styles.googleButton}
+          onPress={async () => {
+            try {
+              console.log("Triggering Google Sign-In...");
+              await promptAsync(); // Trigger Google Sign-In flow
+            } catch (error) {
+              console.error("Google Sign-In error:", error);
+            }
+          }}
+        >
+          <Text style={styles.googleButtonText}>Sign in with Google</Text>
         </TouchableOpacity>
 
         <Link href="/auth/sign-up" asChild>
