@@ -19,8 +19,8 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { useTheme } from "../../../contexts/ThemeContext";
-import { getSetting, saveSetting } from "../../../lib/storage";
+import { useTheme } from "../../../src/contexts/ThemeContext";
+import { getSetting, saveSetting } from "../../../src/lib/storage";
 
 export default function SettingsScreen() {
   const router = useRouter();

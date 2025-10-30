@@ -11,9 +11,9 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { useTheme } from "../../contexts/ThemeContext";
-import { auth, db } from "../../firebaseConfig";
-import { useGoogleAuth } from "../../lib/auth/googleAuth"; // Import Google sign-in hook
+import { auth, db } from "../../src/config/firebaseConfig";
+import { useTheme } from "../../src/contexts/ThemeContext";
+import { useGoogleAuth } from "../../src/lib/auth/googleAuth"; // Import Google sign-in hook
 
 export default function SignInScreen() {
   const { theme } = useTheme();

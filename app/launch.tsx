@@ -1,8 +1,8 @@
 import { useRouter } from "expo-router";
 import React, { useEffect, useRef } from "react";
 import { Animated, StyleSheet, View } from "react-native";
-import LastRepLogo from "../components/LastRepLogo";
-import { useTheme } from "../contexts/ThemeContext";
+import LastRepLogo from "../src/components/LastRepLogo";
+import { useTheme } from "../src/contexts/ThemeContext";
 
 export default function Launch() {
   const router = useRouter();

@@ -5,8 +5,8 @@ import React, { useEffect, useState } from "react";
 import { ActivityIndicator, View } from "react-native";
 import "react-native-gesture-handler";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { ThemeProvider } from "../contexts/ThemeContext";
-import { auth, db } from "../firebaseConfig";
+import { auth, db } from "../src/config/firebaseConfig";
+import { ThemeProvider } from "../src/contexts/ThemeContext";
 
 export default function RootLayout() {
   const [user, setUser] = useState<User | null | undefined>(undefined);

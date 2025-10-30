@@ -3,9 +3,9 @@ import { getAuth } from "firebase/auth";
 import { doc, getDoc, setDoc, updateDoc } from "firebase/firestore"; // Added setDoc
 import React, { useMemo, useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import OnboardingLayout from "../../components/OnboardingLayout";
-import { useTheme } from "../../contexts/ThemeContext";
-import { db } from "../../firebaseConfig";
+import OnboardingLayout from "../../src/components/OnboardingLayout";
+import { db } from "../../src/config/firebaseConfig";
+import { useTheme } from "../../src/contexts/ThemeContext";
 
 export default function Goal() {
   const router = useRouter();

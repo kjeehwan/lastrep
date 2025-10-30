@@ -1,9 +1,9 @@
 import { useRouter } from "expo-router";
 import React, { useMemo } from "react";
 import { Dimensions, StyleSheet, Text, View } from "react-native";
-import LastRepLogo from "../../components/LastRepLogo"; // Import LastRepLogo component
-import OnboardingLayout from "../../components/OnboardingLayout";
-import { useTheme } from "../../contexts/ThemeContext";
+import LastRepLogo from "../../src/components/LastRepLogo"; // Import LastRepLogo component
+import OnboardingLayout from "../../src/components/OnboardingLayout";
+import { useTheme } from "../../src/contexts/ThemeContext";
 
 export default function Ready() {
   const router = useRouter();

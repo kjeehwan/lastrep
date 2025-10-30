@@ -10,9 +10,9 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { useTheme } from "../../../contexts/ThemeContext";
-import { db } from "../../../firebaseConfig";
-import { cacheGet, cacheSet } from "../../../lib/cache"; // 🧠 cache integration
+import { db } from "../../../src/config/firebaseConfig";
+import { useTheme } from "../../../src/contexts/ThemeContext";
+import { cacheGet, cacheSet } from "../../../src/lib/cache"; // 🧠 cache integration
 
 type WorkoutSummary = {
   date: string;

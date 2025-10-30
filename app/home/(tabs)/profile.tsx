@@ -9,9 +9,9 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { useTheme } from "../../../contexts/ThemeContext";
-import { db } from "../../../firebaseConfig";
-import { cacheGet, cacheSet } from "../../../lib/cache"; // 🆕 import cache utils
+import { db } from "../../../src/config/firebaseConfig";
+import { useTheme } from "../../../src/contexts/ThemeContext";
+import { cacheGet, cacheSet } from "../../../src/lib/cache"; // 🆕 import cache utils
 
 export default function Profile() {
   const auth = getAuth();

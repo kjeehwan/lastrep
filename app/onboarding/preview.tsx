@@ -3,9 +3,9 @@ import { getAuth } from "firebase/auth";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import OnboardingLayout from "../../components/OnboardingLayout";
-import { useTheme } from "../../contexts/ThemeContext";
-import { db } from "../../firebaseConfig"; // adjust path if needed
+import OnboardingLayout from "../../src/components/OnboardingLayout";
+import { db } from "../../src/config/firebaseConfig"; // adjust path if needed
+import { useTheme } from "../../src/contexts/ThemeContext";
 
 type PlanDay = { day: string; focus: string; exercises: string[] };
 

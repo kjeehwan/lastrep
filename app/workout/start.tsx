@@ -3,11 +3,11 @@ import { getAuth } from "firebase/auth";
 import { arrayUnion, doc, increment, serverTimestamp, updateDoc } from "firebase/firestore";
 import React, { useMemo, useState } from "react";
 import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import ExerciseCard from "../../components/workout/ExerciseCard";
-import ExercisePickerModal from "../../components/workout/ExercisePickerModal";
-import { useTheme } from "../../contexts/ThemeContext";
-import { db } from "../../firebaseConfig";
-import { cacheGet, cacheSet } from "../../lib/cache";
+import { db } from "../..//src/config/firebaseConfig";
+import ExerciseCard from "../../src/components/workout/ExerciseCard";
+import ExercisePickerModal from "../../src/components/workout/ExercisePickerModal";
+import { useTheme } from "../../src/contexts/ThemeContext";
+import { cacheGet, cacheSet } from "../../src/lib/cache";
 
 type ExerciseSet = { weight: string; reps: string; rpe: string; done: boolean };
 type Exercise = { name: string; sets: ExerciseSet[] };

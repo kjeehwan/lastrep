@@ -3,9 +3,9 @@ import { getAuth } from "firebase/auth";
 import { doc, updateDoc } from "firebase/firestore";
 import React, { useMemo, useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import OnboardingLayout from "../../components/OnboardingLayout"; // Ensure this is imported
-import { useTheme } from "../../contexts/ThemeContext";
-import { db } from "../../firebaseConfig";
+import OnboardingLayout from "../../src/components/OnboardingLayout"; // Ensure this is imported
+import { db } from "../../src/config/firebaseConfig";
+import { useTheme } from "../../src/contexts/ThemeContext";
 
 export default function Experience() {
   const router = useRouter();

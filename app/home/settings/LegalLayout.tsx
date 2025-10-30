@@ -8,7 +8,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { useTheme } from "../../../contexts/ThemeContext";
+import { useTheme } from "../../../src/contexts/ThemeContext";
 
 type Section = {
   title?: string;
