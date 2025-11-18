@@ -1,7 +1,14 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
+﻿import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
-import { createUserWithEmailAndPassword } from "firebase/auth";
-import React, { useState } from "react";
+import { GoogleSignin } from "@react-native-google-signin/google-signin";
+import {
+  GoogleAuthProvider,
+  UserCredential,
+  createUserWithEmailAndPassword,
+  getAdditionalUserInfo,
+  signInWithCredential,
+} from "firebase/auth";
+import React, { useEffect, useState } from "react";
 import { StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import LastRepLogo from "../../components/LastRepLogo"; // Static logo component
 import { auth } from "../../src/config/firebaseConfig";
@@ -11,30 +18,66 @@ export default function SignUp() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [googleBusy, setGoogleBusy] = useState(false);
   const router = useRouter();
+  useEffect(() => {
+    GoogleSignin.configure({
+      webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
+      iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
+      scopes: ["profile", "email"],
+      offlineAccess: true,
+    });
+  }, []);
 
   const handleSignUp = async () => {
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      const userToken = await userCredential.user.getIdToken(); // Get the Firebase ID token
-      await AsyncStorage.setItem("userToken", userToken); // Save the user token
-
-      // Create user data object
-      const userData = {
-        email: userCredential.user.email,
-        name: userCredential.user.displayName || "New User",
-        goals: "Build muscle", // Default goal
-      };
-
-      // Save the user data to Firestore
-      await saveUserData(userCredential.user.uid, userData); // Write to Firestore
-
-      // Mark the user as signed up
-      await AsyncStorage.setItem("isSignedUp", "true");
-
-      router.push("/onboarding/goal"); // Redirect to onboarding after successful sign-up
+      await finalizeRegistration(userCredential, true);
     } catch (err: any) {
       setError(err.message); // Show error message if sign-up fails
+    }
+  };
+
+  const finalizeRegistration = async (userCredential: UserCredential, isNewUser: boolean) => {
+    const userToken = await userCredential.user.getIdToken(); // Get the Firebase ID token
+    await AsyncStorage.setItem("userToken", userToken); // Save the user token
+
+    if (isNewUser) {
+      await saveUserData(userCredential.user.uid, {
+        email: userCredential.user.email,
+        name:
+          userCredential.user.displayName ||
+          userCredential.user.email?.split("@")[0] ||
+          "New User",
+        goal: "Build muscle",
+      });
+      await AsyncStorage.setItem("isSignedUp", "true");
+      router.push("/onboarding/goal"); // Redirect to onboarding after successful sign-up
+    } else {
+      router.push("/home");
+    }
+  };
+
+  const handleGooglePress = async () => {
+    setError(null);
+    setGoogleBusy(true);
+    try {
+      await GoogleSignin.hasPlayServices();
+      const signInResult = await GoogleSignin.signIn();
+      let idToken = (signInResult as any)?.idToken;
+      if (!idToken) {
+        const tokens = await GoogleSignin.getTokens();
+        idToken = tokens?.idToken;
+      }
+      if (!idToken) throw new Error("Google Sign-Up did not return an ID token");
+      const credential = GoogleAuthProvider.credential(idToken);
+      const userCredential = await signInWithCredential(auth, credential);
+      const additionalInfo = getAdditionalUserInfo(userCredential);
+      await finalizeRegistration(userCredential, additionalInfo?.isNewUser ?? false);
+    } catch (googleError: any) {
+      setError(googleError.message ?? "Google Sign-Up failed");
+    } finally {
+      setGoogleBusy(false);
     }
   };
 
@@ -62,6 +105,16 @@ export default function SignUp() {
 
       <TouchableOpacity style={styles.button} onPress={handleSignUp}>
         <Text style={styles.buttonText}>Sign Up</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={[styles.button, styles.googleButton]}
+        onPress={handleGooglePress}
+        disabled={googleBusy}
+      >
+        <Text style={[styles.buttonText, styles.googleButtonText]}>
+          {googleBusy ? "Connecting..." : "Continue with Google"}
+        </Text>
       </TouchableOpacity>
 
       {/* Link to Sign-In */}
@@ -102,6 +155,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: 40,
   },
+  googleButton: {
+    marginTop: 16,
+    backgroundColor: "#fff",
+  },
   footer: {
     marginTop: 20,
     flexDirection: "row",
@@ -117,7 +174,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
   },
-    error: {
+  error: {
     color: "red",
     marginBottom: 12,
   },
@@ -127,4 +184,11 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "700",
   },
+  googleButtonText: {
+    color: "#2a67b1",
+  },
 });
+
+
+
+

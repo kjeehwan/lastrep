@@ -14,12 +14,12 @@ import {
 } from "react-native";
 import { getUserData, saveUserData } from "../../../src/userData"; // Correct import path
 
-// Goal options with emojis
+// Goal options
 const goals = [
-  { key: "buildMuscle", label: "Build Muscle 💪" },
-  { key: "loseFat", label: "Lose Fat 🔥" },
-  { key: "getStronger", label: "Get Stronger 🦾" },
-  { key: "improveFitness", label: "Improve Fitness 🏃‍♂️" },
+  { key: "buildMuscle", label: "Build Muscle" },
+  { key: "loseFat", label: "Lose Fat" },
+  { key: "getStronger", label: "Get Stronger" },
+  { key: "improveFitness", label: "Improve Fitness" },
 ];
 
 const experiences = ["beginner", "intermediate", "advanced"];
@@ -61,7 +61,7 @@ export default function ProfileIndex() {
     (async () => {
       try {
         console.log("Fetching data for user:", uid); // Log uid for debugging
-        const data = await getUserData(uid);  // Fetch user data
+        const data = await getUserData(uid); // Fetch user data
         if (data) {
           console.log("Fetched user data:", data); // Log user data
           setGoal(data.goal || "");
@@ -84,7 +84,7 @@ export default function ProfileIndex() {
 
   // Save user data to Firestore
   const save = async () => {
-    if (!uid) return;  // If no UID, do nothing
+    if (!uid) return; // If no UID, do nothing
     await saveUserData(uid, {
       goal,
       experience,
@@ -103,7 +103,7 @@ export default function ProfileIndex() {
   const formatHeightImperial = (inches: number) => {
     const feet = Math.floor(inches / 12);
     const remainingInches = Math.round(inches % 12);
-    return `${feet}′ ${remainingInches}″`;
+    return `${feet}'${remainingInches}"`;
   };
 
   const Option = ({
@@ -254,3 +254,4 @@ const styles = StyleSheet.create({
   save: { backgroundColor: "#7b61ff", borderRadius: 12, alignItems: "center", paddingVertical: 14, marginTop: 22 },
   saveText: { color: "#fff", fontWeight: "800", fontSize: 15 },
 });
+

@@ -2,6 +2,7 @@
   "expo": {
     "name": "lastrep",
     "slug": "lastrep",
+    "owner": "kjeehwan",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -9,9 +10,11 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
+      "bundleIdentifier": "com.kjeehwan.lastrep",
       "supportsTablet": true
     },
     "android": {
+      "package": "com.kjeehwan.lastrep",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -35,8 +38,15 @@
           "resizeMode": "contain",
           "backgroundColor": "#ffffff",
           "dark": {
-            "backgroundColor": "#000000"
-          }
+          "backgroundColor": "#000000"
+        }
+        }
+      ]
+      ,
+      [
+        "@react-native-google-signin/google-signin/app.plugin.js",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.1011197324131-qavna1bbp3mm9irs056p57o38pg039kc"
         }
       ]
     ],

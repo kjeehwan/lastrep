@@ -5,14 +5,13 @@ import React, { useState } from "react";
 import { StyleSheet, Text, TouchableOpacity } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import OnboardingLayout from "../../components/OnboardingLayout";
-import { saveUserData } from "../../src/userData"; // Import Firestore save function
+import { saveUserData } from "../../src/userData";
 
 const GoalScreen = () => {
   const [goal, setGoal] = useState("");
   const router = useRouter();
 
   const handleNext = async () => {
-    // Save goal to Firestore
     const auth = getAuth();
     const user = auth.currentUser;
     if (!user) {
@@ -20,15 +19,16 @@ const GoalScreen = () => {
       return;
     }
     const userId = user.uid;
-    await saveUserData(userId, { goal }); // Save the goal data to Firestore
+    // Persist a single goal field for consistency across the app
+    await saveUserData(userId, { goal });
     router.push("/onboarding/experience");
   };
 
   const options = [
-    { id: "buildMuscle", label: "Build Muscle 💪" },
-    { id: "getStronger", label: "Get Stronger 🏋️" },
-    { id: "loseFat", label: "Lose Fat 🔥" },
-    { id: "improveFitness", label: "Improve Fitness ⚡" },
+    { id: "buildMuscle", label: "Build Muscle" },
+    { id: "getStronger", label: "Get Stronger" },
+    { id: "loseFat", label: "Lose Fat" },
+    { id: "improveFitness", label: "Improve Fitness" },
   ];
 
   return (

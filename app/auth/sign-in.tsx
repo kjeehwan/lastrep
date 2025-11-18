@@ -1,37 +1,98 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
+﻿import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
-import { signInWithEmailAndPassword } from "firebase/auth";
-import React, { useState } from "react";
-import { StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { GoogleSignin } from "@react-native-google-signin/google-signin";
+import {
+  GoogleAuthProvider,
+  UserCredential,
+  getAdditionalUserInfo,
+  signInWithCredential,
+  signInWithEmailAndPassword,
+} from "firebase/auth";
+import React, { useEffect, useState } from "react";
+import {
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import LastRepLogo from "../../components/LastRepLogo"; // Static logo component
 import { auth } from "../../src/config/firebaseConfig";
-import { getUserData } from "../../src/userData"; // Function to fetch user data from Firestore
+import { getUserData, saveUserData } from "../../src/userData"; // Firestore helpers
 
 export default function SignIn() {
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const router = useRouter();
+  const [googleBusy, setGoogleBusy] = useState(false);
+  useEffect(() => {
+    GoogleSignin.configure({
+      webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
+      iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
+      scopes: ["profile", "email"],
+      offlineAccess: true,
+    });
+  }, []);
 
   const handleSignIn = async () => {
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      const userToken = await userCredential.user.getIdToken(); // Get the Firebase ID token
-      await AsyncStorage.setItem("userToken", userToken); // Store the user token
-
-      // Fetch user data from Firestore
-      const userData = await getUserData(userCredential.user.uid); // Fetch user data
-      console.log(userData); // You can use user data here if needed
-
-      router.push("/home"); // Redirect to home after successful sign-in
+      await finalizeSession(userCredential);
     } catch (err: any) {
-      setError(err.message); // Display error if sign-in fails
+      setError(err.message);
+    }
+  };
+
+  const finalizeSession = async (userCredential: UserCredential) => {
+    const userToken = await userCredential.user.getIdToken();
+    await AsyncStorage.setItem("userToken", userToken);
+
+    const data = await getUserData(userCredential.user.uid);
+    const additionalInfo = getAdditionalUserInfo(userCredential);
+
+    if (!data && additionalInfo?.isNewUser) {
+      await saveUserData(userCredential.user.uid, {
+        email: userCredential.user.email,
+        name:
+          userCredential.user.displayName ||
+          userCredential.user.email?.split("@")[0] ||
+          "New User",
+        goal: "Build muscle",
+      });
+      await AsyncStorage.setItem("isSignedUp", "true");
+      router.push("/onboarding/goal");
+      return;
+    }
+
+    router.push("/home");
+  };
+
+  const handleGooglePress = async () => {
+    setError(null);
+    setGoogleBusy(true);
+    try {
+      await GoogleSignin.hasPlayServices();
+      const signInResult = await GoogleSignin.signIn();
+      let idToken = (signInResult as any)?.idToken;
+      if (!idToken) {
+        // Some devices return tokens via getTokens instead of the sign-in payload
+        const tokens = await GoogleSignin.getTokens();
+        idToken = tokens?.idToken;
+      }
+      if (!idToken) throw new Error("Google Sign-In did not return an ID token");
+      const credential = GoogleAuthProvider.credential(idToken);
+      const userCredential = await signInWithCredential(auth, credential);
+      await finalizeSession(userCredential);
+    } catch (googleError: any) {
+      setError(googleError.message ?? "Google Sign-In failed");
+    } finally {
+      setGoogleBusy(false);
     }
   };
 
   return (
     <View style={styles.container}>
-      {/* Static logo at the top */}
       <LastRepLogo />
 
       <TextInput
@@ -55,9 +116,18 @@ export default function SignIn() {
         <Text style={styles.buttonText}>Sign In</Text>
       </TouchableOpacity>
 
-      {/* Link to Sign-Up */}
+      <TouchableOpacity
+        style={[styles.button, styles.googleButton]}
+        onPress={handleGooglePress}
+        disabled={googleBusy}
+      >
+        <Text style={[styles.buttonText, styles.googleButtonText]}>
+          {googleBusy ? "Connecting..." : "Continue with Google"}
+        </Text>
+      </TouchableOpacity>
+
       <View style={styles.footer}>
-        <Text style={styles.footerText}>Don’t have an account? </Text>
+        <Text style={styles.footerText}>Don?셳 have an account? </Text>
         <TouchableOpacity onPress={() => router.push("/auth/sign-up")}>
           <Text style={styles.link}>Sign up!</Text>
         </TouchableOpacity>
@@ -70,12 +140,8 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     paddingHorizontal: 16,
-    paddingTop: 60, // new: slight padding from top
+    paddingTop: 60,
     backgroundColor: "#0d0d1a",
-  },
-  form: {
-    flexGrow: 1,
-    justifyContent: "flex-start", // move up toward top
   },
   input: {
     height: 50,
@@ -108,15 +174,25 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
   },
-    error: {
+  error: {
     color: "red",
     marginBottom: 12,
   },
-
   buttonText: {
     color: "#fff",
     fontSize: 18,
     fontWeight: "700",
   },
+  googleButton: {
+    marginTop: 16,
+    backgroundColor: "#fff",
+  },
+  googleButtonText: {
+    color: "#2a67b1",
+  },
 });
+
+
+
+
 
