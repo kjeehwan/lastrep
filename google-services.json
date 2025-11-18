@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "1011197324131",
+    "project_id": "lastrep-ebac5",
+    "storage_bucket": "lastrep-ebac5.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1011197324131:android:0ae89b3be26c252a910156",
+        "android_client_info": {
+          "package_name": "com.kjeehwan.lastrep"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1011197324131-93ughcrhd2th17eisrk14fnohkfljomv.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.kjeehwan.lastrep",
+            "certificate_hash": "56013624edbfa2b8496bfff3d2359330992a5633"
+          }
+        },
+        {
+          "client_id": "1011197324131-n2284ea0rfh9j30r2a3dsb8j4o1kmcnc.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDKmGdXQufJd1CC2-AEDgbHd8dwCBxSqeQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1011197324131-n2284ea0rfh9j30r2a3dsb8j4o1kmcnc.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
