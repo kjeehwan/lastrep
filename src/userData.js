@@ -1,8 +1,8 @@
 import { doc, getDoc, setDoc } from "firebase/firestore"; // Correct imports for Firestore v9+ SDK
 import { db } from "./config/firebaseConfig"; // Your Firebase configuration
 
-// Save user data to Firestore
-export const saveUserData = async (userId, userData, merge = false) => {
+// Save user data to Firestore (default to merging to avoid overwriting previous onboarding steps)
+export const saveUserData = async (userId, userData, merge = true) => {
   try {
     await setDoc(doc(db, "users", userId), userData, { merge });
     console.log(merge ? "User data merged." : "User data saved.");
