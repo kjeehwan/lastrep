@@ -5,6 +5,7 @@ import CommunityIndex from "./community/index"; // Same for community index
 import Home from "./home"; // Make sure this path matches where your home component is
 import ProfileIndex from "./profile/index"; // Ensure the correct import path
 import WorkoutIndex from "./workout/index"; // Same for workout index
+import WorkoutLog from "./workout/log";
 
 const Tab = createBottomTabNavigator();
 
@@ -41,6 +42,11 @@ export default function TabsLayout() {
     >
       <Tab.Screen name="home" component={Home} options={{ title: "Home" }} />
       <Tab.Screen name="workout/index" component={WorkoutIndex} options={{ title: "Workout" }} />
+      <Tab.Screen
+        name="workout/log"
+        component={WorkoutLog}
+        options={{ title: "Log workout", tabBarButton: () => null, tabBarStyle: { display: "none" } }}
+      />
       <Tab.Screen name="community/index" component={CommunityIndex} options={{ title: "Community" }} />
       <Tab.Screen name="profile/index" component={ProfileIndex} options={{ title: "Profile" }} />
     </Tab.Navigator>

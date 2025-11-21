@@ -1,16 +1,42 @@
 import { Ionicons } from "@expo/vector-icons";
+import { useFocusEffect } from "@react-navigation/native";
 import { Href, useRouter } from "expo-router";
 import { getAuth, onAuthStateChanged } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
-import React, { useEffect, useState } from "react";
+import { collection, doc, getDoc, getDocs, query, Timestamp, where } from "firebase/firestore";
+import React, { useCallback, useEffect, useState } from "react";
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { db } from "../../src/config/firebaseConfig"; // adjust path if needed
 
 export default function Home() {
   const [user, setUser] = useState<any>(null);
   const [nickname, setNickname] = useState<string | null>(null);
+  const [weeklyStats, setWeeklyStats] = useState({ workouts: 0, sets: 0, volumeKg: 0 });
   const router = useRouter();
   const auth = getAuth();
+
+  const fetchStats = useCallback(
+    async (uid: string) => {
+      try {
+        const sevenDaysAgo = Timestamp.fromDate(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000));
+        const workoutsRef = collection(db, "users", uid, "workouts");
+        const q = query(workoutsRef, where("endedAt", ">=", sevenDaysAgo));
+        const docs = await getDocs(q);
+        let workouts = 0;
+        let sets = 0;
+        let volumeKg = 0;
+        docs.forEach((d) => {
+          const data: any = d.data();
+          workouts += 1;
+          sets += Number(data.totalSets || 0);
+          volumeKg += Number(data.totalVolumeKg || 0);
+        });
+        setWeeklyStats({ workouts, sets, volumeKg });
+      } catch (e) {
+        console.log("Error fetching weekly stats", e);
+      }
+    },
+    []
+  );
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -24,13 +50,22 @@ export default function Home() {
             const data = snap.data();
             if (data.nickname) setNickname(data.nickname);
           }
+          fetchStats(user.uid);
         } catch (e) {
           console.log("Error fetching nickname:", e);
         }
       }
     });
     return unsubscribe;
-  }, []);
+  }, [fetchStats]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (user?.uid) {
+        fetchStats(user.uid);
+      }
+    }, [fetchStats, user?.uid])
+  );
 
   if (!user) return null;
 
@@ -73,21 +108,13 @@ export default function Home() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Today's Workout</Text>
           <View style={styles.card}>
-            <Text style={styles.cardText}>Get started with your next session.</Text>
-            <View style={styles.buttonRow}>
-              <TouchableOpacity
-                style={styles.primaryButton}
-                onPress={() => router.push("/(tabs)/workout/custom" as Href)}
-              >
-                <Text style={styles.primaryText}>Set Up My Workout</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.secondaryButton}
-                onPress={() => router.push("/(tabs)/workout/ai" as Href)}
-              >
-                <Text style={styles.secondaryText}>AI Suggestion</Text>
-              </TouchableOpacity>
-            </View>
+            <Text style={styles.cardText}>Start logging your next session.</Text>
+            <TouchableOpacity
+              style={styles.primaryButtonWide}
+              onPress={() => router.push("/(tabs)/workout/log" as Href)}
+            >
+              <Text style={styles.primaryText}>Start Workout</Text>
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -95,9 +122,9 @@ export default function Home() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>This Week</Text>
           <View style={styles.statsCard}>
-            <Text style={styles.statsText}>Workouts Completed: 0</Text>
-            <Text style={styles.statsText}>Total Sets: 0</Text>
-            <Text style={styles.statsText}>Total Weight Lifted: 0 kg</Text>
+            <Text style={styles.statsText}>Workouts Completed: {weeklyStats.workouts}</Text>
+            <Text style={styles.statsText}>Total Sets: {weeklyStats.sets}</Text>
+            <Text style={styles.statsText}>Total Weight Lifted: {Math.round(weeklyStats.volumeKg * 10) / 10} kg</Text>
           </View>
         </View>
 
@@ -159,14 +186,12 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 20,
   },
-  cardText: {
-    color: "#aaa",
-    fontSize: 15,
-    marginBottom: 20,
-  },
-  buttonRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
+  cardText: { color: "#aaa", fontSize: 15, marginBottom: 16 },
+  primaryButtonWide: {
+    backgroundColor: "#7b61ff",
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: "center",
   },
   primaryButton: {
     backgroundColor: "#7b61ff",
@@ -175,7 +200,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     flex: 1,
     alignItems: "center",
-    marginRight: 8,
   },
   primaryText: {
     color: "#fff",
