@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { Href, useRouter } from "expo-router";
 import { getAuth, onAuthStateChanged } from "firebase/auth";
-import { collection, doc, getDoc, getDocs, query, Timestamp, where } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, query, setDoc, Timestamp, where } from "firebase/firestore";
 import React, { useCallback, useEffect, useState } from "react";
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { db } from "../../src/config/firebaseConfig"; // adjust path if needed
@@ -11,6 +11,12 @@ export default function Home() {
   const [user, setUser] = useState<any>(null);
   const [nickname, setNickname] = useState<string | null>(null);
   const [weeklyStats, setWeeklyStats] = useState({ workouts: 0, sets: 0, volumeKg: 0 });
+  const [readinessScore, setReadinessScore] = useState<number | null>(null);
+  const [lastReadiness, setLastReadiness] = useState<{ score: number | null; updatedAt?: Date }>({
+    score: null,
+    updatedAt: undefined,
+  });
+  const [savingReadiness, setSavingReadiness] = useState(false);
   const router = useRouter();
   const auth = getAuth();
 
@@ -49,6 +55,15 @@ export default function Home() {
           if (snap.exists()) {
             const data = snap.data();
             if (data.nickname) setNickname(data.nickname);
+            if (data.readiness?.score !== undefined) {
+              setReadinessScore(data.readiness.score);
+              setLastReadiness({
+                score: data.readiness.score,
+                updatedAt: data.readiness.updatedAt?.toDate
+                  ? data.readiness.updatedAt.toDate()
+                  : undefined,
+              });
+            }
           }
           fetchStats(user.uid);
         } catch (e) {
@@ -66,6 +81,23 @@ export default function Home() {
       }
     }, [fetchStats, user?.uid])
   );
+
+  const saveReadiness = async () => {
+    if (!user?.uid || readinessScore === null) return;
+    try {
+      setSavingReadiness(true);
+      await setDoc(
+        doc(db, "users", user.uid),
+        { readiness: { score: readinessScore, updatedAt: Timestamp.now() } },
+        { merge: true }
+      );
+      setLastReadiness({ score: readinessScore, updatedAt: new Date() });
+    } catch (e) {
+      console.log("Error saving readiness", e);
+    } finally {
+      setSavingReadiness(false);
+    }
+  };
 
   if (!user) return null;
 
@@ -115,6 +147,51 @@ export default function Home() {
             >
               <Text style={styles.primaryText}>Start Workout</Text>
             </TouchableOpacity>
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Readiness</Text>
+          <View style={styles.card}>
+            <Text style={styles.cardText}>How ready do you feel to train today?</Text>
+            <View style={styles.readinessRow}>
+              {[1, 2, 3, 4, 5].map((val) => {
+                const active = readinessScore === val;
+                return (
+                  <TouchableOpacity
+                    key={val}
+                    style={[styles.readinessButton, active && styles.readinessButtonActive]}
+                    onPress={() => setReadinessScore(val)}
+                  >
+                    <Text style={[styles.readinessButtonText, active && styles.readinessButtonTextActive]}>
+                      {val}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            <TouchableOpacity
+              style={[
+                styles.primaryButtonWide,
+                { marginTop: 8, opacity: readinessScore === null || savingReadiness ? 0.6 : 1 },
+              ]}
+              disabled={readinessScore === null || savingReadiness}
+              onPress={saveReadiness}
+            >
+              <Text style={styles.primaryText}>{savingReadiness ? "Saving..." : "Save readiness"}</Text>
+            </TouchableOpacity>
+            <Text style={[styles.cardText, { marginTop: 10 }]}>
+              {lastReadiness.score !== null
+                ? `Last saved: ${lastReadiness.score}/5${
+                    lastReadiness.updatedAt
+                      ? ` · ${lastReadiness.updatedAt.toLocaleDateString()} ${lastReadiness.updatedAt.toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}`
+                      : ""
+                  }`
+                : "Not saved yet"}
+            </Text>
           </View>
         </View>
 
@@ -187,6 +264,23 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   cardText: { color: "#aaa", fontSize: 15, marginBottom: 16 },
+  readinessRow: { flexDirection: "row", justifyContent: "space-between", marginTop: 8, marginBottom: 8 },
+  readinessButton: {
+    flex: 1,
+    marginHorizontal: 4,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.1)",
+    alignItems: "center",
+  },
+  readinessButtonActive: {
+    backgroundColor: "#7b61ff",
+    borderColor: "#7b61ff",
+  },
+  readinessButtonText: { color: "#d2d3e0", fontWeight: "700" },
+  readinessButtonTextActive: { color: "#0d0d1a" },
   primaryButtonWide: {
     backgroundColor: "#7b61ff",
     borderRadius: 12,
