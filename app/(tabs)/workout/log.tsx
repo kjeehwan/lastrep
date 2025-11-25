@@ -929,8 +929,14 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     marginBottom: 10,
   },
-  row: { flexDirection: "row", gap: 10 },
-  halfInput: { flex: 1, marginBottom: 0 },
+  row: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    columnGap: 10,
+    rowGap: 8,
+  },
+  halfInput: { flexBasis: "48%", flexGrow: 1, minWidth: 120, marginBottom: 0 },
   primaryButton: {
     backgroundColor: "#7b61ff",
     paddingVertical: 12,
