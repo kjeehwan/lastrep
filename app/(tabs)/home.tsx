@@ -3,9 +3,46 @@ import { useFocusEffect } from "@react-navigation/native";
 import { Href, useRouter } from "expo-router";
 import { getAuth, onAuthStateChanged } from "firebase/auth";
 import { collection, doc, getDoc, getDocs, query, setDoc, Timestamp, where } from "firebase/firestore";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { db } from "../../src/config/firebaseConfig"; // adjust path if needed
+
+type PlanDay = { name: string; exercises: string[] };
+type Plan = { goal: string; experience: string; startDate: string; split: PlanDay[] };
+
+const PLAN_TEMPLATES: Record<string, PlanDay[]> = {
+  "push-pull-legs": [
+    { name: "Push", exercises: ["Bench Press", "Overhead Press", "Incline DB Press", "Triceps Pushdown"] },
+    { name: "Pull", exercises: ["Deadlift", "Barbell Row", "Lat Pulldown", "Bicep Curl"] },
+    { name: "Legs", exercises: ["Squat", "Romanian Deadlift", "Leg Press", "Calf Raise"] },
+  ],
+  "upper-lower": [
+    { name: "Upper", exercises: ["Bench Press", "Row", "Overhead Press", "Pull Ups"] },
+    { name: "Lower", exercises: ["Squat", "Deadlift", "Lunges", "Leg Curl"] },
+  ],
+  "full-body": [
+    { name: "Full Body A", exercises: ["Squat", "Bench Press", "Row", "Plank"] },
+    { name: "Full Body B", exercises: ["Deadlift", "Overhead Press", "Pull Ups", "Farmer Walk"] },
+  ],
+};
+
+const buildPlan = (goal: string, experience: string): PlanDay[] => {
+  // simple mapping: heavier frequency for advanced
+  if (experience === "advanced") return PLAN_TEMPLATES["push-pull-legs"];
+  if (experience === "intermediate") return PLAN_TEMPLATES["upper-lower"];
+  return PLAN_TEMPLATES["full-body"];
+};
+
+const getTodaySuggestion = (plan: Plan | null): PlanDay | null => {
+  if (!plan || !plan.split?.length) return null;
+  const start = new Date(plan.startDate);
+  const today = new Date();
+  const startMid = new Date(start.getFullYear(), start.getMonth(), start.getDate()).getTime();
+  const todayMid = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+  const diffDays = Math.max(0, Math.floor((todayMid - startMid) / (1000 * 60 * 60 * 24)));
+  const idx = diffDays % plan.split.length;
+  return plan.split[idx];
+};
 
 export default function Home() {
   const [user, setUser] = useState<any>(null);
@@ -17,8 +54,12 @@ export default function Home() {
     updatedAt: undefined,
   });
   const [savingReadiness, setSavingReadiness] = useState(false);
+  const [plan, setPlan] = useState<any>(null);
+  const [planGoal, setPlanGoal] = useState<string>("build-muscle");
+  const [planExperience, setPlanExperience] = useState<string>("beginner");
   const router = useRouter();
   const auth = getAuth();
+  const todaySuggestion = useMemo(() => getTodaySuggestion(plan), [plan]);
 
   const fetchStats = useCallback(
     async (uid: string) => {
@@ -64,6 +105,14 @@ export default function Home() {
                   : undefined,
               });
             }
+            if (data.plan) {
+              setPlan({
+                ...data.plan,
+                startDate: data.plan.startDate?.toDate
+                  ? data.plan.startDate.toDate().toISOString()
+                  : data.plan.startDate || new Date().toISOString(),
+              });
+            }
           }
           fetchStats(user.uid);
         } catch (e) {
@@ -96,6 +145,40 @@ export default function Home() {
       console.log("Error saving readiness", e);
     } finally {
       setSavingReadiness(false);
+    }
+  };
+
+  const savePlan = async () => {
+    if (!user?.uid) return;
+    try {
+      const split = buildPlan(planGoal, planExperience);
+      const payload = {
+        plan: {
+          goal: planGoal,
+          experience: planExperience,
+          startDate: Timestamp.now(),
+          split,
+        },
+      };
+      await setDoc(doc(db, "users", user.uid), payload, { merge: true });
+      setPlan({
+        goal: planGoal,
+        experience: planExperience,
+        startDate: new Date().toISOString(),
+        split,
+      });
+    } catch (e) {
+      console.log("Error saving plan", e);
+    }
+  };
+
+  const resetPlan = async () => {
+    if (!user?.uid) return;
+    try {
+      await setDoc(doc(db, "users", user.uid), { plan: null }, { merge: true });
+      setPlan(null);
+    } catch (e) {
+      console.log("Error resetting plan", e);
     }
   };
 
@@ -190,8 +273,100 @@ export default function Home() {
                         })}`
                       : ""
                   }`
-                : "Not saved yet"}
+              : "Not saved yet"}
             </Text>
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Guided plan</Text>
+          <View style={styles.card}>
+            {plan ? (
+              <>
+                <View style={styles.planHeader}>
+                  <Text style={styles.cardText}>
+                    Goal: {plan.goal?.replace("-", " ")} · {plan.experience}
+                  </Text>
+                  <TouchableOpacity onPress={resetPlan}>
+                    <Text style={styles.link}>Change</Text>
+                  </TouchableOpacity>
+                </View>
+                {todaySuggestion ? (
+                  <>
+                    <Text style={[styles.cardText, { marginBottom: 8 }]}>
+                      Today: {todaySuggestion.name}
+                    </Text>
+                    <View style={styles.bulletList}>
+                      {todaySuggestion.exercises.map((ex: string) => (
+                        <Text key={ex} style={styles.bulletItem}>
+                          • {ex}
+                        </Text>
+                      ))}
+                    </View>
+                    <View style={styles.buttonRow}>
+                      <TouchableOpacity
+                        style={styles.primaryButton}
+                        onPress={() => router.push("/(tabs)/workout/log" as Href)}
+                      >
+                        <Text style={styles.primaryText}>Start suggested</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.secondaryButton}
+                        onPress={() => router.push("/(tabs)/workout/log" as Href)}
+                      >
+                        <Text style={styles.secondaryText}>Start freestyle</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </>
+                ) : (
+                  <Text style={styles.cardText}>No suggestion for today.</Text>
+                )}
+              </>
+            ) : (
+              <>
+                <Text style={styles.cardText}>Pick a split and we’ll suggest today’s workout.</Text>
+                <Text style={styles.smallLabel}>Goal</Text>
+                <View style={styles.chipRow}>
+                  {[
+                    { key: "build-muscle", label: "Build muscle" },
+                    { key: "lose-fat", label: "Lose fat" },
+                    { key: "general-fitness", label: "General" },
+                  ].map((g) => (
+                    <TouchableOpacity
+                      key={g.key}
+                      style={[styles.chip, planGoal === g.key && styles.chipActive]}
+                      onPress={() => setPlanGoal(g.key)}
+                    >
+                      <Text style={[styles.chipText, planGoal === g.key && styles.chipTextActive]}>
+                        {g.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                <Text style={styles.smallLabel}>Experience</Text>
+                <View style={styles.chipRow}>
+                  {["beginner", "intermediate", "advanced"].map((lvl) => (
+                    <TouchableOpacity
+                      key={lvl}
+                      style={[styles.chip, planExperience === lvl && styles.chipActive]}
+                      onPress={() => setPlanExperience(lvl)}
+                    >
+                      <Text
+                        style={[
+                          styles.chipText,
+                          planExperience === lvl && styles.chipTextActive,
+                        ]}
+                      >
+                        {lvl}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                <TouchableOpacity style={[styles.primaryButtonWide, { marginTop: 8 }]} onPress={savePlan}>
+                  <Text style={styles.primaryText}>Save plan</Text>
+                </TouchableOpacity>
+              </>
+            )}
           </View>
         </View>
 
@@ -264,6 +439,24 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   cardText: { color: "#aaa", fontSize: 15, marginBottom: 16 },
+  link: { color: "#7b61ff", fontWeight: "700" },
+  smallLabel: { color: "#ccc", fontSize: 13, marginTop: 4, marginBottom: 6 },
+  chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 6 },
+  chip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.2)",
+    backgroundColor: "rgba(255,255,255,0.06)",
+  },
+  chipActive: { backgroundColor: "#7b61ff", borderColor: "#7b61ff" },
+  chipText: { color: "#d8daec", fontWeight: "700" },
+  chipTextActive: { color: "#0d0d1a" },
+  planHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  bulletList: { gap: 4, marginBottom: 10 },
+  bulletItem: { color: "#d8daec" },
+  buttonRow: { flexDirection: "row", gap: 10, marginTop: 10 },
   readinessRow: { flexDirection: "row", justifyContent: "space-between", marginTop: 8, marginBottom: 8 },
   readinessButton: {
     flex: 1,
