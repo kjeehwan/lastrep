@@ -43,3 +43,7 @@ app-example
 # generated native folders
 /ios
 /android
+
+# sensitive files
+google-services.json
+GoogleService-Info.plist

@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useRouter } from "expo-router";
 import { getAuth } from "firebase/auth";
 import { addDoc, collection, getDocs, limit, orderBy, query, Timestamp } from "firebase/firestore";
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -124,8 +124,8 @@ export default function WorkoutLog() {
       activeGroup === "all"
         ? EXERCISE_GROUPS.flatMap((g) => g.items)
         : activeGroup === "recent"
-        ? recentExercises
-        : EXERCISE_GROUPS.find((g) => g.key === activeGroup)?.items || [];
+          ? recentExercises
+          : EXERCISE_GROUPS.find((g) => g.key === activeGroup)?.items || [];
     const byGroup = Array.from(new Set([...(activeGroup === "all" ? recentExercises : []), ...baseList]));
     if (!normalizedSearch) return byGroup;
     return byGroup.filter((item) => item.toLowerCase().includes(normalizedSearch));
@@ -133,10 +133,12 @@ export default function WorkoutLog() {
 
   const replacementOptions = useMemo(() => {
     const normalized = replaceSearch.trim().toLowerCase();
-    const byGroup =
+    const raw =
       replaceGroup === "all"
         ? EXERCISE_GROUPS.flatMap((g) => g.items)
         : EXERCISE_GROUPS.find((g) => g.key === replaceGroup)?.items || [];
+    // ✅ Deduplicate to avoid duplicate React keys (e.g., "Deadlift" appears in multiple groups)
+    const byGroup = Array.from(new Set(raw));
     if (!normalized) return byGroup;
     return byGroup.filter((item) => item.toLowerCase().includes(normalized));
   }, [replaceGroup, replaceSearch]);
@@ -232,8 +234,8 @@ export default function WorkoutLog() {
       Number.isNaN(weightNum) || draft.weight.trim() === ""
         ? null
         : unit === "kg"
-        ? weightNum
-        : convertWeight(weightNum, "lbs", "kg");
+          ? weightNum
+          : convertWeight(weightNum, "lbs", "kg");
     setExercises((prev) =>
       prev.map((ex) =>
         ex.id === exerciseId
@@ -249,11 +251,11 @@ export default function WorkoutLog() {
       prev.map((ex) =>
         ex.id === exerciseId
           ? {
-              ...ex,
-              sets: ex.sets.map((s, idx) =>
-                idx === setIndex ? { ...s, done: !s.done } : s
-              ),
-            }
+            ...ex,
+            sets: ex.sets.map((s, idx) =>
+              idx === setIndex ? { ...s, done: !s.done } : s
+            ),
+          }
           : ex
       )
     );
@@ -288,18 +290,18 @@ export default function WorkoutLog() {
       editingSet.weight.trim() === "" || Number.isNaN(weightNum)
         ? null
         : unit === "kg"
-        ? weightNum
-        : convertWeight(weightNum, "lbs", "kg");
+          ? weightNum
+          : convertWeight(weightNum, "lbs", "kg");
     const repsVal = editingSet.reps.trim();
     setExercises((prev) =>
       prev.map((ex) =>
         ex.id === exerciseId
           ? {
-              ...ex,
-              sets: ex.sets.map((s, idx) =>
-                idx === setIndex ? { ...s, weightKg, reps: repsVal || s.reps } : s
-              ),
-            }
+            ...ex,
+            sets: ex.sets.map((s, idx) =>
+              idx === setIndex ? { ...s, weightKg, reps: repsVal || s.reps } : s
+            ),
+          }
           : ex
       )
     );
@@ -417,7 +419,7 @@ export default function WorkoutLog() {
       setExerciseUnits({});
       startTimeRef.current = new Date();
       setSessionTitle("");
-      AsyncStorage.removeItem(DRAFT_KEY).catch(() => {});
+      AsyncStorage.removeItem(DRAFT_KEY).catch(() => { });
       setSummary({
         title: payload.title,
         totalSets,
@@ -556,21 +558,21 @@ export default function WorkoutLog() {
                   >
                     <Text style={[styles.toggleText, unit === "lbs" && styles.toggleTextActive]}>lbs</Text>
                   </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.iconButton}
-                      onPress={() =>
-                        setReplaceTarget((prev) => (prev === ex.id ? null : ex.id))
-                      }
-                    >
-                      <Ionicons
-                        name={replaceTarget === ex.id ? "close" : "swap-horizontal-outline"}
-                        size={18}
-                        color="#cdd0e0"
-                      />
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.iconButton} onPress={() => deleteExercise(ex.id)}>
-                      <Ionicons name="trash-outline" size={18} color="#ff7a7a" />
-                    </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.iconButton}
+                    onPress={() =>
+                      setReplaceTarget((prev) => (prev === ex.id ? null : ex.id))
+                    }
+                  >
+                    <Ionicons
+                      name={replaceTarget === ex.id ? "close" : "swap-horizontal-outline"}
+                      size={18}
+                      color="#cdd0e0"
+                    />
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.iconButton} onPress={() => deleteExercise(ex.id)}>
+                    <Ionicons name="trash-outline" size={18} color="#ff7a7a" />
+                  </TouchableOpacity>
                 </View>
               </View>
               {replaceTarget === ex.id ? (
@@ -582,11 +584,11 @@ export default function WorkoutLog() {
                     onChangeText={setReplaceSearch}
                     style={[styles.input, { marginBottom: 8 }]}
                   />
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.groupChips}
-          >
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.groupChips}
+                  >
                     <TouchableOpacity
                       style={[styles.groupChip, replaceGroup === "all" && styles.groupChipActive]}
                       onPress={() => setReplaceGroup("all")}
@@ -630,7 +632,7 @@ export default function WorkoutLog() {
                   >
                     {replacementOptions.map((item) => (
                       <TouchableOpacity
-                        key={item}
+                        key={`${item}-${ex.id}`}
                         style={styles.pickerRow}
                         onPress={() => replaceExercise(ex.id, item)}
                       >
@@ -645,7 +647,7 @@ export default function WorkoutLog() {
                 <Text style={styles.muted}>No sets yet.</Text>
               ) : (
                 ex.sets.map((s, idx) => (
-                  <View key={idx} style={styles.setContainer}>
+                  <View key={`${ex.id}-set-${idx}`} style={styles.setContainer}>
                     {editingSet.exerciseId === ex.id && editingSet.setIndex === idx ? (
                       <>
                         <View style={styles.row}>
