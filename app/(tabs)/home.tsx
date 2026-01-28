@@ -106,8 +106,16 @@ export default function Home() {
               });
             }
             if (data.plan) {
+              const normalizedSplit =
+                (data.plan.split ?? []).map((day: any) => ({
+                  ...day,
+                  exercises: (day.exercises ?? []).map((ex: any) =>
+                    typeof ex === "string" ? ex : ex?.name ?? String(ex)
+                  ),
+                })) ?? [];
               setPlan({
                 ...data.plan,
+                split: normalizedSplit,
                 startDate: data.plan.startDate?.toDate
                   ? data.plan.startDate.toDate().toISOString()
                   : data.plan.startDate || new Date().toISOString(),
@@ -265,15 +273,14 @@ export default function Home() {
             </TouchableOpacity>
             <Text style={[styles.cardText, { marginTop: 10 }]}>
               {lastReadiness.score !== null
-                ? `Last saved: ${lastReadiness.score}/5${
-                    lastReadiness.updatedAt
-                      ? ` · ${lastReadiness.updatedAt.toLocaleDateString()} ${lastReadiness.updatedAt.toLocaleTimeString([], {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}`
-                      : ""
-                  }`
-              : "Not saved yet"}
+                ? `Last saved: ${lastReadiness.score}/5${lastReadiness.updatedAt
+                  ? ` · ${lastReadiness.updatedAt.toLocaleDateString()} ${lastReadiness.updatedAt.toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}`
+                  : ""
+                }`
+                : "Not saved yet"}
             </Text>
           </View>
         </View>
@@ -297,11 +304,20 @@ export default function Home() {
                       Today: {todaySuggestion.name}
                     </Text>
                     <View style={styles.bulletList}>
-                      {todaySuggestion.exercises.map((ex: string) => (
-                        <Text key={ex} style={styles.bulletItem}>
-                          • {ex}
-                        </Text>
-                      ))}
+                      {(todaySuggestion.exercises ?? []).map((ex: any, index: number) => {
+                        const name = typeof ex === "string" ? ex : ex?.name;
+                        if (!name) return null;
+                        const details =
+                          typeof ex === "object" && ex
+                            ? ` (${ex.sets ?? "?"} sets × ${ex.reps ?? "?"} reps)`
+                            : "";
+                        return (
+                          <Text key={`${name}-${index}`} style={styles.bulletItem}>
+                            • {name}
+                            {details}
+                          </Text>
+                        );
+                      })}
                     </View>
                     <View style={styles.buttonRow}>
                       <TouchableOpacity
