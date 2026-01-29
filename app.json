@@ -38,11 +38,10 @@
           "resizeMode": "contain",
           "backgroundColor": "#ffffff",
           "dark": {
-          "backgroundColor": "#000000"
+            "backgroundColor": "#000000"
+          }
         }
-        }
-      ]
-      ,
+      ],
       [
         "@react-native-google-signin/google-signin/app.plugin.js",
         {
@@ -53,6 +52,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "f0ac21ac-dada-4acd-bc9d-1b7371a018bf"
+      }
     }
   }
 }
