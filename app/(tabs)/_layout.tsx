@@ -1,7 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import React from "react";
-import CommunityIndex from "./community/index"; // Same for community index
 import Home from "./home"; // Make sure this path matches where your home component is
 import ProfileIndex from "./profile/index"; // Ensure the correct import path
 import WorkoutIndex from "./workout/index"; // Same for workout index
@@ -27,7 +26,6 @@ export default function TabsLayout() {
           const icons: Record<string, keyof typeof Ionicons.glyphMap> = {
             home: "home-outline",
             "workout/index": "barbell-outline",
-            "community/index": "people-outline",
             "profile/index": "person-outline",  // Profile route icon
           };
           return (
@@ -47,7 +45,6 @@ export default function TabsLayout() {
         component={WorkoutLog}
         options={{ title: "Log workout", tabBarButton: () => null, tabBarStyle: { display: "none" } }}
       />
-      <Tab.Screen name="community/index" component={CommunityIndex} options={{ title: "Community" }} />
       <Tab.Screen name="profile/index" component={ProfileIndex} options={{ title: "Profile" }} />
     </Tab.Navigator>
   );
