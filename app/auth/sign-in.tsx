@@ -18,7 +18,7 @@ import {
 } from "react-native";
 import LastRepLogo from "../../components/LastRepLogo"; // Static logo component
 import { auth } from "../../src/config/firebaseConfig";
-import { getUserData, saveUserData } from "../../src/userData"; // Firestore helpers
+import { buildDefaultUserDoc, getDecisionUsage, getUserData, saveUserData } from "../../src/userData"; // Firestore helpers
 
 export default function SignIn() {
   const router = useRouter();
@@ -51,18 +51,30 @@ export default function SignIn() {
     const data = await getUserData(userCredential.user.uid);
     const additionalInfo = getAdditionalUserInfo(userCredential);
 
+    const tzOffsetMinutes = new Date().getTimezoneOffset();
     if (!data && additionalInfo?.isNewUser) {
-      await saveUserData(userCredential.user.uid, {
-        email: userCredential.user.email,
-        name:
-          userCredential.user.displayName ||
-          userCredential.user.email?.split("@")[0] ||
-          "New User",
-        goal: "Build muscle",
-      });
+      await saveUserData(
+        userCredential.user.uid,
+        buildDefaultUserDoc({
+          email: userCredential.user.email,
+          name:
+            userCredential.user.displayName ||
+            userCredential.user.email?.split("@")[0] ||
+            "New User",
+          goal: "Build muscle",
+        }, new Date(), tzOffsetMinutes)
+      );
       await AsyncStorage.setItem("isSignedUp", "true");
       router.push("/onboarding/goal");
       return;
+    }
+
+    if (data) {
+      const normalized = getDecisionUsage(data, new Date(), tzOffsetMinutes);
+      await saveUserData(userCredential.user.uid, {
+        entitlement: data.entitlement ?? buildDefaultUserDoc({}, new Date(), tzOffsetMinutes).entitlement,
+        usage: { decisions: normalized },
+      });
     }
 
     router.push("/home");
@@ -191,8 +203,5 @@ const styles = StyleSheet.create({
     color: "#2a67b1",
   },
 });
-
-
-
 
 
