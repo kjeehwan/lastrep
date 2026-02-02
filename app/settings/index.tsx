@@ -1,10 +1,12 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Href, Redirect, useRouter } from "expo-router";
 import { onAuthStateChanged, signOut } from "firebase/auth";
+import { doc, setDoc } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
 import { Linking, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { auth } from "../../src/config/firebaseConfig";
+import { auth, db } from "../../src/config/firebaseConfig";
+import { getDateStringFromOffset } from "../../src/decisionGate";
 import { getUserData } from "../../src/userData";
 
 const ACCENT = "#7b61ff";
@@ -15,6 +17,9 @@ export default function SettingsIndex() {
   const [nickname, setNickname] = useState("You");
   const [email, setEmail] = useState<string | null>(null);
   const [redirectTo, setRedirectTo] = useState<Href | null>(null);
+  const [uid, setUid] = useState<string | null>(null);
+  const [isSubscribed, setIsSubscribed] = useState<boolean | null>(null);
+  const [tzOffsetMinutes, setTzOffsetMinutes] = useState<number>(new Date().getTimezoneOffset());
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (user) => {
@@ -22,11 +27,18 @@ export default function SettingsIndex() {
         setRedirectTo("/auth/sign-in");
         return;
       }
+      setUid(user.uid);
       setEmail(user.email || null);
       (async () => {
         try {
           const data = await getUserData(user.uid);
           if (data?.nickname) setNickname(data.nickname);
+          if (typeof data?.entitlement?.isSubscribed === "boolean") {
+            setIsSubscribed(data.entitlement.isSubscribed);
+          }
+          if (typeof data?.usage?.decisions?.tzOffsetMinutes === "number") {
+            setTzOffsetMinutes(data.usage.decisions.tzOffsetMinutes);
+          }
         } catch (e) {
           console.log("Failed to load nickname", e);
         }
@@ -46,6 +58,43 @@ export default function SettingsIndex() {
 
   const contactSupport = () => {
     Linking.openURL("mailto:kjeehwan@gmail.com?subject=Support%20request");
+  };
+
+  const setDevEntitlement = async (nextValue: boolean) => {
+    if (!uid) return;
+    try {
+      await setDoc(doc(db, "users", uid), { entitlement: { isSubscribed: nextValue } }, { merge: true });
+      setIsSubscribed(nextValue);
+    } catch (e) {
+      console.log("Failed to update entitlement", e);
+    }
+  };
+
+  const resetCooldown = async () => {
+    if (!uid) return;
+    try {
+      await setDoc(
+        doc(db, "users", uid),
+        { usage: { decisions: { lastDecisionAt: null } } },
+        { merge: true }
+      );
+    } catch (e) {
+      console.log("Failed to reset cooldown", e);
+    }
+  };
+
+  const resetDailyLimit = async () => {
+    if (!uid) return;
+    try {
+      const today = getDateStringFromOffset(new Date(), tzOffsetMinutes);
+      await setDoc(
+        doc(db, "users", uid),
+        { usage: { decisions: { dailyCount: 0, dailyDate: today } } },
+        { merge: true }
+      );
+    } catch (e) {
+      console.log("Failed to reset daily limit", e);
+    }
   };
 
   if (redirectTo) return <Redirect href={redirectTo} />;
@@ -82,6 +131,27 @@ export default function SettingsIndex() {
             <Text style={styles.secondaryButtonText}>Log out</Text>
           </TouchableOpacity>
         </View>
+
+        {__DEV__ ? (
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>Dev</Text>
+            <Text style={styles.subText}>Entitlement: {isSubscribed ? "Paid" : "Free"}</Text>
+            <View style={styles.devRow}>
+              <TouchableOpacity style={styles.secondaryButton} onPress={() => setDevEntitlement(true)}>
+                <Text style={styles.secondaryButtonText}>Set Paid</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.secondaryButton} onPress={() => setDevEntitlement(false)}>
+                <Text style={styles.secondaryButtonText}>Set Free</Text>
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity style={styles.secondaryButton} onPress={resetCooldown}>
+              <Text style={styles.secondaryButtonText}>Reset cooldown</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.secondaryButton} onPress={resetDailyLimit}>
+              <Text style={styles.secondaryButtonText}>Reset daily limit</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   );
@@ -114,4 +184,5 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   secondaryButtonText: { color: "#fff", fontWeight: "700", fontSize: 15 },
+  devRow: { flexDirection: "row", gap: 12 },
 });

@@ -33,7 +33,7 @@ export const getDecisionUsage = (userDoc = {}, now = new Date(), tzOffsetMinutes
   const decisions = usage.decisions || {};
   const effectiveOffset =
     typeof decisions.tzOffsetMinutes === "number" ? decisions.tzOffsetMinutes : tzOffsetMinutes;
-  return {
+  const base = {
     freeRemaining: typeof decisions.freeRemaining === "number" ? decisions.freeRemaining : 3,
     dailyCount: typeof decisions.dailyCount === "number" ? decisions.dailyCount : 0,
     dailyDate:
@@ -41,10 +41,11 @@ export const getDecisionUsage = (userDoc = {}, now = new Date(), tzOffsetMinutes
         ? decisions.dailyDate
         : getDateStringFromOffset(now, effectiveOffset),
     tzOffsetMinutes: effectiveOffset,
-    lastDecisionAt: decisions.lastDecisionAt || undefined,
-    lastInputsHash: decisions.lastInputsHash || undefined,
-    lastResult: decisions.lastResult || undefined,
   };
+  if (decisions.lastDecisionAt) base.lastDecisionAt = decisions.lastDecisionAt;
+  if (typeof decisions.lastInputsHash === "string") base.lastInputsHash = decisions.lastInputsHash;
+  if (decisions.lastResult) base.lastResult = decisions.lastResult;
+  return base;
 };
 
 export const normalizeDecisionUsage = (decisions = {}, now = new Date(), tzOffsetMinutes = new Date().getTimezoneOffset()) => {
@@ -78,7 +79,6 @@ export const getUserData = async (userId) => {
     const docSnap = await getDoc(docRef);  // Direct Firestore query
 
     if (docSnap.exists()) {
-      console.log("Fetched user data:", docSnap.data());  // Log user data
       return docSnap.data();  // Return the fetched data
     } else {
       console.warn("No such user document!");  // If the document doesn't exist
