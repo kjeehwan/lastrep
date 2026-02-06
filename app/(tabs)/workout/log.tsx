@@ -1,15 +1,30 @@
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { getAuth } from "firebase/auth";
-import { addDoc, collection, getDocs, limit, orderBy, query, Timestamp } from "firebase/firestore";
+import { addDoc, collection, doc, getDoc, getDocs, limit, orderBy, query, Timestamp } from "firebase/firestore";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { db } from "../../../src/config/firebaseConfig";
 
 type Unit = "kg" | "lbs";
-type SetEntry = { weightKg: number | null; reps: string; done: boolean };
+type SetEntry = {
+  weightKg: number | null;
+  reps: string;
+  done: boolean;
+  baselineWeightKg?: number | null;
+  baselineReps?: string;
+  baselineAdjusted?: boolean;
+};
 type Exercise = { id: string; name: string; sets: SetEntry[] };
+type FollowedAnswer = "yes" | "partial" | "no";
+type HelpfulAnswer = "yes" | "neutral" | "no";
+type PastWorkout = {
+  id: string;
+  title: string;
+  date: Date;
+  exercises: { name: string; sets: { weightKg: number | null; reps: string }[] }[];
+};
 
 const EXERCISE_GROUPS = [
   {
@@ -56,31 +71,32 @@ export default function WorkoutLog() {
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [showPicker, setShowPicker] = useState(false);
   const [customExercise, setCustomExercise] = useState("");
-  const [setDrafts, setSetDrafts] = useState<Record<string, { weight: string; reps: string }>>({});
   const [exerciseUnits, setExerciseUnits] = useState<Record<string, Unit>>({});
   const [searchQuery, setSearchQuery] = useState("");
   const [activeGroup, setActiveGroup] = useState<string>("all");
-  const [editingSet, setEditingSet] = useState<{
-    exerciseId: string | null;
-    setIndex: number | null;
-    weight: string;
-    reps: string;
-  }>({ exerciseId: null, setIndex: null, weight: "", reps: "" });
   const [replaceTarget, setReplaceTarget] = useState<string | null>(null);
   const [replaceSearch, setReplaceSearch] = useState("");
   const [replaceGroup, setReplaceGroup] = useState<string>("all");
   const [saving, setSaving] = useState(false);
   const [sessionTitle, setSessionTitle] = useState("");
   const [elapsedMinutes, setElapsedMinutes] = useState(0);
+  const [sessionPhase, setSessionPhase] = useState("Hypertrophy");
   const [recentExercises, setRecentExercises] = useState<string[]>([]);
-  const [showSummary, setShowSummary] = useState(false);
-  const [summary, setSummary] = useState<null | {
-    title: string;
-    totalSets: number;
-    totalVolumeKg: number;
-    totalExercises: number;
-    durationMinutes: number;
-  }>(null);
+  const [pastWorkouts, setPastWorkouts] = useState<PastWorkout[]>([]);
+  const [showRepeatPicker, setShowRepeatPicker] = useState(false);
+  const [showFinishModal, setShowFinishModal] = useState(false);
+  const [followedAnswer, setFollowedAnswer] = useState<FollowedAnswer | null>(null);
+  const [helpfulAnswer, setHelpfulAnswer] = useState<HelpfulAnswer | null>(null);
+  const [baselineDate, setBaselineDate] = useState<Date | null>(null);
+  const [latestDecision, setLatestDecision] = useState<{
+    decision?: string;
+    adjustments?: { intensityPct?: number };
+  } | null>(null);
+  const [activeSetMenu, setActiveSetMenu] = useState<{
+    exerciseId: string;
+    setIndex: number;
+  } | null>(null);
+  const routerParams = useLocalSearchParams<{ trainingPhase?: string }>();
   const auth = getAuth();
   const startTimeRef = useRef<Date>(new Date());
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -101,6 +117,25 @@ export default function WorkoutLog() {
     if (weightKg === null || Number.isNaN(weightKg)) return "";
     const val = targetUnit === "kg" ? weightKg : weightKg * 2.20462;
     return `${Math.round(val * 10) / 10}`;
+  };
+
+  const roundWeightKg = (weightKg: number, unit: Unit) => {
+    if (!Number.isFinite(weightKg)) return weightKg;
+    if (unit === "kg") {
+      const step = 2.5;
+      return Math.round(weightKg / step) * step;
+    }
+    const lbs = weightKg * 2.20462;
+    const step = 5;
+    const roundedLbs = Math.round(lbs / step) * step;
+    return roundedLbs * 0.453592;
+  };
+
+  const getAdjustmentOptions = () => {
+    const decision = latestDecision?.decision;
+    if (decision === "PULL_BACK") return [0, -5, -10, -15, -20];
+    if (decision === "PUSH") return [0, 5, 10, 15, 20];
+    return [0];
   };
 
   const addExercise = (name: string) => {
@@ -137,11 +172,70 @@ export default function WorkoutLog() {
       replaceGroup === "all"
         ? EXERCISE_GROUPS.flatMap((g) => g.items)
         : EXERCISE_GROUPS.find((g) => g.key === replaceGroup)?.items || [];
-    // ✅ Deduplicate to avoid duplicate React keys (e.g., "Deadlift" appears in multiple groups)
+    // ??Deduplicate to avoid duplicate React keys (e.g., "Deadlift" appears in multiple groups)
     const byGroup = Array.from(new Set(raw));
     if (!normalized) return byGroup;
     return byGroup.filter((item) => item.toLowerCase().includes(normalized));
   }, [replaceGroup, replaceSearch]);
+
+  const loadPastWorkouts = async () => {
+    try {
+      const user = auth.currentUser;
+      if (!user) return;
+      const workoutsRef = collection(db, "users", user.uid, "workouts");
+      const snap = await getDocs(query(workoutsRef, orderBy("date", "desc"), limit(20)));
+      const names: string[] = [];
+      const workouts: PastWorkout[] = [];
+      snap.forEach((docSnap) => {
+        const data: any = docSnap.data();
+        const rawDate =
+          data?.date?.toDate?.() ||
+          data?.endedAt?.toDate?.() ||
+          data?.createdAt?.toDate?.() ||
+          null;
+        if (rawDate) {
+          workouts.push({
+            id: docSnap.id,
+            title: data?.title || "Workout",
+            date: rawDate,
+            exercises: (data?.exercises || []).map((ex: any) => ({
+              name: ex?.name || "Exercise",
+              sets: (ex?.sets || []).map((set: any) => ({
+                weightKg: typeof set?.weightKg === "number" ? set.weightKg : null,
+                reps: String(set?.reps ?? ""),
+              })),
+            })),
+          });
+        }
+        (data.exercises || []).forEach((ex: any) => {
+          if (ex?.name && !names.includes(ex.name)) names.push(ex.name);
+        });
+      });
+      setRecentExercises(names);
+      setPastWorkouts(workouts);
+    } catch (e) {
+      console.log("Failed to load recent exercises", e);
+    }
+  };
+
+  const loadLatestDecision = async () => {
+    try {
+      const user = auth.currentUser;
+      if (!user) return;
+      const snap = await getDoc(doc(db, "users", user.uid));
+      if (!snap.exists()) return;
+      const data: any = snap.data();
+      const last = data?.usage?.decisions?.lastResult;
+      if (last?.result) {
+        setLatestDecision({
+          decision: last.result.decision,
+          adjustments: last.result.adjustments,
+        });
+      }
+    } catch (e) {
+      console.log("Failed to load latest decision", e);
+    }
+  };
 
   // Load draft and recent exercises
   useEffect(() => {
@@ -151,36 +245,37 @@ export default function WorkoutLog() {
         if (raw) {
           const parsed = JSON.parse(raw);
           if (parsed.exercises) setExercises(parsed.exercises);
-          if (parsed.setDrafts) setSetDrafts(parsed.setDrafts);
           if (parsed.exerciseUnits) setExerciseUnits(parsed.exerciseUnits);
           if (parsed.sessionTitle) setSessionTitle(parsed.sessionTitle);
-          if (parsed.startTime) startTimeRef.current = new Date(parsed.startTime);
+          if (parsed.startTime) {
+            const savedStart = new Date(parsed.startTime);
+            const now = new Date();
+            const sameDay =
+              savedStart.getFullYear() === now.getFullYear() &&
+              savedStart.getMonth() === now.getMonth() &&
+              savedStart.getDate() === now.getDate();
+            startTimeRef.current = sameDay ? savedStart : now;
+          }
         }
       } catch (e) {
         console.log("Failed to load draft", e);
       }
     };
-    const loadRecent = async () => {
-      try {
-        const user = auth.currentUser;
-        if (!user) return;
-        const workoutsRef = collection(db, "users", user.uid, "workouts");
-        const snap = await getDocs(query(workoutsRef, orderBy("endedAt", "desc"), limit(10)));
-        const names: string[] = [];
-        snap.forEach((docSnap) => {
-          const data: any = docSnap.data();
-          (data.exercises || []).forEach((ex: any) => {
-            if (ex?.name && !names.includes(ex.name)) names.push(ex.name);
-          });
-        });
-        setRecentExercises(names);
-      } catch (e) {
-        console.log("Failed to load recent exercises", e);
-      }
-    };
     loadDraft();
-    loadRecent();
+    loadPastWorkouts();
   }, [auth.currentUser]);
+
+  useEffect(() => {
+    if (routerParams.trainingPhase) {
+      setSessionPhase(String(routerParams.trainingPhase));
+    }
+  }, [routerParams.trainingPhase]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      loadLatestDecision();
+    }, [auth.currentUser])
+  );
 
   // Persist draft
   useEffect(() => {
@@ -190,7 +285,6 @@ export default function WorkoutLog() {
         DRAFT_KEY,
         JSON.stringify({
           exercises,
-          setDrafts,
           exerciseUnits,
           sessionTitle,
           startTime: startTimeRef.current.toISOString(),
@@ -200,7 +294,7 @@ export default function WorkoutLog() {
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
     };
-  }, [exercises, setDrafts, exerciseUnits, sessionTitle]);
+  }, [exercises, exerciseUnits, sessionTitle]);
 
   // Elapsed timer
   useEffect(() => {
@@ -215,35 +309,14 @@ export default function WorkoutLog() {
     return () => clearInterval(id);
   }, []);
 
-  const updateDraft = (exerciseId: string, field: "weight" | "reps", value: string) => {
-    setSetDrafts((prev) => ({
-      ...prev,
-      [exerciseId]: {
-        weight: prev[exerciseId]?.weight || "",
-        reps: prev[exerciseId]?.reps || "",
-        [field]: value,
-      },
-    }));
-  };
-
-  const addSetToExercise = (exerciseId: string, unit: Unit) => {
-    const draft = setDrafts[exerciseId] || { weight: "", reps: "" };
-    if (!draft.reps.trim()) return;
-    const weightNum = parseFloat(draft.weight);
-    const weightKg =
-      Number.isNaN(weightNum) || draft.weight.trim() === ""
-        ? null
-        : unit === "kg"
-          ? weightNum
-          : convertWeight(weightNum, "lbs", "kg");
+  const addEmptySet = (exerciseId: string) => {
     setExercises((prev) =>
       prev.map((ex) =>
         ex.id === exerciseId
-          ? { ...ex, sets: [...ex.sets, { weightKg, reps: draft.reps.trim(), done: false }] }
+          ? { ...ex, sets: [...ex.sets, { weightKg: null, reps: "", done: false }] }
           : ex
       )
     );
-    setSetDrafts((prev) => ({ ...prev, [exerciseId]: { weight: "", reps: "" } }));
   };
 
   const toggleSetDone = (exerciseId: string, setIndex: number) => {
@@ -269,43 +342,79 @@ export default function WorkoutLog() {
           : ex
       )
     );
-    if (editingSet.exerciseId === exerciseId && editingSet.setIndex === setIndex) {
-      setEditingSet({ exerciseId: null, setIndex: null, weight: "", reps: "" });
-    }
   };
 
-  const startEditSet = (exerciseId: string, setIndex: number, set: SetEntry, unit: Unit) => {
-    setEditingSet({
-      exerciseId,
-      setIndex,
-      weight: formatWeightInput(set.weightKg, unit),
-      reps: set.reps,
-    });
+  const openSetMenu = (exerciseId: string, setIndex: number) => {
+    setActiveSetMenu({ exerciseId, setIndex });
   };
 
-  const saveEditSet = (exerciseId: string, setIndex: number, unit: Unit) => {
-    if (editingSet.exerciseId !== exerciseId || editingSet.setIndex !== setIndex) return;
-    const weightNum = parseFloat(editingSet.weight);
+  const closeSetMenu = () => {
+    setActiveSetMenu(null);
+  };
+
+  const updateSetWeight = (exerciseId: string, setIndex: number, unit: Unit, value: string) => {
+    const weightNum = parseFloat(value);
     const weightKg =
-      editingSet.weight.trim() === "" || Number.isNaN(weightNum)
+      value.trim() === "" || Number.isNaN(weightNum)
         ? null
         : unit === "kg"
           ? weightNum
           : convertWeight(weightNum, "lbs", "kg");
-    const repsVal = editingSet.reps.trim();
     setExercises((prev) =>
       prev.map((ex) =>
         ex.id === exerciseId
           ? {
             ...ex,
             sets: ex.sets.map((s, idx) =>
-              idx === setIndex ? { ...s, weightKg, reps: repsVal || s.reps } : s
+              idx === setIndex ? { ...s, weightKg } : s
             ),
           }
           : ex
       )
     );
-    setEditingSet({ exerciseId: null, setIndex: null, weight: "", reps: "" });
+  };
+
+  const updateSetReps = (exerciseId: string, setIndex: number, value: string) => {
+    setExercises((prev) =>
+      prev.map((ex) =>
+        ex.id === exerciseId
+          ? {
+            ...ex,
+            sets: ex.sets.map((s, idx) =>
+              idx === setIndex ? { ...s, reps: value } : s
+            ),
+          }
+          : ex
+      )
+    );
+  };
+
+  const applySetAdjustment = (exerciseId: string, setIndex: number, unit: Unit, percent: number) => {
+    setExercises((prev) =>
+      prev.map((ex) =>
+        ex.id === exerciseId
+          ? {
+            ...ex,
+            sets: ex.sets.map((s, idx) => {
+              if (idx !== setIndex) return s;
+              if (s.weightKg === null || s.weightKg <= 0) return s;
+              const baseline = s.baselineWeightKg ?? s.weightKg;
+              const adjustedFlag = percent === 0 ? s.baselineAdjusted ?? false : true;
+              if (percent === 0) {
+                return { ...s, baselineWeightKg: baseline, baselineAdjusted: adjustedFlag, weightKg: baseline };
+              }
+              const adjusted = baseline * (1 + percent / 100);
+              return {
+                ...s,
+                baselineWeightKg: baseline,
+                baselineAdjusted: adjustedFlag,
+                weightKg: roundWeightKg(adjusted, unit),
+              };
+            }),
+          }
+          : ex
+      )
+    );
   };
 
   const replaceExercise = (exerciseId: string, newName: string) => {
@@ -338,19 +447,11 @@ export default function WorkoutLog() {
     const target = exercises.find((ex) => ex.id === exerciseId);
     const doDelete = () => {
       setExercises((prev) => prev.filter((ex) => ex.id !== exerciseId));
-      setSetDrafts((prev) => {
-        const copy = { ...prev };
-        delete copy[exerciseId];
-        return copy;
-      });
       setExerciseUnits((prev) => {
         const copy = { ...prev };
         delete copy[exerciseId];
         return copy;
       });
-      if (editingSet.exerciseId === exerciseId) {
-        setEditingSet({ exerciseId: null, setIndex: null, weight: "", reps: "" });
-      }
       if (replaceTarget === exerciseId) {
         setReplaceTarget(null);
         setReplaceSearch("");
@@ -372,8 +473,45 @@ export default function WorkoutLog() {
     }
   };
 
-  const finishWorkout = async () => {
+  const applyPastWorkout = (workout: PastWorkout) => {
+    const nextExercises: Exercise[] = workout.exercises.map((ex) => ({
+      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      name: ex.name,
+      sets: ex.sets.map((s) => ({
+        weightKg: s.weightKg ?? null,
+        reps: s.reps,
+        done: false,
+        baselineWeightKg: s.weightKg ?? null,
+        baselineReps: s.reps,
+      })),
+    }));
+    setExercises(nextExercises);
+    setSessionTitle(workout.title || "Workout");
+    setBaselineDate(workout.date);
+    setExerciseUnits(() => {
+      const next: Record<string, Unit> = {};
+      nextExercises.forEach((ex) => {
+        next[ex.id] = "kg";
+      });
+      return next;
+    });
+    startTimeRef.current = new Date();
+    setShowRepeatPicker(false);
+  };
+
+  const finishWorkout = () => {
     if (!exercises.length) return;
+    setFollowedAnswer(null);
+    setHelpfulAnswer(null);
+    setShowFinishModal(true);
+  };
+
+  const saveWorkout = async () => {
+    if (saving) return;
+    if (!followedAnswer || !helpfulAnswer) {
+      Alert.alert("Quick questions", "Please answer both questions before saving.");
+      return;
+    }
     const user = auth.currentUser;
     if (!user) {
       Alert.alert("Not signed in", "Please sign in again to save your workout.");
@@ -381,53 +519,55 @@ export default function WorkoutLog() {
     }
     try {
       setSaving(true);
-      const totalSets = exercises.reduce((sum, ex) => sum + ex.sets.length, 0);
-      const totalVolumeKg = exercises.reduce((sum, ex) => {
-        const exVol = ex.sets.reduce((s, set) => {
-          const repsNum = parseFloat(set.reps);
-          if (Number.isNaN(repsNum) || set.weightKg === null) return s;
-          return s + set.weightKg * repsNum;
-        }, 0);
-        return sum + exVol;
-      }, 0);
-      const durationMinutes = Math.max(
-        0,
-        Math.floor((Date.now() - startTimeRef.current.getTime()) / 60000)
-      );
+      const sanitizedExercises = exercises
+        .map((ex) => {
+          const cleanedSets = ex.sets.filter((s) => {
+            const repsVal = String(s.reps || "").trim();
+            if (!repsVal) return false;
+            return true;
+          });
+          return cleanedSets.length ? { ...ex, sets: cleanedSets } : null;
+        })
+        .filter(Boolean) as Exercise[];
+
+      const totalCleanSets = sanitizedExercises.reduce((sum, ex) => sum + ex.sets.length, 0);
+      if (totalCleanSets === 0) {
+        Alert.alert("Nothing to save", "Add reps to at least one set before saving.");
+        setSaving(false);
+        return;
+      }
+
       const payload = {
         title: sessionTitle || "Workout",
-        exercises: exercises.map((ex) => ({
+        date: Timestamp.fromDate(new Date()),
+        trainingPhase: sessionPhase,
+        exercises: sanitizedExercises.map((ex) => ({
           name: ex.name,
           sets: ex.sets.map((s) => ({
             weightKg: s.weightKg,
             reps: s.reps,
-            done: s.done,
           })),
         })),
-        totalSets,
-        totalVolumeKg,
-        totalExercises: exercises.length,
-        startedAt: Timestamp.fromDate(startTimeRef.current),
-        endedAt: Timestamp.fromDate(new Date()),
+        followedRecommendation: followedAnswer || "unknown",
+        helpful: helpfulAnswer || "unknown",
         createdAt: Timestamp.now(),
-        status: "completed",
-        durationMinutes,
       };
-      await addDoc(collection(db, "users", user.uid, "workouts"), payload);
+      const docRef = await addDoc(collection(db, "users", user.uid, "workouts"), payload);
+      if (__DEV__) {
+        Alert.alert("Workout saved", `Saved as ${docRef.id}`);
+      }
       setExercises([]);
-      setSetDrafts({});
       setExerciseUnits({});
       startTimeRef.current = new Date();
       setSessionTitle("");
+      setBaselineDate(null);
       AsyncStorage.removeItem(DRAFT_KEY).catch(() => { });
-      setSummary({
-        title: payload.title,
-        totalSets,
-        totalVolumeKg,
-        totalExercises: exercises.length,
-        durationMinutes,
-      });
-      setShowSummary(true);
+      setShowFinishModal(false);
+      await loadPastWorkouts();
+      if (!__DEV__) {
+        Alert.alert("Workout saved", "Nice work.");
+      }
+      router.replace("/(tabs)/home");
     } catch (e) {
       console.log("Error saving workout", e);
       Alert.alert("Save failed", `We couldn't save this workout. ${String(e)}`);
@@ -441,22 +581,6 @@ export default function WorkoutLog() {
       const current = prev[exerciseId] || "kg";
       if (current === next) return prev;
       return { ...prev, [exerciseId]: next };
-    });
-    const currentUnit = exerciseUnits[exerciseId] || "kg";
-    if (currentUnit === next) return;
-    setSetDrafts((prev) => {
-      const draft = prev[exerciseId];
-      if (!draft) return prev;
-      const w = parseFloat(draft.weight);
-      if (Number.isNaN(w)) return prev;
-      const converted = convertWeight(w, currentUnit, next);
-      return {
-        ...prev,
-        [exerciseId]: {
-          ...draft,
-          weight: converted === null ? draft.weight : `${Math.round(converted * 10) / 10}`,
-        },
-      };
     });
   };
 
@@ -478,24 +602,15 @@ export default function WorkoutLog() {
     () => exercises.reduce((sum, ex) => sum + ex.sets.length, 0),
     [exercises]
   );
-  const totalVolumeKg = useMemo(() => {
-    return exercises.reduce((sum, ex) => {
-      const exVol = ex.sets.reduce((s, set) => {
-        const repsNum = parseFloat(set.reps);
-        if (Number.isNaN(repsNum) || set.weightKg === null) return s;
-        return s + set.weightKg * repsNum;
-      }, 0);
-      return sum + exVol;
-    }, 0);
-  }, [exercises]);
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.content}
-      keyboardShouldPersistTaps="handled"
-      scrollEventThrottle={16}
-    >
+    <View style={styles.screen}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        scrollEventThrottle={16}
+      >
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="chevron-back" size={22} color="#fff" />
@@ -525,7 +640,37 @@ export default function WorkoutLog() {
             Duration: {elapsedMinutes} min
           </Text>
         </View>
+        <View style={styles.phaseRow}>
+          <Text style={styles.muted}>Training phase: {sessionPhase}</Text>
+          <TouchableOpacity onPress={() => router.push("/(tabs)/home")} style={styles.phaseLink}>
+            <Text style={styles.phaseLinkText}>Change</Text>
+          </TouchableOpacity>
+        </View>
       </View>
+
+      {baselineDate ? (
+        <View style={styles.baselineBanner}>
+          <Text style={styles.baselineText}>
+            Baseline copied from{" "}
+            {baselineDate.toLocaleDateString(undefined, { year: "numeric", month: "2-digit", day: "2-digit" })}
+          </Text>
+          <Text style={styles.baselineSub}>
+            Adjust per today&apos;s decision:{" "}
+            {latestDecision?.decision
+              ? `${latestDecision.decision} (${latestDecision.adjustments?.intensityPct ?? 0}% weight)`
+              : "—"}
+          </Text>
+        </View>
+      ) : null}
+
+      {pastWorkouts.length > 0 ? (
+        <TouchableOpacity
+          style={[styles.secondaryButton, { marginTop: 10 }]}
+          onPress={() => setShowRepeatPicker(true)}
+        >
+          <Text style={styles.secondaryText}>Repeat past workout</Text>
+        </TouchableOpacity>
+      ) : null}
 
       {exercises.length === 0 ? (
         <View style={styles.emptyCard}>
@@ -533,7 +678,6 @@ export default function WorkoutLog() {
         </View>
       ) : (
         exercises.map((ex) => {
-          const draft = setDrafts[ex.id] || { weight: "", reps: "" };
           const unit = exerciseUnits[ex.id] || "kg";
           return (
             <View key={ex.id} style={styles.card}>
@@ -648,102 +792,65 @@ export default function WorkoutLog() {
               ) : (
                 ex.sets.map((s, idx) => (
                   <View key={`${ex.id}-set-${idx}`} style={styles.setContainer}>
-                    {editingSet.exerciseId === ex.id && editingSet.setIndex === idx ? (
-                      <>
-                        <View style={styles.row}>
-                          <TextInput
-                            placeholder={`Weight (${unit})`}
-                            placeholderTextColor="#7a7a8c"
-                            keyboardType="numeric"
-                            value={editingSet.weight}
-                            onChangeText={(v) =>
-                              setEditingSet((prev) => ({ ...prev, weight: v }))
-                            }
-                            style={[styles.input, styles.halfInput]}
-                          />
-                          <TextInput
-                            placeholder="Reps"
-                            placeholderTextColor="#7a7a8c"
-                            keyboardType="numeric"
-                            value={editingSet.reps}
-                            onChangeText={(v) =>
-                              setEditingSet((prev) => ({ ...prev, reps: v }))
-                            }
-                            style={[styles.input, styles.halfInput]}
-                          />
+                    <View style={styles.setInlineRow}>
+                      <Text style={styles.setLabel}>
+                        {idx + 1}
+                      </Text>
+                      <TouchableOpacity
+                        style={styles.checkboxInline}
+                        onPress={() => toggleSetDone(ex.id, idx)}
+                        activeOpacity={0.8}
+                      >
+                        <View style={[styles.checkbox, s.done && styles.checkboxChecked]}>
+                          {s.done ? <Ionicons name="checkmark" size={14} color="#0d0d1a" /> : null}
                         </View>
-                        <View style={styles.actionRow}>
-                          <TouchableOpacity
-                            style={[styles.miniButton, { backgroundColor: "#7b61ff" }]}
-                            onPress={() => saveEditSet(ex.id, idx, unit)}
-                          >
-                            <Text style={styles.miniButtonText}>Save</Text>
-                          </TouchableOpacity>
-                          <TouchableOpacity
-                            style={[styles.miniButton, { backgroundColor: "rgba(255,255,255,0.15)" }]}
-                            onPress={() =>
-                              setEditingSet({ exerciseId: null, setIndex: null, weight: "", reps: "" })
-                            }
-                          >
-                            <Text style={styles.miniButtonText}>Cancel</Text>
-                          </TouchableOpacity>
-                        </View>
-                      </>
-                    ) : (
-                      <View style={[styles.setRow, { justifyContent: "space-between" }]}>
+                      </TouchableOpacity>
+                      <TextInput
+                        placeholder="Weight"
+                        placeholderTextColor="#7a7a8c"
+                        keyboardType="numeric"
+                        value={formatWeightInput(s.weightKg, unit)}
+                        onChangeText={(v) => updateSetWeight(ex.id, idx, unit, v)}
+                        style={[styles.input, styles.setInput]}
+                      />
+                      <TextInput
+                        placeholder="Reps"
+                        placeholderTextColor="#7a7a8c"
+                        keyboardType="numeric"
+                        value={s.reps}
+                        onChangeText={(v) => updateSetReps(ex.id, idx, v)}
+                        style={[styles.input, styles.setInput, styles.setInputReps]}
+                      />
+                      <View style={styles.actions}>
                         <TouchableOpacity
-                          style={styles.setInfo}
-                          onPress={() => toggleSetDone(ex.id, idx)}
-                          activeOpacity={0.8}
+                          onPress={() => deleteSet(ex.id, idx)}
+                          style={styles.iconButton}
                         >
-                          <View style={[styles.checkbox, s.done && styles.checkboxChecked]}>
-                            {s.done ? <Ionicons name="checkmark" size={14} color="#0d0d1a" /> : null}
-                          </View>
-                          <Text style={[styles.setText, s.done && styles.setTextDone]}>
-                            Set {idx + 1}: {s.reps} reps{" "}
-                            {s.weightKg === null ? "" : `@ ${formatWeight(s.weightKg, unit)}`}
-                          </Text>
+                          <Ionicons name="trash-outline" size={18} color="#ff7a7a" />
                         </TouchableOpacity>
-                        <View style={styles.actions}>
-                          <TouchableOpacity
-                            onPress={() => startEditSet(ex.id, idx, s, unit)}
-                            style={styles.iconButton}
-                          >
-                            <Ionicons name="create-outline" size={18} color="#cdd0e0" />
-                          </TouchableOpacity>
-                          <TouchableOpacity
-                            onPress={() => deleteSet(ex.id, idx)}
-                            style={styles.iconButton}
-                          >
-                            <Ionicons name="trash-outline" size={18} color="#ff7a7a" />
-                          </TouchableOpacity>
-                        </View>
+                        <TouchableOpacity
+                          onPress={() => openSetMenu(ex.id, idx)}
+                          style={styles.iconButton}
+                        >
+                          <Ionicons name="ellipsis-horizontal" size={18} color="#cdd0e0" />
+                        </TouchableOpacity>
                       </View>
-                    )}
+                    </View>
+                    {s.baselineAdjusted && (typeof s.baselineWeightKg === "number" || s.baselineReps) ? (
+                      <Text style={styles.baselineInline}>
+                        Baseline:{" "}
+                        {typeof s.baselineWeightKg === "number"
+                          ? `${formatWeight(s.baselineWeightKg, unit)}`
+                          : "-"}{" "}
+                        x {s.baselineReps ?? "-"}
+                      </Text>
+                    ) : null}
                   </View>
                 ))
               )}
-              <View style={styles.row}>
-                <TextInput
-                  placeholder={`Weight (${unit})`}
-                  placeholderTextColor="#7a7a8c"
-                  keyboardType="numeric"
-                  value={draft.weight}
-                  onChangeText={(v) => updateDraft(ex.id, "weight", v)}
-                  style={[styles.input, styles.halfInput]}
-                />
-                <TextInput
-                  placeholder="Reps"
-                  placeholderTextColor="#7a7a8c"
-                  keyboardType="numeric"
-                  value={draft.reps}
-                  onChangeText={(v) => updateDraft(ex.id, "reps", v)}
-                  style={[styles.input, styles.halfInput]}
-                />
-              </View>
               <TouchableOpacity
                 style={styles.primaryButton}
-                onPress={() => addSetToExercise(ex.id, unit)}
+                onPress={() => addEmptySet(ex.id)}
               >
                 <Text style={styles.primaryText}>Add set</Text>
               </TouchableOpacity>
@@ -836,17 +943,7 @@ export default function WorkoutLog() {
         </View>
       ) : null}
 
-      <View style={styles.summaryCard}>
-        <Text style={styles.sectionTitle}>Summary</Text>
-        <Text style={styles.muted}>Exercises: {exercises.length}</Text>
-        <Text style={styles.muted}>Total sets: {totalSets}</Text>
-        <Text style={styles.muted}>
-          Volume: {Math.round(totalVolumeKg * 10) / 10} kg
-        </Text>
-        <Text style={styles.muted}>Duration: {elapsedMinutes} min</Text>
-      </View>
-
-      <TouchableOpacity
+        <TouchableOpacity
         style={[styles.secondaryButton, { marginTop: 16, opacity: saving ? 0.6 : 1 }]}
         onPress={finishWorkout}
         disabled={saving}
@@ -856,47 +953,131 @@ export default function WorkoutLog() {
         </Text>
       </TouchableOpacity>
 
-      <Modal visible={showSummary} transparent animationType="fade">
+      <Modal visible={showRepeatPicker} transparent animationType="fade">
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>{summary?.title || "Workout saved"}</Text>
-            <Text style={styles.modalText}>Exercises: {summary?.totalExercises ?? 0}</Text>
-            <Text style={styles.modalText}>Sets: {summary?.totalSets ?? 0}</Text>
-            <Text style={styles.modalText}>
-              Volume: {summary ? Math.round(summary.totalVolumeKg * 10) / 10 : 0} kg
-            </Text>
-            <Text style={styles.modalText}>
-              Duration: {summary?.durationMinutes ?? 0} min
-            </Text>
+            <Text style={styles.modalTitle}>Repeat a past workout</Text>
+            <ScrollView style={{ maxHeight: 280 }}>
+              {pastWorkouts.map((w) => (
+                <TouchableOpacity
+                  key={w.id}
+                  style={styles.pickerRow}
+                  onPress={() => applyPastWorkout(w)}
+                >
+                  <Ionicons name="repeat-outline" size={18} color="#7b61ff" />
+                  <View>
+                    <Text style={styles.pickerText}>{w.title}</Text>
+                    <Text style={styles.muted}>
+                      {w.date.toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            <TouchableOpacity
+              style={[styles.secondaryButton, { marginTop: 10 }]}
+              onPress={() => setShowRepeatPicker(false)}
+            >
+              <Text style={styles.secondaryText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={showFinishModal} transparent animationType="fade">
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Quick questions</Text>
+            <Text style={styles.modalText}>Followed recommendation?</Text>
+            <View style={styles.answerRow}>
+              {(["yes", "partial", "no"] as FollowedAnswer[]).map((val) => (
+                <TouchableOpacity
+                  key={val}
+                  style={[styles.answerChip, followedAnswer === val && styles.answerChipActive]}
+                  onPress={() => setFollowedAnswer(val)}
+                >
+                  <Text style={[styles.answerText, followedAnswer === val && styles.answerTextActive]}>
+                    {val}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <Text style={[styles.modalText, { marginTop: 12 }]}>Helpful?</Text>
+            <View style={styles.answerRow}>
+              {(["yes", "neutral", "no"] as HelpfulAnswer[]).map((val) => (
+                <TouchableOpacity
+                  key={val}
+                  style={[styles.answerChip, helpfulAnswer === val && styles.answerChipActive]}
+                  onPress={() => setHelpfulAnswer(val)}
+                >
+                  <Text style={[styles.answerText, helpfulAnswer === val && styles.answerTextActive]}>
+                    {val}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
             <View style={styles.modalActions}>
               <TouchableOpacity
-                style={[styles.primaryButton, styles.modalActionButton, styles.modalPrimaryButton]}
-                onPress={() => {
-                  setShowSummary(false);
-                  router.replace("/(tabs)/home");
-                }}
+                style={[styles.secondaryButton, styles.modalActionButton]}
+                onPress={() => setShowFinishModal(false)}
               >
-                <Text style={styles.primaryText}>Back to Home</Text>
+                <Text style={styles.secondaryText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.secondaryButton, styles.modalActionButton, styles.modalSecondaryButton]}
-                onPress={() => {
-                  setShowSummary(false);
-                  Alert.alert("Share", "Sharing is coming soon.");
-                }}
+                style={[styles.primaryButton, styles.modalActionButton, styles.modalPrimaryButton]}
+                onPress={saveWorkout}
+                disabled={saving}
               >
-                <Text style={styles.secondaryText}>Share</Text>
+                <Text style={styles.primaryText}>{saving ? "Saving..." : "Save workout"}</Text>
               </TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
 
-    </ScrollView>
+      <Modal visible={Boolean(activeSetMenu)} transparent animationType="slide">
+        <View style={styles.sheetBackdrop}>
+          <View style={styles.sheetCard}>
+            <Text style={styles.modalTitle}>Set options</Text>
+            {activeSetMenu ? (
+              <>
+                <Text style={[styles.modalText, { marginTop: 12 }]}>Apply decision adjustment</Text>
+                <View style={styles.answerRow}>
+                  {getAdjustmentOptions().map((pct) => (
+                    <TouchableOpacity
+                      key={`adj-${pct}`}
+                      style={styles.answerChip}
+                      onPress={() => {
+                        const unit = exerciseUnits[activeSetMenu.exerciseId] || "kg";
+                        applySetAdjustment(activeSetMenu.exerciseId, activeSetMenu.setIndex, unit, pct);
+                      }}
+                    >
+                      <Text style={styles.answerText}>{pct >= 0 ? `+${pct}%` : `${pct}%`}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                <TouchableOpacity
+                  style={[styles.secondaryButton, { marginTop: 10 }]}
+                  onPress={closeSetMenu}
+                >
+                  <Text style={styles.secondaryText}>Close</Text>
+                </TouchableOpacity>
+              </>
+            ) : null}
+          </View>
+        </View>
+      </Modal>
+
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  screen: { flex: 1, backgroundColor: "#0d0d1a" },
   container: { flex: 1, backgroundColor: "#0d0d1a" },
   content: { padding: 20, paddingBottom: 140 },
   header: {
@@ -960,6 +1141,11 @@ const styles = StyleSheet.create({
   setRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 6 },
   setText: { color: "#cdd0e0" },
   setTextDone: { color: "#7b61ff", textDecorationLine: "line-through" },
+  setInlineRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 6 },
+  setLabel: { color: "#cdd0e0", fontWeight: "700", width: 22, textAlign: "center" },
+  setInput: { width: 90, minWidth: 80, marginBottom: 0, paddingVertical: 8 },
+  setInputReps: { marginRight: 8 },
+  checkboxInline: { paddingRight: 2 },
   checkbox: {
     width: 22,
     height: 22,
@@ -1006,14 +1192,6 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "rgba(255,255,255,0.08)",
   },
-  summaryCard: {
-    backgroundColor: "rgba(255,255,255,0.06)",
-    borderRadius: 16,
-    padding: 16,
-    marginTop: 14,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(255,255,255,0.08)",
-  },
   toggleRow: {
     flexDirection: "row",
     gap: 8,
@@ -1057,7 +1235,7 @@ const styles = StyleSheet.create({
   },
   setContainer: { marginBottom: 6 },
   setInfo: { flexDirection: "row", alignItems: "center", gap: 10, flex: 1 },
-  actions: { flexDirection: "row", alignItems: "center", gap: 8 },
+  actions: { flexDirection: "row", alignItems: "center", gap: 8, marginLeft: 6 },
   iconButton: {
     padding: 6,
     borderRadius: 8,
@@ -1069,6 +1247,9 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginTop: 6,
   },
+  phaseRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 6 },
+  phaseLink: { paddingHorizontal: 6, paddingVertical: 2 },
+  phaseLinkText: { color: "#7b61ff", fontWeight: "700" },
   modalBackdrop: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.6)",
@@ -1089,5 +1270,44 @@ const styles = StyleSheet.create({
   modalActions: { flexDirection: "row", gap: 10, marginTop: 12 },
   modalActionButton: { flex: 1 },
   modalPrimaryButton: { marginTop: 0, paddingVertical: 12 },
-  modalSecondaryButton: { marginTop: 0, paddingVertical: 12 },
+  answerRow: { flexDirection: "row", gap: 8, marginTop: 8, flexWrap: "wrap" },
+  answerChip: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.3)",
+    backgroundColor: "rgba(255,255,255,0.05)",
+  },
+  answerChipActive: { backgroundColor: "#7b61ff", borderColor: "#7b61ff" },
+  answerText: { color: "#d8daec", fontWeight: "700" },
+  answerTextActive: { color: "#0d0d1a" },
+  baselineBanner: {
+    backgroundColor: "rgba(123,97,255,0.12)",
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(123,97,255,0.4)",
+  },
+  baselineText: { color: "#fff", fontWeight: "700" },
+  baselineSub: { color: "#c9cde4", marginTop: 4 },
+  baselineInline: { color: "#9aa1c3", fontSize: 12, marginTop: 4 },
+  sheetBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "flex-end",
+  },
+  sheetCard: {
+    backgroundColor: "#111427",
+    padding: 16,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
 });
+
+
+
+

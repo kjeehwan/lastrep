@@ -6,6 +6,7 @@ import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc, setDoc, Timestamp } from "firebase/firestore";
 import React, { useEffect, useMemo, useState } from "react";
 import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { auth, db } from "../../src/config/firebaseConfig";
 import { gateAndConsumeDecision } from "../../src/decisionUsageStore";
 import { buildDecisionStub } from "../../src/services/decisionEngineStub";
@@ -28,6 +29,7 @@ type LatestDecisionPayload = {
   result: DecisionResult;
 };
 
+const HOME_INPUTS_KEY = "home-inputs-v1";
 const reasonMessage = (reason?: string) => {
   switch (reason) {
     case "FREE_EXHAUSTED":
@@ -53,7 +55,8 @@ export default function Home() {
   const [soreness, setSoreness] = useState(4);
   const [fatigue, setFatigue] = useState(4);
   const [motivation, setMotivation] = useState(6);
-  const [phase, setPhase] = useState("maintain");
+  const [trainingPhase, setTrainingPhase] = useState("Hypertrophy");
+  const [dietPhase, setDietPhase] = useState("Maintain");
 
   const [loading, setLoading] = useState(false);
   const [gateMessage, setGateMessage] = useState<string | null>(null);
@@ -90,6 +93,46 @@ export default function Home() {
     return unsub;
   }, []);
 
+  useEffect(() => {
+    const loadInputs = async () => {
+      try {
+        const raw = await AsyncStorage.getItem(HOME_INPUTS_KEY);
+        if (!raw) return;
+        const parsed = JSON.parse(raw);
+        if (typeof parsed.sleepHours === "string") setSleepHours(parsed.sleepHours);
+        if (typeof parsed.soreness === "number") setSoreness(parsed.soreness);
+        if (typeof parsed.fatigue === "number") setFatigue(parsed.fatigue);
+        if (typeof parsed.motivation === "number") setMotivation(parsed.motivation);
+        if (typeof parsed.trainingPhase === "string") setTrainingPhase(parsed.trainingPhase);
+        if (typeof parsed.dietPhase === "string") setDietPhase(parsed.dietPhase);
+      } catch (e) {
+        console.log("Failed to load home inputs", e);
+      }
+    };
+    loadInputs();
+  }, []);
+
+  useEffect(() => {
+    const save = async () => {
+      try {
+        await AsyncStorage.setItem(
+          HOME_INPUTS_KEY,
+          JSON.stringify({
+            sleepHours,
+            soreness,
+            fatigue,
+            motivation,
+            trainingPhase,
+            dietPhase,
+          })
+        );
+      } catch (e) {
+        console.log("Failed to save home inputs", e);
+      }
+    };
+    save();
+  }, [sleepHours, soreness, fatigue, motivation, trainingPhase, dietPhase]);
+
   const { parsedSleep, sleepIsInvalid } = useMemo(() => {
     const value = Number(sleepHours);
     const invalid = !Number.isFinite(value) || value < 0 || value > 12;
@@ -125,7 +168,8 @@ export default function Home() {
         soreness,
         fatigue,
         motivation,
-        phase,
+        trainingPhase,
+        dietPhase,
       });
 
       const payload: LatestDecisionPayload = {
@@ -135,7 +179,8 @@ export default function Home() {
           soreness,
           fatigue,
           motivation,
-          phase,
+          trainingPhase,
+          dietPhase,
         },
         result,
       };
@@ -225,17 +270,29 @@ export default function Home() {
             />
 
             <Text style={styles.label}>Training phase</Text>
-            <View style={styles.pickerWrap}>
-              <Picker
-                selectedValue={phase}
-                onValueChange={(val) => setPhase(String(val))}
-                dropdownIconColor="#fff"
-                style={styles.picker}
-              >
-                <Picker.Item label="Cut" value="cut" />
-                <Picker.Item label="Maintain" value="maintain" />
-                <Picker.Item label="Bulk" value="bulk" />
-              </Picker>
+            <View style={styles.segmentRow}>
+              {["Hypertrophy", "Strength", "Power"].map((val) => (
+                <TouchableOpacity
+                  key={val}
+                  style={[styles.segmentChip, trainingPhase === val && styles.segmentChipActive]}
+                  onPress={() => setTrainingPhase(val)}
+                >
+                  <Text style={[styles.segmentText, trainingPhase === val && styles.segmentTextActive]}>{val}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <Text style={styles.label}>Diet phase</Text>
+            <View style={styles.segmentRow}>
+              {["Cut", "Maintain", "Bulk"].map((val) => (
+                <TouchableOpacity
+                  key={val}
+                  style={[styles.segmentChip, dietPhase === val && styles.segmentChipActive]}
+                  onPress={() => setDietPhase(val)}
+                >
+                  <Text style={[styles.segmentText, dietPhase === val && styles.segmentTextActive]}>{val}</Text>
+                </TouchableOpacity>
+              ))}
             </View>
 
             <TouchableOpacity style={[styles.primaryButtonWide, loading && styles.disabled]} onPress={handleDecision} disabled={loading}>
@@ -276,10 +333,9 @@ export default function Home() {
                 </View>
                 <View style={styles.adjustRow}>
   <Text style={styles.adjustText}>
-    {latestDecision.result.adjustments.volumePct === 0 &&
-    latestDecision.result.adjustments.intensityPct === 0
-      ? "No change"
-      : `Volume: ${latestDecision.result.adjustments.volumePct ?? 0}% / Intensity: ${latestDecision.result.adjustments.intensityPct ?? 0}%`}
+                    {latestDecision.result.adjustments.intensityPct === 0
+                      ? "No change"
+                      : `Intensity: ${latestDecision.result.adjustments.intensityPct ?? 0}%`}
   </Text>
   <TouchableOpacity
     onPress={() => setShowAdjustHelp((prev) => !prev)}
@@ -289,11 +345,11 @@ export default function Home() {
     <Ionicons name="help-circle-outline" size={18} color="#9aa1c3" />
   </TouchableOpacity>
 </View>
-{showAdjustHelp ? (
-  <Text style={styles.helpText}>
-    Volume = total work (sets/reps). Intensity = load/effort.
-  </Text>
-) : null}
+                {showAdjustHelp ? (
+                  <Text style={styles.helpText}>
+                    Intensity adjustment = change the weight on your sets.
+                  </Text>
+                ) : null}
               </>
             ) : (
               <Text style={styles.cardText}>No decision yet.</Text>
@@ -305,7 +361,10 @@ export default function Home() {
           <Text style={styles.sectionTitle}>Train</Text>
           <View style={styles.card}>
             <Text style={styles.cardText}>Log a full session without templates or history browsing.</Text>
-            <TouchableOpacity style={styles.primaryButtonWide} onPress={() => router.push("/(tabs)/workout/log" as Href)}>
+            <TouchableOpacity
+              style={styles.primaryButtonWide}
+              onPress={() => router.push(`/(tabs)/workout/log?trainingPhase=${encodeURIComponent(trainingPhase)}` as Href)}
+            >
               <Text style={styles.primaryText}>Start workout</Text>
             </TouchableOpacity>
           </View>
@@ -377,13 +436,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   inputHint: { color: "#9aa1c3", fontSize: 12 },
-  pickerWrap: {
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.2)",
+  segmentRow: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
+  segmentChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     borderRadius: 12,
-    overflow: "hidden",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.2)",
+    backgroundColor: "rgba(255,255,255,0.06)",
   },
-  picker: { color: "#fff" },
+  segmentChipActive: { backgroundColor: "#7b61ff", borderColor: "#7b61ff" },
+  segmentText: { color: "#d8daec", fontWeight: "700" },
+  segmentTextActive: { color: "#0d0d1a" },
   primaryButtonWide: {
     backgroundColor: "#7b61ff",
     borderRadius: 12,
