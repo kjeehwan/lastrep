@@ -9,27 +9,15 @@ import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { auth, db } from "../../src/config/firebaseConfig";
 import { gateAndConsumeDecision } from "../../src/decisionUsageStore";
-import { buildDecisionStub } from "../../src/services/decisionEngineStub";
-
-type DecisionResult = {
-  decision: "PUSH" | "MAINTAIN" | "PULL_BACK";
-  explanation: string[];
-  adjustments: { volumePct?: number; intensityPct?: number };
-};
-
-type LatestDecisionPayload = {
-  createdAt: Timestamp;
-  inputs: {
-    sleepHours: number;
-    soreness: number;
-    fatigue: number;
-    motivation: number;
-    phase: string;
-  };
-  result: DecisionResult;
-};
+import { getDecision } from "../../src/services/decision/getDecision";
+import type { DecisionInputs, DietPhase, LastResultPayload, TrainingPhase } from "../../src/types/decision";
 
 const HOME_INPUTS_KEY = "home-inputs-v1";
+const TRAINING_PHASES: TrainingPhase[] = ["Hypertrophy", "Strength", "Power"];
+const DIET_PHASES: DietPhase[] = ["Cut", "Maintain", "Bulk"];
+const isTrainingPhase = (value: string): value is TrainingPhase =>
+  TRAINING_PHASES.includes(value as TrainingPhase);
+const isDietPhase = (value: string): value is DietPhase => DIET_PHASES.includes(value as DietPhase);
 const reasonMessage = (reason?: string) => {
   switch (reason) {
     case "FREE_EXHAUSTED":
@@ -55,14 +43,14 @@ export default function Home() {
   const [soreness, setSoreness] = useState(4);
   const [fatigue, setFatigue] = useState(4);
   const [motivation, setMotivation] = useState(6);
-  const [trainingPhase, setTrainingPhase] = useState("Hypertrophy");
-  const [dietPhase, setDietPhase] = useState("Maintain");
+  const [trainingPhase, setTrainingPhase] = useState<TrainingPhase>("Hypertrophy");
+  const [dietPhase, setDietPhase] = useState<DietPhase>("Maintain");
 
   const [loading, setLoading] = useState(false);
   const [gateMessage, setGateMessage] = useState<string | null>(null);
   const [gateReason, setGateReason] = useState<string | null>(null);
   const [nextAvailableAt, setNextAvailableAt] = useState<Date | null>(null);
-  const [latestDecision, setLatestDecision] = useState<LatestDecisionPayload | null>(null);
+  const [latestDecision, setLatestDecision] = useState<LastResultPayload | null>(null);
   const [showAdjustHelp, setShowAdjustHelp] = useState(false);
   const [lastGateDebug, setLastGateDebug] = useState<string | null>(null);
   const [lastTapAt, setLastTapAt] = useState(0);
@@ -83,7 +71,7 @@ export default function Home() {
           const data: any = snap.data();
           const lastResult = data?.usage?.decisions?.lastResult;
           if (lastResult) {
-            setLatestDecision(lastResult as LatestDecisionPayload);
+            setLatestDecision(lastResult as LastResultPayload);
           }
         }
       } catch (e) {
@@ -103,8 +91,12 @@ export default function Home() {
         if (typeof parsed.soreness === "number") setSoreness(parsed.soreness);
         if (typeof parsed.fatigue === "number") setFatigue(parsed.fatigue);
         if (typeof parsed.motivation === "number") setMotivation(parsed.motivation);
-        if (typeof parsed.trainingPhase === "string") setTrainingPhase(parsed.trainingPhase);
-        if (typeof parsed.dietPhase === "string") setDietPhase(parsed.dietPhase);
+        if (typeof parsed.trainingPhase === "string" && isTrainingPhase(parsed.trainingPhase)) {
+          setTrainingPhase(parsed.trainingPhase);
+        }
+        if (typeof parsed.dietPhase === "string" && isDietPhase(parsed.dietPhase)) {
+          setDietPhase(parsed.dietPhase);
+        }
       } catch (e) {
         console.log("Failed to load home inputs", e);
       }
@@ -163,25 +155,19 @@ export default function Home() {
         return;
       }
 
-      const result = buildDecisionStub({
+      const inputs: DecisionInputs = {
         sleepHours: parsedSleep,
         soreness,
         fatigue,
         motivation,
         trainingPhase,
         dietPhase,
-      });
+      };
+      const result = await getDecision(inputs);
 
-      const payload: LatestDecisionPayload = {
+      const payload: LastResultPayload = {
         createdAt: Timestamp.now(),
-        inputs: {
-          sleepHours: parsedSleep,
-          soreness,
-          fatigue,
-          motivation,
-          trainingPhase,
-          dietPhase,
-        },
+        inputs,
         result,
       };
 
@@ -271,7 +257,7 @@ export default function Home() {
 
             <Text style={styles.label}>Training phase</Text>
             <View style={styles.segmentRow}>
-              {["Hypertrophy", "Strength", "Power"].map((val) => (
+              {TRAINING_PHASES.map((val) => (
                 <TouchableOpacity
                   key={val}
                   style={[styles.segmentChip, trainingPhase === val && styles.segmentChipActive]}
@@ -284,7 +270,7 @@ export default function Home() {
 
             <Text style={styles.label}>Diet phase</Text>
             <View style={styles.segmentRow}>
-              {["Cut", "Maintain", "Bulk"].map((val) => (
+              {DIET_PHASES.map((val) => (
                 <TouchableOpacity
                   key={val}
                   style={[styles.segmentChip, dietPhase === val && styles.segmentChipActive]}
@@ -333,9 +319,10 @@ export default function Home() {
                 </View>
                 <View style={styles.adjustRow}>
   <Text style={styles.adjustText}>
-                    {latestDecision.result.adjustments.intensityPct === 0
+                    {latestDecision.result.adjustments?.intensityPct == null ||
+                    latestDecision.result.adjustments?.intensityPct === 0
                       ? "No change"
-                      : `Intensity: ${latestDecision.result.adjustments.intensityPct ?? 0}%`}
+                      : `Intensity: ${latestDecision.result.adjustments.intensityPct}%`}
   </Text>
   <TouchableOpacity
     onPress={() => setShowAdjustHelp((prev) => !prev)}

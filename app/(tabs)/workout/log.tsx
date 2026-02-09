@@ -6,6 +6,7 @@ import { addDoc, collection, doc, getDoc, getDocs, limit, orderBy, query, Timest
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { db } from "../../../src/config/firebaseConfig";
+import type { Decision } from "../../../src/types/decision";
 
 type Unit = "kg" | "lbs";
 type SetEntry = {
@@ -89,7 +90,7 @@ export default function WorkoutLog() {
   const [helpfulAnswer, setHelpfulAnswer] = useState<HelpfulAnswer | null>(null);
   const [baselineDate, setBaselineDate] = useState<Date | null>(null);
   const [latestDecision, setLatestDecision] = useState<{
-    decision?: string;
+    decision?: Decision;
     adjustments?: { intensityPct?: number };
   } | null>(null);
   const [activeSetMenu, setActiveSetMenu] = useState<{
