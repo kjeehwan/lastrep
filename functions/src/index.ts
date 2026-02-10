@@ -1,4 +1,5 @@
 import * as functions from "firebase-functions";
+import { z } from "zod";
 
 type Decision = "PUSH" | "MAINTAIN" | "PULL_BACK";
 type TrainingPhase = "Hypertrophy" | "Strength" | "Power";
@@ -18,6 +19,31 @@ type DecisionOutput = {
   explanation: string[];
   adjustments?: { intensityPct?: number; volumePct?: number };
 };
+
+const decisionInputsSchema: z.ZodType<DecisionInputs> = z.object({
+  sleepHours: z.number(),
+  soreness: z.number(),
+  fatigue: z.number(),
+  motivation: z.number(),
+  trainingPhase: z.enum(["Hypertrophy", "Strength", "Power"]),
+  dietPhase: z.enum(["Cut", "Maintain", "Bulk"]),
+});
+
+const adjustmentsSchema = z
+  .object({
+    intensityPct: z.union([z.literal(20), z.literal(-20)]).optional(),
+    volumePct: z.never().optional(),
+  })
+  .strict();
+
+const decisionOutputSchema: z.ZodType<DecisionOutput> = z.object({
+  decision: z.enum(["PUSH", "MAINTAIN", "PULL_BACK"]),
+  explanation: z.array(z.string()),
+  adjustments: adjustmentsSchema.optional(),
+});
+
+const formatZodError = (error: z.ZodError) =>
+  error.issues.map((issue) => issue.message).join("; ");
 
 const heuristicDecision = (input: DecisionInputs): DecisionOutput => {
   const { sleepHours, soreness, fatigue, motivation, dietPhase } = input;
@@ -61,6 +87,17 @@ export const getDailyDecision = functions
     if (!context.auth) {
       throw new functions.https.HttpsError("unauthenticated", "Authentication required.");
     }
-    const input = data as DecisionInputs;
-    return heuristicDecision(input);
+    const parsedInputs = decisionInputsSchema.safeParse(data);
+    if (!parsedInputs.success) {
+      throw new functions.https.HttpsError(
+        "invalid-argument",
+        `Invalid decision inputs: ${formatZodError(parsedInputs.error)}`
+      );
+    }
+    const output = heuristicDecision(parsedInputs.data);
+    const parsedOutput = decisionOutputSchema.safeParse(output);
+    if (!parsedOutput.success) {
+      return heuristicDecision(parsedInputs.data);
+    }
+    return parsedOutput.data;
   });
