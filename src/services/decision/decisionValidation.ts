@@ -12,7 +12,7 @@ const decisionInputsSchema: z.ZodType<DecisionInputs> = z.object({
 
 const adjustmentsSchema = z
   .object({
-    intensityPct: z.union([z.literal(20), z.literal(-20)]).optional(),
+    intensityPct: z.union([z.literal(20), z.literal(10), z.literal(-10), z.literal(-20)]).optional(),
     volumePct: z.never().optional(),
   })
   .strict();

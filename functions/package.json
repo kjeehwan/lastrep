@@ -13,6 +13,7 @@
   "dependencies": {
     "firebase-admin": "^12.5.0",
     "firebase-functions": "^4.5.0",
+    "openai": "^4.83.0",
     "zod": "^3.24.1"
   },
   "devDependencies": {

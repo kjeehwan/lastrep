@@ -1,4 +1,6 @@
 import * as functions from "firebase-functions";
+import { defineSecret } from "firebase-functions/params";
+import OpenAI from "openai";
 import { z } from "zod";
 
 type Decision = "PUSH" | "MAINTAIN" | "PULL_BACK";
@@ -31,7 +33,7 @@ const decisionInputsSchema: z.ZodType<DecisionInputs> = z.object({
 
 const adjustmentsSchema = z
   .object({
-    intensityPct: z.union([z.literal(20), z.literal(-20)]).optional(),
+    intensityPct: z.union([z.literal(20), z.literal(10), z.literal(-10), z.literal(-20)]).optional(),
     volumePct: z.never().optional(),
   })
   .strict();
@@ -44,6 +46,43 @@ const decisionOutputSchema: z.ZodType<DecisionOutput> = z.object({
 
 const formatZodError = (error: z.ZodError) =>
   error.issues.map((issue) => issue.message).join("; ");
+
+const OPENAI_API_KEY = defineSecret("OPENAI_API_KEY");
+let openaiClient: OpenAI | null = null;
+
+const getOpenAIClient = () => {
+  if (!openaiClient) {
+    openaiClient = new OpenAI({ apiKey: OPENAI_API_KEY.value() });
+  }
+  return openaiClient;
+};
+
+const decisionOutputJsonSchema = {
+  name: "decision_output",
+  strict: true,
+  schema: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      decision: { type: "string", enum: ["PUSH", "MAINTAIN", "PULL_BACK"] },
+      explanation: { type: "array", items: { type: "string" } },
+      adjustments: {
+        anyOf: [
+          { type: "null" },
+          {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              intensityPct: { type: "number", enum: [-20, -10, 10, 20] },
+            },
+            required: ["intensityPct"],
+          },
+        ],
+      },
+    },
+    required: ["decision", "explanation", "adjustments"],
+  },
+};
 
 const heuristicDecision = (input: DecisionInputs): DecisionOutput => {
   const { sleepHours, soreness, fatigue, motivation, dietPhase } = input;
@@ -83,7 +122,8 @@ const heuristicDecision = (input: DecisionInputs): DecisionOutput => {
 
 export const getDailyDecision = functions
   .region("asia-northeast3")
-  .https.onCall((data, context) => {
+  .runWith({ secrets: [OPENAI_API_KEY] })
+  .https.onCall(async (data, context) => {
     if (!context.auth) {
       throw new functions.https.HttpsError("unauthenticated", "Authentication required.");
     }
@@ -94,10 +134,64 @@ export const getDailyDecision = functions
         `Invalid decision inputs: ${formatZodError(parsedInputs.error)}`
       );
     }
-    const output = heuristicDecision(parsedInputs.data);
-    const parsedOutput = decisionOutputSchema.safeParse(output);
-    if (!parsedOutput.success) {
-      return heuristicDecision(parsedInputs.data);
+    const inputs = parsedInputs.data;
+    try {
+      const prompt = [
+        "You are a strength training decision engine.",
+        "Return ONLY a JSON object that matches the schema.",
+        "Rules:",
+        "- Always include decision and explanation (2-4 short bullets).",
+        "- If decision is MAINTAIN, set adjustments to null.",
+        "- If decision is PUSH, include adjustments.intensityPct = 10 or 20.",
+        "- If decision is PULL_BACK, include adjustments.intensityPct = -10 or -20.",
+        "- Never include volumePct.",
+        `Inputs: ${JSON.stringify(inputs)}`,
+      ].join("\n");
+
+      const response = await getOpenAIClient().responses.create({
+        model: "gpt-5-nano",
+        input: prompt,
+        store: false,
+        text: {
+          format: {
+            type: "json_schema",
+            ...decisionOutputJsonSchema,
+          },
+        },
+      });
+
+      const outputText = response.output_text;
+      if (!outputText) {
+        throw new Error("Empty OpenAI response");
+      }
+      const parsedJson = JSON.parse(outputText) as DecisionOutput & {
+        adjustments?: { intensityPct?: number } | null;
+      };
+      if (parsedJson.adjustments === null) {
+        delete parsedJson.adjustments;
+      }
+      const parsedOutput = decisionOutputSchema.safeParse(parsedJson);
+      if (!parsedOutput.success) {
+        console.log("getDailyDecision source=heuristic_fallback reason=invalid_output");
+        return heuristicDecision(inputs);
+      }
+      if (
+        parsedOutput.data.decision === "MAINTAIN" &&
+        parsedOutput.data.adjustments?.intensityPct !== undefined
+      ) {
+        console.log("getDailyDecision source=heuristic_fallback reason=maintain_adjustments");
+        return heuristicDecision(inputs);
+      }
+      console.log("getDailyDecision source=openai");
+      return parsedOutput.data;
+    } catch (err) {
+      const errName = (err as { name?: string })?.name;
+      const errMessage = (err as { message?: string })?.message;
+      console.log(
+        "getDailyDecision source=heuristic_fallback reason=exception",
+        errName ?? "",
+        errMessage ?? ""
+      );
+      return heuristicDecision(inputs);
     }
-    return parsedOutput.data;
   });

@@ -132,6 +132,15 @@ export default function WorkoutLog() {
     return roundedLbs * 0.453592;
   };
 
+  const formatDecisionLabel = (decision?: Decision) =>
+    decision ? decision.replace("_", " ") : "";
+
+  const formatIntensityPct = (value?: number) => {
+    if (value == null) return "0%";
+    const sign = value > 0 ? "+" : "";
+    return `${sign}${value}%`;
+  };
+
   const getAdjustmentOptions = () => {
     const decision = latestDecision?.decision;
     if (decision === "PULL_BACK") return [0, -5, -10, -15, -20];
@@ -658,8 +667,8 @@ export default function WorkoutLog() {
           <Text style={styles.baselineSub}>
             Adjust per today&apos;s decision:{" "}
             {latestDecision?.decision
-              ? `${latestDecision.decision} (${latestDecision.adjustments?.intensityPct ?? 0}% weight)`
-              : "—"}
+              ? `${formatDecisionLabel(latestDecision.decision)} (${formatIntensityPct(latestDecision.adjustments?.intensityPct)} weight)`
+              : "??"}
           </Text>
         </View>
       ) : null}

@@ -18,6 +18,12 @@ const DIET_PHASES: DietPhase[] = ["Cut", "Maintain", "Bulk"];
 const isTrainingPhase = (value: string): value is TrainingPhase =>
   TRAINING_PHASES.includes(value as TrainingPhase);
 const isDietPhase = (value: string): value is DietPhase => DIET_PHASES.includes(value as DietPhase);
+const formatDecisionLabel = (decision: string) => decision.replace("_", " ");
+const formatIntensityLabel = (value?: number) => {
+  if (value == null || value === 0) return "No change";
+  const sign = value > 0 ? "+" : "";
+  return `Intensity: ${sign}${value}%`;
+};
 const reasonMessage = (reason?: string) => {
   switch (reason) {
     case "FREE_EXHAUSTED":
@@ -192,7 +198,7 @@ export default function Home() {
     <View style={styles.container}>
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Text style={styles.greeting}>Daily Decision</Text>
+          <Text style={styles.greeting}>lastrep</Text>
           <Text style={styles.userName}>{userEmail ?? "Lifter"}</Text>
         </View>
         <View style={styles.iconContainer}>
@@ -311,7 +317,9 @@ export default function Home() {
           <View style={styles.card}>
             {latestDecision ? (
               <>
-                <Text style={styles.decisionTitle}>{latestDecision.result.decision}</Text>
+                <Text style={styles.decisionTitle}>
+                  {formatDecisionLabel(latestDecision.result.decision)}
+                </Text>
                 <View style={styles.bulletList}>
                   {latestDecision.result.explanation.map((line, idx) => (
                     <Text key={`${line}-${idx}`} style={styles.bulletItem}>- {line}</Text>
@@ -319,10 +327,7 @@ export default function Home() {
                 </View>
                 <View style={styles.adjustRow}>
   <Text style={styles.adjustText}>
-                    {latestDecision.result.adjustments?.intensityPct == null ||
-                    latestDecision.result.adjustments?.intensityPct === 0
-                      ? "No change"
-                      : `Intensity: ${latestDecision.result.adjustments.intensityPct}%`}
+                    {formatIntensityLabel(latestDecision.result.adjustments?.intensityPct)}
   </Text>
   <TouchableOpacity
     onPress={() => setShowAdjustHelp((prev) => !prev)}
