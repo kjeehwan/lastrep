@@ -50,6 +50,10 @@ const formatZodError = (error: z.ZodError) =>
 const OPENAI_API_KEY = defineSecret("OPENAI_API_KEY");
 let openaiClient: OpenAI | null = null;
 
+const OPENAI_TIMEOUT_MS = 12000;
+const OPENAI_FIRST_ATTEMPT_MS = 9000;
+const OPENAI_RETRY_MS = 3000;
+
 const getOpenAIClient = () => {
   if (!openaiClient) {
     openaiClient = new OpenAI({ apiKey: OPENAI_API_KEY.value() });
@@ -82,6 +86,81 @@ const decisionOutputJsonSchema = {
     },
     required: ["decision", "explanation", "adjustments"],
   },
+  };
+
+const callOpenAIWithTimeout = async (input: string, timeoutMs: number) => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await getOpenAIClient().responses.create(
+      {
+        model: "gpt-5-nano",
+        input,
+        store: false,
+        text: {
+          format: {
+            type: "json_schema",
+            ...decisionOutputJsonSchema,
+          },
+        },
+      },
+      { signal: controller.signal }
+    );
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
+const isTransientOpenAiError = (err: unknown) => {
+  const status = (err as { status?: number })?.status;
+  const code = (err as { code?: string })?.code;
+  const name = (err as { name?: string })?.name;
+  if (status && (status === 429 || status >= 500)) return true;
+  if (name === "AbortError") return true;
+  if (code && ["ETIMEDOUT", "ECONNRESET", "ENOTFOUND", "EAI_AGAIN", "ECONNABORTED"].includes(code)) {
+    return true;
+  }
+  return false;
+};
+
+const extractOutputText = (response: OpenAI.Responses.Response) => {
+  const direct = response.output_text?.trim();
+  if (direct) return direct;
+  const outputs = response.output ?? [];
+  for (const item of outputs) {
+    const content = (item as { content?: Array<{ text?: string; json?: unknown }> }).content;
+    if (!Array.isArray(content)) continue;
+    for (const part of content) {
+      if (typeof part?.text === "string" && part.text.trim()) return part.text;
+      if (typeof part?.json === "string" && part.json.trim()) return part.json;
+      if (part?.json && typeof part.json === "object") return JSON.stringify(part.json);
+    }
+  }
+  return "";
+};
+
+const parseDecisionOutput = (outputText: string) => {
+  try {
+    const parsedJson = JSON.parse(outputText) as DecisionOutput & {
+      adjustments?: { intensityPct?: number } | null;
+    };
+    if (parsedJson.adjustments === null) {
+      delete parsedJson.adjustments;
+    }
+    const parsedOutput = decisionOutputSchema.safeParse(parsedJson);
+    if (!parsedOutput.success) {
+      return { ok: false as const, reason: "invalid_output" as const };
+    }
+    if (
+      parsedOutput.data.decision === "MAINTAIN" &&
+      parsedOutput.data.adjustments?.intensityPct !== undefined
+    ) {
+      return { ok: false as const, reason: "maintain_adjustments" as const };
+    }
+    return { ok: true as const, data: parsedOutput.data };
+  } catch {
+    return { ok: false as const, reason: "invalid_json" as const };
+  }
 };
 
 const heuristicDecision = (input: DecisionInputs): DecisionOutput => {
@@ -134,8 +213,15 @@ export const getDailyDecision = functions
         `Invalid decision inputs: ${formatZodError(parsedInputs.error)}`
       );
     }
-    const inputs = parsedInputs.data;
-    try {
+      const startMs = Date.now();
+      const inputs = parsedInputs.data;
+      const uid = context.auth.uid;
+      let openAiAttempted = false;
+      let openAiRetried = false;
+      let latencyMsOpenAI = 0;
+      let pathUsed: "OPENAI" | "FALLBACK_HEURISTIC" = "FALLBACK_HEURISTIC";
+      let fallbackReason = "";
+
       const prompt = [
         "You are a strength training decision engine.",
         "Return ONLY a JSON object that matches the schema.",
@@ -148,50 +234,88 @@ export const getDailyDecision = functions
         `Inputs: ${JSON.stringify(inputs)}`,
       ].join("\n");
 
-      const response = await getOpenAIClient().responses.create({
-        model: "gpt-5-nano",
-        input: prompt,
-        store: false,
-        text: {
-          format: {
-            type: "json_schema",
-            ...decisionOutputJsonSchema,
-          },
-        },
-      });
-
-      const outputText = response.output_text;
-      if (!outputText) {
-        throw new Error("Empty OpenAI response");
-      }
-      const parsedJson = JSON.parse(outputText) as DecisionOutput & {
-        adjustments?: { intensityPct?: number } | null;
+      const attemptOpenAI = async (timeoutMs: number) => {
+        const attemptStart = Date.now();
+        try {
+          const response = await callOpenAIWithTimeout(prompt, timeoutMs);
+          latencyMsOpenAI += Date.now() - attemptStart;
+          return { ok: true as const, response };
+        } catch (err) {
+          latencyMsOpenAI += Date.now() - attemptStart;
+          return { ok: false as const, error: err };
+        }
       };
-      if (parsedJson.adjustments === null) {
-        delete parsedJson.adjustments;
+
+      openAiAttempted = true;
+      const firstAttempt = await attemptOpenAI(OPENAI_FIRST_ATTEMPT_MS);
+      if (firstAttempt.ok) {
+        const outputText = extractOutputText(firstAttempt.response);
+        if (outputText) {
+          const parsed = parseDecisionOutput(outputText);
+          if (parsed.ok) {
+            pathUsed = "OPENAI";
+            const latencyMsTotal = Date.now() - startMs;
+            console.log(
+              JSON.stringify({
+                uid,
+                pathUsed,
+                openAiAttempted,
+                openAiRetried,
+                latencyMsTotal,
+                latencyMsOpenAI,
+              })
+            );
+            return parsed.data;
+          }
+          fallbackReason = parsed.reason ?? "invalid_output";
+        } else {
+          fallbackReason = "empty_response";
+        }
+      } else if (isTransientOpenAiError(firstAttempt.error)) {
+        openAiRetried = true;
+        const retryAttempt = await attemptOpenAI(OPENAI_RETRY_MS);
+        if (retryAttempt.ok) {
+          const outputText = extractOutputText(retryAttempt.response);
+          if (outputText) {
+            const parsed = parseDecisionOutput(outputText);
+            if (parsed.ok) {
+              pathUsed = "OPENAI";
+              const latencyMsTotal = Date.now() - startMs;
+              console.log(
+                JSON.stringify({
+                  uid,
+                  pathUsed,
+                  openAiAttempted,
+                  openAiRetried,
+                  latencyMsTotal,
+                  latencyMsOpenAI,
+                })
+              );
+              return parsed.data;
+            }
+            fallbackReason = parsed.reason ?? "invalid_output";
+          } else {
+            fallbackReason = "empty_response";
+          }
+        } else {
+          fallbackReason = "exception";
+        }
+      } else {
+        fallbackReason = "exception";
       }
-      const parsedOutput = decisionOutputSchema.safeParse(parsedJson);
-      if (!parsedOutput.success) {
-        console.log("getDailyDecision source=heuristic_fallback reason=invalid_output");
-        return heuristicDecision(inputs);
-      }
-      if (
-        parsedOutput.data.decision === "MAINTAIN" &&
-        parsedOutput.data.adjustments?.intensityPct !== undefined
-      ) {
-        console.log("getDailyDecision source=heuristic_fallback reason=maintain_adjustments");
-        return heuristicDecision(inputs);
-      }
-      console.log("getDailyDecision source=openai");
-      return parsedOutput.data;
-    } catch (err) {
-      const errName = (err as { name?: string })?.name;
-      const errMessage = (err as { message?: string })?.message;
+
+      const fallback = heuristicDecision(inputs);
+      const latencyMsTotal = Date.now() - startMs;
       console.log(
-        "getDailyDecision source=heuristic_fallback reason=exception",
-        errName ?? "",
-        errMessage ?? ""
+        JSON.stringify({
+          uid,
+          pathUsed,
+          openAiAttempted,
+          openAiRetried,
+          latencyMsTotal,
+          latencyMsOpenAI,
+          fallbackReason: fallbackReason.slice(0, 80),
+        })
       );
-      return heuristicDecision(inputs);
-    }
-  });
+      return fallback;
+    });
