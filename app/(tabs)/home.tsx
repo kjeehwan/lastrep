@@ -10,6 +10,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { auth, db } from "../../src/config/firebaseConfig";
 import { gateAndConsumeDecision } from "../../src/decisionUsageStore";
 import { getDecision } from "../../src/services/decision/getDecision";
+import { hashDecisionInputs } from "../../src/services/decision/inputHash";
 import type { DecisionInputs, DietPhase, LastResultPayload, TrainingPhase } from "../../src/types/decision";
 
 const HOME_INPUTS_KEY = "home-inputs-v1";
@@ -176,10 +177,11 @@ export default function Home() {
         inputs,
         result,
       };
+      const inputHash = hashDecisionInputs(inputs);
 
       await setDoc(
         doc(db, "users", uid),
-        { usage: { decisions: { lastResult: payload } } },
+        { usage: { decisions: { lastResult: payload, lastInputHash: inputHash } } },
         { merge: true }
       );
 

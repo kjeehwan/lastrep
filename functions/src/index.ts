@@ -1,5 +1,7 @@
 import * as functions from "firebase-functions";
 import { defineSecret } from "firebase-functions/params";
+import * as admin from "firebase-admin";
+import crypto from "crypto";
 import OpenAI from "openai";
 import { z } from "zod";
 
@@ -22,6 +24,10 @@ type DecisionOutput = {
   adjustments?: { intensityPct?: number; volumePct?: number };
 };
 
+if (!admin.apps.length) {
+  admin.initializeApp();
+}
+
 const decisionInputsSchema: z.ZodType<DecisionInputs> = z.object({
   sleepHours: z.number(),
   soreness: z.number(),
@@ -42,6 +48,22 @@ const decisionOutputSchema: z.ZodType<DecisionOutput> = z.object({
   decision: z.enum(["PUSH", "MAINTAIN", "PULL_BACK"]),
   explanation: z.array(z.string()),
   adjustments: adjustmentsSchema.optional(),
+});
+
+const cachedAdjustmentsSchema = z.union([
+  z
+    .object({
+      intensityPct: z.number().optional(),
+      volumePct: z.number().optional(),
+    })
+    .strict(),
+  z.null(),
+]);
+
+const decisionOutputCacheSchema = z.object({
+  decision: z.enum(["PUSH", "MAINTAIN", "PULL_BACK"]),
+  explanation: z.array(z.string()),
+  adjustments: cachedAdjustmentsSchema.optional(),
 });
 
 const formatZodError = (error: z.ZodError) =>
@@ -163,6 +185,38 @@ const parseDecisionOutput = (outputText: string) => {
   }
 };
 
+const hashDecisionInputs = (inputs: DecisionInputs): string => {
+  const normalized = {
+    sleepHours: inputs.sleepHours,
+    soreness: inputs.soreness,
+    fatigue: inputs.fatigue,
+    motivation: inputs.motivation,
+    trainingPhase: inputs.trainingPhase,
+    dietPhase: inputs.dietPhase,
+  };
+  const json = JSON.stringify(normalized);
+  return crypto.createHash("sha256").update(json).digest("hex");
+};
+
+const getDateStringFromOffset = (date: Date, tzOffsetMinutes: number) => {
+  const effective = new Date(date.getTime() - tzOffsetMinutes * 60 * 1000);
+  const year = effective.getUTCFullYear();
+  const month = String(effective.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(effective.getUTCDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+const coerceToDate = (value: unknown): Date | null => {
+  if (value instanceof Date) return value;
+  const maybeToDate = value as { toDate?: () => Date };
+  if (maybeToDate?.toDate) return maybeToDate.toDate();
+  const maybeSeconds = value as { seconds?: number };
+  if (typeof maybeSeconds?.seconds === "number") {
+    return new Date(maybeSeconds.seconds * 1000);
+  }
+  return null;
+};
+
 const heuristicDecision = (input: DecisionInputs): DecisionOutput => {
   const { sleepHours, soreness, fatigue, motivation, dietPhase } = input;
   const isLowSleep = sleepHours < 6;
@@ -218,11 +272,70 @@ export const getDailyDecision = functions
       const uid = context.auth.uid;
       let openAiAttempted = false;
       let openAiRetried = false;
-      let latencyMsOpenAI = 0;
-      let pathUsed: "OPENAI" | "FALLBACK_HEURISTIC" = "FALLBACK_HEURISTIC";
-      let fallbackReason = "";
+        let latencyMsOpenAI = 0;
+        let pathUsed: "OPENAI" | "FALLBACK_HEURISTIC" | "CACHE_HIT" = "FALLBACK_HEURISTIC";
+        let fallbackReason = "";
 
-      const prompt = [
+        const inputHash = hashDecisionInputs(inputs);
+        const userSnap = await admin.firestore().doc(`users/${uid}`).get();
+        const userData = userSnap.data();
+        const decisions = userData?.usage?.decisions;
+        const tzOffsetMinutes = decisions?.tzOffsetMinutes;
+        const lastInputHash = decisions?.lastInputHash;
+        const lastResult = decisions?.lastResult;
+        const lastResultCreatedAt = lastResult?.createdAt;
+        const lastResultOutput = lastResult?.result;
+
+        if (
+          typeof tzOffsetMinutes === "number" &&
+          typeof lastInputHash === "string" &&
+          lastResultCreatedAt &&
+          lastResultOutput
+        ) {
+          const lastResultDate = coerceToDate(lastResultCreatedAt);
+          if (lastResultDate) {
+            const today = getDateStringFromOffset(new Date(), tzOffsetMinutes);
+            const lastDay = getDateStringFromOffset(lastResultDate, tzOffsetMinutes);
+            if (today === lastDay && lastInputHash === inputHash) {
+              const parsedCache = decisionOutputCacheSchema.safeParse(lastResultOutput);
+              if (parsedCache.success) {
+                pathUsed = "CACHE_HIT";
+                const latencyMsTotal = Date.now() - startMs;
+              const cachedResult = parsedCache.data as DecisionOutput & {
+                adjustments?: { intensityPct?: number; volumePct?: number } | null;
+              };
+              if (cachedResult.adjustments === null) {
+                delete cachedResult.adjustments;
+              }
+              if (cachedResult.adjustments && "volumePct" in cachedResult.adjustments) {
+                delete cachedResult.adjustments.volumePct;
+              }
+              if (
+                cachedResult.adjustments &&
+                cachedResult.adjustments.intensityPct === undefined
+              ) {
+                delete cachedResult.adjustments;
+              }
+              if (cachedResult.decision === "MAINTAIN") {
+                delete cachedResult.adjustments;
+              }
+                console.log(
+                  JSON.stringify({
+                    uid,
+                    pathUsed,
+                    openAiAttempted: false,
+                    openAiRetried: false,
+                    latencyMsTotal,
+                    latencyMsOpenAI: 0,
+                  })
+                );
+                return cachedResult;
+              }
+            }
+          }
+        }
+
+        const prompt = [
         "You are a strength training decision engine.",
         "Return ONLY a JSON object that matches the schema.",
         "Rules:",
