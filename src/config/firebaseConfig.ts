@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'; // Import AsyncStorage
 import { getApp, getApps, initializeApp } from 'firebase/app';
 import { getAuth, initializeAuth } from 'firebase/auth'; // Firebase Authentication
-import { getFirestore } from 'firebase/firestore';
+import { getFirestore, initializeFirestore } from 'firebase/firestore';
 import { Platform } from 'react-native';
 
 // @ts-ignore - ignore the TypeScript error for missing typings in Firebase SDK
@@ -28,8 +28,20 @@ const auth =
         persistence: getReactNativePersistence(AsyncStorage),  // Correctly apply persistence for React Native
       });
 
-// Initialize Firestore and Storage
-const db = getFirestore(app);
+// Firestore web channel can be unstable on Android dev builds without long polling.
+// Use long polling for React Native; fall back to existing instance on fast refresh.
+const db =
+  Platform.OS === 'web'
+    ? getFirestore(app)
+    : (() => {
+        try {
+          return initializeFirestore(app, {
+            experimentalForceLongPolling: true,
+          });
+        } catch {
+          return getFirestore(app);
+        }
+      })();
 
 // Export the Firebase services
 export { auth, db, firebaseConfig };

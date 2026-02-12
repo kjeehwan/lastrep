@@ -268,7 +268,12 @@ export default function WorkoutLog() {
           }
         }
       } catch (e) {
-        console.log("Failed to load draft", e);
+        console.log("Failed to load draft, clearing cache", e);
+        try {
+          await AsyncStorage.removeItem(DRAFT_KEY);
+        } catch {
+          // no-op
+        }
       }
     };
     loadDraft();
