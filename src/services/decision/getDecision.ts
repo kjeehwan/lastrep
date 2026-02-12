@@ -59,10 +59,14 @@ const cloudDecision = async (input: DecisionInputs): Promise<DecisionOutput> => 
     }
     return parsed.data;
   } catch (err) {
+    const code = String((err as { code?: string })?.code ?? "");
+    if (code.includes("resource-exhausted")) {
+      throw err;
+    }
     if (__DEV__) {
-      const code = (err as { code?: string })?.code;
+      const devCode = (err as { code?: string })?.code;
       const message = (err as { message?: string })?.message;
-      console.warn("getDailyDecision failed, falling back to heuristic", code ?? "", message ?? "");
+      console.warn("getDailyDecision failed, falling back to heuristic", devCode ?? "", message ?? "");
     }
     return heuristicDecision(input);
   }

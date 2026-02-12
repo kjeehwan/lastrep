@@ -105,7 +105,12 @@ export default function Home() {
           setDietPhase(parsed.dietPhase);
         }
       } catch (e) {
-        console.log("Failed to load home inputs", e);
+        console.log("Failed to load home inputs, clearing cache", e);
+        try {
+          await AsyncStorage.removeItem(HOME_INPUTS_KEY);
+        } catch {
+          // no-op
+        }
       }
     };
     loadInputs();
@@ -188,7 +193,12 @@ export default function Home() {
       setLatestDecision(payload);
     } catch (e) {
       console.log("Decision request failed", e);
-      setGateMessage("Something went wrong. Please try again.");
+      const code = String((e as { code?: string })?.code ?? "");
+      if (code.includes("resource-exhausted")) {
+        setGateMessage("Too many requests. Try again later.");
+      } else {
+        setGateMessage("Something went wrong. Please try again.");
+      }
     } finally {
       setLoading(false);
     }
