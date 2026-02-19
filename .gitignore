@@ -48,3 +48,8 @@ app-example
 # sensitive files
 google-services.json
 GoogleService-Info.plist
+
+# EAS / Android build artifacts
+*.aab
+*.apk
+*.apks
