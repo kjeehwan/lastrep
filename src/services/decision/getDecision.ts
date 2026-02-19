@@ -3,7 +3,7 @@ import { getFunctions, httpsCallable } from "firebase/functions";
 import type { Decision, DecisionInputs, DecisionOutput } from "../../types/decision";
 import { formatZodError, safeParseDecisionInputs, safeParseDecisionOutput } from "./decisionValidation";
 
-const USE_CLOUD_DECISION = false;
+const USE_CLOUD_DECISION = true;
 const FUNCTIONS_REGION = "asia-northeast3";
 
 const heuristicDecision = (input: DecisionInputs): DecisionOutput => {
