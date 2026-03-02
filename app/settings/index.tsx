@@ -150,6 +150,12 @@ export default function SettingsIndex() {
             <TouchableOpacity style={styles.secondaryButton} onPress={resetDailyLimit}>
               <Text style={styles.secondaryButtonText}>Reset daily limit</Text>
             </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.secondaryButton}
+              onPress={() => router.push("/settings/revenuecat-dev" as Href)}
+            >
+              <Text style={styles.secondaryButtonText}>RevenueCat debug</Text>
+            </TouchableOpacity>
           </View>
         ) : null}
       </ScrollView>

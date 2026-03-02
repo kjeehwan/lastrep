@@ -9,3 +9,6 @@ export const OFFERING_ID = "default";
 
 export const PACKAGE_ID_MONTHLY = "$rc_monthly";
 export const PACKAGE_ID_ANNUAL = "$rc_annual";
+
+export const REVENUECAT_API_KEY_ANDROID =
+  process.env.EXPO_PUBLIC_REVENUECAT_API_KEY_ANDROID!; 
