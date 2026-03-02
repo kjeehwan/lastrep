@@ -139,7 +139,7 @@ export default function SignIn() {
       </TouchableOpacity>
 
       <View style={styles.footer}>
-        <Text style={styles.footerText}>Don?셳 have an account? </Text>
+        <Text style={styles.footerText}>Don't have an account? </Text>
         <TouchableOpacity onPress={() => router.push("/auth/sign-up")}>
           <Text style={styles.link}>Sign up!</Text>
         </TouchableOpacity>
@@ -203,5 +203,4 @@ const styles = StyleSheet.create({
     color: "#2a67b1",
   },
 });
-
 
