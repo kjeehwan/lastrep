@@ -6,6 +6,31 @@ import { formatZodError, safeParseDecisionInputs, safeParseDecisionOutput } from
 const USE_CLOUD_DECISION = true;
 const FUNCTIONS_REGION = "asia-northeast3";
 
+export type DecisionGateReasonCode =
+  | "PAYWALL_REQUIRED"
+  | "FREE_WINDOW_EXHAUSTED"
+  | "DAILY_LIMIT"
+  | "COOLDOWN_ACTIVE";
+
+export type DecisionGateError = {
+  code: "failed-precondition";
+  reasonCode: DecisionGateReasonCode;
+  retryAfterSeconds?: number;
+  message: string;
+};
+
+const isDecisionGateReasonCode = (value: unknown): value is DecisionGateReasonCode =>
+  value === "PAYWALL_REQUIRED" ||
+  value === "FREE_WINDOW_EXHAUSTED" ||
+  value === "DAILY_LIMIT" ||
+  value === "COOLDOWN_ACTIVE";
+
+export const isDecisionGateError = (value: unknown): value is DecisionGateError =>
+  typeof value === "object" &&
+  value !== null &&
+  (value as { code?: unknown }).code === "failed-precondition" &&
+  isDecisionGateReasonCode((value as { reasonCode?: unknown }).reasonCode);
+
 const heuristicDecision = (input: DecisionInputs): DecisionOutput => {
   const { sleepHours, soreness, fatigue, motivation, dietPhase } = input;
   const isLowSleep = sleepHours < 6;
@@ -60,6 +85,25 @@ const cloudDecision = async (input: DecisionInputs): Promise<DecisionOutput> => 
     return parsed.data;
   } catch (err) {
     const code = String((err as { code?: string })?.code ?? "");
+    if (code.includes("failed-precondition")) {
+      const details = (err as { details?: unknown }).details as
+        | { reasonCode?: unknown; retryAfterSeconds?: unknown }
+        | undefined;
+      const reasonCode = details?.reasonCode;
+      const retryAfterSeconds =
+        typeof details?.retryAfterSeconds === "number"
+          ? Math.max(0, Math.floor(details.retryAfterSeconds))
+          : undefined;
+      if (isDecisionGateReasonCode(reasonCode)) {
+        throw {
+          code: "failed-precondition",
+          reasonCode,
+          retryAfterSeconds,
+          message: (err as { message?: string })?.message ?? "Decision request blocked by server gate.",
+        } as DecisionGateError;
+      }
+      throw err;
+    }
     if (code.includes("resource-exhausted")) {
       throw err;
     }

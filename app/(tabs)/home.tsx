@@ -8,8 +8,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { auth, db } from "../../src/config/firebaseConfig";
-import { gateAndConsumeDecision } from "../../src/decisionUsageStore";
-import { getDecision } from "../../src/services/decision/getDecision";
+import { getDecision, isDecisionGateError } from "../../src/services/decision/getDecision";
 import { hashDecisionInputs } from "../../src/services/decision/inputHash";
 import type { DecisionInputs, DietPhase, LastResultPayload, TrainingPhase } from "../../src/types/decision";
 
@@ -27,13 +26,12 @@ const formatIntensityLabel = (value?: number) => {
 };
 const reasonMessage = (reason?: string) => {
   switch (reason) {
-    case "FREE_EXHAUSTED":
+    case "PAYWALL_REQUIRED":
+    case "FREE_WINDOW_EXHAUSTED":
       return "Free decisions are exhausted. Upgrade to continue.";
-    case "FREE_DAILY_LIMIT":
-      return "Free users get 1 decision per day.";
-    case "PAID_DAILY_LIMIT":
-      return "Daily limit reached (3/day).";
-    case "COOLDOWN":
+    case "DAILY_LIMIT":
+      return "Daily limit reached.";
+    case "COOLDOWN_ACTIVE":
       return "Please wait before requesting another decision.";
     default:
       return "Unable to get a decision right now.";
@@ -59,7 +57,6 @@ export default function Home() {
   const [nextAvailableAt, setNextAvailableAt] = useState<Date | null>(null);
   const [latestDecision, setLatestDecision] = useState<LastResultPayload | null>(null);
   const [showAdjustHelp, setShowAdjustHelp] = useState(false);
-  const [lastGateDebug, setLastGateDebug] = useState<string | null>(null);
   const [lastTapAt, setLastTapAt] = useState(0);
 
   useEffect(() => {
@@ -153,20 +150,6 @@ export default function Home() {
     setGateReason(null);
     setNextAvailableAt(null);
     try {
-      const gate = await gateAndConsumeDecision(uid, new Date());
-      if (__DEV__) {
-        const usage = gate.updatedUsage ?? gate.currentUsage;
-        const dbg = `allowed=${gate.allowed} reason=${gate.reason ?? "n/a"} dailyCount=${usage?.dailyCount ?? "n/a"} freeRemaining=${usage?.freeRemaining ?? "n/a"}`;
-        setLastGateDebug(dbg);
-      }
-      if (!gate.allowed) {
-        setGateMessage(reasonMessage(gate.reason));
-        setGateReason(gate.reason ?? null);
-        if (gate.nextAvailableAt) setNextAvailableAt(gate.nextAvailableAt);
-        setLoading(false);
-        return;
-      }
-
       const inputs: DecisionInputs = {
         sleepHours: parsedSleep,
         soreness,
@@ -193,6 +176,20 @@ export default function Home() {
       setLatestDecision(payload);
     } catch (e) {
       console.log("Decision request failed", e);
+      if (isDecisionGateError(e)) {
+        setGateReason(e.reasonCode);
+        setGateMessage(reasonMessage(e.reasonCode));
+        if (e.reasonCode === "COOLDOWN_ACTIVE" && typeof e.retryAfterSeconds === "number") {
+          setNextAvailableAt(new Date(Date.now() + e.retryAfterSeconds * 1000));
+        }
+        if (
+          e.reasonCode === "PAYWALL_REQUIRED" ||
+          e.reasonCode === "FREE_WINDOW_EXHAUSTED"
+        ) {
+          router.push("/paywall" as Href);
+        }
+        return;
+      }
       const code = String((e as { code?: string })?.code ?? "");
       if (code.includes("resource-exhausted")) {
         setGateMessage("Too many requests. Try again later.");
@@ -309,16 +306,14 @@ export default function Home() {
                 {nextAvailableAt ? (
                   <Text style={styles.noticeSub}>Try again: {nextAvailableAt.toLocaleString()}</Text>
                 ) : null}
-                {gateReason === "FREE_EXHAUSTED" ? (
-                  <TouchableOpacity style={styles.paywallButton} onPress={() => { /* placeholder */ }}>
-                    <Text style={styles.paywallText}>Upgrade (coming soon)</Text>
+                {gateReason === "PAYWALL_REQUIRED" || gateReason === "FREE_WINDOW_EXHAUSTED" ? (
+                  <TouchableOpacity
+                    style={styles.paywallButton}
+                    onPress={() => router.push("/paywall" as Href)}
+                  >
+                    <Text style={styles.paywallText}>Go to Paywall</Text>
                   </TouchableOpacity>
                 ) : null}
-              </View>
-            ) : null}
-            {__DEV__ && lastGateDebug ? (
-              <View style={styles.devNotice}>
-                <Text style={styles.devText}>{lastGateDebug}</Text>
               </View>
             ) : null}
           </View>
@@ -487,13 +482,4 @@ const styles = StyleSheet.create({
   adjustText: { color: "#9aa1c3", fontSize: 13 },
   helpIcon: { paddingHorizontal: 4, paddingVertical: 2 },
   helpText: { color: "#9aa1c3", fontSize: 12 },
-  devNotice: {
-    marginTop: 8,
-    backgroundColor: "rgba(123,97,255,0.1)",
-    borderRadius: 10,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-  },
-  devText: { color: "#9aa1c3", fontSize: 11 },
 });
-

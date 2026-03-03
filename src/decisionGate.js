@@ -76,18 +76,9 @@ export const canUseDecision = (entitlement = {}, usage = {}, now, tzOffsetMinute
 };
 
 export const applyDecisionUsage = (entitlement = {}, usage = {}, now, tzOffsetMinutes) => {
-  const isSubscribed = Boolean(entitlement.isSubscribed);
-  const decisions = normalizeDecisionUsage(usage.decisions || {}, now, tzOffsetMinutes);
-  const next = { ...decisions };
-
-  next.dailyCount = (typeof next.dailyCount === "number" ? next.dailyCount : 0) + 1;
-  next.lastDecisionAt = now;
-  next.tzOffsetMinutes = tzOffsetMinutes;
-
-  if (!isSubscribed) {
-    const freeRemaining = typeof next.freeRemaining === "number" ? next.freeRemaining : 0;
-    next.freeRemaining = Math.max(0, freeRemaining - 1);
-  }
-
-  return { ...usage, decisions: next };
+  // No client-side spending: server gate is authoritative.
+  return {
+    ...usage,
+    decisions: normalizeDecisionUsage(usage.decisions || {}, now, tzOffsetMinutes),
+  };
 };

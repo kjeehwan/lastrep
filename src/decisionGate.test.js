@@ -77,11 +77,11 @@ test("normalize uses non-zero offset for local day", () => {
   expect(normalized.dailyCount).toBe(0);
 });
 
-test("applyDecisionUsage decrements freeRemaining", () => {
+test("applyDecisionUsage is non-authoritative and does not spend client credits", () => {
   const now = new Date("2026-02-02T10:00:00Z");
   const usage = makeUsage({ freeRemaining: 2 });
   const next = applyDecisionUsage({ isSubscribed: false }, usage, now, tzOffsetMinutes);
-  expect(next.decisions.freeRemaining).toBe(1);
-  expect(next.decisions.dailyCount).toBe(1);
+  expect(next.decisions.freeRemaining).toBe(2);
+  expect(next.decisions.dailyCount).toBe(0);
 });
 });

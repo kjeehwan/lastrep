@@ -25,6 +25,8 @@ const formatZodError = (error: z.ZodError) =>
   error.issues.map((issue) => issue.message).join("; ");
 
 const OPENAI_API_KEY = defineSecret("OPENAI_API_KEY");
+const REVENUECAT_WEBHOOK_AUTH = defineSecret("REVENUECAT_WEBHOOK_AUTH");
+const DEV_UID_ALLOWLIST_SECRET = defineSecret("DEV_UID_ALLOWLIST");
 const DECISION_PROMPT_VERSION = "v3";
 const OPENAI_TIMEOUT_MS = 12000;
 const OPENAI_FIRST_ATTEMPT_MS = 9500;
@@ -33,6 +35,12 @@ const FALLBACK_REASON_MAX_LEN = 80;
 const INPUT_HASH_PREFIX_LEN = 8;
 const SERVER_RATE_LIMIT_MAX_COUNT = 12;
 const SERVER_RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
+const FREE_MAX_PER_DAY = 1;
+const FREE_MAX_PER_30_DAYS = 3;
+const PAID_MAX_PER_DAY = 3;
+const PAID_COOLDOWN_MS = 30 * 60 * 1000;
+const ROLLING_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+const PREMIUM_ENTITLEMENT_ID = "premium";
 
 const ENABLE_OPENAI_DECISION = (() => {
   if (typeof process.env.ENABLE_OPENAI_DECISION === "string") {
@@ -206,6 +214,23 @@ type RateLimitResult = {
   userData: FirebaseFirestore.DocumentData | undefined;
 };
 
+type DecisionGateReasonCode =
+  | "PAYWALL_REQUIRED"
+  | "FREE_WINDOW_EXHAUSTED"
+  | "DAILY_LIMIT"
+  | "COOLDOWN_ACTIVE";
+
+type DecisionGateResult =
+  | {
+      allowed: true;
+      userData: FirebaseFirestore.DocumentData | undefined;
+    }
+  | {
+      allowed: false;
+      reasonCode: DecisionGateReasonCode;
+      retryAfterSeconds?: number;
+    };
+
 const checkAndConsumeServerRateLimit = async (uid: string, now: Date): Promise<RateLimitResult> => {
   const userRef = admin.firestore().doc(`users/${uid}`);
   return admin.firestore().runTransaction(async (tx) => {
@@ -240,6 +265,140 @@ const checkAndConsumeServerRateLimit = async (uid: string, now: Date): Promise<R
 
     return { allowed: true, userData };
   });
+};
+
+const getDateStringForOffset = (date: Date, tzOffsetMinutes: number) => {
+  const effective = new Date(date.getTime() - tzOffsetMinutes * 60 * 1000);
+  const year = effective.getUTCFullYear();
+  const month = String(effective.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(effective.getUTCDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+const coerceTimestampArray = (value: unknown): Date[] => {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => coerceToDate(item))
+    .filter((item): item is Date => Boolean(item))
+    .sort((a, b) => a.getTime() - b.getTime());
+};
+
+const parseBoolean = (value: unknown): boolean | null => {
+  if (typeof value === "boolean") return value;
+  return null;
+};
+
+const assertDevUidAllowed = (uid: string) => {
+  const allowlist = (DEV_UID_ALLOWLIST_SECRET.value() ?? "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+  if (!allowlist.includes(uid)) {
+    throw new functions.https.HttpsError(
+      "permission-denied",
+      "This callable is restricted to development allowlisted users."
+    );
+  }
+};
+
+const checkAndConsumeServerDecisionGate = async (uid: string, now: Date): Promise<DecisionGateResult> => {
+  const userRef = admin.firestore().doc(`users/${uid}`);
+  return admin.firestore().runTransaction(async (tx) => {
+    const snap = await tx.get(userRef);
+    const userData = snap.data();
+    const entitlement = userData?.entitlement ?? {};
+    const decisions = userData?.usage?.decisions ?? {};
+    const tzOffsetMinutes =
+      typeof decisions.tzOffsetMinutes === "number" ? decisions.tzOffsetMinutes : 0;
+    const nowMs = now.getTime();
+    const rollingStartMs = nowMs - ROLLING_WINDOW_MS;
+    const decisionTimestamps = coerceTimestampArray(decisions.decisionTimestamps).filter(
+      (date) => date.getTime() >= rollingStartMs
+    );
+    const today = getDateStringForOffset(now, tzOffsetMinutes);
+    const dailyCount = decisionTimestamps.filter(
+      (date) => getDateStringForOffset(date, tzOffsetMinutes) === today
+    ).length;
+    const cooldownUntil = coerceToDate(decisions.cooldownUntil);
+
+    const override = parseBoolean(entitlement.devOverrideIsSubscribed);
+    const isSubscribed = override ?? Boolean(entitlement.isSubscribed);
+
+    if (!isSubscribed) {
+      if (dailyCount >= FREE_MAX_PER_DAY) {
+        return { allowed: false, reasonCode: "DAILY_LIMIT" };
+      }
+      if (decisionTimestamps.length >= FREE_MAX_PER_30_DAYS) {
+        return { allowed: false, reasonCode: "FREE_WINDOW_EXHAUSTED" };
+      }
+    } else {
+      if (dailyCount >= PAID_MAX_PER_DAY) {
+        return { allowed: false, reasonCode: "DAILY_LIMIT" };
+      }
+      if (cooldownUntil && cooldownUntil.getTime() > nowMs) {
+        const retryAfterSeconds = Math.max(
+          1,
+          Math.ceil((cooldownUntil.getTime() - nowMs) / 1000)
+        );
+        return { allowed: false, reasonCode: "COOLDOWN_ACTIVE", retryAfterSeconds };
+      }
+    }
+
+    const updatedTimestamps = [
+      ...decisionTimestamps,
+      now,
+    ].map((date) => admin.firestore.Timestamp.fromDate(date));
+
+    tx.set(
+      userRef,
+      {
+        usage: {
+          decisions: {
+            decisionTimestamps: updatedTimestamps,
+            cooldownUntil: isSubscribed
+              ? admin.firestore.Timestamp.fromDate(new Date(nowMs + PAID_COOLDOWN_MS))
+              : null,
+          },
+        },
+      },
+      { merge: true }
+    );
+
+    return { allowed: true, userData };
+  });
+};
+
+const isRevenueCatWebhookAuthorized = (authorizationHeader: string | undefined): boolean => {
+  const secret = REVENUECAT_WEBHOOK_AUTH.value()?.trim();
+  if (!secret) return false;
+  if (!authorizationHeader) return false;
+  const normalized = authorizationHeader.trim();
+  return normalized === secret || normalized === `Bearer ${secret}`;
+};
+
+const premiumStatusFromWebhookEvent = (event: Record<string, unknown>): boolean | null => {
+  const entitlementIds = Array.isArray(event.entitlement_ids)
+    ? event.entitlement_ids.filter((value): value is string => typeof value === "string")
+    : [];
+  const entitlementId =
+    typeof event.entitlement_id === "string" ? event.entitlement_id : null;
+  const touchesPremium =
+    entitlementIds.includes(PREMIUM_ENTITLEMENT_ID) ||
+    entitlementId === PREMIUM_ENTITLEMENT_ID;
+  if (!touchesPremium) return null;
+
+  const eventType = typeof event.type === "string" ? event.type.toUpperCase() : "";
+  if (eventType === "EXPIRATION") {
+    return false;
+  }
+
+  const expirationAtMs =
+    typeof event.expiration_at_ms === "number" ? event.expiration_at_ms : null;
+  if (expirationAtMs && expirationAtMs <= Date.now()) {
+    return false;
+  }
+
+  return entitlementIds.includes(PREMIUM_ENTITLEMENT_ID) || entitlementId === PREMIUM_ENTITLEMENT_ID;
 };
 
 const getBoundedHeuristicDecision = (inputs: DecisionInputs): DecisionOutput => {
@@ -292,7 +451,23 @@ export const getDailyDecision = functions
       throw new functions.https.HttpsError("resource-exhausted", "Too many requests. Try again later.");
     }
 
-    const decisions = rateLimitResult.userData?.usage?.decisions;
+    const decisionGateResult = await checkAndConsumeServerDecisionGate(uid, now);
+    if (!decisionGateResult.allowed) {
+      const details =
+        typeof decisionGateResult.retryAfterSeconds === "number"
+          ? {
+              reasonCode: decisionGateResult.reasonCode,
+              retryAfterSeconds: decisionGateResult.retryAfterSeconds,
+            }
+          : { reasonCode: decisionGateResult.reasonCode };
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Decision gate blocked this request.",
+        details
+      );
+    }
+
+    const decisions = decisionGateResult.userData?.usage?.decisions;
     const tzOffsetMinutes = decisions?.tzOffsetMinutes;
     const lastInputHash = decisions?.lastInputHash;
     const lastResultCreatedAt = decisions?.lastResult?.createdAt;
@@ -433,4 +608,155 @@ export const getDailyDecision = functions
       fallbackReason: fallbackReason || "openai_failed",
     });
     return fallback;
+  });
+
+export const setDevEntitlementOverride = functions
+  .region("asia-northeast3")
+  .runWith({ secrets: [DEV_UID_ALLOWLIST_SECRET] })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "Authentication required.");
+    }
+    assertDevUidAllowed(context.auth.uid);
+
+    const schema = z.object({ isSubscribed: z.boolean() });
+    const parsed = schema.safeParse(data);
+    if (!parsed.success) {
+      throw new functions.https.HttpsError(
+        "invalid-argument",
+        `Invalid override payload: ${formatZodError(parsed.error)}`
+      );
+    }
+
+    await admin
+      .firestore()
+      .doc(`users/${context.auth.uid}`)
+      .set(
+        {
+          entitlement: {
+            devOverrideIsSubscribed: parsed.data.isSubscribed,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          },
+        },
+        { merge: true }
+      );
+
+    return { ok: true };
+  });
+
+export const resetDailyLimit = functions
+  .region("asia-northeast3")
+  .runWith({ secrets: [DEV_UID_ALLOWLIST_SECRET] })
+  .https.onCall(async (_data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "Authentication required.");
+    }
+    assertDevUidAllowed(context.auth.uid);
+
+    const now = new Date();
+    const userRef = admin.firestore().doc(`users/${context.auth.uid}`);
+    await admin.firestore().runTransaction(async (tx) => {
+      const snap = await tx.get(userRef);
+      const data = snap.data();
+      const decisions = data?.usage?.decisions ?? {};
+      const tzOffsetMinutes =
+        typeof decisions.tzOffsetMinutes === "number" ? decisions.tzOffsetMinutes : 540;
+      const today = getDateStringForOffset(now, tzOffsetMinutes);
+      const decisionTimestamps = coerceTimestampArray(decisions.decisionTimestamps);
+      const filteredTimestamps = decisionTimestamps.filter(
+        (timestamp) => getDateStringForOffset(timestamp, tzOffsetMinutes) !== today
+      );
+
+      tx.set(
+        userRef,
+        {
+          usage: {
+            decisions: {
+              decisionTimestamps: filteredTimestamps.map((timestamp) =>
+                admin.firestore.Timestamp.fromDate(timestamp)
+              ),
+            },
+          },
+        },
+        { merge: true }
+      );
+    });
+
+    return { ok: true };
+  });
+
+export const resetCooldown = functions
+  .region("asia-northeast3")
+  .runWith({ secrets: [DEV_UID_ALLOWLIST_SECRET] })
+  .https.onCall(async (_data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "Authentication required.");
+    }
+    assertDevUidAllowed(context.auth.uid);
+
+    const userRef = admin.firestore().doc(`users/${context.auth.uid}`);
+    await admin.firestore().runTransaction(async (tx) => {
+      tx.set(
+        userRef,
+        {
+          usage: {
+            decisions: {
+              cooldownUntil: null,
+            },
+          },
+        },
+        { merge: true }
+      );
+    });
+
+    return { ok: true };
+  });
+
+export const revenuecatWebhook = functions
+  .region("asia-northeast3")
+  .runWith({ secrets: [REVENUECAT_WEBHOOK_AUTH] })
+  .https.onRequest(async (req, res) => {
+    if (req.method !== "POST") {
+      res.status(405).json({ ok: false, error: "method_not_allowed" });
+      return;
+    }
+
+    const authorizationHeader = req.get("authorization");
+    if (!isRevenueCatWebhookAuthorized(authorizationHeader)) {
+      res.status(401).json({ ok: false, error: "unauthorized" });
+      return;
+    }
+
+    const event =
+      req.body && typeof req.body.event === "object" && req.body.event
+        ? (req.body.event as Record<string, unknown>)
+        : (req.body as Record<string, unknown>);
+
+    const appUserId =
+      typeof event?.app_user_id === "string" ? event.app_user_id.trim() : "";
+    if (!appUserId) {
+      res.status(400).json({ ok: false, error: "missing_app_user_id" });
+      return;
+    }
+
+    const isSubscribed = premiumStatusFromWebhookEvent(event);
+    if (isSubscribed === null) {
+      res.status(200).json({ ok: true, ignored: true });
+      return;
+    }
+
+    await admin
+      .firestore()
+      .doc(`users/${appUserId}`)
+      .set(
+        {
+          entitlement: {
+            isSubscribed,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          },
+        },
+        { merge: true }
+      );
+
+    res.status(200).json({ ok: true });
   });

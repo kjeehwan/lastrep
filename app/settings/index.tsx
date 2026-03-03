@@ -1,25 +1,23 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Href, Redirect, useRouter } from "expo-router";
 import { onAuthStateChanged, signOut } from "firebase/auth";
-import { doc, setDoc } from "firebase/firestore";
+import { getFunctions, httpsCallable } from "firebase/functions";
 import React, { useEffect, useState } from "react";
 import { Linking, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { auth, db } from "../../src/config/firebaseConfig";
-import { getDateStringFromOffset } from "../../src/decisionGate";
+import { auth } from "../../src/config/firebaseConfig";
 import { getUserData } from "../../src/userData";
 
 const ACCENT = "#7b61ff";
 const MUTED = "#a5acc1";
+const FUNCTIONS_REGION = "asia-northeast3";
 
 export default function SettingsIndex() {
   const router = useRouter();
   const [nickname, setNickname] = useState("You");
   const [email, setEmail] = useState<string | null>(null);
   const [redirectTo, setRedirectTo] = useState<Href | null>(null);
-  const [uid, setUid] = useState<string | null>(null);
   const [isSubscribed, setIsSubscribed] = useState<boolean | null>(null);
-  const [tzOffsetMinutes, setTzOffsetMinutes] = useState<number>(new Date().getTimezoneOffset());
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (user) => {
@@ -27,7 +25,6 @@ export default function SettingsIndex() {
         setRedirectTo("/auth/sign-in");
         return;
       }
-      setUid(user.uid);
       setEmail(user.email || null);
       (async () => {
         try {
@@ -35,9 +32,6 @@ export default function SettingsIndex() {
           if (data?.nickname) setNickname(data.nickname);
           if (typeof data?.entitlement?.isSubscribed === "boolean") {
             setIsSubscribed(data.entitlement.isSubscribed);
-          }
-          if (typeof data?.usage?.decisions?.tzOffsetMinutes === "number") {
-            setTzOffsetMinutes(data.usage.decisions.tzOffsetMinutes);
           }
         } catch (e) {
           console.log("Failed to load nickname", e);
@@ -61,39 +55,39 @@ export default function SettingsIndex() {
   };
 
   const setDevEntitlement = async (nextValue: boolean) => {
-    if (!uid) return;
     try {
-      await setDoc(doc(db, "users", uid), { entitlement: { isSubscribed: nextValue } }, { merge: true });
+      const callable = httpsCallable<{ isSubscribed: boolean }, { ok: boolean }>(
+        getFunctions(undefined, FUNCTIONS_REGION),
+        "setDevEntitlementOverride"
+      );
+      await callable({ isSubscribed: nextValue });
       setIsSubscribed(nextValue);
     } catch (e) {
       console.log("Failed to update entitlement", e);
     }
   };
 
-  const resetCooldown = async () => {
-    if (!uid) return;
+  const resetDailyLimit = async () => {
     try {
-      await setDoc(
-        doc(db, "users", uid),
-        { usage: { decisions: { lastDecisionAt: null } } },
-        { merge: true }
+      const callable = httpsCallable<Record<string, never>, { ok: boolean }>(
+        getFunctions(undefined, FUNCTIONS_REGION),
+        "resetDailyLimit"
       );
+      await callable({});
     } catch (e) {
-      console.log("Failed to reset cooldown", e);
+      console.log("Failed to reset daily limit", e);
     }
   };
 
-  const resetDailyLimit = async () => {
-    if (!uid) return;
+  const resetCooldown = async () => {
     try {
-      const today = getDateStringFromOffset(new Date(), tzOffsetMinutes);
-      await setDoc(
-        doc(db, "users", uid),
-        { usage: { decisions: { dailyCount: 0, dailyDate: today } } },
-        { merge: true }
+      const callable = httpsCallable<Record<string, never>, { ok: boolean }>(
+        getFunctions(undefined, FUNCTIONS_REGION),
+        "resetCooldown"
       );
+      await callable({});
     } catch (e) {
-      console.log("Failed to reset daily limit", e);
+      console.log("Failed to reset cooldown", e);
     }
   };
 
@@ -144,11 +138,11 @@ export default function SettingsIndex() {
                 <Text style={styles.secondaryButtonText}>Set Free</Text>
               </TouchableOpacity>
             </View>
-            <TouchableOpacity style={styles.secondaryButton} onPress={resetCooldown}>
-              <Text style={styles.secondaryButtonText}>Reset cooldown</Text>
-            </TouchableOpacity>
             <TouchableOpacity style={styles.secondaryButton} onPress={resetDailyLimit}>
               <Text style={styles.secondaryButtonText}>Reset daily limit</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.secondaryButton} onPress={resetCooldown}>
+              <Text style={styles.secondaryButtonText}>Reset cooldown</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.secondaryButton}

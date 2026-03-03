@@ -46,6 +46,7 @@ export default function RootLayout() {
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="paywall" options={{ title: "Paywall" }} />
         <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
         {__DEV__ && (
           <Stack.Screen name="settings/revenuecat-dev" options={{ title: 'RevenueCat Debug' }} />
