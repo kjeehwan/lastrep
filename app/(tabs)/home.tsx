@@ -1,34 +1,37 @@
 import { Ionicons } from "@expo/vector-icons";
 import Slider from "@react-native-community/slider";
-import { Picker } from "@react-native-picker/picker";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Href, Redirect, useRouter } from "expo-router";
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc, setDoc, Timestamp } from "firebase/firestore";
 import React, { useEffect, useMemo, useState } from "react";
 import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import type { NormalizedDecisionError, ReasonCode } from "../../src/contracts";
 import { auth, db } from "../../src/config/firebaseConfig";
-import { getDecision, isDecisionGateError } from "../../src/services/decision/getDecision";
+import { useEntitlement } from "../../src/hooks/useEntitlement";
+import { getDecision, isNormalizedDecisionError } from "../../src/services/decision/getDecision";
 import { hashDecisionInputs } from "../../src/services/decision/inputHash";
 import type { DecisionInputs, DietPhase, LastResultPayload, TrainingPhase } from "../../src/types/decision";
 
 const HOME_INPUTS_KEY = "home-inputs-v1";
 const TRAINING_PHASES: TrainingPhase[] = ["Hypertrophy", "Strength", "Power"];
 const DIET_PHASES: DietPhase[] = ["Cut", "Maintain", "Bulk"];
+
 const isTrainingPhase = (value: string): value is TrainingPhase =>
   TRAINING_PHASES.includes(value as TrainingPhase);
 const isDietPhase = (value: string): value is DietPhase => DIET_PHASES.includes(value as DietPhase);
+
 const formatDecisionLabel = (decision: string) => decision.replace("_", " ");
 const formatIntensityLabel = (value?: number) => {
   if (value == null || value === 0) return "No change";
   const sign = value > 0 ? "+" : "";
   return `Intensity: ${sign}${value}%`;
 };
-const reasonMessage = (reason?: string) => {
-  switch (reason) {
-    case "PAYWALL_REQUIRED":
+
+const getReasonMessage = (reasonCode: ReasonCode): string => {
+  switch (reasonCode) {
     case "FREE_WINDOW_EXHAUSTED":
-      return "Free decisions are exhausted. Upgrade to continue.";
+      return "Free window is exhausted.";
     case "DAILY_LIMIT":
       return "Daily limit reached.";
     case "COOLDOWN_ACTIVE":
@@ -38,9 +41,17 @@ const reasonMessage = (reason?: string) => {
   }
 };
 
+const formatCooldownMessage = (cooldownSeconds: number | null): string => {
+  if (cooldownSeconds == null) return "Please wait before requesting another decision.";
+  if (cooldownSeconds <= 0) return "Cooldown complete. Try again now.";
+  const minutes = Math.max(1, Math.ceil(cooldownSeconds / 60));
+  return `Try again in ${minutes} min.`;
+};
+
 export default function Home() {
   const router = useRouter();
   const [redirectTo, setRedirectTo] = useState<Href | null>(null);
+  const [authReady, setAuthReady] = useState(false);
   const [uid, setUid] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
 
@@ -52,19 +63,25 @@ export default function Home() {
   const [dietPhase, setDietPhase] = useState<DietPhase>("Maintain");
 
   const [loading, setLoading] = useState(false);
-  const [gateMessage, setGateMessage] = useState<string | null>(null);
-  const [gateReason, setGateReason] = useState<string | null>(null);
-  const [nextAvailableAt, setNextAvailableAt] = useState<Date | null>(null);
+  const [gateError, setGateError] = useState<NormalizedDecisionError | null>(null);
+  const [cooldownSeconds, setCooldownSeconds] = useState<number | null>(null);
   const [latestDecision, setLatestDecision] = useState<LastResultPayload | null>(null);
   const [showAdjustHelp, setShowAdjustHelp] = useState(false);
   const [lastTapAt, setLastTapAt] = useState(0);
 
+  const entitlement = useEntitlement(authReady, uid);
+
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
+      setAuthReady(true);
       if (!user) {
+        setUid(null);
+        setUserEmail(null);
+        setLatestDecision(null);
         setRedirectTo("/auth/sign-in");
         return;
       }
+
       setRedirectTo(null);
       setUid(user.uid);
       setUserEmail(user.email || null);
@@ -134,21 +151,36 @@ export default function Home() {
     save();
   }, [sleepHours, soreness, fatigue, motivation, trainingPhase, dietPhase]);
 
+  useEffect(() => {
+    if (cooldownSeconds == null || cooldownSeconds <= 0) return;
+    const timer = setInterval(() => {
+      setCooldownSeconds((previous) => {
+        if (previous == null) return previous;
+        return previous > 0 ? previous - 1 : 0;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [cooldownSeconds]);
+
   const { parsedSleep, sleepIsInvalid } = useMemo(() => {
     const value = Number(sleepHours);
     const invalid = !Number.isFinite(value) || value < 0 || value > 12;
     return { parsedSleep: invalid ? 0 : value, sleepIsInvalid: invalid };
   }, [sleepHours]);
 
+  const shouldShowUpgradeCta =
+    gateError?.bucket === "business_gate" && entitlement.state === "inactive";
+
   const handleDecision = async () => {
     if (!uid || loading) return;
     const nowMs = Date.now();
     if (nowMs - lastTapAt < 500) return;
+
     setLastTapAt(nowMs);
     setLoading(true);
-    setGateMessage(null);
-    setGateReason(null);
-    setNextAvailableAt(null);
+    setGateError(null);
+    setCooldownSeconds(null);
+
     try {
       const inputs: DecisionInputs = {
         sleepHours: parsedSleep,
@@ -158,8 +190,8 @@ export default function Home() {
         trainingPhase,
         dietPhase,
       };
-      const result = await getDecision(inputs);
 
+      const result = await getDecision(inputs);
       const payload: LastResultPayload = {
         createdAt: Timestamp.now(),
         inputs,
@@ -174,28 +206,22 @@ export default function Home() {
       );
 
       setLatestDecision(payload);
-    } catch (e) {
-      console.log("Decision request failed", e);
-      if (isDecisionGateError(e)) {
-        setGateReason(e.reasonCode);
-        setGateMessage(reasonMessage(e.reasonCode));
-        if (e.reasonCode === "COOLDOWN_ACTIVE" && typeof e.retryAfterSeconds === "number") {
-          setNextAvailableAt(new Date(Date.now() + e.retryAfterSeconds * 1000));
-        }
-        if (
-          e.reasonCode === "PAYWALL_REQUIRED" ||
-          e.reasonCode === "FREE_WINDOW_EXHAUSTED"
-        ) {
-          router.push("/paywall" as Href);
+    } catch (error) {
+      if (isNormalizedDecisionError(error)) {
+        setGateError(error);
+        if (error.bucket === "business_gate" && error.reasonCode === "COOLDOWN_ACTIVE") {
+          if (typeof error.retryAfterSeconds === "number") {
+            setCooldownSeconds(error.retryAfterSeconds);
+          }
         }
         return;
       }
-      const code = String((e as { code?: string })?.code ?? "");
-      if (code.includes("resource-exhausted")) {
-        setGateMessage("Too many requests. Try again later.");
-      } else {
-        setGateMessage("Something went wrong. Please try again.");
-      }
+
+      console.log("Decision request failed", error);
+      setGateError({
+        bucket: "other",
+        message: "Something went wrong. Please try again.",
+      });
     } finally {
       setLoading(false);
     }
@@ -230,9 +256,7 @@ export default function Home() {
               placeholder="7"
               placeholderTextColor="#7a7a8c"
             />
-            {sleepIsInvalid ? (
-              <Text style={styles.inputHint}>Enter a number between 0 and 12.</Text>
-            ) : null}
+            {sleepIsInvalid ? <Text style={styles.inputHint}>Enter a number between 0 and 12.</Text> : null}
 
             <Text style={styles.label}>Soreness: {soreness}</Text>
             <Slider
@@ -272,46 +296,58 @@ export default function Home() {
 
             <Text style={styles.label}>Training phase</Text>
             <View style={styles.segmentRow}>
-              {TRAINING_PHASES.map((val) => (
+              {TRAINING_PHASES.map((value) => (
                 <TouchableOpacity
-                  key={val}
-                  style={[styles.segmentChip, trainingPhase === val && styles.segmentChipActive]}
-                  onPress={() => setTrainingPhase(val)}
+                  key={value}
+                  style={[styles.segmentChip, trainingPhase === value && styles.segmentChipActive]}
+                  onPress={() => setTrainingPhase(value)}
                 >
-                  <Text style={[styles.segmentText, trainingPhase === val && styles.segmentTextActive]}>{val}</Text>
+                  <Text style={[styles.segmentText, trainingPhase === value && styles.segmentTextActive]}>
+                    {value}
+                  </Text>
                 </TouchableOpacity>
               ))}
             </View>
 
             <Text style={styles.label}>Diet phase</Text>
             <View style={styles.segmentRow}>
-              {DIET_PHASES.map((val) => (
+              {DIET_PHASES.map((value) => (
                 <TouchableOpacity
-                  key={val}
-                  style={[styles.segmentChip, dietPhase === val && styles.segmentChipActive]}
-                  onPress={() => setDietPhase(val)}
+                  key={value}
+                  style={[styles.segmentChip, dietPhase === value && styles.segmentChipActive]}
+                  onPress={() => setDietPhase(value)}
                 >
-                  <Text style={[styles.segmentText, dietPhase === val && styles.segmentTextActive]}>{val}</Text>
+                  <Text style={[styles.segmentText, dietPhase === value && styles.segmentTextActive]}>
+                    {value}
+                  </Text>
                 </TouchableOpacity>
               ))}
             </View>
 
-            <TouchableOpacity style={[styles.primaryButtonWide, loading && styles.disabled]} onPress={handleDecision} disabled={loading}>
+            <TouchableOpacity
+              style={[styles.primaryButtonWide, loading && styles.disabled]}
+              onPress={handleDecision}
+              disabled={loading}
+            >
               <Text style={styles.primaryText}>{loading ? "Working..." : "Get today's decision"}</Text>
             </TouchableOpacity>
 
-            {gateMessage ? (
+            {gateError ? (
               <View style={styles.notice}>
-                <Text style={styles.noticeText}>{gateMessage}</Text>
-                {nextAvailableAt ? (
-                  <Text style={styles.noticeSub}>Try again: {nextAvailableAt.toLocaleString()}</Text>
+                <Text style={styles.noticeText}>
+                  {gateError.bucket === "business_gate"
+                    ? getReasonMessage(gateError.reasonCode)
+                    : gateError.message ?? "Unable to get a decision right now."}
+                </Text>
+                {gateError.bucket === "business_gate" && gateError.reasonCode === "COOLDOWN_ACTIVE" ? (
+                  <Text style={styles.noticeSub}>{formatCooldownMessage(cooldownSeconds)}</Text>
                 ) : null}
-                {gateReason === "PAYWALL_REQUIRED" || gateReason === "FREE_WINDOW_EXHAUSTED" ? (
-                  <TouchableOpacity
-                    style={styles.paywallButton}
-                    onPress={() => router.push("/paywall" as Href)}
-                  >
-                    <Text style={styles.paywallText}>Go to Paywall</Text>
+                {gateError.bucket === "seatbelt" ? (
+                  <Text style={styles.noticeSub}>Too many requests. Try again shortly.</Text>
+                ) : null}
+                {shouldShowUpgradeCta ? (
+                  <TouchableOpacity style={styles.paywallButton} onPress={() => router.push("/paywall" as Href)}>
+                    <Text style={styles.paywallText}>Upgrade to Premium</Text>
                   </TouchableOpacity>
                 ) : null}
               </View>
@@ -324,30 +360,28 @@ export default function Home() {
           <View style={styles.card}>
             {latestDecision ? (
               <>
-                <Text style={styles.decisionTitle}>
-                  {formatDecisionLabel(latestDecision.result.decision)}
-                </Text>
+                <Text style={styles.decisionTitle}>{formatDecisionLabel(latestDecision.result.decision)}</Text>
                 <View style={styles.bulletList}>
-                  {latestDecision.result.explanation.map((line, idx) => (
-                    <Text key={`${line}-${idx}`} style={styles.bulletItem}>- {line}</Text>
+                  {latestDecision.result.explanation.map((line, index) => (
+                    <Text key={`${line}-${index}`} style={styles.bulletItem}>
+                      - {line}
+                    </Text>
                   ))}
                 </View>
                 <View style={styles.adjustRow}>
-  <Text style={styles.adjustText}>
+                  <Text style={styles.adjustText}>
                     {formatIntensityLabel(latestDecision.result.adjustments?.intensityPct)}
-  </Text>
-  <TouchableOpacity
-    onPress={() => setShowAdjustHelp((prev) => !prev)}
-    style={styles.helpIcon}
-    accessibilityLabel="What do volume and intensity mean?"
-  >
-    <Ionicons name="help-circle-outline" size={18} color="#9aa1c3" />
-  </TouchableOpacity>
-</View>
-                {showAdjustHelp ? (
-                  <Text style={styles.helpText}>
-                    Intensity adjustment = change the weight on your sets.
                   </Text>
+                  <TouchableOpacity
+                    onPress={() => setShowAdjustHelp((previous) => !previous)}
+                    style={styles.helpIcon}
+                    accessibilityLabel="What does intensity mean?"
+                  >
+                    <Ionicons name="help-circle-outline" size={18} color="#9aa1c3" />
+                  </TouchableOpacity>
+                </View>
+                {showAdjustHelp ? (
+                  <Text style={styles.helpText}>Intensity adjustment = change the weight on your sets.</Text>
                 ) : null}
               </>
             ) : (
@@ -362,7 +396,11 @@ export default function Home() {
             <Text style={styles.cardText}>Log a full session without templates or history browsing.</Text>
             <TouchableOpacity
               style={styles.primaryButtonWide}
-              onPress={() => router.push(`/(tabs)/workout/log?trainingPhase=${encodeURIComponent(trainingPhase)}` as Href)}
+              onPress={() =>
+                router.push(
+                  `/(tabs)/workout/log?trainingPhase=${encodeURIComponent(trainingPhase)}` as Href
+                )
+              }
             >
               <Text style={styles.primaryText}>Start workout</Text>
             </TouchableOpacity>

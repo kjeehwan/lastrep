@@ -215,7 +215,6 @@ type RateLimitResult = {
 };
 
 type DecisionGateReasonCode =
-  | "PAYWALL_REQUIRED"
   | "FREE_WINDOW_EXHAUSTED"
   | "DAILY_LIMIT"
   | "COOLDOWN_ACTIVE";

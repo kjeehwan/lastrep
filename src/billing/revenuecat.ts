@@ -2,10 +2,10 @@ import { Platform } from "react-native";
 import Purchases, {
   type CustomerInfo,
   LOG_LEVEL,
-  type MakePurchaseResult,
   type PurchasesOfferings,
   type PurchasesPackage,
 } from "react-native-purchases";
+import type { PurchaseResult } from "../contracts";
 import { REVENUECAT_API_KEY_ANDROID } from "../config/billingConfig";
 
 type BillingOperation =
@@ -38,6 +38,8 @@ const IS_ANDROID = Platform.OS === "android";
 let configured = false;
 let configurePromise: Promise<void> | null = null;
 let activeFirebaseUid: string | null = null;
+let ensureLoginPromise: Promise<void> | null = null;
+let ensureLoginUid: string | null = null;
 
 function toUidPrefix(uid?: string | null): string | undefined {
   if (!uid) return undefined;
@@ -73,6 +75,15 @@ function toBillingError(error: unknown): BillingError {
       : "Unexpected RevenueCat error";
 
   return { code: codeFromError, message: messageFromError };
+}
+
+function isUserCancelled(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "userCancelled" in error &&
+    (error as { userCancelled?: unknown }).userCancelled === true
+  );
 }
 
 function ensureSupportedPlatform() {
@@ -112,14 +123,7 @@ async function runBillingOperation<T>(
   }
 }
 
-async function ensureInitialized() {
-  ensureSupportedPlatform();
-  if (!configured) {
-    await initializeRevenueCat();
-  }
-}
-
-export async function initializeRevenueCat(): Promise<void> {
+export async function configureRevenueCat(): Promise<void> {
   if (!IS_ANDROID) return;
   if (configured) return;
   if (configurePromise) return configurePromise;
@@ -161,92 +165,170 @@ export async function initializeRevenueCat(): Promise<void> {
   return configurePromise;
 }
 
+async function verifyAppUserId(firebaseUid: string): Promise<void> {
+  let appUserId = await runBillingOperation("getAppUserId", () => Purchases.getAppUserID(), firebaseUid);
+  if (appUserId === firebaseUid) {
+    logBillingEvent({
+      op: "logInPostCheck",
+      ok: true,
+      latencyMs: 0,
+      uidPrefix: toUidPrefix(firebaseUid),
+    });
+    return;
+  }
+
+  await runBillingOperation("logIn", () => Purchases.logIn(firebaseUid), firebaseUid);
+  activeFirebaseUid = firebaseUid;
+  appUserId = await runBillingOperation("getAppUserId", () => Purchases.getAppUserID(), firebaseUid);
+
+  if (appUserId !== firebaseUid) {
+    logBillingEvent({
+      op: "logInPostCheck",
+      ok: false,
+      latencyMs: 0,
+      uidPrefix: toUidPrefix(firebaseUid),
+      code: "identity_mismatch",
+    });
+    throw {
+      code: "identity_mismatch",
+      message: "RevenueCat identity mismatch after login.",
+    } as BillingError;
+  }
+
+  logBillingEvent({
+    op: "logInPostCheck",
+    ok: true,
+    latencyMs: 0,
+    uidPrefix: toUidPrefix(firebaseUid),
+  });
+}
+
+async function startEnsureRevenueCatLoggedIn(firebaseUid: string): Promise<void> {
+  ensureLoginUid = firebaseUid;
+  ensureLoginPromise = (async () => {
+    await runBillingOperation("logIn", () => Purchases.logIn(firebaseUid), firebaseUid);
+    activeFirebaseUid = firebaseUid;
+    await verifyAppUserId(firebaseUid);
+  })();
+
+  try {
+    await ensureLoginPromise;
+  } finally {
+    if (ensureLoginUid === firebaseUid) {
+      ensureLoginUid = null;
+      ensureLoginPromise = null;
+    }
+  }
+}
+
+export async function ensureRevenueCatLoggedIn(firebaseUid: string): Promise<void> {
+  ensureSupportedPlatform();
+  if (!firebaseUid) {
+    throw {
+      code: "missing_uid",
+      message: "A Firebase UID is required for RevenueCat login.",
+    } as BillingError;
+  }
+
+  await configureRevenueCat();
+
+  if (activeFirebaseUid === firebaseUid) return;
+
+  if (ensureLoginPromise) {
+    if (ensureLoginUid === firebaseUid) {
+      await ensureLoginPromise;
+      return;
+    }
+    await ensureLoginPromise;
+    if (activeFirebaseUid === firebaseUid) return;
+  }
+
+  await startEnsureRevenueCatLoggedIn(firebaseUid);
+}
+
+// Backward-compatible alias used by existing app bootstrap.
+export async function initializeRevenueCat(): Promise<void> {
+  await configureRevenueCat();
+}
+
+// Backward-compatible auth sync used by app bootstrap.
 export async function syncRevenueCatIdentity(firebaseUid: string | null): Promise<void> {
   if (!IS_ANDROID) return;
-  await ensureInitialized();
+  await configureRevenueCat();
 
   if (firebaseUid) {
-    if (activeFirebaseUid === firebaseUid) return;
-    await runBillingOperation("logIn", async () => {
-      await Purchases.logIn(firebaseUid);
-    }, firebaseUid);
-    activeFirebaseUid = firebaseUid;
-
-    // Verify SDK identity after login without logging full identifiers.
-    const startedAt = Date.now();
-    try {
-      const [postLogInAppUserId, postLogInCustomerInfo] = await Promise.all([
-        Purchases.getAppUserID(),
-        Purchases.getCustomerInfo(),
-      ]);
-      console.log(
-        `[billing] ${JSON.stringify({
-          op: "logInPostCheck",
-          ok: true,
-          latencyMs: Date.now() - startedAt,
-          uidPrefix: toUidPrefix(firebaseUid),
-          postLogInAppUserIdPrefix: toUidPrefix(postLogInAppUserId),
-          postLogInOriginalAppUserIdPrefix: toUidPrefix(postLogInCustomerInfo.originalAppUserId),
-        })}`
-      );
-    } catch (error) {
-      const normalized = toBillingError(error);
-      console.log(
-        `[billing] ${JSON.stringify({
-          op: "logInPostCheck",
-          ok: false,
-          latencyMs: Date.now() - startedAt,
-          uidPrefix: toUidPrefix(firebaseUid),
-          code: normalized.code,
-        })}`
-      );
-    }
-
+    await ensureRevenueCatLoggedIn(firebaseUid);
     return;
   }
 
-  // If we're already anonymous (never logged in), do nothing.
-  if (activeFirebaseUid === null) {
-    return;
-  }
-
+  if (activeFirebaseUid === null) return;
   const previousUid = activeFirebaseUid;
-  await runBillingOperation("logOut", async () => {
-    await Purchases.logOut();
-  }, previousUid);
+  await runBillingOperation("logOut", () => Purchases.logOut(), previousUid);
   activeFirebaseUid = null;
 }
 
 export async function getOfferings(): Promise<PurchasesOfferings> {
-  await ensureInitialized();
+  await configureRevenueCat();
   return runBillingOperation("getOfferings", () => Purchases.getOfferings(), activeFirebaseUid);
 }
 
-export async function purchasePackage(aPackage: PurchasesPackage): Promise<MakePurchaseResult> {
-  await ensureInitialized();
-  return runBillingOperation(
-    "purchasePackage",
-    () => Purchases.purchasePackage(aPackage),
-    activeFirebaseUid
-  );
+export async function purchasePackage(aPackage: PurchasesPackage): Promise<PurchaseResult> {
+  await configureRevenueCat();
+  const startedAt = Date.now();
+  try {
+    await Purchases.purchasePackage(aPackage);
+    logBillingEvent({
+      op: "purchasePackage",
+      ok: true,
+      latencyMs: Date.now() - startedAt,
+      uidPrefix: toUidPrefix(activeFirebaseUid),
+    });
+    return "PURCHASED";
+  } catch (error) {
+    const normalized = toBillingError(error);
+    logBillingEvent({
+      op: "purchasePackage",
+      ok: false,
+      latencyMs: Date.now() - startedAt,
+      code: normalized.code,
+      uidPrefix: toUidPrefix(activeFirebaseUid),
+    });
+    return isUserCancelled(error) ? "CANCELLED" : "ERROR";
+  }
 }
 
-export async function restorePurchases(): Promise<CustomerInfo> {
-  await ensureInitialized();
-  return runBillingOperation(
-    "restorePurchases",
-    () => Purchases.restorePurchases(),
-    activeFirebaseUid
-  );
+export async function restorePurchases(): Promise<PurchaseResult> {
+  await configureRevenueCat();
+  const startedAt = Date.now();
+  try {
+    await Purchases.restorePurchases();
+    logBillingEvent({
+      op: "restorePurchases",
+      ok: true,
+      latencyMs: Date.now() - startedAt,
+      uidPrefix: toUidPrefix(activeFirebaseUid),
+    });
+    return "RESTORED";
+  } catch (error) {
+    const normalized = toBillingError(error);
+    logBillingEvent({
+      op: "restorePurchases",
+      ok: false,
+      latencyMs: Date.now() - startedAt,
+      code: normalized.code,
+      uidPrefix: toUidPrefix(activeFirebaseUid),
+    });
+    return "ERROR";
+  }
 }
 
-// Debug-only helper for Phase 4B. Do not use as source-of-truth entitlement state.
+// Debug-only helper. Do not use as source-of-truth entitlement state.
 export async function getCustomerInfo(): Promise<CustomerInfo> {
-  await ensureInitialized();
+  await configureRevenueCat();
   return runBillingOperation("getCustomerInfo", () => Purchases.getCustomerInfo(), activeFirebaseUid);
 }
 
 export async function getAppUserId(): Promise<string> {
-  await ensureInitialized();
+  await configureRevenueCat();
   return runBillingOperation("getAppUserId", () => Purchases.getAppUserID(), activeFirebaseUid);
 }

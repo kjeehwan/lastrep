@@ -1,35 +1,23 @@
 import { getApp } from "firebase/app";
 import { getFunctions, httpsCallable } from "firebase/functions";
+import type { NormalizedDecisionError, ReasonCode } from "../../contracts";
 import type { Decision, DecisionInputs, DecisionOutput } from "../../types/decision";
 import { formatZodError, safeParseDecisionInputs, safeParseDecisionOutput } from "./decisionValidation";
 
 const USE_CLOUD_DECISION = true;
 const FUNCTIONS_REGION = "asia-northeast3";
 
-export type DecisionGateReasonCode =
-  | "PAYWALL_REQUIRED"
-  | "FREE_WINDOW_EXHAUSTED"
-  | "DAILY_LIMIT"
-  | "COOLDOWN_ACTIVE";
+const isReasonCode = (value: unknown): value is ReasonCode =>
+  value === "FREE_WINDOW_EXHAUSTED" || value === "DAILY_LIMIT" || value === "COOLDOWN_ACTIVE";
 
-export type DecisionGateError = {
-  code: "failed-precondition";
-  reasonCode: DecisionGateReasonCode;
-  retryAfterSeconds?: number;
-  message: string;
+export const isNormalizedDecisionError = (value: unknown): value is NormalizedDecisionError => {
+  if (typeof value !== "object" || value === null) return false;
+  const bucket = (value as { bucket?: unknown }).bucket;
+  if (bucket === "business_gate") {
+    return isReasonCode((value as { reasonCode?: unknown }).reasonCode);
+  }
+  return bucket === "seatbelt" || bucket === "other";
 };
-
-const isDecisionGateReasonCode = (value: unknown): value is DecisionGateReasonCode =>
-  value === "PAYWALL_REQUIRED" ||
-  value === "FREE_WINDOW_EXHAUSTED" ||
-  value === "DAILY_LIMIT" ||
-  value === "COOLDOWN_ACTIVE";
-
-export const isDecisionGateError = (value: unknown): value is DecisionGateError =>
-  typeof value === "object" &&
-  value !== null &&
-  (value as { code?: unknown }).code === "failed-precondition" &&
-  isDecisionGateReasonCode((value as { reasonCode?: unknown }).reasonCode);
 
 const heuristicDecision = (input: DecisionInputs): DecisionOutput => {
   const { sleepHours, soreness, fatigue, motivation, dietPhase } = input;
@@ -75,16 +63,21 @@ const cloudDecision = async (input: DecisionInputs): Promise<DecisionOutput> => 
     const parsed = safeParseDecisionOutput(res.data);
     if (!parsed.success) {
       if (__DEV__) {
-        console.warn(
-          "getDailyDecision returned invalid output, falling back to heuristic",
-          formatZodError(parsed.error)
-        );
+        console.warn("getDailyDecision returned invalid output", formatZodError(parsed.error));
       }
-      return heuristicDecision(input);
+      throw {
+        bucket: "other",
+        message: "Decision response format was invalid.",
+      } as NormalizedDecisionError;
     }
     return parsed.data;
   } catch (err) {
+    if (isNormalizedDecisionError(err)) {
+      throw err;
+    }
+
     const code = String((err as { code?: string })?.code ?? "");
+
     if (code.includes("failed-precondition")) {
       const details = (err as { details?: unknown }).details as
         | { reasonCode?: unknown; retryAfterSeconds?: unknown }
@@ -94,25 +87,28 @@ const cloudDecision = async (input: DecisionInputs): Promise<DecisionOutput> => 
         typeof details?.retryAfterSeconds === "number"
           ? Math.max(0, Math.floor(details.retryAfterSeconds))
           : undefined;
-      if (isDecisionGateReasonCode(reasonCode)) {
+
+      if (isReasonCode(reasonCode)) {
         throw {
-          code: "failed-precondition",
+          bucket: "business_gate",
           reasonCode,
           retryAfterSeconds,
           message: (err as { message?: string })?.message ?? "Decision request blocked by server gate.",
-        } as DecisionGateError;
+        } as NormalizedDecisionError;
       }
-      throw err;
     }
+
     if (code.includes("resource-exhausted")) {
-      throw err;
+      throw {
+        bucket: "seatbelt",
+        message: "Too many requests. Try again shortly.",
+      } as NormalizedDecisionError;
     }
-    if (__DEV__) {
-      const devCode = (err as { code?: string })?.code;
-      const message = (err as { message?: string })?.message;
-      console.warn("getDailyDecision failed, falling back to heuristic", devCode ?? "", message ?? "");
-    }
-    return heuristicDecision(input);
+
+    throw {
+      bucket: "other",
+      message: (err as { message?: string })?.message ?? "Unable to get a decision right now.",
+    } as NormalizedDecisionError;
   }
 };
 
@@ -125,9 +121,11 @@ export const getDecision = async (inputs: DecisionInputs): Promise<DecisionOutpu
     }
     throw new Error("Invalid decision inputs.");
   }
+
   if (USE_CLOUD_DECISION) {
     return cloudDecision(parsedInputs.data);
   }
+
   const local = heuristicDecision(parsedInputs.data);
   if (__DEV__) {
     const parsedOutput = safeParseDecisionOutput(local);

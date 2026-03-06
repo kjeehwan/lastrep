@@ -121,6 +121,16 @@ export default function SettingsIndex() {
         </View>
 
         <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Subscription</Text>
+          <TouchableOpacity
+            style={styles.secondaryButton}
+            onPress={() => router.push("/paywall" as Href)}
+          >
+            <Text style={styles.secondaryButtonText}>Upgrade to Premium</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.card}>
           <TouchableOpacity style={styles.secondaryButton} onPress={handleSignOut}>
             <Text style={styles.secondaryButtonText}>Log out</Text>
           </TouchableOpacity>
