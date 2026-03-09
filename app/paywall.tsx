@@ -184,6 +184,14 @@ export default function PaywallScreen() {
 
   const handleRestore = async () => {
     if (!uid || !canInteract) return;
+    if (entitlement.state === "active") {
+      setScreenState("idle");
+      setPendingEntitlementAction(null);
+      setActivationStartedAt(null);
+      setFeedback("You already have active premium.");
+      return;
+    }
+
     setScreenState("loading");
     setFeedback("Checking for previous purchases...");
     setPendingEntitlementAction(null);
@@ -324,7 +332,7 @@ export default function PaywallScreen() {
         <Text style={styles.secondaryButtonText}>Manage subscription</Text>
       </TouchableOpacity>
       <Text style={styles.noticeSub}>
-        Opens Google Play. To cancel, tap LastRep in the subscription list.
+        Opens Google Play. To cancel, tap Lastrep in the subscription list.
       </Text>
 
       {manageFallbackText ? <Text style={styles.noticeSub}>{manageFallbackText}</Text> : null}

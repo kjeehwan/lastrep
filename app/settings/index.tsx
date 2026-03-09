@@ -48,6 +48,12 @@ export default function SettingsIndex() {
     return unsub;
   }, []);
 
+  useEffect(() => {
+    if (entitlement.state !== "active") {
+      setManageFallbackText(null);
+    }
+  }, [entitlement.state]);
+
   const handleSignOut = async () => {
     try {
       await signOut(auth);
@@ -71,7 +77,7 @@ export default function SettingsIndex() {
       setManageFallbackText(null);
     } catch {
       setManageFallbackText(
-        "Opens Google Play. To cancel, tap LastRep in the subscription list."
+        "Opens Google Play. To cancel, tap Lastrep in the subscription list."
       );
     }
   };
@@ -151,7 +157,7 @@ export default function SettingsIndex() {
                 <Text style={styles.secondaryButtonText}>Manage subscription</Text>
               </TouchableOpacity>
               <Text style={styles.subText}>
-                Opens Google Play. To cancel, tap LastRep in the subscription list.
+                Opens Google Play. To cancel, tap Lastrep in the subscription list.
               </Text>
             </>
           ) : (
