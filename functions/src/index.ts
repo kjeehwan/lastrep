@@ -375,29 +375,53 @@ const isRevenueCatWebhookAuthorized = (authorizationHeader: string | undefined):
   return normalized === secret || normalized === `Bearer ${secret}`;
 };
 
-const premiumStatusFromWebhookEvent = (event: Record<string, unknown>): boolean | null => {
+const touchesPremiumEntitlement = (event: Record<string, unknown>): boolean => {
   const entitlementIds = Array.isArray(event.entitlement_ids)
     ? event.entitlement_ids.filter((value): value is string => typeof value === "string")
     : [];
   const entitlementId =
     typeof event.entitlement_id === "string" ? event.entitlement_id : null;
-  const touchesPremium =
+  return (
     entitlementIds.includes(PREMIUM_ENTITLEMENT_ID) ||
-    entitlementId === PREMIUM_ENTITLEMENT_ID;
-  if (!touchesPremium) return null;
+    entitlementId === PREMIUM_ENTITLEMENT_ID
+  );
+};
 
-  const eventType = typeof event.type === "string" ? event.type.toUpperCase() : "";
-  if (eventType === "EXPIRATION") {
-    return false;
+const toMsNumber = (value: unknown): number | null => {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.floor(value);
   }
-
-  const expirationAtMs =
-    typeof event.expiration_at_ms === "number" ? event.expiration_at_ms : null;
-  if (expirationAtMs && expirationAtMs <= Date.now()) {
-    return false;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return Math.floor(parsed);
+    }
   }
+  return null;
+};
 
-  return entitlementIds.includes(PREMIUM_ENTITLEMENT_ID) || entitlementId === PREMIUM_ENTITLEMENT_ID;
+const mapRevenueCatEventToSubscriptionStatus = (
+  eventType: string,
+  currentIsSubscribed: boolean
+): { shouldMutate: boolean; isSubscribed: boolean } => {
+  switch (eventType) {
+    case "INITIAL_PURCHASE":
+    case "RENEWAL":
+    case "UNCANCELLATION":
+    case "NON_RENEWING_PURCHASE":
+    case "TEMPORARY_ENTITLEMENT_GRANT":
+      return { shouldMutate: true, isSubscribed: true };
+    case "EXPIRATION":
+      return { shouldMutate: true, isSubscribed: false };
+    case "PRODUCT_CHANGE":
+    case "SUBSCRIPTION_EXTENDED":
+    case "CANCELLATION":
+    case "BILLING_ISSUE":
+    case "SUBSCRIPTION_PAUSED":
+      return { shouldMutate: true, isSubscribed: currentIsSubscribed };
+    default:
+      return { shouldMutate: true, isSubscribed: currentIsSubscribed };
+  }
 };
 
 const getBoundedHeuristicDecision = (inputs: DecisionInputs): DecisionOutput => {
@@ -738,24 +762,89 @@ export const revenuecatWebhook = functions
       return;
     }
 
-    const isSubscribed = premiumStatusFromWebhookEvent(event);
-    if (isSubscribed === null) {
-      res.status(200).json({ ok: true, ignored: true });
+    const eventId = typeof event.id === "string" ? event.id : "";
+    const eventType =
+      typeof event.type === "string" ? event.type.toUpperCase().trim() : "";
+    const productId = typeof event.product_id === "string" ? event.product_id : null;
+    const expirationAtMs = toMsNumber(event.expiration_at_ms);
+    const eventTimestampMs = toMsNumber(event.event_timestamp_ms);
+    const hasPremiumEntitlement = touchesPremiumEntitlement(event);
+
+    console.log("RC_EVENT", {
+      uid: appUserId.slice(0, 8),
+      type: eventType,
+      productId,
+      expiresAt: expirationAtMs,
+      eventId,
+      eventTimestampMs,
+    });
+
+    if (eventType === "TEST") {
+      res.status(200).json({ ok: true, ignored: true, reason: "test_event" });
       return;
     }
 
-    await admin
-      .firestore()
-      .doc(`users/${appUserId}`)
-      .set(
+    if (!hasPremiumEntitlement) {
+      res.status(200).json({ ok: true, ignored: true, reason: "non_premium_event" });
+      return;
+    }
+
+    const expiresAt =
+      typeof expirationAtMs === "number"
+        ? admin.firestore.Timestamp.fromMillis(expirationAtMs)
+        : null;
+
+    const userRef = admin.firestore().doc(`users/${appUserId}`);
+    const result = await admin.firestore().runTransaction(async (tx) => {
+      const snap = await tx.get(userRef);
+      const entitlement = snap.data()?.entitlement ?? {};
+      const lastEventId =
+        typeof entitlement.lastEventId === "string" ? entitlement.lastEventId : "";
+      const lastEventTimestampMs =
+        typeof entitlement.lastEventTimestampMs === "number"
+          ? entitlement.lastEventTimestampMs
+          : null;
+      const currentIsSubscribed =
+        typeof entitlement.isSubscribed === "boolean" ? entitlement.isSubscribed : false;
+
+      if (eventId && lastEventId === eventId) {
+        return { skipped: true, reason: "duplicate_event_id" as const };
+      }
+
+      if (
+        typeof eventTimestampMs === "number" &&
+        typeof lastEventTimestampMs === "number" &&
+        eventTimestampMs < lastEventTimestampMs
+      ) {
+        return { skipped: true, reason: "stale_event" as const };
+      }
+
+      const mapped = mapRevenueCatEventToSubscriptionStatus(eventType, currentIsSubscribed);
+      if (!mapped.shouldMutate) {
+        return { skipped: true, reason: "ignored_event" as const };
+      }
+
+      const nextEventTimestampMs =
+        eventTimestampMs ?? lastEventTimestampMs ?? Date.now();
+
+      tx.set(
+        userRef,
         {
           entitlement: {
-            isSubscribed,
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            isSubscribed: mapped.isSubscribed,
+            source: "revenuecat",
+            productId,
+            expiresAt,
+            lastEventId: eventId,
+            lastEventTimestampMs: nextEventTimestampMs,
+            lastUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
           },
         },
         { merge: true }
       );
 
-    res.status(200).json({ ok: true });
+      return { skipped: false, reason: null as null };
+    });
+
+    res.status(200).json({ ok: true, skipped: result.skipped, reason: result.reason });
   });
