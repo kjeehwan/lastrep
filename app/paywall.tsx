@@ -5,6 +5,7 @@ import { ActivityIndicator, Linking, ScrollView, StyleSheet, Text, TouchableOpac
 import type { PurchasesOfferings, PurchasesPackage } from "react-native-purchases";
 import { auth } from "../src/config/firebaseConfig";
 import {
+  MANAGE_SUBSCRIPTION_URL,
   OFFERING_ID,
   PACKAGE_ID_ANNUAL,
   PACKAGE_ID_MONTHLY,
@@ -18,11 +19,11 @@ import {
   getOfferings,
   purchasePackage,
   restorePurchases,
+  syncRevenueCatPurchases,
 } from "../src/billing/revenuecat";
 
-const MANAGE_SUBSCRIPTION_URL = "https://play.google.com/store/account/subscriptions";
-
 type ScreenState = "idle" | "loading" | "success" | "error";
+type PendingEntitlementAction = "purchase" | "restore" | null;
 
 function getDefaultOffering(offerings: PurchasesOfferings | null) {
   if (!offerings) return null;
@@ -62,6 +63,7 @@ export default function PaywallScreen() {
   const [feedback, setFeedback] = useState<string | null>(null);
   const [manageFallbackText, setManageFallbackText] = useState<string | null>(null);
   const [activationStartedAt, setActivationStartedAt] = useState<number | null>(null);
+  const [pendingEntitlementAction, setPendingEntitlementAction] = useState<PendingEntitlementAction>(null);
 
   const entitlement = useEntitlement(authReady, uid);
 
@@ -117,11 +119,28 @@ export default function PaywallScreen() {
 
   useEffect(() => {
     if (entitlement.state === "active") {
-      setScreenState("success");
+      setScreenState("idle");
       setActivationStartedAt(null);
-      setFeedback("Premium active.");
+      setPendingEntitlementAction(null);
+      setFeedback(null);
     }
   }, [entitlement.state]);
+
+  useEffect(() => {
+    if (pendingEntitlementAction !== "restore" || activationStartedAt == null) return;
+    if (entitlement.state === "active") return;
+
+    const timer = setTimeout(() => {
+      setPendingEntitlementAction(null);
+      setActivationStartedAt(null);
+      setScreenState("idle");
+      setFeedback(
+        "We couldn't confirm an active subscription yet. If you recently subscribed, wait a moment and reopen the app, or try Restore again."
+      );
+    }, 8000);
+
+    return () => clearTimeout(timer);
+  }, [pendingEntitlementAction, activationStartedAt, entitlement.state]);
 
   const packages = useMemo(() => getSortedPackages(offerings), [offerings]);
   const packagesAvailable = packages.length > 0;
@@ -138,6 +157,7 @@ export default function PaywallScreen() {
     if (!uid || !canInteract) return;
     setScreenState("loading");
     setFeedback(null);
+    setPendingEntitlementAction(null);
 
     const result: PurchaseResult = await purchasePackage(selectedPackage);
     if (result === "CANCELLED") {
@@ -152,14 +172,21 @@ export default function PaywallScreen() {
     }
 
     setScreenState("success");
+    setPendingEntitlementAction("purchase");
     setActivationStartedAt(Date.now());
     setFeedback("Purchase successful. Activating subscription...");
+    try {
+      await syncRevenueCatPurchases();
+    } catch (error) {
+      console.log("Purchase sync failed", error);
+    }
   };
 
   const handleRestore = async () => {
     if (!uid || !canInteract) return;
     setScreenState("loading");
-    setFeedback(null);
+    setFeedback("Checking for previous purchases...");
+    setPendingEntitlementAction(null);
 
     const result = await restorePurchases();
     if (result === "ERROR") {
@@ -169,8 +196,14 @@ export default function PaywallScreen() {
     }
 
     setScreenState("success");
+    setPendingEntitlementAction("restore");
     setActivationStartedAt(Date.now());
-    setFeedback("Subscription restored. Activating...");
+    setFeedback("Checking for previous purchases...");
+    try {
+      await syncRevenueCatPurchases();
+    } catch (error) {
+      console.log("Restore sync failed", error);
+    }
   };
 
   const handleManageSubscription = async () => {
@@ -222,16 +255,19 @@ export default function PaywallScreen() {
         </View>
       ) : null}
 
-      {entitlement.state === "active" ? (
+            {entitlement.state === "active" ? (
         <View style={styles.notice}>
-          <Text style={styles.noticeText}>✓ Premium active</Text>
+          <Text style={styles.noticeText}>Premium active</Text>
         </View>
       ) : null}
 
       {feedback ? (
         <View style={styles.notice}>
           <Text style={styles.noticeText}>{feedback}</Text>
-          {activationStartedAt && entitlement.state !== "active" && Date.now() - activationStartedAt >= 30000 ? (
+          {activationStartedAt &&
+          pendingEntitlementAction === "purchase" &&
+          entitlement.state !== "active" &&
+          Date.now() - activationStartedAt >= 30000 ? (
             <Text style={styles.noticeSub}>
               If it doesn&apos;t activate within ~30 seconds, reopen the app or tap Restore.
             </Text>
@@ -287,6 +323,9 @@ export default function PaywallScreen() {
       <TouchableOpacity style={styles.secondaryButton} onPress={handleManageSubscription}>
         <Text style={styles.secondaryButtonText}>Manage subscription</Text>
       </TouchableOpacity>
+      <Text style={styles.noticeSub}>
+        Opens Google Play. To cancel, tap LastRep in the subscription list.
+      </Text>
 
       {manageFallbackText ? <Text style={styles.noticeSub}>{manageFallbackText}</Text> : null}
     </ScrollView>
@@ -402,3 +441,5 @@ const styles = StyleSheet.create({
     opacity: 0.55,
   },
 });
+
+

@@ -14,6 +14,7 @@ type BillingOperation =
   | "logInPostCheck"
   | "logOut"
   | "getOfferings"
+  | "syncPurchases"
   | "purchasePackage"
   | "restorePurchases"
   | "getCustomerInfo"
@@ -320,6 +321,17 @@ export async function restorePurchases(): Promise<PurchaseResult> {
     });
     return "ERROR";
   }
+}
+
+export async function syncRevenueCatPurchases(): Promise<void> {
+  await configureRevenueCat();
+  await runBillingOperation(
+    "syncPurchases",
+    async () => {
+      await Purchases.syncPurchasesForResult();
+    },
+    activeFirebaseUid
+  );
 }
 
 // Debug-only helper. Do not use as source-of-truth entitlement state.

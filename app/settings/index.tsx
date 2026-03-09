@@ -5,7 +5,9 @@ import { getFunctions, httpsCallable } from "firebase/functions";
 import React, { useEffect, useState } from "react";
 import { Linking, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { MANAGE_SUBSCRIPTION_URL } from "../../src/config/billingConfig";
 import { auth } from "../../src/config/firebaseConfig";
+import { useEntitlement } from "../../src/hooks/useEntitlement";
 import { getUserData } from "../../src/userData";
 
 const ACCENT = "#7b61ff";
@@ -17,22 +19,27 @@ export default function SettingsIndex() {
   const [nickname, setNickname] = useState("You");
   const [email, setEmail] = useState<string | null>(null);
   const [redirectTo, setRedirectTo] = useState<Href | null>(null);
-  const [isSubscribed, setIsSubscribed] = useState<boolean | null>(null);
+  const [authReady, setAuthReady] = useState(false);
+  const [uid, setUid] = useState<string | null>(null);
+  const [manageFallbackText, setManageFallbackText] = useState<string | null>(null);
+  const entitlement = useEntitlement(authReady, uid);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (user) => {
+      setAuthReady(true);
       if (!user) {
+        setUid(null);
+        setEmail(null);
         setRedirectTo("/auth/sign-in");
         return;
       }
+      setUid(user.uid);
+      setRedirectTo(null);
       setEmail(user.email || null);
       (async () => {
         try {
           const data = await getUserData(user.uid);
           if (data?.nickname) setNickname(data.nickname);
-          if (typeof data?.entitlement?.isSubscribed === "boolean") {
-            setIsSubscribed(data.entitlement.isSubscribed);
-          }
         } catch (e) {
           console.log("Failed to load nickname", e);
         }
@@ -54,6 +61,21 @@ export default function SettingsIndex() {
     Linking.openURL("mailto:kjeehwan@gmail.com?subject=Support%20request");
   };
 
+  const handleManageSubscription = async () => {
+    try {
+      const canOpen = await Linking.canOpenURL(MANAGE_SUBSCRIPTION_URL);
+      if (!canOpen) {
+        throw new Error("cannot_open_url");
+      }
+      await Linking.openURL(MANAGE_SUBSCRIPTION_URL);
+      setManageFallbackText(null);
+    } catch {
+      setManageFallbackText(
+        "Opens Google Play. To cancel, tap LastRep in the subscription list."
+      );
+    }
+  };
+
   const setDevEntitlement = async (nextValue: boolean) => {
     try {
       const callable = httpsCallable<{ isSubscribed: boolean }, { ok: boolean }>(
@@ -61,7 +83,6 @@ export default function SettingsIndex() {
         "setDevEntitlementOverride"
       );
       await callable({ isSubscribed: nextValue });
-      setIsSubscribed(nextValue);
     } catch (e) {
       console.log("Failed to update entitlement", e);
     }
@@ -122,12 +143,23 @@ export default function SettingsIndex() {
 
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Subscription</Text>
-          <TouchableOpacity
-            style={styles.secondaryButton}
-            onPress={() => router.push("/paywall" as Href)}
-          >
-            <Text style={styles.secondaryButtonText}>Upgrade to Premium</Text>
-          </TouchableOpacity>
+          {entitlement.state === "loading" ? (
+            <Text style={styles.subText}>Checking subscription status...</Text>
+          ) : entitlement.state === "active" ? (
+            <>
+              <TouchableOpacity style={styles.secondaryButton} onPress={handleManageSubscription}>
+                <Text style={styles.secondaryButtonText}>Manage subscription</Text>
+              </TouchableOpacity>
+              <Text style={styles.subText}>
+                Opens Google Play. To cancel, tap LastRep in the subscription list.
+              </Text>
+            </>
+          ) : (
+            <TouchableOpacity style={styles.secondaryButton} onPress={() => router.push("/paywall" as Href)}>
+              <Text style={styles.secondaryButtonText}>Upgrade to Premium</Text>
+            </TouchableOpacity>
+          )}
+          {manageFallbackText ? <Text style={styles.subText}>{manageFallbackText}</Text> : null}
         </View>
 
         <View style={styles.card}>
@@ -139,7 +171,9 @@ export default function SettingsIndex() {
         {__DEV__ ? (
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>Dev</Text>
-            <Text style={styles.subText}>Entitlement: {isSubscribed ? "Paid" : "Free"}</Text>
+            <Text style={styles.subText}>
+              Entitlement: {entitlement.state === "active" ? "Paid" : "Free"}
+            </Text>
             <View style={styles.devRow}>
               <TouchableOpacity style={styles.secondaryButton} onPress={() => setDevEntitlement(true)}>
                 <Text style={styles.secondaryButtonText}>Set Paid</Text>

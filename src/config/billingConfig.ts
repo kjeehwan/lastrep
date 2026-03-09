@@ -9,6 +9,7 @@ export const OFFERING_ID = "default";
 
 export const PACKAGE_ID_MONTHLY = "$rc_monthly";
 export const PACKAGE_ID_ANNUAL = "$rc_annual";
+export const MANAGE_SUBSCRIPTION_URL = "https://play.google.com/store/account/subscriptions";
 
 export const REVENUECAT_API_KEY_ANDROID =
-  process.env.EXPO_PUBLIC_REVENUECAT_API_KEY_ANDROID!; 
+  process.env.EXPO_PUBLIC_REVENUECAT_API_KEY_ANDROID!;
