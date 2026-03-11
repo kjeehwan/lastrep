@@ -9,7 +9,8 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "lint": "expo lint",
-    "test": "vitest run"
+    "test": "vitest run",
+    "vercel-build": "node scripts/write-google-services.js"
   },
   "postinstall": "node scripts/patch-tslib.js",
   "dependencies": {
