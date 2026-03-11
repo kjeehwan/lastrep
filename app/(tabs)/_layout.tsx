@@ -1,15 +1,11 @@
 import { Ionicons } from "@expo/vector-icons";
-import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import { Tabs } from "expo-router";
 import React from "react";
-import Home from "./home"; // Make sure this path matches where your home component is
-import ProfileIndex from "./profile/index"; // Ensure the correct import path
-import WorkoutLog from "./workout/log";
-
-const Tab = createBottomTabNavigator();
 
 export default function TabsLayout() {
   return (
-    <Tab.Navigator
+    <Tabs
+      initialRouteName="home"
       screenOptions={({ route }) => ({
         headerShown: false,
         tabBarStyle: {
@@ -25,7 +21,7 @@ export default function TabsLayout() {
           const icons: Record<string, keyof typeof Ionicons.glyphMap> = {
             home: "home-outline",
             "workout/index": "barbell-outline",
-            "profile/index": "person-outline",  // Profile route icon
+            "profile/index": "person-outline",
           };
           return (
             <Ionicons
@@ -37,14 +33,17 @@ export default function TabsLayout() {
         },
       })}
     >
-      <Tab.Screen name="home" component={Home} options={{ title: "Home" }} />
-      <Tab.Screen name="workout/index" component={WorkoutLog} options={{ title: "Workout" }} />
-      <Tab.Screen
+      <Tabs.Screen name="index" options={{ href: null }} />
+      <Tabs.Screen name="home" options={{ title: "Home" }} />
+      <Tabs.Screen name="workout/index" options={{ title: "Workout" }} />
+      <Tabs.Screen
         name="workout/log"
-        component={WorkoutLog}
-        options={{ title: "Log workout", tabBarButton: () => null }}
+        options={{ title: "Log workout", href: null }}
       />
-      <Tab.Screen name="profile/index" component={ProfileIndex} options={{ title: "Profile" }} />
-    </Tab.Navigator>
+      <Tabs.Screen name="workout/custom" options={{ href: null }} />
+      <Tabs.Screen name="workout/ai" options={{ href: null }} />
+      <Tabs.Screen name="community/index" options={{ href: null }} />
+      <Tabs.Screen name="profile/index" options={{ title: "Profile" }} />
+    </Tabs>
   );
 }

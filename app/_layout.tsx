@@ -15,6 +15,21 @@ export const unstable_settings = {
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
+  const stackScreens = [
+    <Stack.Screen key="tabs" name="(tabs)" options={{ headerShown: false }} />,
+    <Stack.Screen key="paywall" name="paywall" options={{ title: "Paywall" }} />,
+    <Stack.Screen key="modal" name="modal" options={{ presentation: "modal", title: "Modal" }} />,
+  ];
+
+  if (__DEV__) {
+    stackScreens.push(
+      <Stack.Screen
+        key="revenuecat-dev"
+        name="settings/revenuecat-dev"
+        options={{ title: "RevenueCat Debug" }}
+      />
+    );
+  }
 
   useEffect(() => {
     let canceled = false;
@@ -44,14 +59,7 @@ export default function RootLayout() {
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="paywall" options={{ title: "Paywall" }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
-        {__DEV__ && (
-          <Stack.Screen name="settings/revenuecat-dev" options={{ title: 'RevenueCat Debug' }} />
-        )}
-      </Stack>
+      <Stack>{stackScreens}</Stack>
       <StatusBar style="auto" />
     </ThemeProvider>
   );
