@@ -23,9 +23,11 @@ if (
 
 const config: ExpoConfig = {
   ...baseConfig,
+  newArchEnabled: true,
   android: {
     ...baseConfig.android,
     googleServicesFile: resolvedGoogleServicesFile,
+    edgeToEdgeEnabled: true,
   },
 };
 

@@ -8,7 +8,6 @@
     "icon": "./assets/images/icon.png",
     "scheme": "lastrep",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "ios": {
       "bundleIdentifier": "com.kjeehwan.lastrep",
       "supportsTablet": true
@@ -22,7 +21,6 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
     },
     "web": {
@@ -30,7 +28,7 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
-      "@react-native-firebase/app",
+      "@react-native-firebase/app/app.plugin.js",
       "expo-router",
       [
         "expo-splash-screen",
