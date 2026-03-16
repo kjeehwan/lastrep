@@ -5,6 +5,7 @@ import { getFunctions, httpsCallable } from "firebase/functions";
 import React, { useEffect, useState } from "react";
 import { Linking, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { getUidPrefix, logAnalyticsEvent } from "../../src/analytics/analytics";
 import { MANAGE_SUBSCRIPTION_URL } from "../../src/config/billingConfig";
 import { auth } from "../../src/config/firebaseConfig";
 import { useEntitlement } from "../../src/hooks/useEntitlement";
@@ -68,6 +69,12 @@ export default function SettingsIndex() {
   };
 
   const handleManageSubscription = async () => {
+    void logAnalyticsEvent("manage_subscription_tapped", {
+      source_screen: "settings",
+      entitlement_state: entitlement.state,
+      uid_prefix: getUidPrefix(uid),
+    });
+
     try {
       const canOpen = await Linking.canOpenURL(MANAGE_SUBSCRIPTION_URL);
       if (!canOpen) {
@@ -161,7 +168,15 @@ export default function SettingsIndex() {
               </Text>
             </>
           ) : (
-            <TouchableOpacity style={styles.secondaryButton} onPress={() => router.push("/paywall" as Href)}>
+            <TouchableOpacity
+              style={styles.secondaryButton}
+              onPress={() =>
+                router.push({
+                  pathname: "/paywall",
+                  params: { sourceScreen: "settings", reasonCode: "manual_upgrade" },
+                })
+              }
+            >
               <Text style={styles.secondaryButtonText}>Upgrade to Premium</Text>
             </TouchableOpacity>
           )}

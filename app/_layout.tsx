@@ -7,6 +7,7 @@ import 'react-native-reanimated';
 
 import { auth } from '@/src/config/firebaseConfig';
 import { initializeRevenueCat, syncRevenueCatIdentity } from '@/src/billing/revenuecat';
+import { logAnalyticsRuntimeDiagnostics } from '@/src/analytics/analytics';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export const unstable_settings = {
@@ -32,6 +33,10 @@ export default function RootLayout() {
   }
 
   useEffect(() => {
+    if (__DEV__) {
+      void logAnalyticsRuntimeDiagnostics();
+    }
+
     let canceled = false;
     let unsubscribeAuth: (() => void) | null = null;
 

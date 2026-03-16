@@ -9,7 +9,7 @@ import {
   restorePurchases,
   type BillingError,
 } from "../../src/billing/revenuecat";
-import type { PurchaseResult } from "../../src/contracts";
+import type { RestoreResult } from "../../src/contracts";
 
 function toErrorMessage(error: unknown): string {
   if (
@@ -114,8 +114,8 @@ export default function RevenueCatDevScreen() {
     setLoadingOp("restore");
     setErrorMessage(null);
     try {
-      const result: PurchaseResult = await restorePurchases();
-      if (result === "RESTORED") {
+      const result: RestoreResult = await restorePurchases();
+      if (result.status === "RESTORED") {
         const [restoredCustomerInfo, appUserId] = await Promise.all([
           getCustomerInfo(),
           getAppUserId(),
@@ -123,7 +123,7 @@ export default function RevenueCatDevScreen() {
         setCustomerInfo(restoredCustomerInfo);
         setCurrentAppUserIdPrefix(appUserId.slice(0, 8));
       } else {
-        setErrorMessage("restore_failed: Restore did not complete.");
+        setErrorMessage(`${result.errorCode ?? "restore_failed"}: Restore did not complete.`);
       }
     } catch (error) {
       setErrorMessage(toErrorMessage(error));

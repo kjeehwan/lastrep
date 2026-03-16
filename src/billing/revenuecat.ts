@@ -5,7 +5,7 @@ import Purchases, {
   type PurchasesOfferings,
   type PurchasesPackage,
 } from "react-native-purchases";
-import type { PurchaseResult } from "../contracts";
+import type { PurchaseResult, RestoreResult } from "../contracts";
 import { REVENUECAT_API_KEY_ANDROID } from "../config/billingConfig";
 
 type BillingOperation =
@@ -87,6 +87,63 @@ function isUserCancelled(error: unknown): boolean {
   );
 }
 
+function isPurchaseCancelledError(error: unknown): boolean {
+  if (isUserCancelled(error)) {
+    return true;
+  }
+
+  const code =
+    typeof (error as { code?: unknown } | undefined)?.code === "string"
+      ? (error as { code: string }).code.toLowerCase()
+      : "";
+  const message =
+    typeof (error as { message?: unknown } | undefined)?.message === "string"
+      ? (error as { message: string }).message.toLowerCase()
+      : "";
+
+  return (
+    code.includes("purchasecancellederror") ||
+    code.includes("user_canceled") ||
+    message.includes("purchasecancellederror") ||
+    message.includes("user_canceled") ||
+    message.includes("user canceled") ||
+    message.includes("user cancelled")
+  );
+}
+
+function shouldSuppressRevenueCatLog(logLevel: LOG_LEVEL, message: string): boolean {
+  if (logLevel !== LOG_LEVEL.ERROR) {
+    return false;
+  }
+
+  const normalizedMessage = message.toLowerCase();
+  return (
+    normalizedMessage.includes("purchasecancellederror") ||
+    normalizedMessage.includes("user_canceled") ||
+    normalizedMessage.includes("user canceled") ||
+    normalizedMessage.includes("user cancelled")
+  );
+}
+
+function revenueCatLogHandler(logLevel: LOG_LEVEL, message: string) {
+  if (shouldSuppressRevenueCatLog(logLevel, message)) {
+    return;
+  }
+
+  const formattedMessage = `[revenuecat] ${message}`;
+  if (logLevel === LOG_LEVEL.ERROR) {
+    console.error(formattedMessage);
+    return;
+  }
+  if (logLevel === LOG_LEVEL.WARN) {
+    console.warn(formattedMessage);
+    return;
+  }
+  if (__DEV__) {
+    console.log(formattedMessage);
+  }
+}
+
 function ensureSupportedPlatform() {
   if (!IS_ANDROID) {
     throw {
@@ -141,6 +198,7 @@ export async function configureRevenueCat(): Promise<void> {
       }
 
       await Purchases.setLogLevel(LOG_LEVEL.INFO);
+      Purchases.setLogHandler(revenueCatLogHandler);
       Purchases.configure({ apiKey });
       configured = true;
 
@@ -284,8 +342,19 @@ export async function purchasePackage(aPackage: PurchasesPackage): Promise<Purch
       latencyMs: Date.now() - startedAt,
       uidPrefix: toUidPrefix(activeFirebaseUid),
     });
-    return "PURCHASED";
+    return { status: "PURCHASED" };
   } catch (error) {
+    if (isPurchaseCancelledError(error)) {
+      logBillingEvent({
+        op: "purchasePackage",
+        ok: true,
+        latencyMs: Date.now() - startedAt,
+        code: "cancelled",
+        uidPrefix: toUidPrefix(activeFirebaseUid),
+      });
+      return { status: "CANCELLED" };
+    }
+
     const normalized = toBillingError(error);
     logBillingEvent({
       op: "purchasePackage",
@@ -294,11 +363,11 @@ export async function purchasePackage(aPackage: PurchasesPackage): Promise<Purch
       code: normalized.code,
       uidPrefix: toUidPrefix(activeFirebaseUid),
     });
-    return isUserCancelled(error) ? "CANCELLED" : "ERROR";
+    return { status: "ERROR", errorCode: normalized.code };
   }
 }
 
-export async function restorePurchases(): Promise<PurchaseResult> {
+export async function restorePurchases(): Promise<RestoreResult> {
   await configureRevenueCat();
   const startedAt = Date.now();
   try {
@@ -309,7 +378,7 @@ export async function restorePurchases(): Promise<PurchaseResult> {
       latencyMs: Date.now() - startedAt,
       uidPrefix: toUidPrefix(activeFirebaseUid),
     });
-    return "RESTORED";
+    return { status: "RESTORED" };
   } catch (error) {
     const normalized = toBillingError(error);
     logBillingEvent({
@@ -319,7 +388,7 @@ export async function restorePurchases(): Promise<PurchaseResult> {
       code: normalized.code,
       uidPrefix: toUidPrefix(activeFirebaseUid),
     });
-    return "ERROR";
+    return { status: "ERROR", errorCode: normalized.code };
   }
 }
 
@@ -344,3 +413,4 @@ export async function getAppUserId(): Promise<string> {
   await configureRevenueCat();
   return runBillingOperation("getAppUserId", () => Purchases.getAppUserID(), activeFirebaseUid);
 }
+

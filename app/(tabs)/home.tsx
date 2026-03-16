@@ -171,6 +171,20 @@ export default function Home() {
   const shouldShowUpgradeCta =
     gateError?.bucket === "business_gate" && entitlement.state === "inactive";
 
+  const handleOpenPaywallFromGate = () => {
+    if (gateError?.bucket !== "business_gate" || entitlement.state !== "inactive") return;
+
+    const paywallParams =
+      gateError.reasonCode === "COOLDOWN_ACTIVE"
+        ? { sourceScreen: "cooldown_gate", reasonCode: "cooldown_gate" }
+        : { sourceScreen: "home_gate", reasonCode: "decision_limit" };
+
+    router.push({
+      pathname: "/paywall",
+      params: paywallParams,
+    });
+  };
+
   const handleDecision = async () => {
     if (!uid || loading) return;
     const nowMs = Date.now();
@@ -346,7 +360,7 @@ export default function Home() {
                   <Text style={styles.noticeSub}>Too many requests. Try again shortly.</Text>
                 ) : null}
                 {shouldShowUpgradeCta ? (
-                  <TouchableOpacity style={styles.paywallButton} onPress={() => router.push("/paywall" as Href)}>
+                  <TouchableOpacity style={styles.paywallButton} onPress={handleOpenPaywallFromGate}>
                     <Text style={styles.paywallText}>Upgrade to Premium</Text>
                   </TouchableOpacity>
                 ) : null}

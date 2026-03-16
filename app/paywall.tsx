@@ -1,17 +1,26 @@
-import { Href, useRouter } from "expo-router";
+import { Href, useLocalSearchParams, useRouter } from "expo-router";
 import { onAuthStateChanged } from "firebase/auth";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import type { PurchasesOfferings, PurchasesPackage } from "react-native-purchases";
-import { auth } from "../src/config/firebaseConfig";
+import { getUidPrefix, logAnalyticsEvent } from "../src/analytics/analytics";
 import {
   MANAGE_SUBSCRIPTION_URL,
   OFFERING_ID,
   PACKAGE_ID_ANNUAL,
   PACKAGE_ID_MONTHLY,
 } from "../src/config/billingConfig";
+import { auth } from "../src/config/firebaseConfig";
+import type {
+  PaywallAnalyticsContext,
+  PurchaseResult,
+  RestoreResult,
+} from "../src/contracts";
+import {
+  normalizePaywallReasonCode,
+  normalizePaywallSourceScreen,
+} from "../src/contracts";
 import { useEntitlement } from "../src/hooks/useEntitlement";
-import type { PurchaseResult } from "../src/contracts";
 import {
   configureRevenueCat,
   ensureRevenueCatLoggedIn,
@@ -24,6 +33,25 @@ import {
 
 type ScreenState = "idle" | "loading" | "success" | "error";
 type PendingEntitlementAction = "purchase" | "restore" | null;
+
+type PurchaseAttempt = {
+  packageParams: Record<string, string | number | boolean | undefined>;
+  successAtMs?: number;
+  waitingForActivation: boolean;
+  terminalLogged: boolean;
+};
+
+type RestoreAttempt = {
+  baseParams: Record<string, string | number | boolean | undefined>;
+  startedAtMs: number;
+  timeoutId: ReturnType<typeof setTimeout> | null;
+  waitingForActivation: boolean;
+  terminalLogged: boolean;
+};
+
+function getFirstParam(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
 
 function getDefaultOffering(offerings: PurchasesOfferings | null) {
   if (!offerings) return null;
@@ -45,14 +73,54 @@ function getSortedPackages(offerings: PurchasesOfferings | null): PurchasesPacka
 }
 
 function formatPrice(aPackage: PurchasesPackage): string {
-  const product = aPackage.product as { priceString?: string; title?: string };
+  const product = aPackage.product as {
+    priceString?: string;
+    title?: string;
+  };
   const price = product.priceString ?? "";
   const title = product.title ?? aPackage.identifier;
   return `${title} ${price}`.trim();
 }
 
+function getCommonAnalyticsParams(
+  sourceScreen: string | undefined,
+  reasonCode: string | undefined,
+  entitlementState: string,
+  uid: string | null
+) {
+  return {
+    source_screen: sourceScreen,
+    reason_code: reasonCode,
+    entitlement_state: entitlementState,
+    uid_prefix: getUidPrefix(uid),
+  };
+}
+
+function getPackageAnalyticsParams(
+  aPackage: PurchasesPackage,
+  offeringId: string | undefined
+) {
+  const product = aPackage.product as {
+    identifier?: string;
+    price?: number;
+    currencyCode?: string;
+  };
+
+  return {
+    offering_id: offeringId,
+    package_id: aPackage.identifier,
+    product_id: product.identifier,
+    price: typeof product.price === "number" ? product.price : undefined,
+    currency: product.currencyCode,
+  };
+}
+
 export default function PaywallScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<PaywallAnalyticsContext>();
+  const sourceScreen = normalizePaywallSourceScreen(getFirstParam(params.sourceScreen));
+  const reasonCode = normalizePaywallReasonCode(getFirstParam(params.reasonCode));
+
   const [authReady, setAuthReady] = useState(false);
   const [uid, setUid] = useState<string | null>(null);
 
@@ -66,6 +134,14 @@ export default function PaywallScreen() {
   const [pendingEntitlementAction, setPendingEntitlementAction] = useState<PendingEntitlementAction>(null);
 
   const entitlement = useEntitlement(authReady, uid);
+  const currentOffering = useMemo(() => getDefaultOffering(offerings), [offerings]);
+  const packages = useMemo(() => getSortedPackages(offerings), [offerings]);
+  const packagesAvailable = packages.length > 0;
+
+  const paywallViewedLoggedRef = useRef(false);
+  const paywallOpenedAtRef = useRef<number | null>(null);
+  const purchaseAttemptRef = useRef<PurchaseAttempt | null>(null);
+  const restoreAttemptRef = useRef<RestoreAttempt | null>(null);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -74,6 +150,19 @@ export default function PaywallScreen() {
     });
     return unsubscribe;
   }, []);
+
+  useEffect(() => {
+    if (paywallViewedLoggedRef.current) return;
+
+    paywallViewedLoggedRef.current = true;
+    paywallOpenedAtRef.current = Date.now();
+    void logAnalyticsEvent("paywall_viewed", {
+      source_screen: sourceScreen,
+      reason_code: reasonCode,
+      entitlement_state: entitlement.state,
+      uid_prefix: getUidPrefix(uid),
+    });
+  }, [entitlement.state, reasonCode, sourceScreen, uid]);
 
   useEffect(() => {
     let canceled = false;
@@ -115,35 +204,51 @@ export default function PaywallScreen() {
     return () => {
       canceled = true;
     };
-  }, [authReady, uid, entitlement.state]);
+  }, [authReady, entitlement.state, uid]);
 
   useEffect(() => {
-    if (entitlement.state === "active") {
-      setScreenState("idle");
-      setActivationStartedAt(null);
-      setPendingEntitlementAction(null);
-      setFeedback(null);
+    if (entitlement.state !== "active") return;
+
+    const now = Date.now();
+    const purchaseAttempt = purchaseAttemptRef.current;
+    if (purchaseAttempt?.waitingForActivation && !purchaseAttempt.terminalLogged) {
+      purchaseAttempt.terminalLogged = true;
+      purchaseAttemptRef.current = null;
+      void logAnalyticsEvent("purchase_completed", {
+        ...purchaseAttempt.packageParams,
+        latency_ms:
+          typeof purchaseAttempt.successAtMs === "number"
+            ? now - purchaseAttempt.successAtMs
+            : undefined,
+      });
     }
+
+    const restoreAttempt = restoreAttemptRef.current;
+    if (restoreAttempt?.waitingForActivation && !restoreAttempt.terminalLogged) {
+      restoreAttempt.terminalLogged = true;
+      if (restoreAttempt.timeoutId) {
+        clearTimeout(restoreAttempt.timeoutId);
+      }
+      restoreAttemptRef.current = null;
+      void logAnalyticsEvent("restore_completed", {
+        ...restoreAttempt.baseParams,
+        latency_ms: now - restoreAttempt.startedAtMs,
+      });
+    }
+
+    setScreenState("idle");
+    setActivationStartedAt(null);
+    setPendingEntitlementAction(null);
+    setFeedback(null);
   }, [entitlement.state]);
 
   useEffect(() => {
-    if (pendingEntitlementAction !== "restore" || activationStartedAt == null) return;
-    if (entitlement.state === "active") return;
-
-    const timer = setTimeout(() => {
-      setPendingEntitlementAction(null);
-      setActivationStartedAt(null);
-      setScreenState("idle");
-      setFeedback(
-        "We couldn't confirm an active subscription yet. If you recently subscribed, wait a moment and reopen the app, or try Restore again."
-      );
-    }, 8000);
-
-    return () => clearTimeout(timer);
-  }, [pendingEntitlementAction, activationStartedAt, entitlement.state]);
-
-  const packages = useMemo(() => getSortedPackages(offerings), [offerings]);
-  const packagesAvailable = packages.length > 0;
+    return () => {
+      if (restoreAttemptRef.current?.timeoutId) {
+        clearTimeout(restoreAttemptRef.current.timeoutId);
+      }
+    };
+  }, []);
 
   const canInteract =
     authReady &&
@@ -151,25 +256,59 @@ export default function PaywallScreen() {
     entitlement.state !== "loading" &&
     identityReady &&
     !offeringsLoading &&
-    screenState !== "loading";
+    screenState !== "loading" &&
+    pendingEntitlementAction === null;
 
   const handlePurchase = async (selectedPackage: PurchasesPackage) => {
     if (!uid || !canInteract) return;
+
     setScreenState("loading");
     setFeedback(null);
     setPendingEntitlementAction(null);
 
+    const purchaseStartedAt = Date.now();
+    const packageParams = {
+      ...getCommonAnalyticsParams(sourceScreen, reasonCode, entitlement.state, uid),
+      ...getPackageAnalyticsParams(selectedPackage, currentOffering?.identifier ?? OFFERING_ID),
+      latency_ms:
+        typeof paywallOpenedAtRef.current === "number"
+          ? purchaseStartedAt - paywallOpenedAtRef.current
+          : undefined,
+    };
+
+    purchaseAttemptRef.current = {
+      packageParams,
+      waitingForActivation: false,
+      terminalLogged: false,
+    };
+
+    void logAnalyticsEvent("purchase_started", packageParams);
+
     const result: PurchaseResult = await purchasePackage(selectedPackage);
-    if (result === "CANCELLED") {
+    if (result.status === "CANCELLED") {
+      void logAnalyticsEvent("purchase_cancelled", packageParams);
+      purchaseAttemptRef.current = null;
       setScreenState("idle");
       return;
     }
 
-    if (result === "ERROR") {
+    if (result.status === "ERROR") {
+      void logAnalyticsEvent("purchase_failed", {
+        ...packageParams,
+        error_code: result.errorCode,
+      });
+      purchaseAttemptRef.current = null;
       setScreenState("error");
       setFeedback("Purchase failed. Please try again.");
       return;
     }
+
+    purchaseAttemptRef.current = {
+      packageParams,
+      successAtMs: Date.now(),
+      waitingForActivation: true,
+      terminalLogged: false,
+    };
 
     setScreenState("success");
     setPendingEntitlementAction("purchase");
@@ -196,12 +335,57 @@ export default function PaywallScreen() {
     setFeedback("Checking for previous purchases...");
     setPendingEntitlementAction(null);
 
-    const result = await restorePurchases();
-    if (result === "ERROR") {
+    const restoreStartedAt = Date.now();
+    const restoreParams = {
+      ...getCommonAnalyticsParams(sourceScreen, reasonCode, entitlement.state, uid),
+    };
+
+    restoreAttemptRef.current = {
+      baseParams: restoreParams,
+      startedAtMs: restoreStartedAt,
+      timeoutId: null,
+      waitingForActivation: false,
+      terminalLogged: false,
+    };
+
+    void logAnalyticsEvent("restore_started", restoreParams);
+
+    const result: RestoreResult = await restorePurchases();
+    if (result.status === "ERROR") {
+      void logAnalyticsEvent("restore_failed", {
+        ...restoreParams,
+        error_code: result.errorCode,
+      });
+      restoreAttemptRef.current = null;
       setScreenState("error");
       setFeedback("Restore failed. Please try again.");
       return;
     }
+
+    const timeoutId = setTimeout(() => {
+      const currentAttempt = restoreAttemptRef.current;
+      if (!currentAttempt || currentAttempt.terminalLogged || !currentAttempt.waitingForActivation) {
+        return;
+      }
+
+      currentAttempt.terminalLogged = true;
+      restoreAttemptRef.current = null;
+      void logAnalyticsEvent("restore_failed", currentAttempt.baseParams);
+      setPendingEntitlementAction(null);
+      setActivationStartedAt(null);
+      setScreenState("idle");
+      setFeedback(
+        "We couldn't confirm an active subscription yet. If you recently subscribed, wait a moment and reopen the app, or try Restore again."
+      );
+    }, 30000);
+
+    restoreAttemptRef.current = {
+      baseParams: restoreParams,
+      startedAtMs: restoreStartedAt,
+      timeoutId,
+      waitingForActivation: true,
+      terminalLogged: false,
+    };
 
     setScreenState("success");
     setPendingEntitlementAction("restore");
@@ -215,6 +399,10 @@ export default function PaywallScreen() {
   };
 
   const handleManageSubscription = async () => {
+    void logAnalyticsEvent("manage_subscription_tapped", {
+      ...getCommonAnalyticsParams(sourceScreen, reasonCode, entitlement.state, uid),
+    });
+
     try {
       const canOpen = await Linking.canOpenURL(MANAGE_SUBSCRIPTION_URL);
       if (!canOpen) {
@@ -263,7 +451,7 @@ export default function PaywallScreen() {
         </View>
       ) : null}
 
-            {entitlement.state === "active" ? (
+      {entitlement.state === "active" ? (
         <View style={styles.notice}>
           <Text style={styles.noticeText}>Premium active</Text>
         </View>
@@ -277,7 +465,7 @@ export default function PaywallScreen() {
           entitlement.state !== "active" &&
           Date.now() - activationStartedAt >= 30000 ? (
             <Text style={styles.noticeSub}>
-              If it doesn&apos;t activate within ~30 seconds, reopen the app or tap Restore.
+              If it doesn't activate within ~30 seconds, reopen the app or tap Restore.
             </Text>
           ) : null}
         </View>
@@ -449,5 +637,3 @@ const styles = StyleSheet.create({
     opacity: 0.55,
   },
 });
-
-
