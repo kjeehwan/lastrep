@@ -1,6 +1,11 @@
 import { useEffect, useState } from "react";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "../config/firebaseConfig";
+import {
+  ENTITLEMENT_FIELDS,
+  USER_ENTITLEMENT_FIELD,
+  USERS_COLLECTION,
+} from "../contracts";
 
 type EntitlementState = "loading" | "inactive" | "active";
 
@@ -24,12 +29,13 @@ export function useEntitlement(authReady: boolean, uid: string | null): UseEntit
     setIsSubscribed(null);
 
     const unsubscribe = onSnapshot(
-      doc(db, "users", uid),
+      doc(db, USERS_COLLECTION, uid),
       (snap) => {
+        const entitlement = snap.data()?.[USER_ENTITLEMENT_FIELD];
         const nextSubscribed =
           snap.exists() &&
-          typeof snap.data()?.entitlement?.isSubscribed === "boolean" &&
-          snap.data()?.entitlement?.isSubscribed === true;
+          typeof entitlement?.[ENTITLEMENT_FIELDS.isSubscribed] === "boolean" &&
+          entitlement?.[ENTITLEMENT_FIELDS.isSubscribed] === true;
         setIsSubscribed(nextSubscribed);
         setState(nextSubscribed ? "active" : "inactive");
       },

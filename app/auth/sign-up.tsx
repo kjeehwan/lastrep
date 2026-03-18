@@ -1,4 +1,4 @@
-﻿import AsyncStorage from "@react-native-async-storage/async-storage";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import { GoogleSignin } from "@react-native-google-signin/google-signin";
 import {
@@ -12,7 +12,7 @@ import React, { useEffect, useState } from "react";
 import { StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import LastRepLogo from "../../components/LastRepLogo"; // Static logo component
 import { auth } from "../../src/config/firebaseConfig";
-import { buildDefaultUserDoc, getDecisionUsage, getUserData, saveUserData } from "../../src/userData"; // Function to save user data in Firestore
+import { buildDefaultUserDoc, getDecisionUsage, getUserData, saveUserData } from "../../src/userData";
 
 export default function SignUp() {
   const [email, setEmail] = useState("");
@@ -62,7 +62,6 @@ export default function SignUp() {
       if (data) {
         const normalized = getDecisionUsage(data, new Date(), tzOffsetMinutes);
         await saveUserData(userCredential.user.uid, {
-          entitlement: data.entitlement ?? buildDefaultUserDoc({}, new Date(), tzOffsetMinutes).entitlement,
           usage: { decisions: normalized },
         });
       }
@@ -200,4 +199,5 @@ const styles = StyleSheet.create({
     color: "#2a67b1",
   },
 });
+
 

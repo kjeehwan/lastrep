@@ -10,6 +10,7 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "test": "vitest run",
+    "test:firestore-rules": "firebase emulators:exec --only firestore \"npx vitest run src/firestore.rules.test.ts\"",
     "vercel-build": "node scripts/write-google-services.js"
   },
   "postinstall": "node scripts/patch-tslib.js",
@@ -64,6 +65,7 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.0",
     "@types/react": "~19.1.0",
     "@types/react-native": "^0.72.8",
     "eslint": "^9.25.0",
@@ -73,3 +75,4 @@
   },
   "private": true
 }
+

@@ -41,6 +41,7 @@ const PAID_MAX_PER_DAY = 3;
 const PAID_COOLDOWN_MS = 30 * 60 * 1000;
 const ROLLING_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 const PREMIUM_ENTITLEMENT_ID = "premium";
+const DEV_OVERRIDE_ENABLED = process.env.FUNCTIONS_EMULATOR === "true";
 
 const ENABLE_OPENAI_DECISION = (() => {
   if (typeof process.env.ENABLE_OPENAI_DECISION === "string") {
@@ -320,7 +321,7 @@ const checkAndConsumeServerDecisionGate = async (uid: string, now: Date): Promis
     ).length;
     const cooldownUntil = coerceToDate(decisions.cooldownUntil);
 
-    const override = parseBoolean(entitlement.devOverrideIsSubscribed);
+    const override = DEV_OVERRIDE_ENABLED ? parseBoolean(entitlement.devOverrideIsSubscribed) : null;
     const isSubscribed = override ?? Boolean(entitlement.isSubscribed);
 
     if (!isSubscribed) {
@@ -642,6 +643,13 @@ export const setDevEntitlementOverride = functions
     }
     assertDevUidAllowed(context.auth.uid);
 
+    if (!DEV_OVERRIDE_ENABLED) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "devOverrideIsSubscribed is only honored in the Functions emulator."
+      );
+    }
+
     const schema = z.object({ isSubscribed: z.boolean() });
     const parsed = schema.safeParse(data);
     if (!parsed.success) {
@@ -658,7 +666,7 @@ export const setDevEntitlementOverride = functions
         {
           entitlement: {
             devOverrideIsSubscribed: parsed.data.isSubscribed,
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            lastUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
           },
         },
         { merge: true }
@@ -848,3 +856,4 @@ export const revenuecatWebhook = functions
 
     res.status(200).json({ ok: true, skipped: result.skipped, reason: result.reason });
   });
+

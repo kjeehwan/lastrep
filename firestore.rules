@@ -1,0 +1,23 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isOwnUser(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    function entitlementFieldMissingOnCreate() {
+      return !request.resource.data.keys().hasAny(["entitlement"]);
+    }
+
+    function entitlementFieldUnchanged() {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(["entitlement"]);
+    }
+
+    match /users/{uid} {
+      allow read: if isOwnUser(uid);
+      allow create: if isOwnUser(uid) && entitlementFieldMissingOnCreate();
+      allow update: if isOwnUser(uid) && entitlementFieldUnchanged();
+      allow delete: if false;
+    }
+  }
+}
