@@ -7,6 +7,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { db } from "../../../src/config/firebaseConfig";
 import type { Decision } from "../../../src/types/decision";
+import { isExpectedOfflineError } from "../../../src/utils/networkErrors";
 
 type Unit = "kg" | "lbs";
 type SetEntry = {
@@ -224,7 +225,9 @@ export default function WorkoutLog() {
       setRecentExercises(names);
       setPastWorkouts(workouts);
     } catch (e) {
-      console.log("Failed to load recent exercises", e);
+      if (!isExpectedOfflineError(e)) {
+        console.log("Failed to load recent exercises", e);
+      }
     }
   };
 
@@ -243,7 +246,9 @@ export default function WorkoutLog() {
         });
       }
     } catch (e) {
-      console.log("Failed to load latest decision", e);
+      if (!isExpectedOfflineError(e)) {
+        console.log("Failed to load latest decision", e);
+      }
     }
   };
 
@@ -1322,7 +1327,6 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.08)",
   },
 });
-
 
 
 

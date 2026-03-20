@@ -1,5 +1,6 @@
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { db } from "./config/firebaseConfig";
+import { isExpectedOfflineError } from "./utils/networkErrors";
 
 const getDateStringFromOffset = (now, tzOffsetMinutes) => {
   const effective = new Date(now.getTime() - tzOffsetMinutes * 60 * 1000);
@@ -91,7 +92,9 @@ export const getUserData = async (userId) => {
     console.warn("No such user document!");
     return null;
   } catch (error) {
-    console.error("Error fetching user data:", error);
+    if (!isExpectedOfflineError(error)) {
+      console.error("Error fetching user data:", error);
+    }
     return null;
   }
 };

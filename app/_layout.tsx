@@ -5,6 +5,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { useEffect } from 'react';
 import 'react-native-reanimated';
 
+import OfflineBanner from '@/components/OfflineBanner';
 import { auth } from '@/src/config/firebaseConfig';
 import { initializeRevenueCat, syncRevenueCatIdentity } from '@/src/billing/revenuecat';
 import { logAnalyticsRuntimeDiagnostics } from '@/src/analytics/analytics';
@@ -65,6 +66,7 @@ export default function RootLayout() {
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <Stack>{stackScreens}</Stack>
+      <OfflineBanner />
       <StatusBar style="auto" />
     </ThemeProvider>
   );

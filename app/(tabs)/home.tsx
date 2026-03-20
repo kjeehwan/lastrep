@@ -12,6 +12,7 @@ import { useEntitlement } from "../../src/hooks/useEntitlement";
 import { getDecision, isNormalizedDecisionError } from "../../src/services/decision/getDecision";
 import { hashDecisionInputs } from "../../src/services/decision/inputHash";
 import type { DecisionInputs, DietPhase, LastResultPayload, TrainingPhase } from "../../src/types/decision";
+import { isExpectedOfflineError } from "../../src/utils/networkErrors";
 
 const HOME_INPUTS_KEY = "home-inputs-v1";
 const TRAINING_PHASES: TrainingPhase[] = ["Hypertrophy", "Strength", "Power"];
@@ -96,7 +97,9 @@ export default function Home() {
           }
         }
       } catch (e) {
-        console.log("Failed to load latest decision", e);
+        if (!isExpectedOfflineError(e)) {
+          console.log("Failed to load latest decision", e);
+        }
       }
     });
     return unsub;

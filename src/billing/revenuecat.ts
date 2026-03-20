@@ -7,6 +7,7 @@ import Purchases, {
 } from "react-native-purchases";
 import type { PurchaseResult, RestoreResult } from "../contracts";
 import { REVENUECAT_API_KEY_ANDROID } from "../config/billingConfig";
+import { isExpectedOfflineMessage } from "../utils/networkErrors";
 
 type BillingOperation =
   | "configure"
@@ -131,6 +132,12 @@ function revenueCatLogHandler(logLevel: LOG_LEVEL, message: string) {
   }
 
   const formattedMessage = `[revenuecat] ${message}`;
+  if (logLevel === LOG_LEVEL.ERROR && isExpectedOfflineMessage(message)) {
+    if (__DEV__) {
+      console.log(formattedMessage);
+    }
+    return;
+  }
   if (logLevel === LOG_LEVEL.ERROR) {
     console.error(formattedMessage);
     return;

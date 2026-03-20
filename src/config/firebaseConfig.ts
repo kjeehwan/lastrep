@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'; // Import AsyncStorage
 import { getApp, getApps, initializeApp } from 'firebase/app';
 import { getAuth, initializeAuth } from 'firebase/auth'; // Firebase Authentication
-import { getFirestore, initializeFirestore } from 'firebase/firestore';
+import { getFirestore, initializeFirestore, setLogLevel as setFirestoreLogLevel } from 'firebase/firestore';
 import { Platform } from 'react-native';
 
 // @ts-ignore - ignore the TypeScript error for missing typings in Firebase SDK
@@ -19,6 +19,7 @@ const firebaseConfig = {
 
 // Initialize Firebase if not already initialized
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
+setFirestoreLogLevel(Platform.OS === 'web' && __DEV__ ? 'error' : 'silent');
 
 // Initialize Firebase Authentication with AsyncStorage persistence
 const auth =
@@ -45,4 +46,3 @@ const db =
 
 // Export the Firebase services
 export { auth, db, firebaseConfig };
-
