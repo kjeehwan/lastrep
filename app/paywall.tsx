@@ -477,7 +477,7 @@ export default function PaywallScreen() {
         </View>
       ) : null}
 
-      {entitlement.state !== "active" ? (
+      {entitlement.state === "inactive" ? (
         <>
           {packagesAvailable ? (
             <View style={styles.card}>
