@@ -1,33 +1,56 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Redirect, type Href } from "expo-router";
-import { getAuth } from "firebase/auth";
+import { onAuthStateChanged } from "firebase/auth";
 import React, { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
+import { auth } from "../../src/config/firebaseConfig";
+import { getUserData } from "../../src/userData";
+
+const ONBOARDING_COMPLETE_KEY = "onboardingComplete";
+
+const hasCompletedLegacyOnboarding = (userData: any): boolean =>
+  typeof userData?.nickname === "string" &&
+  userData.nickname.trim().length > 0 &&
+  typeof userData?.experience === "string" &&
+  userData.experience.trim().length > 0 &&
+  typeof userData?.availability === "string" &&
+  userData.availability.trim().length > 0;
 
 export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [redirectTo, setRedirectTo] = useState<Href | null>(null);
 
   useEffect(() => {
-    const checkUserStatus = async () => {
-      const user = getAuth().currentUser;
+    let cancelled = false;
 
-      if (user) {
-        const onboardingComplete = await AsyncStorage.getItem("onboardingComplete");
-
-        if (onboardingComplete === "true") {
-          setRedirectTo("/(tabs)/home");
-        } else {
-          setRedirectTo("/onboarding/goal");
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (!user) {
+        if (!cancelled) {
+          setRedirectTo("/auth/sign-up");
+          setLoading(false);
         }
-      } else {
-        setRedirectTo("/auth/sign-up");
+        return;
       }
 
-      setLoading(false);
-    };
+      let onboardingComplete = await AsyncStorage.getItem(ONBOARDING_COMPLETE_KEY);
+      if (onboardingComplete !== "true") {
+        const userData = await getUserData(user.uid);
+        if (hasCompletedLegacyOnboarding(userData)) {
+          onboardingComplete = "true";
+          await AsyncStorage.setItem(ONBOARDING_COMPLETE_KEY, "true");
+        }
+      }
 
-    void checkUserStatus();
+      if (cancelled) return;
+
+      setRedirectTo(onboardingComplete === "true" ? "/(tabs)/home" : "/onboarding/goal");
+      setLoading(false);
+    });
+
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
   }, []);
 
   if (redirectTo) {
