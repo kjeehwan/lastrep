@@ -19,8 +19,64 @@ type FirebaseDiagnostics = {
   preferenceKeys?: string[];
 };
 
+type FirebaseAppModule = {
+  getApp: () => {
+    options?: {
+      projectId?: string;
+      appId?: string;
+      measurementId?: string;
+    };
+    automaticDataCollectionEnabled?: boolean;
+  };
+  metaGetAll: () => Promise<Record<string, boolean | string>>;
+  jsonGetAll: () => Promise<Record<string, boolean | string>>;
+  preferencesGetAll: () => Promise<Record<string, boolean | string>>;
+};
+
+type FirebaseAnalyticsModule = {
+  getAnalytics: (app?: unknown) => unknown;
+  getAppInstanceId: (analytics: unknown) => Promise<string | null>;
+  logEvent: (
+    analytics: unknown,
+    name: string,
+    params?: Record<string, string | number | boolean>
+  ) => Promise<void>;
+  setAnalyticsCollectionEnabled: (analytics: unknown, enabled: boolean) => Promise<void>;
+};
+
+type ExpoConstantsModule = {
+  default?: {
+    expoConfig?: {
+      android?: {
+        package?: string;
+      };
+    };
+  };
+};
+
 const UID_PREFIX_LENGTH = 8;
 let analyticsDiagnosticsPromise: Promise<void> | null = null;
+
+function getFirebaseAppModule(): FirebaseAppModule {
+  return require("@react-native-firebase/app") as FirebaseAppModule;
+}
+
+function getFirebaseAnalyticsModule(): FirebaseAnalyticsModule {
+  return require("@react-native-firebase/analytics") as FirebaseAnalyticsModule;
+}
+
+function getPlatformOs(): string | undefined {
+  const reactNative = require("react-native") as {
+    Platform?: { OS?: string };
+  };
+
+  return reactNative.Platform?.OS;
+}
+
+function getExpoPackageName(): string | undefined {
+  const constantsModule = require("expo-constants") as ExpoConstantsModule;
+  return constantsModule.default?.expoConfig?.android?.package;
+}
 
 export function getUidPrefix(uid?: string | null): string | undefined {
   if (!uid) return undefined;
@@ -48,21 +104,19 @@ export async function logAnalyticsEvent(
   params?: AnalyticsParams
 ): Promise<void> {
   try {
-    const { Platform } = require("react-native") as { Platform?: { OS?: string } };
-    if (Platform?.OS !== "android") return;
+    if (getPlatformOs() !== "android") return;
 
     if (__DEV__) {
       void logAnalyticsRuntimeDiagnostics();
     }
 
-    const analyticsModule = require("@react-native-firebase/analytics") as {
-      default?: () => { logEvent: (eventName: string, eventParams?: Record<string, unknown>) => Promise<void> };
-    };
-    const analyticsFactory = analyticsModule.default;
-    if (!analyticsFactory) return;
-
+    const firebaseApp = getFirebaseAppModule();
+    const analyticsModule = getFirebaseAnalyticsModule();
+    const app = firebaseApp.getApp();
+    const analytics = analyticsModule.getAnalytics(app);
     const sanitizedParams = sanitizeAnalyticsParams(params);
-    await analyticsFactory().logEvent(name, sanitizedParams);
+
+    await analyticsModule.logEvent(analytics, name, sanitizedParams);
   } catch (error) {
     if (__DEV__) {
       console.log("[analytics] log_failed", { name, error });
@@ -76,70 +130,34 @@ export async function logAnalyticsRuntimeDiagnostics(): Promise<void> {
 
   analyticsDiagnosticsPromise = (async () => {
     try {
-      const { Platform } = require("react-native") as { Platform?: { OS?: string } };
-      if (Platform?.OS !== "android") return;
+      if (getPlatformOs() !== "android") return;
 
-      const constantsModule = require("expo-constants") as { default?: Record<string, unknown> };
-      const firebaseAppModule = require("@react-native-firebase/app") as {
-        getApp?: () => {
-          name?: string;
-          options?: {
-            projectId?: string;
-            appId?: string;
-            measurementId?: string;
-          };
-          automaticDataCollectionEnabled?: boolean;
-        };
-        default?: {
-          app?: () => {
-            name?: string;
-            options?: {
-              projectId?: string;
-              appId?: string;
-              measurementId?: string;
-            };
-            automaticDataCollectionEnabled?: boolean;
-          };
-        };
-        metaGetAll?: () => Promise<Record<string, boolean | string>>;
-        jsonGetAll?: () => Promise<Record<string, boolean | string>>;
-        preferencesGetAll?: () => Promise<Record<string, boolean | string>>;
-      };
-      const analyticsModule = require("@react-native-firebase/analytics") as {
-        default?: () => {
-          getAppInstanceId?: () => Promise<string | null>;
-          setAnalyticsCollectionEnabled?: (enabled: boolean) => Promise<void>;
-        };
-      };
-
-      const app = firebaseAppModule.getApp?.() ?? firebaseAppModule.default?.app?.();
-      const analytics = analyticsModule.default?.();
+      const firebaseApp = getFirebaseAppModule();
+      const analyticsModule = getFirebaseAnalyticsModule();
+      const app = firebaseApp.getApp();
+      const analytics = analyticsModule.getAnalytics(app);
 
       const [meta, json, preferences, appInstanceId] = await Promise.all([
-        firebaseAppModule.metaGetAll?.().catch(() => undefined),
-        firebaseAppModule.jsonGetAll?.().catch(() => undefined),
-        firebaseAppModule.preferencesGetAll?.().catch(() => undefined),
-        analytics?.getAppInstanceId?.().catch(() => null),
+        firebaseApp.metaGetAll().catch(() => undefined),
+        firebaseApp.jsonGetAll().catch(() => undefined),
+        firebaseApp.preferencesGetAll().catch(() => undefined),
+        analyticsModule.getAppInstanceId(analytics).catch(() => null),
       ]);
 
       let analyticsCollectionEnabledForced = false;
-      if (analytics?.setAnalyticsCollectionEnabled) {
-        await analytics.setAnalyticsCollectionEnabled(true);
-        analyticsCollectionEnabledForced = true;
-      }
+      await analyticsModule.setAnalyticsCollectionEnabled(analytics, true);
+      analyticsCollectionEnabledForced = true;
 
-      const appInstanceIdAfterEnable = await analytics?.getAppInstanceId?.().catch(() => null);
-
-      const expoConfig = (constantsModule.default?.expoConfig ?? {}) as {
-        android?: { package?: string };
-      };
+      const appInstanceIdAfterEnable = await analyticsModule
+        .getAppInstanceId(analytics)
+        .catch(() => null);
 
       const diagnostics: FirebaseDiagnostics = {
-        packageName: expoConfig.android?.package,
-        firebaseProjectId: app?.options?.projectId,
-        googleAppId: app?.options?.appId,
-        measurementId: app?.options?.measurementId,
-        automaticDataCollectionEnabled: app?.automaticDataCollectionEnabled,
+        packageName: getExpoPackageName(),
+        firebaseProjectId: app.options?.projectId,
+        googleAppId: app.options?.appId,
+        measurementId: app.options?.measurementId,
+        automaticDataCollectionEnabled: app.automaticDataCollectionEnabled,
         analyticsCollectionEnabledForced,
         analyticsAppInstanceIdPresent: Boolean(appInstanceId),
         analyticsAppInstanceIdPresentAfterEnable: Boolean(appInstanceIdAfterEnable),
