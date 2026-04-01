@@ -6,6 +6,7 @@ import {
   USER_ENTITLEMENT_FIELD,
   USERS_COLLECTION,
 } from "../contracts";
+import { logBillingLifecycleEvent } from "../diagnostics/billingLifecycle";
 import { isExpectedOfflineError } from "../utils/networkErrors";
 
 type EntitlementState = "loading" | "inactive" | "active";
@@ -54,19 +55,17 @@ export function useEntitlement(authReady: boolean, uid: string | null): UseEntit
   }, [authReady, uid]);
 
   useEffect(() => {
-    if (!__DEV__) return;
-
     const nextLogKey = `${authReady}:${uid ?? "signed_out"}:${state}:${isSubscribed ?? "null"}`;
     if (previousLogKeyRef.current === nextLogKey) {
       return;
     }
 
     previousLogKeyRef.current = nextLogKey;
-    console.log("[entitlement] transition", {
-      authReady,
-      uidPrefix: uid ? uid.slice(0, 8) : null,
-      state,
-      isSubscribed,
+    logBillingLifecycleEvent("entitlement_state_changed", {
+      auth_ready: authReady,
+      uid_prefix: uid ? uid.slice(0, 8) : null,
+      entitlement_state: state,
+      is_subscribed: isSubscribed,
     });
   }, [authReady, isSubscribed, state, uid]);
 

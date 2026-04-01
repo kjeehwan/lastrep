@@ -19,6 +19,7 @@ export default function RootLayout() {
   const colorScheme = useColorScheme();
   const stackScreens = [
     <Stack.Screen key="tabs" name="(tabs)" options={{ headerShown: false }} />,
+    <Stack.Screen key="settings-index" name="settings/index" options={{ headerShown: false }} />,
     <Stack.Screen key="paywall" name="paywall" options={{ title: "Paywall" }} />,
     <Stack.Screen key="modal" name="modal" options={{ presentation: "modal", title: "Modal" }} />,
   ];

@@ -251,7 +251,34 @@ export default function Home() {
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <Text style={styles.greeting}>lastrep</Text>
-          <Text style={styles.userName}>{userEmail ?? "Lifter"}</Text>
+          <View style={styles.userRow}>
+            <Text style={styles.userName}>{userEmail ?? "Lifter"}</Text>
+            <View
+              style={[
+                styles.entitlementBadge,
+                entitlement.state === "active"
+                  ? styles.entitlementBadgeActive
+                  : entitlement.state === "inactive"
+                    ? styles.entitlementBadgeInactive
+                    : styles.entitlementBadgeLoading,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.entitlementBadgeText,
+                  entitlement.state === "active"
+                    ? styles.entitlementBadgeTextActive
+                    : styles.entitlementBadgeTextMuted,
+                ]}
+              >
+                {entitlement.state === "active"
+                  ? "Premium"
+                  : entitlement.state === "inactive"
+                    ? "Free"
+                    : "Checking"}
+              </Text>
+            </View>
+          </View>
         </View>
         <View style={styles.iconContainer}>
           <TouchableOpacity onPress={() => router.push("/settings" as Href)} style={{ marginLeft: 12 }}>
@@ -453,6 +480,36 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 16,
     fontWeight: "700",
+  },
+  userRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap",
+  },
+  entitlementBadge: {
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  entitlementBadgeActive: {
+    backgroundColor: "#a6e3a1",
+  },
+  entitlementBadgeInactive: {
+    backgroundColor: "rgba(255,255,255,0.14)",
+  },
+  entitlementBadgeLoading: {
+    backgroundColor: "rgba(255,255,255,0.08)",
+  },
+  entitlementBadgeText: {
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  entitlementBadgeTextActive: {
+    color: "#0d0d1a",
+  },
+  entitlementBadgeTextMuted: {
+    color: "#fff",
   },
   iconContainer: {
     flexDirection: "row",

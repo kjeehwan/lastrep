@@ -20,6 +20,7 @@ import {
   normalizePaywallReasonCode,
   normalizePaywallSourceScreen,
 } from "../src/contracts";
+import { logBillingLifecycleEvent } from "../src/diagnostics/billingLifecycle";
 import { useEntitlement } from "../src/hooks/useEntitlement";
 import {
   configureRevenueCat,
@@ -115,6 +116,19 @@ function getPackageAnalyticsParams(
   };
 }
 
+function getDiagnosticErrorCode(error: unknown): string | undefined {
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    typeof (error as { code?: unknown }).code === "string"
+  ) {
+    return (error as { code: string }).code;
+  }
+
+  return undefined;
+}
+
 export default function PaywallScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<PaywallAnalyticsContext>();
@@ -156,6 +170,9 @@ export default function PaywallScreen() {
 
     paywallViewedLoggedRef.current = true;
     paywallOpenedAtRef.current = Date.now();
+    logBillingLifecycleEvent("paywall_opened", {
+      ...getCommonAnalyticsParams(sourceScreen, reasonCode, entitlement.state, uid),
+    });
     void logAnalyticsEvent("paywall_viewed", {
       source_screen: sourceScreen,
       reason_code: reasonCode,
@@ -186,10 +203,23 @@ export default function PaywallScreen() {
         }
         const nextOfferings = await getOfferings();
         if (canceled) return;
+        const nextOffering = getDefaultOffering(nextOfferings);
+        const nextPackages = getSortedPackages(nextOfferings);
         setOfferings(nextOfferings);
+        logBillingLifecycleEvent("offerings_fetched", {
+          ...getCommonAnalyticsParams(sourceScreen, reasonCode, entitlement.state, uid),
+          result_status: "success",
+          offering_id: nextOffering?.identifier ?? OFFERING_ID,
+          package_count: nextPackages.length,
+        });
       } catch (error) {
         if (canceled) return;
         console.log("Failed to load paywall", error);
+        logBillingLifecycleEvent("offerings_fetched", {
+          ...getCommonAnalyticsParams(sourceScreen, reasonCode, entitlement.state, uid),
+          result_status: "error",
+          error_code: getDiagnosticErrorCode(error),
+        });
         setOfferings(null);
         setScreenState("error");
         setFeedback("Unable to load plans right now.");
@@ -282,9 +312,15 @@ export default function PaywallScreen() {
       terminalLogged: false,
     };
 
+    logBillingLifecycleEvent("purchase_attempted", packageParams);
     void logAnalyticsEvent("purchase_started", packageParams);
 
     const result: PurchaseResult = await purchasePackage(selectedPackage);
+    logBillingLifecycleEvent("purchase_result", {
+      ...packageParams,
+      result_status: result.status.toLowerCase(),
+      error_code: result.status === "ERROR" ? result.errorCode : undefined,
+    });
     if (result.status === "CANCELLED") {
       void logAnalyticsEvent("purchase_cancelled", packageParams);
       purchaseAttemptRef.current = null;
@@ -348,9 +384,15 @@ export default function PaywallScreen() {
       terminalLogged: false,
     };
 
+    logBillingLifecycleEvent("restore_attempted", restoreParams);
     void logAnalyticsEvent("restore_started", restoreParams);
 
     const result: RestoreResult = await restorePurchases();
+    logBillingLifecycleEvent("restore_result", {
+      ...restoreParams,
+      result_status: result.status.toLowerCase(),
+      error_code: result.status === "ERROR" ? result.errorCode : undefined,
+    });
     if (result.status === "ERROR") {
       void logAnalyticsEvent("restore_failed", {
         ...restoreParams,

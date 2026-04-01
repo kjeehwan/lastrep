@@ -68,6 +68,14 @@ export default function SettingsIndex() {
     Linking.openURL("mailto:kjeehwan@gmail.com?subject=Support%20request");
   };
 
+  const handleGoBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+    router.replace("/home");
+  };
+
   const handleManageSubscription = async () => {
     void logAnalyticsEvent("manage_subscription_tapped", {
       source_screen: "settings",
@@ -130,7 +138,15 @@ export default function SettingsIndex() {
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView contentContainerStyle={styles.content} style={styles.container} bounces>
-        <Text style={styles.title}>Settings</Text>
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.backButton} onPress={handleGoBack}>
+            <Ionicons name="chevron-back" size={26} color="#fff" />
+          </TouchableOpacity>
+          <View style={styles.headerText}>
+            <Text style={styles.greeting}>lastrep</Text>
+            <Text style={styles.title}>Settings</Text>
+          </View>
+        </View>
 
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Account</Text>
@@ -225,8 +241,28 @@ export default function SettingsIndex() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#0d0d1a" },
   container: { flex: 1, backgroundColor: "#0d0d1a" },
-  content: { padding: 20, paddingTop: 56, paddingBottom: 32, gap: 14 },
-  title: { color: "#fff", fontSize: 28, fontWeight: "800", marginBottom: 4 },
+  content: { padding: 20, paddingTop: 20, paddingBottom: 32, gap: 14 },
+  header: {
+    marginBottom: 4,
+    gap: 12,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.06)",
+  },
+  headerText: {
+    flexShrink: 1,
+  },
+  greeting: {
+    color: MUTED,
+    fontSize: 18,
+    fontWeight: "700",
+  },
+  title: { color: "#fff", fontSize: 28, fontWeight: "800" },
   card: {
     backgroundColor: "rgba(255,255,255,0.06)",
     borderRadius: 18,

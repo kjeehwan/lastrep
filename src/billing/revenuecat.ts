@@ -113,17 +113,26 @@ function isPurchaseCancelledError(error: unknown): boolean {
 }
 
 function shouldSuppressRevenueCatLog(logLevel: LOG_LEVEL, message: string): boolean {
-  if (logLevel !== LOG_LEVEL.ERROR) {
-    return false;
-  }
-
   const normalizedMessage = message.toLowerCase();
-  return (
+  const isCancellationNoise =
     normalizedMessage.includes("purchasecancellederror") ||
     normalizedMessage.includes("user_canceled") ||
     normalizedMessage.includes("user canceled") ||
-    normalizedMessage.includes("user cancelled")
-  );
+    normalizedMessage.includes("user cancelled");
+  const isBillingDisconnectNoise =
+    normalizedMessage.includes("billing service disconnected") ||
+    normalizedMessage.includes("billing is disconnected and purchase methods won't work") ||
+    normalizedMessage.includes("billing is disconnected and purchase methods won''t work");
+
+  if (logLevel === LOG_LEVEL.ERROR) {
+    return isCancellationNoise || isBillingDisconnectNoise;
+  }
+
+  if (logLevel === LOG_LEVEL.WARN) {
+    return isBillingDisconnectNoise;
+  }
+
+  return false;
 }
 
 function revenueCatLogHandler(logLevel: LOG_LEVEL, message: string) {

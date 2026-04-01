@@ -401,6 +401,33 @@ const toMsNumber = (value: unknown): number | null => {
   return null;
 };
 
+type RevenueCatLifecycleLogEvent =
+  | "RC_EVENT"
+  | "entitlement_activated"
+  | "entitlement_expired"
+  | "duplicate_event_skipped"
+  | "stale_event_skipped";
+
+type RevenueCatLifecycleLogPayload = {
+  app_user_id: string;
+  event_id?: string;
+  event_type?: string;
+  product_id?: string | null;
+  expiration_at_ms?: number | null;
+  processed_at: string;
+  is_subscribed?: boolean;
+};
+
+const logRevenueCatLifecycleEvent = (
+  event: RevenueCatLifecycleLogEvent,
+  payload: RevenueCatLifecycleLogPayload
+) => {
+  const sanitizedPayload = Object.fromEntries(
+    Object.entries(payload).filter(([, value]) => value !== undefined)
+  );
+  console.log(event, sanitizedPayload);
+};
+
 const mapRevenueCatEventToSubscriptionStatus = (
   eventType: string,
   currentIsSubscribed: boolean
@@ -777,14 +804,15 @@ export const revenuecatWebhook = functions
     const expirationAtMs = toMsNumber(event.expiration_at_ms);
     const eventTimestampMs = toMsNumber(event.event_timestamp_ms);
     const hasPremiumEntitlement = touchesPremiumEntitlement(event);
+    const processedAt = new Date().toISOString();
 
-    console.log("RC_EVENT", {
-      uid: appUserId.slice(0, 8),
-      type: eventType,
-      productId,
-      expiresAt: expirationAtMs,
-      eventId,
-      eventTimestampMs,
+    logRevenueCatLifecycleEvent("RC_EVENT", {
+      app_user_id: appUserId,
+      event_id: eventId,
+      event_type: eventType,
+      product_id: productId,
+      expiration_at_ms: expirationAtMs,
+      processed_at: processedAt,
     });
 
     if (eventType === "TEST") {
@@ -816,7 +844,12 @@ export const revenuecatWebhook = functions
         typeof entitlement.isSubscribed === "boolean" ? entitlement.isSubscribed : false;
 
       if (eventId && lastEventId === eventId) {
-        return { skipped: true, reason: "duplicate_event_id" as const };
+        return {
+          skipped: true,
+          reason: "duplicate_event_id" as const,
+          previousIsSubscribed: currentIsSubscribed,
+          nextIsSubscribed: currentIsSubscribed,
+        };
       }
 
       if (
@@ -824,12 +857,22 @@ export const revenuecatWebhook = functions
         typeof lastEventTimestampMs === "number" &&
         eventTimestampMs < lastEventTimestampMs
       ) {
-        return { skipped: true, reason: "stale_event" as const };
+        return {
+          skipped: true,
+          reason: "stale_event" as const,
+          previousIsSubscribed: currentIsSubscribed,
+          nextIsSubscribed: currentIsSubscribed,
+        };
       }
 
       const mapped = mapRevenueCatEventToSubscriptionStatus(eventType, currentIsSubscribed);
       if (!mapped.shouldMutate) {
-        return { skipped: true, reason: "ignored_event" as const };
+        return {
+          skipped: true,
+          reason: "ignored_event" as const,
+          previousIsSubscribed: currentIsSubscribed,
+          nextIsSubscribed: currentIsSubscribed,
+        };
       }
 
       const nextEventTimestampMs =
@@ -851,8 +894,57 @@ export const revenuecatWebhook = functions
         { merge: true }
       );
 
-      return { skipped: false, reason: null as null };
+      return {
+        skipped: false,
+        reason: null as null,
+        previousIsSubscribed: currentIsSubscribed,
+        nextIsSubscribed: mapped.isSubscribed,
+      };
     });
+
+    if (result.skipped && result.reason === "duplicate_event_id") {
+      logRevenueCatLifecycleEvent("duplicate_event_skipped", {
+        app_user_id: appUserId,
+        event_id: eventId,
+        event_type: eventType,
+        product_id: productId,
+        expiration_at_ms: expirationAtMs,
+        processed_at: processedAt,
+        is_subscribed: result.nextIsSubscribed,
+      });
+    } else if (result.skipped && result.reason === "stale_event") {
+      logRevenueCatLifecycleEvent("stale_event_skipped", {
+        app_user_id: appUserId,
+        event_id: eventId,
+        event_type: eventType,
+        product_id: productId,
+        expiration_at_ms: expirationAtMs,
+        processed_at: processedAt,
+        is_subscribed: result.nextIsSubscribed,
+      });
+    } else if (!result.skipped) {
+      if (!result.previousIsSubscribed && result.nextIsSubscribed) {
+        logRevenueCatLifecycleEvent("entitlement_activated", {
+          app_user_id: appUserId,
+          event_id: eventId,
+          event_type: eventType,
+          product_id: productId,
+          expiration_at_ms: expirationAtMs,
+          processed_at: processedAt,
+          is_subscribed: result.nextIsSubscribed,
+        });
+      } else if (result.previousIsSubscribed && !result.nextIsSubscribed) {
+        logRevenueCatLifecycleEvent("entitlement_expired", {
+          app_user_id: appUserId,
+          event_id: eventId,
+          event_type: eventType,
+          product_id: productId,
+          expiration_at_ms: expirationAtMs,
+          processed_at: processedAt,
+          is_subscribed: result.nextIsSubscribed,
+        });
+      }
+    }
 
     res.status(200).json({ ok: true, skipped: result.skipped, reason: result.reason });
   });
