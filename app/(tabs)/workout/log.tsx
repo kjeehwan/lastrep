@@ -5,6 +5,7 @@ import { getAuth } from "firebase/auth";
 import { addDoc, collection, doc, getDoc, getDocs, limit, orderBy, query, Timestamp } from "firebase/firestore";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { db } from "../../../src/config/firebaseConfig";
 import type { Decision } from "../../../src/types/decision";
 import { isExpectedOfflineError } from "../../../src/utils/networkErrors";
@@ -624,7 +625,7 @@ export default function WorkoutLog() {
   );
 
   return (
-    <View style={styles.screen}>
+    <SafeAreaView style={styles.screen} edges={["top"]}>
       <ScrollView
         style={styles.container}
         contentContainerStyle={styles.content}
@@ -1092,14 +1093,14 @@ export default function WorkoutLog() {
       </Modal>
 
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#0d0d1a" },
   container: { flex: 1, backgroundColor: "#0d0d1a" },
-  content: { padding: 20, paddingBottom: 140 },
+  content: { padding: 20, paddingTop: 28, paddingBottom: 140 },
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -1327,6 +1328,5 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.08)",
   },
 });
-
 
 

@@ -5,11 +5,11 @@ import { getFunctions, httpsCallable } from "firebase/functions";
 import React, { useEffect, useState } from "react";
 import { Linking, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { getUidPrefix, logAnalyticsEvent } from "../../src/analytics/analytics";
-import { MANAGE_SUBSCRIPTION_URL } from "../../src/config/billingConfig";
-import { auth } from "../../src/config/firebaseConfig";
-import { useEntitlement } from "../../src/hooks/useEntitlement";
-import { getUserData } from "../../src/userData";
+import { getUidPrefix, logAnalyticsEvent } from "../../../src/analytics/analytics";
+import { MANAGE_SUBSCRIPTION_URL } from "../../../src/config/billingConfig";
+import { auth } from "../../../src/config/firebaseConfig";
+import { useEntitlement } from "../../../src/hooks/useEntitlement";
+import { getUserData } from "../../../src/userData";
 
 const ACCENT = "#7b61ff";
 const MUTED = "#a5acc1";
@@ -136,16 +136,14 @@ export default function SettingsIndex() {
   if (redirectTo) return <Redirect href={redirectTo} />;
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={styles.safe} edges={["top"]}>
       <ScrollView contentContainerStyle={styles.content} style={styles.container} bounces>
         <View style={styles.header}>
           <TouchableOpacity style={styles.backButton} onPress={handleGoBack}>
-            <Ionicons name="chevron-back" size={26} color="#fff" />
+            <Ionicons name="chevron-back" size={22} color="#fff" />
           </TouchableOpacity>
-          <View style={styles.headerText}>
-            <Text style={styles.greeting}>lastrep</Text>
-            <Text style={styles.title}>Settings</Text>
-          </View>
+          <Text style={styles.title}>Settings</Text>
+          <View style={styles.headerSpacer} />
         </View>
 
         <View style={styles.card}>
@@ -243,26 +241,23 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#0d0d1a" },
   content: { padding: 20, paddingTop: 20, paddingBottom: 32, gap: 14 },
   header: {
-    marginBottom: 4,
-    gap: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
   },
   backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 999,
+    width: 32,
+    height: 32,
+    borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: "rgba(255,255,255,0.08)",
   },
-  headerText: {
-    flexShrink: 1,
+  headerSpacer: {
+    width: 22,
   },
-  greeting: {
-    color: MUTED,
-    fontSize: 18,
-    fontWeight: "700",
-  },
-  title: { color: "#fff", fontSize: 28, fontWeight: "800" },
+  title: { color: "#fff", fontSize: 22, fontWeight: "800" },
   card: {
     backgroundColor: "rgba(255,255,255,0.06)",
     borderRadius: 18,
