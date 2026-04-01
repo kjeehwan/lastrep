@@ -24,6 +24,7 @@ export default function TabsLayout() {
         tabBarIcon: ({ color, size }) => {
           const icons: Record<string, keyof typeof Ionicons.glyphMap> = {
             home: "home-outline",
+            "nutrition/index": "restaurant-outline",
             workout: "barbell-outline",
             "profile/index": "person-outline",
           };
@@ -39,8 +40,8 @@ export default function TabsLayout() {
     >
       <Tabs.Screen name="index" options={{ href: null }} />
       <Tabs.Screen name="home" options={{ title: "Home" }} />
-      <Tabs.Screen name="nutrition/index" options={{ href: null }} />
       <Tabs.Screen name="workout" options={{ title: "Workout" }} />
+      <Tabs.Screen name="nutrition/index" options={{ title: "Nutrition" }} />
       <Tabs.Screen name="settings/index" options={{ href: null }} />
       <Tabs.Screen name="community/index" options={{ href: null }} />
       <Tabs.Screen name="profile/index" options={{ title: "Profile" }} />

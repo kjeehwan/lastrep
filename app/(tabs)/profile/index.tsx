@@ -1,7 +1,9 @@
+import { Ionicons } from "@expo/vector-icons";
 import { Href, Redirect, useRouter } from "expo-router";
 import { onAuthStateChanged } from "firebase/auth";
 import React, { useEffect, useState } from "react";
 import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { auth } from "../../../src/config/firebaseConfig";
 import { getUserData, saveUserData } from "../../../src/userData";
 
@@ -20,6 +22,14 @@ export default function ProfileIndex() {
   const [goal, setGoal] = useState("");
   const [nickname, setNickname] = useState("");
   const [redirectTo, setRedirectTo] = useState<Href | null>(null);
+
+  const handleGoBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+    router.replace("/home");
+  };
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
@@ -48,45 +58,84 @@ export default function ProfileIndex() {
   };
 
   if (redirectTo) return <Redirect href={redirectTo} />;
-  if (loading) return <Text style={{ color: "#fff", padding: 20 }}>Loading...</Text>;
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.safe} edges={["top"]}>
+        <Text style={styles.loadingText}>Loading...</Text>
+      </SafeAreaView>
+    );
+  }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-      <Text style={styles.title}>Profile</Text>
-
-      <Text style={styles.sectionTitle}>Nickname</Text>
-      <TextInput
-        placeholder="Your nickname"
-        placeholderTextColor="#7a7a8c"
-        style={styles.input}
-        value={nickname}
-        onChangeText={setNickname}
-      />
-
-      <Text style={styles.sectionTitle}>Goal</Text>
-      <View style={styles.row}>
-        {goals.map((g) => (
-          <TouchableOpacity
-            key={g.key}
-            onPress={() => setGoal(g.key)}
-            style={[styles.chip, goal === g.key && styles.chipActive]}
-          >
-            <Text style={[styles.chipText, goal === g.key && styles.chipTextActive]}>{g.label}</Text>
+    <SafeAreaView style={styles.safe} edges={["top"]}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.backButton} onPress={handleGoBack}>
+            <Ionicons name="chevron-back" size={22} color="#fff" />
           </TouchableOpacity>
-        ))}
-      </View>
+          <Text style={styles.title}>Profile</Text>
+          <View style={styles.headerSpacer} />
+        </View>
 
-      <TouchableOpacity style={styles.save} onPress={save}>
-        <Text style={styles.saveText}>Save Changes</Text>
-      </TouchableOpacity>
-    </ScrollView>
+        <Text style={styles.sectionTitle}>Nickname</Text>
+        <TextInput
+          placeholder="Your nickname"
+          placeholderTextColor="#7a7a8c"
+          style={styles.input}
+          value={nickname}
+          onChangeText={setNickname}
+        />
+
+        <Text style={styles.sectionTitle}>Goal</Text>
+        <View style={styles.row}>
+          {goals.map((g) => (
+            <TouchableOpacity
+              key={g.key}
+              onPress={() => setGoal(g.key)}
+              style={[styles.chip, goal === g.key && styles.chipActive]}
+            >
+              <Text style={[styles.chipText, goal === g.key && styles.chipTextActive]}>
+                {g.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <TouchableOpacity style={styles.save} onPress={save}>
+          <Text style={styles.saveText}>Save Changes</Text>
+        </TouchableOpacity>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#0d0d1a", padding: 20, paddingTop: 56 },
-  scrollContent: { paddingBottom: 80, gap: 10 },
-  title: { color: "#fff", fontSize: 22, fontWeight: "700", marginBottom: 10 },
+  safe: { flex: 1, backgroundColor: "#0d0d1a" },
+  loadingText: { color: "#fff", padding: 20 },
+  container: { flex: 1, backgroundColor: "#0d0d1a" },
+  scrollContent: { padding: 20, paddingTop: 20, paddingBottom: 100, gap: 10 },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  backButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.08)",
+  },
+  headerSpacer: {
+    width: 22,
+  },
+  title: { color: "#fff", fontSize: 22, fontWeight: "800" },
   sectionTitle: { color: "#fff", fontSize: 15, fontWeight: "700", marginTop: 18, marginBottom: 8 },
   row: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   input: {

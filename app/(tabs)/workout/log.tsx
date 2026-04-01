@@ -632,13 +632,13 @@ export default function WorkoutLog() {
         keyboardShouldPersistTaps="handled"
         scrollEventThrottle={16}
       >
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Ionicons name="chevron-back" size={22} color="#fff" />
-        </TouchableOpacity>
-        <Text style={styles.title}>Workout Log</Text>
-        <View style={{ width: 22 }} />
-      </View>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <Ionicons name="chevron-back" size={22} color="#fff" />
+          </TouchableOpacity>
+          <Text style={styles.title}>Workout Log</Text>
+          <View style={styles.headerSpacer} />
+        </View>
 
       <View style={styles.card}>
         <Text style={styles.sectionTitle}>Session</Text>
@@ -1100,21 +1100,22 @@ export default function WorkoutLog() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#0d0d1a" },
   container: { flex: 1, backgroundColor: "#0d0d1a" },
-  content: { padding: 20, paddingTop: 28, paddingBottom: 140 },
+  content: { padding: 20, paddingTop: 20, paddingBottom: 140 },
   header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 12,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginBottom: 12,
   },
   backButton: {
     width: 32,
     height: 32,
     borderRadius: 8,
-    backgroundColor: "rgba(255,255,255,0.08)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
+      backgroundColor: "rgba(255,255,255,0.08)",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+  headerSpacer: { width: 22 },
   title: { color: "#fff", fontSize: 22, fontWeight: "800" },
   card: {
     backgroundColor: "rgba(255,255,255,0.06)",
@@ -1328,5 +1329,3 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.08)",
   },
 });
-
-
