@@ -6,12 +6,13 @@ import {
   initializeTestEnvironment,
   RulesTestEnvironment,
 } from "@firebase/rules-unit-testing";
-import { Timestamp, doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
+import { Timestamp, deleteDoc, doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import {
   ENTITLEMENT_DEV_OVERRIDE_POLICY,
   ENTITLEMENT_FIELDS,
+  NUTRITION_MEALS_SUBCOLLECTION,
   USER_ENTITLEMENT_FIELD,
   USERS_COLLECTION,
 } from "./contracts";
@@ -32,6 +33,14 @@ const buildCanonicalEntitlement = () => ({
   [ENTITLEMENT_FIELDS.lastEventId]: "evt_123",
   [ENTITLEMENT_FIELDS.lastEventTimestampMs]: 1_700_000_000_000,
   [ENTITLEMENT_FIELDS.lastUpdatedAt]: Timestamp.fromMillis(1_700_000_000_500),
+});
+
+const buildMeal = () => ({
+  name: "Lunch",
+  calories: 650,
+  proteinGrams: 40,
+  loggedAt: Timestamp.fromMillis(1_700_000_000_000),
+  updatedAt: Timestamp.fromMillis(1_700_000_000_500),
 });
 
 describeIfFirestoreEmulator("firestore entitlement rules", () => {
@@ -145,5 +154,28 @@ describeIfFirestoreEmulator("firestore entitlement rules", () => {
         })
       );
     });
+  });
+
+  it("allows the owning client to create, update, and delete nutrition meals", async () => {
+    const db = testEnv.authenticatedContext("alice").firestore();
+    const mealRef = doc(db, USERS_COLLECTION, "alice", NUTRITION_MEALS_SUBCOLLECTION, "meal-1");
+
+    await assertSucceeds(setDoc(mealRef, buildMeal()));
+    await assertSucceeds(updateDoc(mealRef, { calories: 700 }));
+    await assertSucceeds(deleteDoc(mealRef));
+  });
+
+  it("prevents other users from reading nutrition meals", async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(
+        doc(context.firestore(), USERS_COLLECTION, "alice", NUTRITION_MEALS_SUBCOLLECTION, "meal-1"),
+        buildMeal()
+      );
+    });
+
+    const db = testEnv.authenticatedContext("bob").firestore();
+    await assertFails(
+      getDoc(doc(db, USERS_COLLECTION, "alice", NUTRITION_MEALS_SUBCOLLECTION, "meal-1"))
+    );
   });
 });

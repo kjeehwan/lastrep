@@ -18,6 +18,10 @@ service cloud.firestore {
       allow create: if isOwnUser(uid) && entitlementFieldMissingOnCreate();
       allow update: if isOwnUser(uid) && entitlementFieldUnchanged();
       allow delete: if false;
+
+      match /nutritionMeals/{mealId} {
+        allow read, create, update, delete: if isOwnUser(uid);
+      }
     }
   }
 }

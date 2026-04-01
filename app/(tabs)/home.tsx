@@ -450,6 +450,19 @@ export default function Home() {
             </TouchableOpacity>
           </View>
         </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Nutrition</Text>
+          <View style={styles.card}>
+            <Text style={styles.cardText}>Log today&apos;s meals and keep a simple calorie total.</Text>
+            <TouchableOpacity
+              style={styles.primaryButtonWide}
+              onPress={() => router.push("/nutrition" as Href)}
+            >
+              <Text style={styles.primaryText}>Open nutrition</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       </ScrollView>
     </View>
   );
