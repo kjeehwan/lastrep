@@ -19,6 +19,15 @@ const decisionInputsSchema: z.ZodType<DecisionInputs> = z.object({
   motivation: z.number(),
   trainingPhase: z.enum(["Hypertrophy", "Strength", "Power"]),
   dietPhase: z.enum(["Cut", "Maintain", "Bulk"]),
+  nutrition: z
+    .object({
+      caloriesConsumedToday: z.number().int().min(0),
+      proteinGramsToday: z.number().int().min(0).nullable(),
+      calorieTargetAdherence: z.enum(["below_target", "on_target", "above_target"]).nullable(),
+    })
+    .strict()
+    .nullable()
+    .optional(),
 });
 
 const formatZodError = (error: z.ZodError) =>
@@ -27,7 +36,7 @@ const formatZodError = (error: z.ZodError) =>
 const OPENAI_API_KEY = defineSecret("OPENAI_API_KEY");
 const REVENUECAT_WEBHOOK_AUTH = defineSecret("REVENUECAT_WEBHOOK_AUTH");
 const DEV_UID_ALLOWLIST_SECRET = defineSecret("DEV_UID_ALLOWLIST");
-const DECISION_PROMPT_VERSION = "v3";
+const DECISION_PROMPT_VERSION = "v4";
 const OPENAI_TIMEOUT_MS = 12000;
 const OPENAI_FIRST_ATTEMPT_MS = 9500;
 const OPENAI_RETRY_MS = 2500;
@@ -568,12 +577,13 @@ export const getDailyDecision = functions
       return fallback;
     }
 
-    const prompt = [
-      "You are a strength training decision engine.",
-      "Return ONLY a JSON object that matches the schema.",
-      "Use the provided inputs to choose the best decision: PUSH, MAINTAIN, or PULL_BACK.",
-      "Prefer MAINTAIN when signals are mixed or unclear.",
-      "Output rules:",
+      const prompt = [
+        "You are a strength training decision engine.",
+        "Return ONLY a JSON object that matches the schema.",
+        "Use the provided inputs to choose the best decision: PUSH, MAINTAIN, or PULL_BACK.",
+        "Prefer MAINTAIN when signals are mixed or unclear.",
+        "Treat nutrition as supporting context, not the only factor.",
+        "Output rules:",
       "- Always include decision and explanation.",
       "- Explanation should have 2-4 short bullets.",
       "- If decision is MAINTAIN, set adjustments to null.",

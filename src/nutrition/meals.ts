@@ -3,9 +3,12 @@ import {
   collection,
   deleteDoc,
   doc,
+  type DocumentData,
+  getDocs,
   onSnapshot,
   orderBy,
   query,
+  type QueryDocumentSnapshot,
   setDoc,
   Timestamp,
   where,
@@ -18,6 +21,8 @@ import {
   USERS_COLLECTION,
 } from "../contracts";
 import type { NutritionMeal, NutritionMealWrite } from "../contracts";
+import type { DecisionNutritionSummary } from "../types/decision";
+import { buildDecisionNutritionSummary } from "./mealHelpers";
 
 export * from "./mealHelpers";
 
@@ -33,39 +38,52 @@ function endOfLocalDay(date = new Date()): Date {
   return end;
 }
 
+function buildTodayMealsQuery(uid: string, now = new Date()) {
+  const start = Timestamp.fromDate(startOfLocalDay(now));
+  const end = Timestamp.fromDate(endOfLocalDay(now));
+
+  return query(
+    collection(db, USERS_COLLECTION, uid, NUTRITION_MEALS_SUBCOLLECTION),
+    where(NUTRITION_MEAL_FIELDS.loggedAt, ">=", start),
+    where(NUTRITION_MEAL_FIELDS.loggedAt, "<=", end),
+    orderBy(NUTRITION_MEAL_FIELDS.loggedAt, "desc")
+  );
+}
+
+function mapMealDoc(mealDoc: QueryDocumentSnapshot<DocumentData>): NutritionMeal {
+  const data = mealDoc.data() as NutritionMealWrite;
+  return {
+    id: mealDoc.id,
+    name: data.name,
+    calories: data.calories,
+    proteinGrams: data.proteinGrams ?? null,
+    loggedAt: data.loggedAt,
+    updatedAt: data.updatedAt,
+  };
+}
+
 export function subscribeToTodayMeals(
   uid: string,
   onNext: (meals: NutritionMeal[]) => void,
   onError: (error: unknown) => void,
   now = new Date()
 ): Unsubscribe {
-  const start = Timestamp.fromDate(startOfLocalDay(now));
-  const end = Timestamp.fromDate(endOfLocalDay(now));
-  const mealsQuery = query(
-    collection(db, USERS_COLLECTION, uid, NUTRITION_MEALS_SUBCOLLECTION),
-    where(NUTRITION_MEAL_FIELDS.loggedAt, ">=", start),
-    where(NUTRITION_MEAL_FIELDS.loggedAt, "<=", end),
-    orderBy(NUTRITION_MEAL_FIELDS.loggedAt, "desc")
-  );
-
   return onSnapshot(
-    mealsQuery,
+    buildTodayMealsQuery(uid, now),
     (snapshot) => {
-      const meals = snapshot.docs.map((mealDoc) => {
-        const data = mealDoc.data() as NutritionMealWrite;
-        return {
-          id: mealDoc.id,
-          name: data.name,
-          calories: data.calories,
-          proteinGrams: data.proteinGrams ?? null,
-          loggedAt: data.loggedAt,
-          updatedAt: data.updatedAt,
-        } as NutritionMeal;
-      });
+      const meals = snapshot.docs.map(mapMealDoc);
       onNext(meals);
     },
     onError
   );
+}
+
+export async function getTodayDecisionNutritionSummary(
+  uid: string,
+  now = new Date()
+): Promise<DecisionNutritionSummary> {
+  const snapshot = await getDocs(buildTodayMealsQuery(uid, now));
+  return buildDecisionNutritionSummary(snapshot.docs.map(mapMealDoc));
 }
 
 export async function createMeal(uid: string, payload: NutritionMealWrite): Promise<void> {

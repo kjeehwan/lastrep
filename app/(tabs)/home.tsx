@@ -3,12 +3,14 @@ import Slider from "@react-native-community/slider";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Href, Redirect, useRouter } from "expo-router";
 import { onAuthStateChanged } from "firebase/auth";
-import { doc, getDoc, setDoc, Timestamp } from "firebase/firestore";
+import { deleteField, doc, getDoc, setDoc, Timestamp, updateDoc } from "firebase/firestore";
 import React, { useEffect, useMemo, useState } from "react";
 import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import type { NormalizedDecisionError, ReasonCode } from "../../src/contracts";
 import { auth, db } from "../../src/config/firebaseConfig";
 import { useEntitlement } from "../../src/hooks/useEntitlement";
+import { useOfflineStatus } from "../../src/hooks/useOfflineStatus";
+import { getTodayDecisionNutritionSummary } from "../../src/nutrition/meals";
 import { getDecision, isNormalizedDecisionError } from "../../src/services/decision/getDecision";
 import { hashDecisionInputs } from "../../src/services/decision/inputHash";
 import type { DecisionInputs, DietPhase, LastResultPayload, TrainingPhase } from "../../src/types/decision";
@@ -71,6 +73,7 @@ export default function Home() {
   const [lastTapAt, setLastTapAt] = useState(0);
 
   const entitlement = useEntitlement(authReady, uid);
+  const { isOffline } = useOfflineStatus();
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
@@ -194,11 +197,28 @@ export default function Home() {
     if (nowMs - lastTapAt < 500) return;
 
     setLastTapAt(nowMs);
+    if (isOffline) {
+      setGateError({
+        bucket: "other",
+        message: "You're offline. Connect to get today's decision.",
+      });
+      setCooldownSeconds(null);
+      return;
+    }
     setLoading(true);
     setGateError(null);
     setCooldownSeconds(null);
 
     try {
+      let nutrition: DecisionInputs["nutrition"] = null;
+      try {
+        nutrition = await getTodayDecisionNutritionSummary(uid);
+      } catch (nutritionError) {
+        if (!isExpectedOfflineError(nutritionError)) {
+          console.log("Failed to load nutrition summary", nutritionError);
+        }
+      }
+
       const inputs: DecisionInputs = {
         sleepHours: parsedSleep,
         soreness,
@@ -206,6 +226,7 @@ export default function Home() {
         motivation,
         trainingPhase,
         dietPhase,
+        nutrition,
       };
 
       const result = await getDecision(inputs);
@@ -216,11 +237,15 @@ export default function Home() {
       };
       const inputHash = hashDecisionInputs(inputs);
 
+      const userRef = doc(db, "users", uid);
       await setDoc(
-        doc(db, "users", uid),
+        userRef,
         { usage: { decisions: { lastResult: payload, lastInputHash: inputHash } } },
         { merge: true }
       );
+      await updateDoc(userRef, {
+        "usage.decisions.lastResult.inputs.phase": deleteField(),
+      });
 
       setLatestDecision(payload);
     } catch (error) {

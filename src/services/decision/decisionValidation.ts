@@ -1,6 +1,14 @@
 import { z } from "zod";
 import type { DecisionInputs, DecisionOutput } from "../../types/decision";
 
+const nutritionSummarySchema = z
+  .object({
+    caloriesConsumedToday: z.number().int().min(0),
+    proteinGramsToday: z.number().int().min(0).nullable(),
+    calorieTargetAdherence: z.enum(["below_target", "on_target", "above_target"]).nullable(),
+  })
+  .strict();
+
 const decisionInputsSchema: z.ZodType<DecisionInputs> = z.object({
   sleepHours: z.number(),
   soreness: z.number(),
@@ -8,6 +16,7 @@ const decisionInputsSchema: z.ZodType<DecisionInputs> = z.object({
   motivation: z.number(),
   trainingPhase: z.enum(["Hypertrophy", "Strength", "Power"]),
   dietPhase: z.enum(["Cut", "Maintain", "Bulk"]),
+  nutrition: nutritionSummarySchema.nullable().optional(),
 });
 
 const adjustmentsSchema = z

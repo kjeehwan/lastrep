@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { Timestamp } from "firebase/firestore";
-import { computeNutritionTotals, getDefaultMealTime, parseMealForm } from "./mealHelpers";
+import {
+  buildDecisionNutritionSummary,
+  computeNutritionTotals,
+  getDefaultMealTime,
+  parseMealForm,
+} from "./mealHelpers";
 
 describe("nutrition meal helpers", () => {
   it("computes daily totals", () => {
@@ -26,6 +31,33 @@ describe("nutrition meal helpers", () => {
     ).toEqual({
       calories: 870,
       proteinGrams: 40,
+    });
+  });
+
+  it("builds a decision nutrition summary", () => {
+    expect(
+      buildDecisionNutritionSummary([
+        {
+          id: "a",
+          name: "Lunch",
+          calories: 650,
+          proteinGrams: 40,
+          loggedAt: Timestamp.fromMillis(1_700_000_000_000),
+          updatedAt: Timestamp.fromMillis(1_700_000_000_500),
+        },
+        {
+          id: "b",
+          name: "Snack",
+          calories: 220,
+          proteinGrams: null,
+          loggedAt: Timestamp.fromMillis(1_700_000_100_000),
+          updatedAt: Timestamp.fromMillis(1_700_000_100_500),
+        },
+      ])
+    ).toEqual({
+      caloriesConsumedToday: 870,
+      proteinGramsToday: 40,
+      calorieTargetAdherence: null,
     });
   });
 

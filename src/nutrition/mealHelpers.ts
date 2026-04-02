@@ -1,5 +1,6 @@
 import { Timestamp } from "firebase/firestore";
 import type { NutritionMeal, NutritionMealWrite } from "../contracts";
+import type { DecisionNutritionSummary } from "../types/decision";
 
 export type NutritionTotals = {
   calories: number;
@@ -32,6 +33,19 @@ export function computeNutritionTotals(meals: NutritionMeal[]): NutritionTotals 
     }),
     { calories: 0, proteinGrams: 0 }
   );
+}
+
+export function buildDecisionNutritionSummary(
+  meals: NutritionMeal[]
+): DecisionNutritionSummary {
+  const totals = computeNutritionTotals(meals);
+  const hasProteinEntries = meals.some((meal) => meal.proteinGrams != null);
+
+  return {
+    caloriesConsumedToday: totals.calories,
+    proteinGramsToday: hasProteinEntries ? totals.proteinGrams : null,
+    calorieTargetAdherence: null,
+  };
 }
 
 export function formatMealTime(timestamp: Timestamp): string {
