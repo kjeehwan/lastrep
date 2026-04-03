@@ -210,12 +210,12 @@ export default function Home() {
     setCooldownSeconds(null);
 
     try {
-      let nutrition: DecisionInputs["nutrition"] = null;
-      try {
-        nutrition = await getTodayDecisionNutritionSummary(uid);
-      } catch (nutritionError) {
-        if (!isExpectedOfflineError(nutritionError)) {
-          console.log("Failed to load nutrition summary", nutritionError);
+        let nutrition: DecisionInputs["nutrition"] = null;
+        try {
+          nutrition = await getTodayDecisionNutritionSummary(uid, dietPhase);
+        } catch (nutritionError) {
+          if (!isExpectedOfflineError(nutritionError)) {
+            console.log("Failed to load nutrition summary", nutritionError);
         }
       }
 
@@ -242,10 +242,12 @@ export default function Home() {
         userRef,
         { usage: { decisions: { lastResult: payload, lastInputHash: inputHash } } },
         { merge: true }
-      );
-      await updateDoc(userRef, {
-        "usage.decisions.lastResult.inputs.phase": deleteField(),
-      });
+        );
+        await updateDoc(userRef, {
+          "usage.decisions.lastResult.inputs.phase": deleteField(),
+          "usage.decisions.lastResult.inputs.nutrition.calorieTargetAdherence":
+            deleteField(),
+        });
 
       setLatestDecision(payload);
     } catch (error) {

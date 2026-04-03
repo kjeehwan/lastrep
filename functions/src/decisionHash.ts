@@ -13,7 +13,11 @@ export const hashDecisionInputs = (inputs: DecisionInputs): string => {
       ? {
           caloriesConsumedToday: inputs.nutrition.caloriesConsumedToday,
           proteinGramsToday: inputs.nutrition.proteinGramsToday,
-          calorieTargetAdherence: inputs.nutrition.calorieTargetAdherence,
+          calorieTarget: inputs.nutrition.calorieTarget,
+          yesterdayCalories: inputs.nutrition.yesterdayCalories,
+          yesterdayAdherence: inputs.nutrition.yesterdayAdherence,
+          recentAdherence: inputs.nutrition.recentAdherence,
+          recentCompletedDaysTracked: inputs.nutrition.recentCompletedDaysTracked,
         }
       : null,
   };

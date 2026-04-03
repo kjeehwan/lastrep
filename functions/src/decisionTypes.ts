@@ -6,7 +6,11 @@ export type CalorieTargetAdherence = "below_target" | "on_target" | "above_targe
 export type DecisionNutritionSummary = {
   caloriesConsumedToday: number;
   proteinGramsToday: number | null;
-  calorieTargetAdherence: CalorieTargetAdherence | null;
+  calorieTarget: number | null;
+  yesterdayCalories: number | null;
+  yesterdayAdherence: CalorieTargetAdherence | null;
+  recentAdherence: CalorieTargetAdherence | null;
+  recentCompletedDaysTracked: number;
 };
 
 export type DecisionInputs = {

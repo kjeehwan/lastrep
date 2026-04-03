@@ -23,7 +23,11 @@ const decisionInputsSchema: z.ZodType<DecisionInputs> = z.object({
     .object({
       caloriesConsumedToday: z.number().int().min(0),
       proteinGramsToday: z.number().int().min(0).nullable(),
-      calorieTargetAdherence: z.enum(["below_target", "on_target", "above_target"]).nullable(),
+      calorieTarget: z.number().int().min(0).nullable(),
+      yesterdayCalories: z.number().int().min(0).nullable(),
+      yesterdayAdherence: z.enum(["below_target", "on_target", "above_target"]).nullable(),
+      recentAdherence: z.enum(["below_target", "on_target", "above_target"]).nullable(),
+      recentCompletedDaysTracked: z.number().int().min(0),
     })
     .strict()
     .nullable()
@@ -36,7 +40,7 @@ const formatZodError = (error: z.ZodError) =>
 const OPENAI_API_KEY = defineSecret("OPENAI_API_KEY");
 const REVENUECAT_WEBHOOK_AUTH = defineSecret("REVENUECAT_WEBHOOK_AUTH");
 const DEV_UID_ALLOWLIST_SECRET = defineSecret("DEV_UID_ALLOWLIST");
-const DECISION_PROMPT_VERSION = "v4";
+const DECISION_PROMPT_VERSION = "v6";
 const OPENAI_TIMEOUT_MS = 12000;
 const OPENAI_FIRST_ATTEMPT_MS = 9500;
 const OPENAI_RETRY_MS = 2500;

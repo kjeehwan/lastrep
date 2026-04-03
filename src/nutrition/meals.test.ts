@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest";
 import { Timestamp } from "firebase/firestore";
 import {
   buildDecisionNutritionSummary,
+  classifyCalorieTargetAdherence,
+  computeDailyCalorieProgress,
   computeNutritionTotals,
   getDefaultMealTime,
+  normalizeCalorieTargets,
   parseMealForm,
 } from "./mealHelpers";
 
@@ -34,30 +37,109 @@ describe("nutrition meal helpers", () => {
     });
   });
 
-  it("builds a decision nutrition summary", () => {
-    expect(
-      buildDecisionNutritionSummary([
+  it("classifies calorie target adherence with completed-day bands", () => {
+    expect(classifyCalorieTargetAdherence(1700, 2000)).toBe("below_target");
+    expect(classifyCalorieTargetAdherence(1950, 2000)).toBe("on_target");
+    expect(classifyCalorieTargetAdherence(2250, 2000)).toBe("above_target");
+    expect(classifyCalorieTargetAdherence(null, 2000)).toBeNull();
+    expect(classifyCalorieTargetAdherence(1950, null)).toBeNull();
+  });
+
+  it("computes daily calorie progress against a target", () => {
+    expect(computeDailyCalorieProgress(1800, 2200)).toEqual({
+      remainingCalories: 400,
+      overTargetCalories: 0,
+    });
+    expect(computeDailyCalorieProgress(2450, 2200)).toEqual({
+      remainingCalories: 0,
+      overTargetCalories: 250,
+    });
+    expect(computeDailyCalorieProgress(1200, null)).toEqual({
+      remainingCalories: null,
+      overTargetCalories: null,
+    });
+  });
+
+  it("builds decision nutrition summary from completed-day windows", () => {
+    const summary = buildDecisionNutritionSummary(
+      [
         {
-          id: "a",
+          id: "today-breakfast",
+          name: "Breakfast",
+          calories: 500,
+          proteinGrams: 35,
+          loggedAt: Timestamp.fromDate(new Date("2026-04-02T08:00:00.000+09:00")),
+          updatedAt: Timestamp.fromDate(new Date("2026-04-02T08:00:00.000+09:00")),
+        },
+      ],
+      [
+        {
+          id: "yesterday",
+          name: "Dinner",
+          calories: 1800,
+          proteinGrams: 90,
+          loggedAt: Timestamp.fromDate(new Date("2026-04-01T20:00:00.000+09:00")),
+          updatedAt: Timestamp.fromDate(new Date("2026-04-01T20:00:00.000+09:00")),
+        },
+        {
+          id: "day-2",
           name: "Lunch",
-          calories: 650,
-          proteinGrams: 40,
-          loggedAt: Timestamp.fromMillis(1_700_000_000_000),
-          updatedAt: Timestamp.fromMillis(1_700_000_000_500),
+          calories: 1950,
+          proteinGrams: 110,
+          loggedAt: Timestamp.fromDate(new Date("2026-03-31T12:00:00.000+09:00")),
+          updatedAt: Timestamp.fromDate(new Date("2026-03-31T12:00:00.000+09:00")),
         },
         {
-          id: "b",
-          name: "Snack",
-          calories: 220,
-          proteinGrams: null,
-          loggedAt: Timestamp.fromMillis(1_700_000_100_000),
-          updatedAt: Timestamp.fromMillis(1_700_000_100_500),
+          id: "day-3",
+          name: "Lunch",
+          calories: 2050,
+          proteinGrams: 100,
+          loggedAt: Timestamp.fromDate(new Date("2026-03-30T12:00:00.000+09:00")),
+          updatedAt: Timestamp.fromDate(new Date("2026-03-30T12:00:00.000+09:00")),
         },
-      ])
-    ).toEqual({
-      caloriesConsumedToday: 870,
-      proteinGramsToday: 40,
-      calorieTargetAdherence: null,
+      ],
+      2000,
+      new Date("2026-04-02T10:00:00.000+09:00")
+    );
+
+    expect(summary).toEqual({
+      caloriesConsumedToday: 500,
+      proteinGramsToday: 35,
+      calorieTarget: 2000,
+      yesterdayCalories: 1800,
+      yesterdayAdherence: "on_target",
+      recentAdherence: "on_target",
+      recentCompletedDaysTracked: 3,
+    });
+  });
+
+  it("requires enough completed days before reporting recent adherence", () => {
+    const summary = buildDecisionNutritionSummary(
+      [],
+      [
+        {
+          id: "yesterday",
+          name: "Lunch",
+          calories: 1400,
+          proteinGrams: null,
+          loggedAt: Timestamp.fromDate(new Date("2026-04-01T12:00:00.000+09:00")),
+          updatedAt: Timestamp.fromDate(new Date("2026-04-01T12:00:00.000+09:00")),
+        },
+      ],
+      2000,
+      new Date("2026-04-02T10:00:00.000+09:00")
+    );
+
+    expect(summary.yesterdayAdherence).toBe("below_target");
+    expect(summary.recentAdherence).toBeNull();
+    expect(summary.recentCompletedDaysTracked).toBe(1);
+  });
+
+  it("normalizes calorie targets from partial user data", () => {
+    expect(normalizeCalorieTargets({ Cut: 2100, Bulk: 2900 })).toEqual({
+      Cut: 2100,
+      Maintain: null,
+      Bulk: 2900,
     });
   });
 

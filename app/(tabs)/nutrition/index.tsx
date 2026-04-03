@@ -1,7 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Href, Redirect, useRouter } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Href, Redirect, useFocusEffect, useRouter } from "expo-router";
 import { onAuthStateChanged } from "firebase/auth";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
   ScrollView,
@@ -15,12 +16,16 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { auth } from "@/src/config/firebaseConfig";
 import { useOfflineStatus } from "@/src/hooks/useOfflineStatus";
 import {
-  DEFAULT_MEAL_FORM_VALUES,
+  computeDailyCalorieProgress,
   computeNutritionTotals,
   createMeal,
+  DEFAULT_CALORIE_TARGETS_BY_DIET_PHASE,
+  DEFAULT_MEAL_FORM_VALUES,
   deleteMeal,
   formatMealTime,
+  getCalorieTargetForDietPhase,
   getDefaultMealTime,
+  getNutritionProfile,
   parseMealForm,
   subscribeToTodayMeals,
   toEditableTime,
@@ -28,16 +33,23 @@ import {
   type MealFormValues,
 } from "@/src/nutrition/meals";
 import type { NutritionMeal } from "@/src/contracts";
+import type { DietPhase } from "@/src/types/decision";
 import { isExpectedOfflineError } from "@/src/utils/networkErrors";
 
 const ACCENT = "#7b61ff";
 const MUTED = "#a5acc1";
+const HOME_INPUTS_KEY = "home-inputs-v1";
+const DIET_PHASES: DietPhase[] = ["Cut", "Maintain", "Bulk"];
 
 function buildInitialFormValues(): MealFormValues {
   return {
     ...DEFAULT_MEAL_FORM_VALUES,
     time: getDefaultMealTime(),
   };
+}
+
+function isDietPhase(value: string): value is DietPhase {
+  return DIET_PHASES.includes(value as DietPhase);
 }
 
 export default function NutritionIndex() {
@@ -52,6 +64,8 @@ export default function NutritionIndex() {
   const [editingMealId, setEditingMealId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [currentDietPhase, setCurrentDietPhase] = useState<DietPhase>("Maintain");
+  const [calorieTargets, setCalorieTargets] = useState(DEFAULT_CALORIE_TARGETS_BY_DIET_PHASE);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -101,7 +115,57 @@ export default function NutritionIndex() {
     return unsubscribe;
   }, [uid]);
 
+  useFocusEffect(
+    useCallback(() => {
+      if (!uid) return undefined;
+
+      let cancelled = false;
+      const loadNutritionContext = async () => {
+        try {
+          const [profile, rawHomeInputs] = await Promise.all([
+            getNutritionProfile(uid),
+            AsyncStorage.getItem(HOME_INPUTS_KEY),
+          ]);
+
+          if (cancelled) return;
+
+          setCalorieTargets(profile.calorieTargetsByDietPhase);
+
+          if (!rawHomeInputs) {
+            setCurrentDietPhase("Maintain");
+            return;
+          }
+
+          const parsed = JSON.parse(rawHomeInputs) as { dietPhase?: string };
+          if (typeof parsed.dietPhase === "string" && isDietPhase(parsed.dietPhase)) {
+            setCurrentDietPhase(parsed.dietPhase);
+            return;
+          }
+
+          setCurrentDietPhase("Maintain");
+        } catch (error) {
+          if (!isExpectedOfflineError(error)) {
+            console.log("Failed to load nutrition targets", error);
+          }
+        }
+      };
+
+      void loadNutritionContext();
+      return () => {
+        cancelled = true;
+      };
+    }, [uid])
+  );
+
   const totals = useMemo(() => computeNutritionTotals(meals), [meals]);
+  const calorieTarget = useMemo(
+    () => getCalorieTargetForDietPhase(calorieTargets, currentDietPhase),
+    [calorieTargets, currentDietPhase]
+  );
+  const calorieProgress = useMemo(
+    () => computeDailyCalorieProgress(totals.calories, calorieTarget),
+    [totals.calories, calorieTarget]
+  );
 
   const handleGoBack = () => {
     if (router.canGoBack()) {
@@ -239,17 +303,47 @@ export default function NutritionIndex() {
           <Text style={styles.sectionTitle}>Today</Text>
           <View style={styles.totalRow}>
             <View style={styles.totalChip}>
-              <Text style={styles.totalLabel}>Calories</Text>
+              <Text style={styles.totalLabel}>Consumed</Text>
               <Text style={styles.totalValue}>{totals.calories}</Text>
             </View>
             <View style={styles.totalChip}>
+              <Text style={styles.totalLabel}>{currentDietPhase} target</Text>
+              <Text style={styles.totalValue}>{calorieTarget == null ? "Set" : calorieTarget}</Text>
+            </View>
+          </View>
+          <View style={styles.totalRow}>
+            <View style={styles.totalChip}>
               <Text style={styles.totalLabel}>Protein</Text>
               <Text style={styles.totalValue}>
-                {totals.proteinGrams > 0 ? `${totals.proteinGrams} g` : "—"}
+                {totals.proteinGrams > 0 ? `${totals.proteinGrams} g` : "-"}
+              </Text>
+            </View>
+            <View style={styles.totalChip}>
+              <Text style={styles.totalLabel}>
+                {calorieProgress.overTargetCalories && calorieProgress.overTargetCalories > 0
+                  ? "Over target"
+                  : "Remaining"}
+              </Text>
+              <Text style={styles.totalValue}>
+                {calorieTarget == null
+                  ? "Set"
+                  : calorieProgress.overTargetCalories && calorieProgress.overTargetCalories > 0
+                    ? calorieProgress.overTargetCalories
+                    : calorieProgress.remainingCalories}
               </Text>
             </View>
           </View>
-          <Text style={styles.subText}>Track meals manually. Today only for Phase 5A.</Text>
+          <Text style={styles.subText}>
+            {calorieTarget == null
+              ? `Set your ${currentDietPhase} calorie target in Profile to track progress.`
+              : `Today is for tracking. Decisions rely mainly on completed-day adherence, not partial same-day intake.`}
+          </Text>
+          <TouchableOpacity
+            style={styles.secondaryButton}
+            onPress={() => router.push("/profile" as Href)}
+          >
+            <Text style={styles.secondaryButtonText}>Edit calorie targets</Text>
+          </TouchableOpacity>
         </View>
 
         <View style={styles.card}>
@@ -319,7 +413,7 @@ export default function NutritionIndex() {
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Today&apos;s meals</Text>
+          <Text style={styles.sectionTitle}>Today's meals</Text>
           {loadingMeals ? <Text style={styles.subText}>Loading meals...</Text> : null}
           {!loadingMeals && meals.length === 0 ? (
             <Text style={styles.subText}>No meals logged yet.</Text>
@@ -330,8 +424,8 @@ export default function NutritionIndex() {
                 <Text style={styles.mealTitle}>{meal.name}</Text>
                 <Text style={styles.subText}>
                   {meal.calories} kcal
-                  {meal.proteinGrams != null ? ` • ${meal.proteinGrams} g protein` : ""}
-                  {` • ${formatMealTime(meal.loggedAt)}`}
+                  {meal.proteinGrams != null ? ` - ${meal.proteinGrams} g protein` : ""}
+                  {` - ${formatMealTime(meal.loggedAt)}`}
                 </Text>
               </View>
               <View style={styles.mealActions}>

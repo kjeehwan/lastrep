@@ -2,9 +2,14 @@ import { Ionicons } from "@expo/vector-icons";
 import { Href, Redirect, useRouter } from "expo-router";
 import { onAuthStateChanged } from "firebase/auth";
 import React, { useEffect, useState } from "react";
-import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { auth } from "../../../src/config/firebaseConfig";
+import {
+  DEFAULT_CALORIE_TARGETS_BY_DIET_PHASE,
+  normalizeCalorieTargets,
+  saveNutritionProfile,
+} from "../../../src/nutrition/meals";
 import { getUserData, saveUserData } from "../../../src/userData";
 
 const goals = [
@@ -21,6 +26,9 @@ export default function ProfileIndex() {
   const [loading, setLoading] = useState(true);
   const [goal, setGoal] = useState("");
   const [nickname, setNickname] = useState("");
+  const [cutCalories, setCutCalories] = useState("");
+  const [maintainCalories, setMaintainCalories] = useState("");
+  const [bulkCalories, setBulkCalories] = useState("");
   const [redirectTo, setRedirectTo] = useState<Href | null>(null);
 
   const handleGoBack = () => {
@@ -42,6 +50,18 @@ export default function ProfileIndex() {
         const data = await getUserData(user.uid);
         if (data?.goal) setGoal(data.goal);
         if (data?.nickname) setNickname(data.nickname);
+        const calorieTargets = normalizeCalorieTargets(
+          data?.nutritionProfile?.calorieTargetsByDietPhase
+        );
+        setCutCalories(
+          calorieTargets.Cut == null ? "" : String(calorieTargets.Cut)
+        );
+        setMaintainCalories(
+          calorieTargets.Maintain == null ? "" : String(calorieTargets.Maintain)
+        );
+        setBulkCalories(
+          calorieTargets.Bulk == null ? "" : String(calorieTargets.Bulk)
+        );
       } catch (e) {
         console.log("Error fetching user data", e);
       } finally {
@@ -53,7 +73,31 @@ export default function ProfileIndex() {
 
   const save = async () => {
     if (!uid) return;
+    const fields = [
+      { label: "Cut", value: cutCalories },
+      { label: "Maintain", value: maintainCalories },
+      { label: "Bulk", value: bulkCalories },
+    ] as const;
+
+    const parsedTargets = { ...DEFAULT_CALORIE_TARGETS_BY_DIET_PHASE };
+    for (const field of fields) {
+      const trimmed = field.value.trim();
+      if (!trimmed) continue;
+
+      const parsed = Number(trimmed);
+      if (!Number.isFinite(parsed) || parsed <= 0) {
+        Alert.alert(
+          "Invalid calorie target",
+          `${field.label} calories must be a positive number or left blank.`
+        );
+        return;
+      }
+
+      parsedTargets[field.label] = Math.round(parsed);
+    }
+
     await saveUserData(uid, { goal, nickname }, true);
+    await saveNutritionProfile(uid, parsedTargets);
     router.push("/home" as Href);
   };
 
@@ -105,6 +149,47 @@ export default function ProfileIndex() {
           ))}
         </View>
 
+        <Text style={styles.sectionTitle}>Calorie targets</Text>
+        <Text style={styles.helperText}>
+          Set daily targets by diet phase. Nutrition decisions will use completed days, not partial
+          same-day intake.
+        </Text>
+        <View style={styles.targetRow}>
+          <View style={styles.targetColumn}>
+            <Text style={styles.targetLabel}>Cut</Text>
+            <TextInput
+              placeholder="2200"
+              placeholderTextColor="#7a7a8c"
+              style={styles.input}
+              value={cutCalories}
+              onChangeText={setCutCalories}
+              keyboardType="numeric"
+            />
+          </View>
+          <View style={styles.targetColumn}>
+            <Text style={styles.targetLabel}>Maintain</Text>
+            <TextInput
+              placeholder="2600"
+              placeholderTextColor="#7a7a8c"
+              style={styles.input}
+              value={maintainCalories}
+              onChangeText={setMaintainCalories}
+              keyboardType="numeric"
+            />
+          </View>
+          <View style={styles.targetColumn}>
+            <Text style={styles.targetLabel}>Bulk</Text>
+            <TextInput
+              placeholder="2900"
+              placeholderTextColor="#7a7a8c"
+              style={styles.input}
+              value={bulkCalories}
+              onChangeText={setBulkCalories}
+              keyboardType="numeric"
+            />
+          </View>
+        </View>
+
         <TouchableOpacity style={styles.save} onPress={save}>
           <Text style={styles.saveText}>Save Changes</Text>
         </TouchableOpacity>
@@ -137,7 +222,11 @@ const styles = StyleSheet.create({
   },
   title: { color: "#fff", fontSize: 22, fontWeight: "800" },
   sectionTitle: { color: "#fff", fontSize: 15, fontWeight: "700", marginTop: 18, marginBottom: 8 },
+  helperText: { color: "#a5acc1", fontSize: 13, lineHeight: 18 },
   row: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  targetRow: { gap: 10 },
+  targetColumn: { gap: 8 },
+  targetLabel: { color: "#cfcfe6", fontSize: 14, fontWeight: "600" },
   input: {
     backgroundColor: "rgba(255,255,255,0.08)",
     borderColor: "rgba(255,255,255,0.2)",

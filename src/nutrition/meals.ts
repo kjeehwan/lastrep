@@ -5,6 +5,7 @@ import {
   doc,
   type DocumentData,
   getDocs,
+  getDoc,
   onSnapshot,
   orderBy,
   query,
@@ -16,13 +17,26 @@ import {
 import type { Unsubscribe } from "firebase/firestore";
 import { db } from "../config/firebaseConfig";
 import {
+  NUTRITION_PROFILE_FIELDS,
   NUTRITION_MEAL_FIELDS,
   NUTRITION_MEALS_SUBCOLLECTION,
+  USER_NUTRITION_PROFILE_FIELD,
   USERS_COLLECTION,
 } from "../contracts";
-import type { NutritionMeal, NutritionMealWrite } from "../contracts";
-import type { DecisionNutritionSummary } from "../types/decision";
-import { buildDecisionNutritionSummary } from "./mealHelpers";
+import type {
+  NutritionCalorieTargetsByDietPhase,
+  NutritionMeal,
+  NutritionMealWrite,
+  NutritionProfile,
+} from "../contracts";
+import type { DecisionNutritionSummary, DietPhase } from "../types/decision";
+import {
+  buildDecisionNutritionSummary,
+  buildNutritionProfile,
+  DEFAULT_CALORIE_TARGETS_BY_DIET_PHASE,
+  getCalorieTargetForDietPhase,
+  normalizeCalorieTargets,
+} from "./mealHelpers";
 
 export * from "./mealHelpers";
 
@@ -38,6 +52,13 @@ function endOfLocalDay(date = new Date()): Date {
   return end;
 }
 
+function startOfLocalDayOffset(date = new Date(), offsetDays = 0): Date {
+  const next = new Date(date);
+  next.setDate(next.getDate() + offsetDays);
+  next.setHours(0, 0, 0, 0);
+  return next;
+}
+
 function buildTodayMealsQuery(uid: string, now = new Date()) {
   const start = Timestamp.fromDate(startOfLocalDay(now));
   const end = Timestamp.fromDate(endOfLocalDay(now));
@@ -46,6 +67,15 @@ function buildTodayMealsQuery(uid: string, now = new Date()) {
     collection(db, USERS_COLLECTION, uid, NUTRITION_MEALS_SUBCOLLECTION),
     where(NUTRITION_MEAL_FIELDS.loggedAt, ">=", start),
     where(NUTRITION_MEAL_FIELDS.loggedAt, "<=", end),
+    orderBy(NUTRITION_MEAL_FIELDS.loggedAt, "desc")
+  );
+}
+
+function buildMealsRangeQuery(uid: string, startDate: Date, endDate: Date) {
+  return query(
+    collection(db, USERS_COLLECTION, uid, NUTRITION_MEALS_SUBCOLLECTION),
+    where(NUTRITION_MEAL_FIELDS.loggedAt, ">=", Timestamp.fromDate(startDate)),
+    where(NUTRITION_MEAL_FIELDS.loggedAt, "<=", Timestamp.fromDate(endDate)),
     orderBy(NUTRITION_MEAL_FIELDS.loggedAt, "desc")
   );
 }
@@ -80,10 +110,57 @@ export function subscribeToTodayMeals(
 
 export async function getTodayDecisionNutritionSummary(
   uid: string,
+  dietPhase: DietPhase,
   now = new Date()
 ): Promise<DecisionNutritionSummary> {
-  const snapshot = await getDocs(buildTodayMealsQuery(uid, now));
-  return buildDecisionNutritionSummary(snapshot.docs.map(mapMealDoc));
+  const todayStart = startOfLocalDay(now);
+  const completedStart = startOfLocalDayOffset(now, -7);
+  const completedEnd = new Date(todayStart.getTime() - 1);
+
+  const [todaySnapshot, completedSnapshot, profileSnapshot] = await Promise.all([
+    getDocs(buildTodayMealsQuery(uid, now)),
+    getDocs(buildMealsRangeQuery(uid, completedStart, completedEnd)),
+    getDoc(doc(db, USERS_COLLECTION, uid)),
+  ]);
+
+  const calorieTargets = normalizeCalorieTargets(
+    profileSnapshot.data()?.[USER_NUTRITION_PROFILE_FIELD]?.[NUTRITION_PROFILE_FIELDS.calorieTargetsByDietPhase]
+  );
+
+  return buildDecisionNutritionSummary(
+    todaySnapshot.docs.map(mapMealDoc),
+    completedSnapshot.docs.map(mapMealDoc),
+    getCalorieTargetForDietPhase(calorieTargets, dietPhase),
+    now
+  );
+}
+
+export async function getNutritionProfile(uid: string): Promise<NutritionProfile> {
+  const snapshot = await getDoc(doc(db, USERS_COLLECTION, uid));
+  const data = snapshot.data()?.[USER_NUTRITION_PROFILE_FIELD] as
+    | { calorieTargetsByDietPhase?: unknown; updatedAt?: Timestamp | null }
+    | undefined;
+
+  return buildNutritionProfile(
+    normalizeCalorieTargets(data?.calorieTargetsByDietPhase),
+    data?.updatedAt ?? null
+  );
+}
+
+export async function saveNutritionProfile(
+  uid: string,
+  calorieTargetsByDietPhase: NutritionCalorieTargetsByDietPhase
+): Promise<void> {
+  await setDoc(
+    doc(db, USERS_COLLECTION, uid),
+    {
+      [USER_NUTRITION_PROFILE_FIELD]: buildNutritionProfile(
+        calorieTargetsByDietPhase,
+        Timestamp.now()
+      ),
+    },
+    { merge: true }
+  );
 }
 
 export async function createMeal(uid: string, payload: NutritionMealWrite): Promise<void> {

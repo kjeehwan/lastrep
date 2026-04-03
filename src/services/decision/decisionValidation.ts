@@ -5,7 +5,11 @@ const nutritionSummarySchema = z
   .object({
     caloriesConsumedToday: z.number().int().min(0),
     proteinGramsToday: z.number().int().min(0).nullable(),
-    calorieTargetAdherence: z.enum(["below_target", "on_target", "above_target"]).nullable(),
+    calorieTarget: z.number().int().min(0).nullable(),
+    yesterdayCalories: z.number().int().min(0).nullable(),
+    yesterdayAdherence: z.enum(["below_target", "on_target", "above_target"]).nullable(),
+    recentAdherence: z.enum(["below_target", "on_target", "above_target"]).nullable(),
+    recentCompletedDaysTracked: z.number().int().min(0),
   })
   .strict();
 
