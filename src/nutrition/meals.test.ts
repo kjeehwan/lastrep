@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { Timestamp } from "firebase/firestore";
 import {
   buildDecisionNutritionSummary,
+  buildTrendReport,
   classifyCalorieTargetAdherence,
   computeDailyCalorieProgress,
   computeNutritionTotals,
@@ -179,6 +180,46 @@ describe("nutrition meal helpers", () => {
       ok: false,
       message: "Enter a meal name.",
     });
+  });
+
+  it("builds a trend report from a list of meals", () => {
+    const meals = [
+      {
+        id: "1",
+        name: "Meal 1",
+        calories: 1000,
+        proteinGrams: 50,
+        loggedAt: Timestamp.fromDate(new Date("2026-04-01T12:00:00")), // Local
+        updatedAt: Timestamp.now(),
+      },
+      {
+        id: "2",
+        name: "Meal 2",
+        calories: 1000,
+        proteinGrams: 50,
+        loggedAt: Timestamp.fromDate(new Date("2026-04-01T18:00:00")), // Local, same day
+        updatedAt: Timestamp.now(),
+      },
+      {
+        id: "3",
+        name: "Meal 3",
+        calories: 1500,
+        proteinGrams: 80,
+        loggedAt: Timestamp.fromDate(new Date("2026-03-31T12:00:00")), // Local, prev day
+        updatedAt: Timestamp.now(),
+      },
+    ];
+
+    const report = buildTrendReport(meals, 2000);
+
+    expect(report.daysTracked).toBe(2);
+    expect(report.averageCalories).toBe(1750); // (2000 + 1500) / 2
+    expect(report.consistencyScore).toBe(50); // 1 out of 2 days on target
+    expect(report.dailyHistory).toHaveLength(2);
+    expect(report.dailyHistory[0].calories).toBe(2000);
+    expect(report.dailyHistory[0].adherence).toBe("on_target");
+    expect(report.dailyHistory[1].calories).toBe(1500);
+    expect(report.dailyHistory[1].adherence).toBe("below_target");
   });
 
   it("builds a default current-time string", () => {

@@ -26,6 +26,8 @@ import {
   getCalorieTargetForDietPhase,
   getDefaultMealTime,
   getNutritionProfile,
+  getRecentMeals,
+  getNutritionTrendReport,
   parseMealForm,
   subscribeToTodayMeals,
   toEditableTime,
@@ -34,10 +36,14 @@ import {
 } from "@/src/nutrition/meals";
 import type { NutritionMeal } from "@/src/contracts";
 import type { DietPhase } from "@/src/types/decision";
+import type { NutritionTrendReport } from "@/src/nutrition/mealHelpers";
 import { isExpectedOfflineError } from "@/src/utils/networkErrors";
 
 const ACCENT = "#7b61ff";
 const MUTED = "#a5acc1";
+const SUCCESS = "#4ade80";
+const WARNING = "#fbbf24";
+const DANGER = "#f87171";
 const HOME_INPUTS_KEY = "home-inputs-v1";
 const DIET_PHASES: DietPhase[] = ["Cut", "Maintain", "Bulk"];
 
@@ -66,6 +72,9 @@ export default function NutritionIndex() {
   const [feedback, setFeedback] = useState<string | null>(null);
   const [currentDietPhase, setCurrentDietPhase] = useState<DietPhase>("Maintain");
   const [calorieTargets, setCalorieTargets] = useState(DEFAULT_CALORIE_TARGETS_BY_DIET_PHASE);
+  const [trendReport, setTrendReport] = useState<NutritionTrendReport | null>(null);
+  const [loadingTrends, setLoadingTrends] = useState(false);
+  const [recentMeals, setRecentMeals] = useState<NutritionMeal[]>([]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -85,6 +94,31 @@ export default function NutritionIndex() {
     return unsubscribe;
   }, []);
 
+  const calorieTarget = useMemo(
+    () => getCalorieTargetForDietPhase(calorieTargets, currentDietPhase),
+    [calorieTargets, currentDietPhase]
+  );
+
+  const fetchHistoryData = useCallback(async () => {
+    if (!uid) return;
+    setLoadingTrends(true);
+
+    try {
+      const [report, mealsForRecentDays] = await Promise.all([
+        getNutritionTrendReport(uid, calorieTarget),
+        getRecentMeals(uid),
+      ]);
+      setTrendReport(report);
+      setRecentMeals(mealsForRecentDays);
+    } catch (error) {
+      if (!isExpectedOfflineError(error)) {
+        console.log("Failed to load trends", error);
+      }
+    } finally {
+      setLoadingTrends(false);
+    }
+  }, [uid, calorieTarget]);
+
   useEffect(() => {
     if (!uid) {
       setMeals([]);
@@ -98,6 +132,8 @@ export default function NutritionIndex() {
       (nextMeals) => {
         setMeals(nextMeals);
         setLoadingMeals(false);
+        // Refresh trends whenever today's meals change
+        void fetchHistoryData();
       },
       (error) => {
         if (!isExpectedOfflineError(error)) {
@@ -113,7 +149,7 @@ export default function NutritionIndex() {
     );
 
     return unsubscribe;
-  }, [uid]);
+  }, [uid, fetchHistoryData]);
 
   useFocusEffect(
     useCallback(() => {
@@ -158,10 +194,6 @@ export default function NutritionIndex() {
   );
 
   const totals = useMemo(() => computeNutritionTotals(meals), [meals]);
-  const calorieTarget = useMemo(
-    () => getCalorieTargetForDietPhase(calorieTargets, currentDietPhase),
-    [calorieTargets, currentDietPhase]
-  );
   const calorieProgress = useMemo(
     () => computeDailyCalorieProgress(totals.calories, calorieTarget),
     [totals.calories, calorieTarget]
@@ -216,6 +248,7 @@ export default function NutritionIndex() {
       await request;
       setFeedback(editingMealId ? "Meal updated." : "Meal added.");
       resetForm();
+      void fetchHistoryData();
     } catch (error) {
       if (!isExpectedOfflineError(error)) {
         console.log("Failed to save meal", error);
@@ -271,6 +304,7 @@ export default function NutritionIndex() {
               resetForm();
             }
             setFeedback("Meal deleted.");
+            void fetchHistoryData();
           } catch (error) {
             if (!isExpectedOfflineError(error)) {
               console.log("Failed to delete meal", error);
@@ -284,6 +318,42 @@ export default function NutritionIndex() {
         },
       },
     ]);
+  };
+
+  const todayKey = useMemo(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }, []);
+  const getAdherenceColor = (status: string | null, dateKey?: string) => {
+    if (dateKey === todayKey && status === "below_target") {
+      return "#60a5fa"; // Informational blue for "tracking"
+    }
+    switch (status) {
+      case "on_target":
+        return SUCCESS;
+      case "below_target":
+        return WARNING;
+      case "above_target":
+        return DANGER;
+      default:
+        return MUTED;
+    }
+  };
+
+  const getAdherenceLabel = (status: string | null, dateKey?: string) => {
+    if (dateKey === todayKey && status === "below_target") {
+      return "Tracking...";
+    }
+    switch (status) {
+      case "on_target":
+        return "On target";
+      case "below_target":
+        return "Below target";
+      case "above_target":
+        return "Above target";
+      default:
+        return "Not enough data";
+    }
   };
 
   if (redirectTo) return <Redirect href={redirectTo} />;
@@ -300,7 +370,7 @@ export default function NutritionIndex() {
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Today</Text>
+          <Text style={styles.sectionTitle}>Daily intake</Text>
           <View style={styles.totalRow}>
             <View style={styles.totalChip}>
               <Text style={styles.totalLabel}>Consumed</Text>
@@ -333,17 +403,35 @@ export default function NutritionIndex() {
               </Text>
             </View>
           </View>
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>7-day trends</Text>
+          {loadingTrends && !trendReport ? <Text style={styles.subText}>Recalculating...</Text> : null}
+          <View style={styles.totalRow}>
+            <View style={styles.totalChip}>
+              <Text style={styles.totalLabel}>Avg. Daily</Text>
+              <Text style={styles.totalValue}>
+                {trendReport?.averageCalories ?? "-"}
+              </Text>
+              <Text style={styles.muted}>kcal</Text>
+            </View>
+            <View style={styles.totalChip}>
+              <Text style={styles.totalLabel}>Consistency</Text>
+              <Text style={[styles.totalValue, { color: (trendReport?.consistencyScore ?? 0) >= 70 ? SUCCESS : "#fff" }]}>
+                {trendReport?.consistencyScore != null ? `${trendReport.consistencyScore}%` : "-"}
+              </Text>
+              <Text style={styles.muted}>on target</Text>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Feature access</Text>
+          <Text style={styles.subText}>Free now: meal logging, daily intake, 7-day trends, and history.</Text>
           <Text style={styles.subText}>
-            {calorieTarget == null
-              ? `Set your ${currentDietPhase} calorie target in Profile to track progress.`
-              : `Today is for tracking. Decisions rely mainly on completed-day adherence, not partial same-day intake.`}
+            Premium later: deeper multi-week insights and advanced nutrition-performance coaching.
           </Text>
-          <TouchableOpacity
-            style={styles.secondaryButton}
-            onPress={() => router.push("/profile" as Href)}
-          >
-            <Text style={styles.secondaryButtonText}>Edit calorie targets</Text>
-          </TouchableOpacity>
         </View>
 
         <View style={styles.card}>
@@ -409,7 +497,7 @@ export default function NutritionIndex() {
             </TouchableOpacity>
           ) : null}
 
-          {feedback ? <Text style={styles.subText}>{feedback}</Text> : null}
+          {feedback ? <Text style={styles.feedbackText}>{feedback}</Text> : null}
         </View>
 
         <View style={styles.card}>
@@ -439,6 +527,50 @@ export default function NutritionIndex() {
             </View>
           ))}
         </View>
+
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>History</Text>
+          {loadingTrends && !trendReport ? <Text style={styles.subText}>Loading history...</Text> : null}
+          {trendReport?.dailyHistory.length === 0 ? <Text style={styles.subText}>No history yet.</Text> : null}
+          {trendReport?.dailyHistory.map((day) => (
+            <View key={day.dateKey} style={styles.historyRow}>
+              <View style={styles.historyDateCol}>
+                <Text style={styles.historyDate}>{day.dateKey.split("-").slice(1).join("/")}</Text>
+                <View style={[styles.adherenceDot, { backgroundColor: getAdherenceColor(day.adherence, day.dateKey) }]} />
+              </View>
+              <View style={styles.historyStatsCol}>
+                <Text style={styles.historyValue}>{day.calories} kcal</Text>
+                <Text style={styles.subText}>{getAdherenceLabel(day.adherence, day.dateKey)}</Text>
+              </View>
+              <View style={styles.historyProteinCol}>
+                <Text style={styles.historyValue}>{day.proteinGrams}g</Text>
+                <Text style={styles.subText}>Protein</Text>
+              </View>
+            </View>
+          ))}
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Recent meals (previous 7 days)</Text>
+          {loadingTrends && recentMeals.length === 0 ? (
+            <Text style={styles.subText}>Loading recent meals...</Text>
+          ) : null}
+          {!loadingTrends && recentMeals.length === 0 ? (
+            <Text style={styles.subText}>No recent meals yet.</Text>
+          ) : null}
+          {recentMeals.map((meal) => (
+            <View key={`recent-${meal.id}`} style={styles.mealRow}>
+              <View style={styles.mealBody}>
+                <Text style={styles.mealTitle}>{meal.name}</Text>
+                <Text style={styles.subText}>
+                  {meal.calories} kcal
+                  {meal.proteinGrams != null ? ` - ${meal.proteinGrams} g protein` : ""}
+                  {` - ${meal.loggedAt.toDate().toLocaleDateString()} ${formatMealTime(meal.loggedAt)}`}
+                </Text>
+              </View>
+            </View>
+          ))}
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -454,10 +586,10 @@ const styles = StyleSheet.create({
     backgroundColor: "#0d0d1a",
   },
   content: {
-    padding: 20,
-    paddingTop: 20,
+    padding: 16,
+    paddingTop: 12,
     paddingBottom: 140,
-    gap: 14,
+    gap: 12,
   },
   header: {
     flexDirection: "row",
@@ -487,12 +619,13 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "rgba(255,255,255,0.08)",
-    gap: 10,
+    gap: 12,
   },
   sectionTitle: {
     color: "#fff",
     fontSize: 16,
     fontWeight: "700",
+    marginBottom: 4,
   },
   totalRow: {
     flexDirection: "row",
@@ -504,21 +637,22 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: 12,
     paddingHorizontal: 12,
-    gap: 6,
+    gap: 4,
   },
   totalLabel: {
     color: MUTED,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "700",
+    textTransform: "uppercase",
   },
   totalValue: {
     color: "#fff",
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: "800",
   },
   label: {
     color: "#cfcfe6",
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "600",
   },
   fieldRow: {
@@ -527,16 +661,16 @@ const styles = StyleSheet.create({
   },
   fieldColumn: {
     flex: 1,
-    gap: 8,
+    gap: 6,
   },
   input: {
     backgroundColor: "rgba(255,255,255,0.08)",
-    borderColor: "rgba(255,255,255,0.2)",
+    borderColor: "rgba(255,255,255,0.15)",
     borderWidth: 1,
     borderRadius: 12,
     color: "#fff",
     paddingHorizontal: 12,
-    paddingVertical: 12,
+    paddingVertical: 10,
     fontSize: 14,
   },
   primaryButton: {
@@ -544,6 +678,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: "center",
+    marginTop: 4,
   },
   primaryButtonText: {
     color: "#fff",
@@ -551,21 +686,32 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   secondaryButton: {
-    borderColor: "rgba(255,255,255,0.25)",
-    borderWidth: StyleSheet.hairlineWidth * 2,
+    borderColor: "rgba(255,255,255,0.2)",
+    borderWidth: 1,
     borderRadius: 12,
-    paddingVertical: 14,
+    paddingVertical: 12,
     alignItems: "center",
   },
   secondaryButtonText: {
     color: "#fff",
-    fontWeight: "700",
-    fontSize: 15,
+    fontWeight: "600",
+    fontSize: 14,
   },
   subText: {
     color: MUTED,
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  feedbackText: {
     fontSize: 13,
-    lineHeight: 18,
+    textAlign: "center",
+    marginTop: 4,
+    color: MUTED,
+  },
+  muted: {
+    color: MUTED,
+    fontSize: 10,
+    fontWeight: "600",
   },
   disabled: {
     opacity: 0.6,
@@ -574,11 +720,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    paddingVertical: 8,
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "rgba(255,255,255,0.05)",
   },
   mealBody: {
     flex: 1,
-    gap: 4,
+    gap: 2,
   },
   mealTitle: {
     color: "#fff",
@@ -587,14 +735,51 @@ const styles = StyleSheet.create({
   },
   mealActions: {
     flexDirection: "row",
-    gap: 8,
+    gap: 6,
   },
   iconButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+    width: 34,
+    height: 34,
+    borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.08)",
+    backgroundColor: "rgba(255,255,255,0.06)",
+  },
+  historyRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "rgba(255,255,255,0.05)",
+    gap: 12,
+  },
+  historyDateCol: {
+    width: 50,
+    alignItems: "center",
+    gap: 6,
+  },
+  historyDate: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  adherenceDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  historyStatsCol: {
+    flex: 1,
+    gap: 2,
+  },
+  historyProteinCol: {
+    width: 60,
+    alignItems: "flex-end",
+    gap: 2,
+  },
+  historyValue: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "700",
   },
 });

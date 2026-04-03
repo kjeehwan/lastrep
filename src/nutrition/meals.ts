@@ -32,11 +32,13 @@ import type {
 import type { DecisionNutritionSummary, DietPhase } from "../types/decision";
 import {
   buildDecisionNutritionSummary,
+  buildTrendReport,
   buildNutritionProfile,
   DEFAULT_CALORIE_TARGETS_BY_DIET_PHASE,
   getCalorieTargetForDietPhase,
   normalizeCalorieTargets,
 } from "./mealHelpers";
+import type { NutritionTrendReport } from "./mealHelpers";
 
 export * from "./mealHelpers";
 
@@ -133,6 +135,35 @@ export async function getTodayDecisionNutritionSummary(
     getCalorieTargetForDietPhase(calorieTargets, dietPhase),
     now
   );
+}
+
+export async function getNutritionTrendReport(
+  uid: string,
+  calorieTarget: number | null,
+  days = 7,
+  now = new Date()
+): Promise<NutritionTrendReport> {
+  const todayStart = startOfLocalDay(now);
+  const startDate = startOfLocalDayOffset(now, -days);
+  const endDate = new Date(todayStart.getTime() - 1);
+
+  const snapshot = await getDocs(buildMealsRangeQuery(uid, startDate, endDate));
+  const meals = snapshot.docs.map(mapMealDoc);
+
+  return buildTrendReport(meals, calorieTarget);
+}
+
+export async function getRecentMeals(
+  uid: string,
+  days = 7,
+  now = new Date()
+): Promise<NutritionMeal[]> {
+  const todayStart = startOfLocalDay(now);
+  const startDate = startOfLocalDayOffset(now, -days);
+  const endDate = new Date(todayStart.getTime() - 1);
+
+  const snapshot = await getDocs(buildMealsRangeQuery(uid, startDate, endDate));
+  return snapshot.docs.map(mapMealDoc);
 }
 
 export async function getNutritionProfile(uid: string): Promise<NutritionProfile> {

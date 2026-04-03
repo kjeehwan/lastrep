@@ -27,6 +27,14 @@ export type NutritionDayAggregate = {
   calories: number;
   proteinGrams: number;
   mealCount: number;
+  adherence: CalorieTargetAdherence | null;
+};
+
+export type NutritionTrendReport = {
+  dailyHistory: NutritionDayAggregate[];
+  averageCalories: number | null;
+  consistencyScore: number | null; // percentage of on_target days
+  daysTracked: number;
 };
 
 export type MealFormValues = {
@@ -63,6 +71,27 @@ export function computeNutritionTotals(meals: NutritionMeal[]): NutritionTotals 
     }),
     { calories: 0, proteinGrams: 0 }
   );
+}
+
+export function buildTrendReport(
+  meals: NutritionMeal[],
+  calorieTarget: number | null
+): NutritionTrendReport {
+  const dailyHistory = groupMealsByLocalDay(meals, calorieTarget);
+  const daysTracked = dailyHistory.length;
+
+  const totalCalories = dailyHistory.reduce((sum, day) => sum + day.calories, 0);
+  const averageCalories = daysTracked > 0 ? Math.round(totalCalories / daysTracked) : null;
+
+  const onTargetDays = dailyHistory.filter((day) => day.adherence === "on_target").length;
+  const consistencyScore = daysTracked > 0 ? Math.round((onTargetDays / daysTracked) * 100) : null;
+
+  return {
+    dailyHistory,
+    averageCalories,
+    consistencyScore,
+    daysTracked,
+  };
 }
 
 export function buildDecisionNutritionSummary(
@@ -176,7 +205,10 @@ export function getLocalDateKey(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-export function groupMealsByLocalDay(meals: NutritionMeal[]): NutritionDayAggregate[] {
+export function groupMealsByLocalDay(
+  meals: NutritionMeal[],
+  calorieTarget: number | null = null
+): NutritionDayAggregate[] {
   const grouped = new Map<string, NutritionDayAggregate>();
 
   for (const meal of meals) {
@@ -187,12 +219,18 @@ export function groupMealsByLocalDay(meals: NutritionMeal[]): NutritionDayAggreg
         calories: 0,
         proteinGrams: 0,
         mealCount: 0,
+        adherence: null,
       };
 
     current.calories += meal.calories;
     current.proteinGrams += meal.proteinGrams ?? 0;
     current.mealCount += 1;
     grouped.set(dateKey, current);
+  }
+
+  // Final pass to calculate adherence per day
+  for (const day of grouped.values()) {
+    day.adherence = classifyCalorieTargetAdherence(day.calories, calorieTarget);
   }
 
   return Array.from(grouped.values()).sort((a, b) => b.dateKey.localeCompare(a.dateKey));
