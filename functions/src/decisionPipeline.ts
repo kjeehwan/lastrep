@@ -7,6 +7,7 @@ const MAX_BULLET_CHARS = 140;
 const MAX_TOTAL_CHARS = 600;
 
 const allowedIntensityValues = new Set([-20, -10, 10, 20]);
+const nutritionBulletPattern = /\b(nutrition|calorie|calories|protein|target|underfuel|fuel|intake|adherence)\b/i;
 
 const rawDecisionOutputSchema = z
   .object({
@@ -47,9 +48,30 @@ const truncateWithEllipsis = (value: string, limit: number) => {
   return `${value.slice(0, limit - 3)}...`;
 };
 
+const humanizeExplanationText = (value: string) =>
+  value
+    .replace(/\bbelow_target\b/g, "below target")
+    .replace(/\bon_target\b/g, "on target")
+    .replace(/\babove_target\b/g, "above target");
+
+const collapseNutritionBullets = (items: string[]) => {
+  let sawNutrition = false;
+  const collapsed = items.filter((item) => {
+    if (!nutritionBulletPattern.test(item)) return true;
+    if (sawNutrition) return false;
+    sawNutrition = true;
+    return true;
+  });
+
+  return collapsed.length >= MIN_BULLETS ? collapsed : items;
+};
+
 const normalizeExplanation = (explanation: string[]) => {
-  const normalized = explanation
-    .map((item) => item.trim())
+  const normalized = collapseNutritionBullets(
+    explanation
+      .map((item) => humanizeExplanationText(item.trim()))
+      .filter((item) => item.length > 0)
+  )
     .filter((item) => item.length > 0)
     .slice(0, MAX_BULLETS)
     .map((item) => truncateWithEllipsis(item, MAX_BULLET_CHARS));
