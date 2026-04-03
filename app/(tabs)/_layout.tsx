@@ -26,6 +26,7 @@ export default function TabsLayout() {
             home: "home-outline",
             "nutrition/index": "restaurant-outline",
             workout: "barbell-outline",
+            "sleep/index": "moon-outline",
             "profile/index": "person-outline",
           };
           return (
@@ -42,6 +43,7 @@ export default function TabsLayout() {
       <Tabs.Screen name="home" options={{ title: "Home" }} />
       <Tabs.Screen name="workout" options={{ title: "Workout" }} />
       <Tabs.Screen name="nutrition/index" options={{ title: "Nutrition" }} />
+      <Tabs.Screen name="sleep/index" options={{ title: "Sleep" }} />
       <Tabs.Screen name="settings/index" options={{ href: null }} />
       <Tabs.Screen name="community/index" options={{ href: null }} />
       <Tabs.Screen name="profile/index" options={{ title: "Profile" }} />

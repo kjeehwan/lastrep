@@ -4,6 +4,7 @@ export type Decision = "PUSH" | "MAINTAIN" | "PULL_BACK";
 export type TrainingPhase = "Hypertrophy" | "Strength" | "Power";
 export type DietPhase = "Cut" | "Maintain" | "Bulk";
 export type CalorieTargetAdherence = "below_target" | "on_target" | "above_target";
+export type DecisionSleepSource = "manual" | "health";
 
 export type DecisionNutritionSummary = {
   caloriesConsumedToday: number;
@@ -17,6 +18,8 @@ export type DecisionNutritionSummary = {
 
 export type DecisionInputs = {
   sleepHours: number;
+  sleepSource: DecisionSleepSource;
+  sleepSampleAgeHours: number | null;
   soreness: number;
   fatigue: number;
   motivation: number;

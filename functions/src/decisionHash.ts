@@ -4,6 +4,8 @@ import type { DecisionInputs } from "./decisionTypes";
 export const hashDecisionInputs = (inputs: DecisionInputs): string => {
   const normalized = {
     sleepHours: inputs.sleepHours,
+    sleepSource: inputs.sleepSource,
+    sleepSampleAgeHours: inputs.sleepSampleAgeHours,
     soreness: inputs.soreness,
     fatigue: inputs.fatigue,
     motivation: inputs.motivation,

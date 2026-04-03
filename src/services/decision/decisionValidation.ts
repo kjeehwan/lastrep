@@ -15,6 +15,8 @@ const nutritionSummarySchema = z
 
 const decisionInputsSchema: z.ZodType<DecisionInputs> = z.object({
   sleepHours: z.number(),
+  sleepSource: z.enum(["manual", "health"]),
+  sleepSampleAgeHours: z.number().min(0).nullable(),
   soreness: z.number(),
   fatigue: z.number(),
   motivation: z.number(),

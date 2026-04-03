@@ -11,6 +11,7 @@ import { auth, db } from "../../src/config/firebaseConfig";
 import { useEntitlement } from "../../src/hooks/useEntitlement";
 import { useOfflineStatus } from "../../src/hooks/useOfflineStatus";
 import { getTodayDecisionNutritionSummary } from "../../src/nutrition/meals";
+import { getSleepProfile, getSleepSampleAgeHours, saveManualSleepSample } from "../../src/sleep/sleep";
 import { getDecision, isNormalizedDecisionError } from "../../src/services/decision/getDecision";
 import { hashDecisionInputs } from "../../src/services/decision/inputHash";
 import type { DecisionInputs, DietPhase, LastResultPayload, TrainingPhase } from "../../src/types/decision";
@@ -211,16 +212,38 @@ export default function Home() {
 
     try {
         let nutrition: DecisionInputs["nutrition"] = null;
+        let sleepSource: DecisionInputs["sleepSource"] = "manual";
+        let sleepSampleAgeHours: DecisionInputs["sleepSampleAgeHours"] = null;
         try {
           nutrition = await getTodayDecisionNutritionSummary(uid, dietPhase);
         } catch (nutritionError) {
           if (!isExpectedOfflineError(nutritionError)) {
             console.log("Failed to load nutrition summary", nutritionError);
+          }
         }
-      }
+
+        try {
+          const sleepProfile = await getSleepProfile(uid);
+          const hasHealthSleep =
+            sleepProfile.source === "health" && typeof sleepProfile.latestSleepHours === "number";
+          if (hasHealthSleep) {
+            sleepSource = "health";
+            sleepSampleAgeHours = getSleepSampleAgeHours(sleepProfile.sampleRecordedAt);
+          } else {
+            await saveManualSleepSample(uid, parsedSleep);
+            sleepSource = "manual";
+            sleepSampleAgeHours = 0;
+          }
+        } catch (sleepError) {
+          if (!isExpectedOfflineError(sleepError)) {
+            console.log("Failed to resolve sleep source", sleepError);
+          }
+        }
 
       const inputs: DecisionInputs = {
         sleepHours: parsedSleep,
+        sleepSource,
+        sleepSampleAgeHours,
         soreness,
         fatigue,
         motivation,

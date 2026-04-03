@@ -3,3 +3,4 @@ export * from "./decision";
 export * from "./entitlement";
 export * from "./analytics";
 export * from "./nutrition";
+export * from "./sleep";

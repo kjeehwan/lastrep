@@ -5,6 +5,8 @@ import type { DecisionInputs } from "./decisionTypes";
 
 const baseInputs: DecisionInputs = {
   sleepHours: 7,
+  sleepSource: "manual",
+  sleepSampleAgeHours: null,
   soreness: 4,
   fatigue: 4,
   motivation: 7,
