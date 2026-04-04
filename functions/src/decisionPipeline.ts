@@ -52,7 +52,8 @@ const humanizeExplanationText = (value: string) =>
   value
     .replace(/\bbelow_target\b/g, "below target")
     .replace(/\bon_target\b/g, "on target")
-    .replace(/\babove_target\b/g, "above target");
+    .replace(/\babove_target\b/g, "above target")
+    .replace(/\bage\s*~\s*([0-9]+(?:\.[0-9]+)?)\s*h\b/gi, "recorded about $1h ago");
 
 const collapseNutritionBullets = (items: string[]) => {
   let sawNutrition = false;

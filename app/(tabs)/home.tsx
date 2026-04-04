@@ -11,7 +11,12 @@ import { auth, db } from "../../src/config/firebaseConfig";
 import { useEntitlement } from "../../src/hooks/useEntitlement";
 import { useOfflineStatus } from "../../src/hooks/useOfflineStatus";
 import { getTodayDecisionNutritionSummary } from "../../src/nutrition/meals";
-import { getSleepProfile, getSleepSampleAgeHours, saveManualSleepSample } from "../../src/sleep/sleep";
+import {
+  getSleepProfile,
+  getSleepSampleAgeHours,
+  isHealthSleepStale,
+  saveManualSleepSample,
+} from "../../src/sleep/sleep";
 import { getDecision, isNormalizedDecisionError } from "../../src/services/decision/getDecision";
 import { hashDecisionInputs } from "../../src/services/decision/inputHash";
 import type { DecisionInputs, DietPhase, LastResultPayload, TrainingPhase } from "../../src/types/decision";
@@ -212,8 +217,9 @@ export default function Home() {
 
     try {
         let nutrition: DecisionInputs["nutrition"] = null;
+        let effectiveSleepHours = parsedSleep;
         let sleepSource: DecisionInputs["sleepSource"] = "manual";
-        let sleepSampleAgeHours: DecisionInputs["sleepSampleAgeHours"] = null;
+        let sleepSampleAgeHours: DecisionInputs["sleepSampleAgeHours"] = 0;
         try {
           nutrition = await getTodayDecisionNutritionSummary(uid, dietPhase);
         } catch (nutritionError) {
@@ -226,7 +232,10 @@ export default function Home() {
           const sleepProfile = await getSleepProfile(uid);
           const hasHealthSleep =
             sleepProfile.source === "health" && typeof sleepProfile.latestSleepHours === "number";
-          if (hasHealthSleep) {
+          const isHealthFresh = hasHealthSleep && !isHealthSleepStale(sleepProfile, new Date());
+
+          if (isHealthFresh) {
+            effectiveSleepHours = sleepProfile.latestSleepHours as number;
             sleepSource = "health";
             sleepSampleAgeHours = getSleepSampleAgeHours(sleepProfile.sampleRecordedAt);
           } else {
@@ -241,7 +250,7 @@ export default function Home() {
         }
 
       const inputs: DecisionInputs = {
-        sleepHours: parsedSleep,
+        sleepHours: effectiveSleepHours,
         sleepSource,
         sleepSampleAgeHours,
         soreness,

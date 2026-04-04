@@ -230,4 +230,16 @@ describe("decisionPipeline golden cases", () => {
       "Motivation is high.",
     ]);
   });
+
+  it("humanizes sleep sample age phrasing in explanations", () => {
+    const parsed = sanitizeDecisionOutput({
+      decision: "MAINTAIN",
+      explanation: ["Sleep sample age ~3.5h is recent.", "Recovery is otherwise steady."],
+      adjustments: null,
+    });
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.data.explanation[0]).toContain("recorded about 3.5h ago");
+    expect(parsed.data.explanation[0]).not.toContain("age ~3.5h");
+  });
 });
