@@ -38,6 +38,7 @@ export default function ProfileIndex() {
   const [cutCalories, setCutCalories] = useState("");
   const [maintainCalories, setMaintainCalories] = useState("");
   const [bulkCalories, setBulkCalories] = useState("");
+  const [sleepTargetHours, setSleepTargetHours] = useState("7");
   const [healthFeedback, setHealthFeedback] = useState<string | null>(null);
   const [healthLoading, setHealthLoading] = useState(false);
   const [healthAvailability, setHealthAvailability] = useState<HealthConnectAvailability>("unsupported");
@@ -97,6 +98,10 @@ export default function ProfileIndex() {
         setBulkCalories(
           calorieTargets.Bulk == null ? "" : String(calorieTargets.Bulk)
         );
+        const sleepTarget = data?.sleepSettings?.targetHours;
+        if (typeof sleepTarget === "number" && sleepTarget > 0) {
+          setSleepTargetHours(String(Math.round(sleepTarget * 10) / 10));
+        }
       } catch (e) {
         console.log("Error fetching user data", e);
       } finally {
@@ -194,7 +199,18 @@ export default function ProfileIndex() {
       parsedTargets[field.label] = Math.round(parsed);
     }
 
+    const parsedSleepTarget = Number(sleepTargetHours.trim());
+    if (!Number.isFinite(parsedSleepTarget) || parsedSleepTarget <= 0 || parsedSleepTarget > 24) {
+      Alert.alert("Invalid sleep target", "Sleep target must be a number between 0 and 24.");
+      return;
+    }
+
     await saveUserData(uid, { goal, nickname }, true);
+    await saveUserData(
+      uid,
+      { sleepSettings: { targetHours: Math.round(parsedSleepTarget * 10) / 10 } },
+      true
+    );
     await saveNutritionProfile(uid, parsedTargets);
     router.push("/home" as Href);
   };
@@ -287,6 +303,16 @@ export default function ProfileIndex() {
             />
           </View>
         </View>
+
+        <Text style={styles.sectionTitle}>Sleep target (hours)</Text>
+        <TextInput
+          placeholder="7.0"
+          placeholderTextColor="#7a7a8c"
+          style={styles.input}
+          value={sleepTargetHours}
+          onChangeText={setSleepTargetHours}
+          keyboardType="decimal-pad"
+        />
 
         <Text style={styles.sectionTitle}>Health Connect</Text>
         <View style={styles.card}>

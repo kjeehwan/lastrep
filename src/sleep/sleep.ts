@@ -412,11 +412,21 @@ export const saveManualSleepSample = async (
   sleepHours: number,
   now = new Date()
 ): Promise<void> => {
+  const dateKey = formatDateKey(now);
+  await saveManualSleepForDateKey(uid, sleepHours, dateKey, now);
+};
+
+export const saveManualSleepForDateKey = async (
+  uid: string,
+  sleepHours: number,
+  dateKey: string,
+  now = new Date()
+): Promise<void> => {
   const nowTimestamp = Timestamp.fromDate(now);
   const roundedHours = roundSleepHours(sleepHours);
   const profile = await getSleepProfile(uid);
   const manualSummary: SleepNightlySummary = {
-    dateKey: formatDateKey(now),
+    dateKey,
     sleepHours: roundedHours,
     source: "manual",
     recordedAt: nowTimestamp,
@@ -437,6 +447,12 @@ export const saveManualSleepSample = async (
     },
     { merge: true }
   );
+  console.log("[sleep_sync]", {
+    event: "manual_override_set",
+    dateKey,
+    sleepHours: roundedHours,
+    source: "manual",
+  });
 };
 
 export const getSleepSampleAgeHours = (

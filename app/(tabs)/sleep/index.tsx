@@ -2,22 +2,23 @@ import { Ionicons } from "@expo/vector-icons";
 import { Href, Redirect, useFocusEffect, useRouter } from "expo-router";
 import { onAuthStateChanged } from "firebase/auth";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Linking, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { auth } from "@/src/config/firebaseConfig";
 import type { SleepNightlySummary } from "@/src/contracts";
 import { useOfflineStatus } from "@/src/hooks/useOfflineStatus";
+import { getSleepDeltaText, getSleepRecoveryHint, classifySleepVsTarget } from "@/src/sleep/sleepInsights";
 import {
   autoSyncSleepFromHealthConnectIfEligible,
   HEALTH_SLEEP_STALE_HOURS,
   getHealthConnectAvailability,
   getSleepProfile,
-  openHealthConnectDataManagementScreen,
-  requestHealthSleepPermission,
+  saveManualSleepForDateKey,
   syncSleepFromHealthConnect,
   hasHealthSleepPermission,
   type HealthConnectAvailability,
 } from "@/src/sleep/sleep";
+import { getUserData } from "@/src/userData";
 import { isExpectedOfflineError } from "@/src/utils/networkErrors";
 
 const ACCENT = "#7b61ff";
@@ -25,11 +26,6 @@ const MUTED = "#a5acc1";
 
 const formatTimestamp = (value: Date | null): string =>
   value ? value.toLocaleString() : "Not synced yet";
-const permissionRequestTimeoutMs = 6000;
-
-const healthConnectStoreUrl =
-  "https://play.google.com/store/apps/details?id=com.google.android.apps.healthdata";
-
 export default function SleepIndex() {
   const router = useRouter();
   const { isOffline } = useOfflineStatus();
@@ -43,6 +39,9 @@ export default function SleepIndex() {
   const [sampleRecordedAt, setSampleRecordedAt] = useState<Date | null>(null);
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
   const [recentNightlyHours, setRecentNightlyHours] = useState<SleepNightlySummary[]>([]);
+  const [sleepTargetHours, setSleepTargetHours] = useState<number>(7);
+  const [manualOverrideHours, setManualOverrideHours] = useState("");
+  const [savingOverride, setSavingOverride] = useState(false);
   const [permissionState, setPermissionState] = useState<
     "granted" | "denied" | "revoked" | "unavailable" | "unsupported" | "unknown"
   >("unknown");
@@ -124,6 +123,12 @@ export default function SleepIndex() {
       }
       setUid(user.uid);
       setRedirectTo(null);
+      void getUserData(user.uid).then((data) => {
+        const target = data?.sleepSettings?.targetHours;
+        if (typeof target === "number" && target > 0) {
+          setSleepTargetHours(Math.round(target * 10) / 10);
+        }
+      });
     });
     return unsub;
   }, []);
@@ -139,16 +144,16 @@ export default function SleepIndex() {
     if (sleepSource !== "health") return "Manual";
     return sleepOriginLabel ?? "Health Connect";
   }, [sleepSource, sleepOriginLabel]);
-  const lastNightDateKey = useMemo(() => {
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    return `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, "0")}-${String(
-      yesterday.getDate()
+  const fallbackLastNightDateKey = useMemo(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(
+      now.getDate()
     ).padStart(2, "0")}`;
   }, []);
   const lastNightSummary = useMemo(
-    () => recentNightlyHours.find((item) => item.dateKey === lastNightDateKey) ?? recentNightlyHours[0] ?? null,
-    [recentNightlyHours, lastNightDateKey]
+    // "Last night" means the most recent completed sleep episode.
+    () => recentNightlyHours[0] ?? null,
+    [recentNightlyHours]
   );
   const trendAverage = useMemo(() => {
     if (!recentNightlyHours.length) return null;
@@ -171,6 +176,18 @@ export default function SleepIndex() {
     if (sampleAgeHours == null) return true;
     return sampleAgeHours > HEALTH_SLEEP_STALE_HOURS;
   }, [sleepSource, sampleAgeHours]);
+  const lastNightStatus = useMemo(
+    () => classifySleepVsTarget(lastNightSummary?.sleepHours ?? null, sleepTargetHours),
+    [lastNightSummary, sleepTargetHours]
+  );
+  const lastNightDeltaText = useMemo(
+    () => getSleepDeltaText(lastNightSummary?.sleepHours ?? null, sleepTargetHours),
+    [lastNightSummary, sleepTargetHours]
+  );
+  const recoveryHint = useMemo(
+    () => getSleepRecoveryHint(lastNightStatus, trendConsistencyPct),
+    [lastNightStatus, trendConsistencyPct]
+  );
 
   const handleSync = async () => {
     if (!uid) return;
@@ -221,6 +238,30 @@ export default function SleepIndex() {
     await refreshSleep({ resetFeedback: false });
   };
 
+  const handleManualOverride = async () => {
+    if (!uid || savingOverride) return;
+    const parsed = Number(manualOverrideHours.trim());
+    if (!Number.isFinite(parsed) || parsed <= 0 || parsed > 24) {
+      setFeedback("Enter a valid sleep value between 0 and 24 hours.");
+      return;
+    }
+    const overrideDateKey = lastNightSummary?.dateKey ?? fallbackLastNightDateKey;
+    setSavingOverride(true);
+    try {
+      await saveManualSleepForDateKey(uid, parsed, overrideDateKey);
+      setFeedback(`Saved manual sleep override for ${overrideDateKey}.`);
+      setManualOverrideHours("");
+      await refreshSleep({ resetFeedback: false });
+    } catch (error) {
+      if (!isExpectedOfflineError(error)) {
+        console.log("Failed to save manual override", error);
+      }
+      setFeedback("Unable to save manual sleep override right now.");
+    } finally {
+      setSavingOverride(false);
+    }
+  };
+
   const canSyncSleep = permissionState === "granted" && availability === "available" && !loading;
   const syncUnavailableMessage =
     availability === "provider_update_required"
@@ -249,9 +290,14 @@ export default function SleepIndex() {
           <Text style={styles.valueText}>
             {lastNightSummary ? `${lastNightSummary.sleepHours.toFixed(1)} hours` : "No sample yet"}
           </Text>
+          <Text style={styles.subText}>
+            Target: {sleepTargetHours.toFixed(1)}h
+            {lastNightDeltaText ? ` (${lastNightDeltaText})` : ""}
+          </Text>
           <Text style={styles.subText}>Recorded at: {formatTimestamp(sampleRecordedAt)}</Text>
           <Text style={styles.subText}>Last sync: {formatTimestamp(lastSyncedAt)}</Text>
           <Text style={styles.subText}>Sleep source: {sourceLabel}</Text>
+          <Text style={styles.subText}>{recoveryHint}</Text>
           {sleepSource === "health" && isStale ? (
             <Text style={styles.warningText}>
               Health sleep sample is stale. Decision flow will fall back to manual sleep.
@@ -279,6 +325,23 @@ export default function SleepIndex() {
             ) : (
               <Text style={styles.subText}>No recent sleep records yet.</Text>
             )}
+          </View>
+          <View style={styles.overrideRow}>
+            <TextInput
+              placeholder="Manually record last night hours (e.g. 7.5)"
+              placeholderTextColor="#7a7a8c"
+              style={styles.overrideInput}
+              keyboardType="decimal-pad"
+              value={manualOverrideHours}
+              onChangeText={setManualOverrideHours}
+            />
+            <TouchableOpacity
+              style={[styles.overrideButton, savingOverride && styles.disabled]}
+              disabled={savingOverride}
+              onPress={handleManualOverride}
+            >
+              <Text style={styles.overrideButtonText}>{savingOverride ? "Saving..." : "Save manual entry"}</Text>
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -369,6 +432,24 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   trendHours: { color: "#fff", fontSize: 12, fontWeight: "600" },
+  overrideRow: { marginTop: 8, gap: 8 },
+  overrideInput: {
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderColor: "rgba(255,255,255,0.2)",
+    borderWidth: 1,
+    borderRadius: 12,
+    color: "#fff",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 13,
+  },
+  overrideButton: {
+    backgroundColor: "rgba(123,97,255,0.25)",
+    borderRadius: 12,
+    alignItems: "center",
+    paddingVertical: 10,
+  },
+  overrideButtonText: { color: "#fff", fontSize: 13, fontWeight: "700" },
   feedbackText: {
     color: MUTED,
     fontSize: 13,
