@@ -17,6 +17,7 @@ import {
   isHealthSleepStale,
   saveManualSleepSample,
 } from "../../src/sleep/sleep";
+import { resolveDecisionSleepInput } from "../../src/sleep/resolveDecisionSleepInput";
 import { getDecision, isNormalizedDecisionError } from "../../src/services/decision/getDecision";
 import { hashDecisionInputs } from "../../src/services/decision/inputHash";
 import type { DecisionInputs, DietPhase, LastResultPayload, TrainingPhase } from "../../src/types/decision";
@@ -220,6 +221,7 @@ export default function Home() {
         let effectiveSleepHours = parsedSleep;
         let sleepSource: DecisionInputs["sleepSource"] = "manual";
         let sleepSampleAgeHours: DecisionInputs["sleepSampleAgeHours"] = 0;
+        let shouldPersistManualSample = true;
         try {
           nutrition = await getTodayDecisionNutritionSummary(uid, dietPhase);
         } catch (nutritionError) {
@@ -230,18 +232,19 @@ export default function Home() {
 
         try {
           const sleepProfile = await getSleepProfile(uid);
-          const hasHealthSleep =
-            sleepProfile.source === "health" && typeof sleepProfile.latestSleepHours === "number";
-          const isHealthFresh = hasHealthSleep && !isHealthSleepStale(sleepProfile, new Date());
-
-          if (isHealthFresh) {
-            effectiveSleepHours = sleepProfile.latestSleepHours as number;
-            sleepSource = "health";
-            sleepSampleAgeHours = getSleepSampleAgeHours(sleepProfile.sampleRecordedAt);
-          } else {
+          const sampleAgeHours = getSleepSampleAgeHours(sleepProfile.sampleRecordedAt);
+          const stale = isHealthSleepStale(sleepProfile, new Date());
+          const resolvedSleep = resolveDecisionSleepInput(parsedSleep, {
+            source: sleepProfile.source,
+            latestSleepHours: sleepProfile.latestSleepHours,
+            sampleAgeHours: stale ? null : sampleAgeHours,
+          });
+          effectiveSleepHours = resolvedSleep.sleepHours;
+          sleepSource = resolvedSleep.sleepSource;
+          sleepSampleAgeHours = resolvedSleep.sleepSampleAgeHours;
+          shouldPersistManualSample = resolvedSleep.shouldPersistManualSample;
+          if (shouldPersistManualSample) {
             await saveManualSleepSample(uid, parsedSleep);
-            sleepSource = "manual";
-            sleepSampleAgeHours = 0;
           }
         } catch (sleepError) {
           if (!isExpectedOfflineError(sleepError)) {

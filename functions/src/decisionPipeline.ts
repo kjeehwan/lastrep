@@ -42,10 +42,26 @@ export const decisionOutputSchema: z.ZodType<DecisionOutput> = z
   })
   .strict();
 
-const truncateWithEllipsis = (value: string, limit: number) => {
+const truncateBullet = (value: string, limit: number) => {
   if (value.length <= limit) return value;
-  if (limit <= 3) return value.slice(0, limit);
-  return `${value.slice(0, limit - 3)}...`;
+  const sliced = value.slice(0, limit).trim();
+
+  const sentenceEnd = Math.max(sliced.lastIndexOf(". "), sliced.lastIndexOf("! "), sliced.lastIndexOf("? "));
+  if (sentenceEnd >= Math.floor(limit * 0.6)) {
+    return sliced.slice(0, sentenceEnd + 1).trim();
+  }
+
+  const clauseEnd = Math.max(sliced.lastIndexOf("; "), sliced.lastIndexOf(", "));
+  if (clauseEnd >= Math.floor(limit * 0.7)) {
+    return sliced.slice(0, clauseEnd).trim();
+  }
+
+  const wordBoundary = sliced.lastIndexOf(" ");
+  if (wordBoundary >= Math.floor(limit * 0.75)) {
+    return sliced.slice(0, wordBoundary).trim();
+  }
+
+  return sliced;
 };
 
 const humanizeExplanationText = (value: string) =>
@@ -75,7 +91,7 @@ const normalizeExplanation = (explanation: string[]) => {
   )
     .filter((item) => item.length > 0)
     .slice(0, MAX_BULLETS)
-    .map((item) => truncateWithEllipsis(item, MAX_BULLET_CHARS));
+    .map((item) => truncateBullet(item, MAX_BULLET_CHARS));
 
   let totalChars = normalized.reduce((sum, item) => sum + item.length, 0);
   if (totalChars > MAX_TOTAL_CHARS) {
@@ -83,7 +99,7 @@ const normalizeExplanation = (explanation: string[]) => {
       const current = normalized[i];
       const excess = totalChars - MAX_TOTAL_CHARS;
       const nextLimit = Math.max(1, current.length - excess);
-      const next = truncateWithEllipsis(current, nextLimit);
+      const next = truncateBullet(current, nextLimit);
       normalized[i] = next;
       totalChars = totalChars - current.length + next.length;
     }

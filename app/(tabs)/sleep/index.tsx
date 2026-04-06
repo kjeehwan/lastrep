@@ -2,10 +2,12 @@ import { Ionicons } from "@expo/vector-icons";
 import { Href, Redirect, useFocusEffect, useRouter } from "expo-router";
 import { onAuthStateChanged } from "firebase/auth";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Linking, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { auth } from "@/src/config/firebaseConfig";
+import { useOfflineStatus } from "@/src/hooks/useOfflineStatus";
 import {
+  autoSyncSleepFromHealthConnectIfEligible,
   HEALTH_SLEEP_STALE_HOURS,
   getHealthConnectAvailability,
   getSleepProfile,
@@ -82,6 +84,7 @@ const permissionDisplay = (
 
 export default function SleepIndex() {
   const router = useRouter();
+  const { isOffline } = useOfflineStatus();
   const [redirectTo, setRedirectTo] = useState<Href | null>(null);
   const [uid, setUid] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -95,6 +98,13 @@ export default function SleepIndex() {
   >("unknown");
   const [availability, setAvailability] = useState<HealthConnectAvailability>("unsupported");
 
+  const applyProfile = useCallback((profile: Awaited<ReturnType<typeof getSleepProfile>>) => {
+    setSleepHours(profile.latestSleepHours);
+    setSleepSource(profile.source);
+    setSampleRecordedAt(profile.sampleRecordedAt?.toDate() ?? null);
+    setLastSyncedAt(profile.lastSyncedAt?.toDate() ?? null);
+  }, []);
+
   const handleGoBack = () => {
     if (router.canGoBack()) {
       router.back();
@@ -103,7 +113,9 @@ export default function SleepIndex() {
     router.replace("/home");
   };
 
-  const refreshSleep = useCallback(async (resetFeedback = true) => {
+  const refreshSleep = useCallback(async (options?: { resetFeedback?: boolean; autoSync?: boolean }) => {
+    const resetFeedback = options?.resetFeedback ?? true;
+    const autoSync = options?.autoSync ?? false;
     if (!uid) return;
     setLoading(true);
     if (resetFeedback) {
@@ -114,10 +126,7 @@ export default function SleepIndex() {
         getSleepProfile(uid),
         getHealthConnectAvailability(),
       ]);
-      setSleepHours(profile.latestSleepHours);
-      setSleepSource(profile.source);
-      setSampleRecordedAt(profile.sampleRecordedAt?.toDate() ?? null);
-      setLastSyncedAt(profile.lastSyncedAt?.toDate() ?? null);
+      applyProfile(profile);
 
       setAvailability(nextAvailability);
       if (nextAvailability === "unsupported") {
@@ -128,6 +137,15 @@ export default function SleepIndex() {
         const granted = await hasHealthSleepPermission();
         if (granted) {
           setPermissionState("granted");
+          if (autoSync) {
+            const autoSyncResult = await autoSyncSleepFromHealthConnectIfEligible(uid, {
+              minIntervalMinutes: 30,
+            });
+            if (autoSyncResult === "synced") {
+              const refreshedProfile = await getSleepProfile(uid);
+              applyProfile(refreshedProfile);
+            }
+          }
         } else if (profile.source === "health") {
           setPermissionState("revoked");
         } else {
@@ -138,15 +156,11 @@ export default function SleepIndex() {
       if (!isExpectedOfflineError(error)) {
         console.log("Failed to load sleep profile", error);
       }
-      setFeedback(
-        isExpectedOfflineError(error)
-          ? "You're offline. Sleep data will refresh when you reconnect."
-          : "Unable to load sleep data right now."
-      );
+      setFeedback(isExpectedOfflineError(error) ? null : "Unable to load sleep data right now.");
     } finally {
       setLoading(false);
     }
-  }, [uid]);
+  }, [uid, applyProfile]);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (user) => {
@@ -164,7 +178,7 @@ export default function SleepIndex() {
 
   useFocusEffect(
     useCallback(() => {
-      void refreshSleep();
+      void refreshSleep({ autoSync: true });
       return undefined;
     }, [refreshSleep])
   );
@@ -211,11 +225,19 @@ export default function SleepIndex() {
     } else {
       setFeedback("Health Connect permission denied.");
     }
-    await refreshSleep(false);
+    await refreshSleep({ resetFeedback: false });
   };
 
   const handleSync = async () => {
     if (!uid) return;
+    if (isOffline) {
+      setFeedback("You're offline. Reconnect to sync sleep from Health Connect.");
+      return;
+    }
+    if (loading) {
+      setFeedback("Still checking sleep access. Try again in a moment.");
+      return;
+    }
     if (availability === "provider_update_required") {
       setFeedback("Sync is unavailable until Health Connect is installed or updated.");
       return;
@@ -252,7 +274,7 @@ export default function SleepIndex() {
         setFeedback(result.message);
         break;
     }
-    await refreshSleep(false);
+    await refreshSleep({ resetFeedback: false });
   };
 
   const handleOpenHealthConnectStore = async () => {
@@ -351,13 +373,14 @@ export default function SleepIndex() {
               <Text style={styles.primaryButtonText}>Grant Health Connect permission</Text>
             </TouchableOpacity>
           )}
-          <TouchableOpacity
+          <Pressable
             style={[styles.primaryButton, (!canSyncSleep || loading) && styles.disabled]}
-            disabled={loading}
+            disabled={false}
+            hitSlop={8}
             onPress={handleSync}
           >
             <Text style={styles.primaryButtonText}>Sync sleep</Text>
-          </TouchableOpacity>
+          </Pressable>
           {syncUnavailableMessage ? (
             <Text style={styles.subText}>{syncUnavailableMessage}</Text>
           ) : null}

@@ -43,9 +43,9 @@ const OPENAI_API_KEY = defineSecret("OPENAI_API_KEY");
 const REVENUECAT_WEBHOOK_AUTH = defineSecret("REVENUECAT_WEBHOOK_AUTH");
 const DEV_UID_ALLOWLIST_SECRET = defineSecret("DEV_UID_ALLOWLIST");
 const DECISION_PROMPT_VERSION = "v6";
-const OPENAI_TIMEOUT_MS = 12000;
-const OPENAI_FIRST_ATTEMPT_MS = 9500;
-const OPENAI_RETRY_MS = 2500;
+const OPENAI_TIMEOUT_MS = 20000;
+const OPENAI_FIRST_ATTEMPT_MS = 14000;
+const OPENAI_RETRY_MS = 6000;
 const FALLBACK_REASON_MAX_LEN = 80;
 const INPUT_HASH_PREFIX_LEN = 8;
 const SERVER_RATE_LIMIT_MAX_COUNT = 12;
@@ -147,6 +147,16 @@ const isTransientOpenAiError = (err: unknown) => {
   return false;
 };
 
+const summarizeOpenAiError = (err: unknown) => {
+  const name = (err as { name?: string })?.name ?? "UnknownError";
+  const code = (err as { code?: string })?.code ?? "";
+  const status = (err as { status?: number })?.status;
+  if (typeof status === "number") {
+    return `${name}:${status}${code ? `:${code}` : ""}`;
+  }
+  return `${name}${code ? `:${code}` : ""}`;
+};
+
 const extractOutputText = (response: OpenAI.Responses.Response) => {
   const direct = response.output_text?.trim();
   if (direct) return direct;
@@ -185,6 +195,8 @@ const coerceToDate = (value: unknown): Date | null => {
 type DecisionLogEvent = {
   uid: string;
   pathUsed: DecisionPathUsed;
+  sleepSource: DecisionInputs["sleepSource"];
+  sleepSampleAgeHours: DecisionInputs["sleepSampleAgeHours"];
   openAiAttempted: boolean;
   openAiRetried: boolean;
   latencyMsTotal: number;
@@ -198,6 +210,8 @@ const logDecisionEvent = (event: DecisionLogEvent) => {
   const payload: {
     uid: string;
     pathUsed: DecisionPathUsed;
+    sleepSource: DecisionInputs["sleepSource"];
+    sleepSampleAgeHours: DecisionInputs["sleepSampleAgeHours"];
     openAiAttempted: boolean;
     openAiRetried: boolean;
     latencyMsTotal: number;
@@ -210,6 +224,8 @@ const logDecisionEvent = (event: DecisionLogEvent) => {
   } = {
     uid: event.uid,
     pathUsed: event.pathUsed,
+    sleepSource: event.sleepSource,
+    sleepSampleAgeHours: event.sleepSampleAgeHours,
     openAiAttempted: event.openAiAttempted,
     openAiRetried: event.openAiRetried,
     latencyMsTotal: event.latencyMsTotal,
@@ -495,6 +511,10 @@ export const getDailyDecision = functions
     const uid = context.auth.uid;
     const inputHash = hashDecisionInputs(inputs);
     const inputHashPrefix = inputHash.slice(0, INPUT_HASH_PREFIX_LEN);
+    const sleepLogContext = {
+      sleepSource: inputs.sleepSource,
+      sleepSampleAgeHours: inputs.sleepSampleAgeHours,
+    } as const;
 
     let openAiAttempted = false;
     let openAiRetried = false;
@@ -506,6 +526,7 @@ export const getDailyDecision = functions
       logDecisionEvent({
         uid,
         pathUsed: "RATE_LIMITED",
+        ...sleepLogContext,
         openAiAttempted: false,
         openAiRetried: false,
         latencyMsTotal: Date.now() - startMs,
@@ -555,6 +576,7 @@ export const getDailyDecision = functions
             logDecisionEvent({
               uid,
               pathUsed: "CACHE_HIT",
+              ...sleepLogContext,
               openAiAttempted: false,
               openAiRetried: false,
               latencyMsTotal: Date.now() - startMs,
@@ -573,6 +595,7 @@ export const getDailyDecision = functions
       logDecisionEvent({
         uid,
         pathUsed: "FALLBACK_HEURISTIC",
+        ...sleepLogContext,
         openAiAttempted: false,
         openAiRetried: false,
         latencyMsTotal: Date.now() - startMs,
@@ -593,6 +616,7 @@ export const getDailyDecision = functions
         "Output rules:",
       "- Always include decision and explanation.",
       "- Explanation should have 2-4 short bullets.",
+      "- Keep each bullet concise (prefer <=100 characters) with one clear point per bullet.",
       "- Explanation must be holistic: include recovery context (sleep/fatigue/soreness) and readiness context (motivation plus phase context).",
       "- Mention nutrition in at most one bullet, and only when it materially changes the recommendation.",
       "- Avoid technical wording like 'age ~3.5h'; write user-facing phrasing like 'recorded about 3.5h ago' or omit sample timing.",
@@ -606,7 +630,7 @@ export const getDailyDecision = functions
     const attemptOpenAI = async (timeoutMs: number) => {
       const attemptStart = Date.now();
       try {
-        const response = await callOpenAIWithTimeout(prompt, timeoutMs);
+      const response = await callOpenAIWithTimeout(prompt, Math.min(timeoutMs, OPENAI_TIMEOUT_MS));
         latencyMsOpenAI += Date.now() - attemptStart;
         return { ok: true as const, response };
       } catch (err) {
@@ -625,6 +649,7 @@ export const getDailyDecision = functions
           logDecisionEvent({
             uid,
             pathUsed: "OPENAI",
+            ...sleepLogContext,
             openAiAttempted,
             openAiRetried,
             latencyMsTotal: Date.now() - startMs,
@@ -648,6 +673,7 @@ export const getDailyDecision = functions
             logDecisionEvent({
               uid,
               pathUsed: "OPENAI",
+              ...sleepLogContext,
               openAiAttempted,
               openAiRetried,
               latencyMsTotal: Date.now() - startMs,
@@ -661,16 +687,17 @@ export const getDailyDecision = functions
           fallbackReason = "empty_response";
         }
       } else {
-        fallbackReason = "exception";
+        fallbackReason = summarizeOpenAiError(retryAttempt.error);
       }
     } else {
-      fallbackReason = "exception";
+      fallbackReason = summarizeOpenAiError(firstAttempt.error);
     }
 
     const fallback = getBoundedHeuristicDecision(inputs);
     logDecisionEvent({
       uid,
       pathUsed: "FALLBACK_HEURISTIC",
+      ...sleepLogContext,
       openAiAttempted,
       openAiRetried,
       latencyMsTotal: Date.now() - startMs,

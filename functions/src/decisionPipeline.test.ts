@@ -176,6 +176,19 @@ describe("decisionPipeline golden cases", () => {
     expect(parsed.data.explanation[0].length).toBeLessThanOrEqual(140);
   });
 
+  it("truncates long bullets without trailing ellipsis", () => {
+    const long =
+      "Recovery is solid overall, and motivation is high, but this sentence is intentionally too long to fit the bullet limit cleanly.";
+    const parsed = sanitizeDecisionOutput({
+      decision: "PUSH",
+      explanation: [long, "Nutrition remains supportive."],
+      adjustments: { intensityPct: 10 },
+    });
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.data.explanation[0].endsWith("...")).toBe(false);
+  });
+
   it("caps total explanation chars to 600", () => {
     const long = "x".repeat(200);
     const parsed = sanitizeDecisionOutput({

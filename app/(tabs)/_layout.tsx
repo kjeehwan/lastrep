@@ -1,11 +1,30 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
-import React from "react";
+import { onAuthStateChanged } from "firebase/auth";
+import React, { useEffect, useRef } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { auth } from "../../src/config/firebaseConfig";
+import { useOfflineStatus } from "../../src/hooks/useOfflineStatus";
+import { autoSyncSleepFromHealthConnectIfEligible } from "../../src/sleep/sleep";
 
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
   const bottomInset = Math.max(insets.bottom, 12);
+  const { isOffline } = useOfflineStatus();
+  const inFlightRef = useRef(false);
+
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (user) => {
+      if (!user || isOffline || inFlightRef.current) return;
+      inFlightRef.current = true;
+      void autoSyncSleepFromHealthConnectIfEligible(user.uid, { minIntervalMinutes: 30 }).finally(
+        () => {
+          inFlightRef.current = false;
+        }
+      );
+    });
+    return unsub;
+  }, [isOffline]);
 
   return (
     <Tabs

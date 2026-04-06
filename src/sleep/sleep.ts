@@ -31,6 +31,8 @@ export type SleepSyncResult =
   | { status: "unsupported" }
   | { status: "error"; message: string };
 
+export type AutoSleepSyncResult = "synced" | "skipped" | "failed";
+
 const sleepReadPermission: Permission = {
   accessType: "read",
   recordType: "SleepSession",
@@ -256,6 +258,34 @@ export const syncSleepFromHealthConnect = async (
       message,
     });
     return { status: "error", message };
+  }
+};
+
+export const autoSyncSleepFromHealthConnectIfEligible = async (
+  uid: string,
+  options?: { minIntervalMinutes?: number }
+): Promise<AutoSleepSyncResult> => {
+  if (Platform.OS !== "android") return "skipped";
+
+  try {
+    const availability = await getHealthConnectAvailability();
+    if (availability !== "available") return "skipped";
+
+    const hasPermission = await hasHealthSleepPermission();
+    if (!hasPermission) return "skipped";
+
+    const profile = await getSleepProfile(uid);
+    const minIntervalMinutes = options?.minIntervalMinutes ?? 30;
+    const lastSyncedAt = profile.lastSyncedAt?.toDate() ?? null;
+    if (lastSyncedAt) {
+      const minutesSinceLastSync = (Date.now() - lastSyncedAt.getTime()) / (60 * 1000);
+      if (minutesSinceLastSync < minIntervalMinutes) return "skipped";
+    }
+
+    const syncResult = await syncSleepFromHealthConnect(uid);
+    return syncResult.status === "success" ? "synced" : "skipped";
+  } catch {
+    return "failed";
   }
 };
 
