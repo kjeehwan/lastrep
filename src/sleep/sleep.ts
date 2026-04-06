@@ -6,6 +6,7 @@ import {
   SLEEP_PROFILE_FIELDS,
   USER_SLEEP_PROFILE_FIELD,
   USERS_COLLECTION,
+  type SleepNightlySummary,
   type SleepProfile,
   type SleepSource,
 } from "../contracts";
@@ -74,14 +75,107 @@ const normalizeSource = (value: unknown): SleepSource =>
 
 const normalizeTimestamp = (value: unknown): Timestamp | null =>
   value instanceof Timestamp ? value : null;
+const normalizeString = (value: unknown): string | null =>
+  typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+
+const isDateKey = (value: unknown): value is string =>
+  typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
+
+const normalizeRecentNightlyHours = (value: unknown): SleepNightlySummary[] => {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => {
+      const row = item as Record<string, unknown>;
+      const sleepHours = normalizeSleepHours(row?.sleepHours);
+      const dateKey = row?.dateKey;
+      if (sleepHours == null || !isDateKey(dateKey)) return null;
+      return {
+        dateKey,
+        sleepHours,
+        source: normalizeSource(row?.source),
+        recordedAt: normalizeTimestamp(row?.recordedAt),
+      } satisfies SleepNightlySummary;
+    })
+    .filter((item): item is SleepNightlySummary => item != null)
+    .sort((a, b) => b.dateKey.localeCompare(a.dateKey))
+    .slice(0, 7);
+};
 
 const roundSleepHours = (value: number) => Math.round(value * 10) / 10;
+const inferOriginLabel = (originAppPackage: string | null): string | null => {
+  if (!originAppPackage) return null;
+  if (originAppPackage.includes("shealth")) return "Samsung Health / Galaxy Watch";
+  if (originAppPackage.includes("google.android.apps.fitness")) return "Google Fit";
+  return "Health Connect";
+};
+
+const formatDateKey = (date: Date) =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
+    date.getDate()
+  ).padStart(2, "0")}`;
+
+const upsertRecentNightlySummary = (
+  summaries: SleepNightlySummary[],
+  next: SleepNightlySummary
+): SleepNightlySummary[] => {
+  const map = new Map<string, SleepNightlySummary>();
+  for (const item of summaries) {
+    map.set(item.dateKey, item);
+  }
+  map.set(next.dateKey, next);
+  return Array.from(map.values())
+    .sort((a, b) => b.dateKey.localeCompare(a.dateKey))
+    .slice(0, 7);
+};
+
+const getRecentHealthNightlySummaries = async (
+  healthConnect: HealthConnectModule,
+  now: Date
+): Promise<SleepNightlySummary[]> => {
+  const start = new Date(now);
+  start.setDate(start.getDate() - 7);
+  start.setHours(0, 0, 0, 0);
+
+  const records = await healthConnect.readRecords("SleepSession", {
+    timeRangeFilter: {
+      operator: "between",
+      startTime: asIso(start),
+      endTime: asIso(now),
+    },
+    ascendingOrder: false,
+  });
+
+  const grouped = new Map<string, { totalMs: number; latestEndMs: number }>();
+  for (const record of records.records) {
+    const startMs = new Date(record.startTime).getTime();
+    const endMs = new Date(record.endTime).getTime();
+    if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) continue;
+    const dateKey = formatDateKey(new Date(endMs));
+    const existing = grouped.get(dateKey);
+    const totalMs = (existing?.totalMs ?? 0) + (endMs - startMs);
+    const latestEndMs = Math.max(existing?.latestEndMs ?? 0, endMs);
+    grouped.set(dateKey, { totalMs, latestEndMs });
+  }
+
+  return Array.from(grouped.entries())
+    .map(([dateKey, row]) => ({
+      dateKey,
+      sleepHours: roundSleepHours(row.totalMs / (60 * 60 * 1000)),
+      source: "health" as const,
+      recordedAt: Timestamp.fromMillis(row.latestEndMs),
+    }))
+    .filter((row) => row.sleepHours > 0)
+    .sort((a, b) => b.dateKey.localeCompare(a.dateKey))
+    .slice(0, 7);
+};
 
 const saveHealthSleepSample = async (
   uid: string,
   sleepHours: number,
   sampleRecordedAt: Timestamp,
-  syncedAt: Timestamp
+  syncedAt: Timestamp,
+  recentNightlyHours: SleepNightlySummary[],
+  originAppPackage: string | null
 ) => {
   await setDoc(
     doc(db, USERS_COLLECTION, uid),
@@ -91,6 +185,9 @@ const saveHealthSleepSample = async (
         [SLEEP_PROFILE_FIELDS.source]: "health",
         [SLEEP_PROFILE_FIELDS.sampleRecordedAt]: sampleRecordedAt,
         [SLEEP_PROFILE_FIELDS.lastSyncedAt]: syncedAt,
+        [SLEEP_PROFILE_FIELDS.recentNightlyHours]: recentNightlyHours,
+        [SLEEP_PROFILE_FIELDS.originAppPackage]: originAppPackage,
+        [SLEEP_PROFILE_FIELDS.originLabel]: inferOriginLabel(originAppPackage),
       },
     },
     { merge: true }
@@ -101,12 +198,18 @@ export const buildSleepProfile = (
   latestSleepHours: number | null,
   source: SleepSource,
   sampleRecordedAt: Timestamp | null,
-  lastSyncedAt: Timestamp | null
+  lastSyncedAt: Timestamp | null,
+  recentNightlyHours: SleepNightlySummary[],
+  originAppPackage: string | null,
+  originLabel: string | null
 ): SleepProfile => ({
   latestSleepHours,
   source,
   sampleRecordedAt,
   lastSyncedAt,
+  recentNightlyHours,
+  originAppPackage,
+  originLabel,
 });
 
 export const getSleepProfile = async (uid: string): Promise<SleepProfile> => {
@@ -117,7 +220,10 @@ export const getSleepProfile = async (uid: string): Promise<SleepProfile> => {
     normalizeSleepHours(data?.[SLEEP_PROFILE_FIELDS.latestSleepHours]),
     normalizeSource(data?.[SLEEP_PROFILE_FIELDS.source]),
     normalizeTimestamp(data?.[SLEEP_PROFILE_FIELDS.sampleRecordedAt]),
-    normalizeTimestamp(data?.[SLEEP_PROFILE_FIELDS.lastSyncedAt])
+    normalizeTimestamp(data?.[SLEEP_PROFILE_FIELDS.lastSyncedAt]),
+    normalizeRecentNightlyHours(data?.[SLEEP_PROFILE_FIELDS.recentNightlyHours]),
+    normalizeString(data?.[SLEEP_PROFILE_FIELDS.originAppPackage]),
+    normalizeString(data?.[SLEEP_PROFILE_FIELDS.originLabel])
   );
 };
 
@@ -217,6 +323,7 @@ export const syncSleepFromHealthConnect = async (
     const endMs = end.getTime();
     let totalSleepMs = 0;
     let latestRecordEndMs: number | null = null;
+    let latestRecordOriginPackage: string | null = null;
 
     for (const record of records.records) {
       const recordStartMs = new Date(record.startTime).getTime();
@@ -224,6 +331,9 @@ export const syncSleepFromHealthConnect = async (
       totalSleepMs += getOverlapMs(recordStartMs, recordEndMs, startMs, endMs);
       if (latestRecordEndMs == null || recordEndMs > latestRecordEndMs) {
         latestRecordEndMs = recordEndMs;
+        latestRecordOriginPackage = normalizeString(
+          (record as { metadata?: { dataOrigin?: string } }).metadata?.dataOrigin
+        );
       }
     }
 
@@ -234,8 +344,16 @@ export const syncSleepFromHealthConnect = async (
     const sleepHours = roundSleepHours(totalSleepMs / (60 * 60 * 1000));
     const sampleRecordedAt = Timestamp.fromMillis(latestRecordEndMs);
     const syncedAt = Timestamp.fromDate(now);
+    const recentNightlyHours = await getRecentHealthNightlySummaries(healthConnect, now);
 
-    await saveHealthSleepSample(uid, sleepHours, sampleRecordedAt, syncedAt);
+    await saveHealthSleepSample(
+      uid,
+      sleepHours,
+      sampleRecordedAt,
+      syncedAt,
+      recentNightlyHours,
+      latestRecordOriginPackage
+    );
 
     console.log("[sleep_sync]", {
       event: "sync_success",
@@ -296,6 +414,14 @@ export const saveManualSleepSample = async (
 ): Promise<void> => {
   const nowTimestamp = Timestamp.fromDate(now);
   const roundedHours = roundSleepHours(sleepHours);
+  const profile = await getSleepProfile(uid);
+  const manualSummary: SleepNightlySummary = {
+    dateKey: formatDateKey(now),
+    sleepHours: roundedHours,
+    source: "manual",
+    recordedAt: nowTimestamp,
+  };
+  const recentNightlyHours = upsertRecentNightlySummary(profile.recentNightlyHours, manualSummary);
   await setDoc(
     doc(db, USERS_COLLECTION, uid),
     {
@@ -304,6 +430,9 @@ export const saveManualSleepSample = async (
         [SLEEP_PROFILE_FIELDS.source]: "manual",
         [SLEEP_PROFILE_FIELDS.sampleRecordedAt]: nowTimestamp,
         [SLEEP_PROFILE_FIELDS.lastSyncedAt]: nowTimestamp,
+        [SLEEP_PROFILE_FIELDS.recentNightlyHours]: recentNightlyHours,
+        [SLEEP_PROFILE_FIELDS.originAppPackage]: null,
+        [SLEEP_PROFILE_FIELDS.originLabel]: null,
       },
     },
     { merge: true }

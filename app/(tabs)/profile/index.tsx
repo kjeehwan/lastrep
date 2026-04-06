@@ -1,15 +1,23 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Href, Redirect, useRouter } from "expo-router";
+import { Href, Redirect, useFocusEffect, useRouter } from "expo-router";
 import { onAuthStateChanged } from "firebase/auth";
-import React, { useEffect, useState } from "react";
-import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import React, { useCallback, useEffect, useState } from "react";
+import { Alert, Linking, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { auth } from "../../../src/config/firebaseConfig";
+import { useOfflineStatus } from "../../../src/hooks/useOfflineStatus";
 import {
   DEFAULT_CALORIE_TARGETS_BY_DIET_PHASE,
   normalizeCalorieTargets,
   saveNutritionProfile,
 } from "../../../src/nutrition/meals";
+import {
+  getHealthConnectAvailability,
+  hasHealthSleepPermission,
+  openHealthConnectDataManagementScreen,
+  requestHealthSleepPermission,
+  type HealthConnectAvailability,
+} from "../../../src/sleep/sleep";
 import { getUserData, saveUserData } from "../../../src/userData";
 
 const goals = [
@@ -22,6 +30,7 @@ const goals = [
 // Phase 2A: keep only nickname + goal for prompts; remove body metrics
 export default function ProfileIndex() {
   const router = useRouter();
+  const { isOffline } = useOfflineStatus();
   const [uid, setUid] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [goal, setGoal] = useState("");
@@ -29,6 +38,12 @@ export default function ProfileIndex() {
   const [cutCalories, setCutCalories] = useState("");
   const [maintainCalories, setMaintainCalories] = useState("");
   const [bulkCalories, setBulkCalories] = useState("");
+  const [healthFeedback, setHealthFeedback] = useState<string | null>(null);
+  const [healthLoading, setHealthLoading] = useState(false);
+  const [healthAvailability, setHealthAvailability] = useState<HealthConnectAvailability>("unsupported");
+  const [healthPermissionState, setHealthPermissionState] = useState<
+    "granted" | "denied" | "revoked" | "unavailable" | "unsupported" | "unknown"
+  >("unknown");
   const [redirectTo, setRedirectTo] = useState<Href | null>(null);
 
   const handleGoBack = () => {
@@ -38,6 +53,26 @@ export default function ProfileIndex() {
     }
     router.replace("/home");
   };
+
+  const refreshHealthConnectStatus = useCallback(async () => {
+    setHealthLoading(true);
+    try {
+      const availability = await getHealthConnectAvailability();
+      setHealthAvailability(availability);
+      if (availability === "unsupported") {
+        setHealthPermissionState("unsupported");
+      } else if (availability !== "available") {
+        setHealthPermissionState("unavailable");
+      } else {
+        const granted = await hasHealthSleepPermission();
+        setHealthPermissionState(granted ? "granted" : "denied");
+      }
+    } catch {
+      setHealthPermissionState("unknown");
+    } finally {
+      setHealthLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
@@ -65,11 +100,74 @@ export default function ProfileIndex() {
       } catch (e) {
         console.log("Error fetching user data", e);
       } finally {
+        await refreshHealthConnectStatus();
         setLoading(false);
       }
     });
     return unsub;
-  }, []);
+  }, [refreshHealthConnectStatus]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void refreshHealthConnectStatus();
+      return undefined;
+    }, [refreshHealthConnectStatus])
+  );
+
+  const healthConnectMessage = () => {
+    if (healthAvailability === "provider_update_required") {
+      return "Download or update Health Connect from the Play Store.";
+    }
+    if (healthAvailability === "unavailable") {
+      return "Health Connect is unavailable on this device.";
+    }
+    if (healthAvailability === "unsupported") {
+      return "Health Connect is only supported on Android.";
+    }
+    if (healthPermissionState === "granted") {
+      return "You have granted Health Connect permission. You can sync sleep data now.";
+    }
+    if (healthPermissionState === "denied" || healthPermissionState === "revoked") {
+      return "Sleep permission is required. Grant Health Connect permission to sync sleep data.";
+    }
+    if (isOffline) {
+      return "You're offline. Reconnect to refresh Health Connect status.";
+    }
+    return "Checking Health Connect status...";
+  };
+
+  const handleOpenPlayStore = async () => {
+    const url = "https://play.google.com/store/apps/details?id=com.google.android.apps.healthdata";
+    const supported = await Linking.canOpenURL(url);
+    if (!supported) {
+      setHealthFeedback("Unable to open Play Store on this device.");
+      return;
+    }
+    await Linking.openURL(url);
+  };
+
+  const handleOpenHealthConnectSettings = async () => {
+    const opened = await openHealthConnectDataManagementScreen();
+    if (!opened) {
+      setHealthFeedback("Unable to open Health Connect settings on this device.");
+    }
+  };
+
+  const handleGrantHealthPermission = async () => {
+    if (isOffline) {
+      setHealthFeedback("You're offline. Reconnect to grant permission.");
+      return;
+    }
+    setHealthFeedback("Requesting Health Connect permission...");
+    try {
+      const granted = await requestHealthSleepPermission();
+      setHealthFeedback(granted ? "Health Connect permission granted." : "Health Connect permission denied.");
+    } catch {
+      setHealthFeedback("Unable to request Health Connect permission right now.");
+    } finally {
+      await refreshHealthConnectStatus();
+    }
+  };
 
   const save = async () => {
     if (!uid) return;
@@ -190,6 +288,37 @@ export default function ProfileIndex() {
           </View>
         </View>
 
+        <Text style={styles.sectionTitle}>Health Connect</Text>
+        <View style={styles.card}>
+          <Text style={styles.helperText}>{healthConnectMessage()}</Text>
+          <TouchableOpacity
+            style={[styles.secondaryButton, healthLoading && styles.buttonDisabled]}
+            disabled={healthLoading}
+            onPress={handleOpenHealthConnectSettings}
+          >
+            <Text style={styles.secondaryButtonText}>Open Health Connect settings</Text>
+          </TouchableOpacity>
+          {healthAvailability === "provider_update_required" ? (
+            <TouchableOpacity
+              style={[styles.secondaryButton, healthLoading && styles.buttonDisabled]}
+              disabled={healthLoading}
+              onPress={handleOpenPlayStore}
+            >
+              <Text style={styles.secondaryButtonText}>Open Play Store</Text>
+            </TouchableOpacity>
+          ) : null}
+          {(healthPermissionState === "denied" || healthPermissionState === "revoked") && (
+            <TouchableOpacity
+              style={[styles.secondaryButton, healthLoading && styles.buttonDisabled]}
+              disabled={healthLoading}
+              onPress={handleGrantHealthPermission}
+            >
+              <Text style={styles.secondaryButtonText}>Grant Health Connect permission</Text>
+            </TouchableOpacity>
+          )}
+          {healthFeedback ? <Text style={styles.healthFeedback}>{healthFeedback}</Text> : null}
+        </View>
+
         <TouchableOpacity style={styles.save} onPress={save}>
           <Text style={styles.saveText}>Save Changes</Text>
         </TouchableOpacity>
@@ -225,6 +354,14 @@ const styles = StyleSheet.create({
   helperText: { color: "#a5acc1", fontSize: 13, lineHeight: 18 },
   row: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   targetRow: { gap: 10 },
+  card: {
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.08)",
+    gap: 8,
+  },
   targetColumn: { gap: 8 },
   targetLabel: { color: "#cfcfe6", fontSize: 14, fontWeight: "600" },
   input: {
@@ -248,6 +385,16 @@ const styles = StyleSheet.create({
   chipActive: { backgroundColor: "#fff", borderColor: "#7b61ff" },
   chipText: { color: "#fff", fontWeight: "600", fontSize: 13.5 },
   chipTextActive: { color: "#4a90e2", fontWeight: "700", fontSize: 13.5 },
+  secondaryButton: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.24)",
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  secondaryButtonText: { color: "#fff", fontSize: 14, fontWeight: "600" },
+  buttonDisabled: { opacity: 0.6 },
+  healthFeedback: { color: "#a5acc1", fontSize: 12, lineHeight: 16 },
   save: { backgroundColor: "#7b61ff", borderRadius: 12, alignItems: "center", paddingVertical: 14, marginTop: 22 },
   saveText: { color: "#fff", fontWeight: "800", fontSize: 15 },
 });

@@ -15,13 +15,26 @@ export const SLEEP_PROFILE_FIELDS = {
   source: "source",
   sampleRecordedAt: "sampleRecordedAt",
   lastSyncedAt: "lastSyncedAt",
+  recentNightlyHours: "recentNightlyHours",
+  originAppPackage: "originAppPackage",
+  originLabel: "originLabel",
 } as const;
 
 export type SleepSource = (typeof SLEEP_SOURCES)[number];
+
+export interface SleepNightlySummary {
+  dateKey: string;
+  sleepHours: number;
+  source: SleepSource;
+  recordedAt: Timestamp | null;
+}
 
 export interface SleepProfile {
   latestSleepHours: number | null;
   source: SleepSource;
   sampleRecordedAt: Timestamp | null;
   lastSyncedAt: Timestamp | null;
+  recentNightlyHours: SleepNightlySummary[];
+  originAppPackage: string | null;
+  originLabel: string | null;
 }
