@@ -353,7 +353,8 @@ const checkAndConsumeServerDecisionGate = async (uid: string, now: Date): Promis
     const cooldownUntil = coerceToDate(decisions.cooldownUntil);
 
     const override = DEV_OVERRIDE_ENABLED ? parseBoolean(entitlement.devOverrideIsSubscribed) : null;
-    const isSubscribed = override ?? Boolean(entitlement.isSubscribed);
+    const hasPermanentGrant = hasPermanentPremiumGrant(entitlement);
+    const isSubscribed = hasPermanentGrant ? true : (override ?? Boolean(entitlement.isSubscribed));
 
     if (!isSubscribed) {
       if (dailyCount >= FREE_MAX_PER_DAY) {
@@ -437,7 +438,8 @@ type RevenueCatLifecycleLogEvent =
   | "entitlement_activated"
   | "entitlement_expired"
   | "duplicate_event_skipped"
-  | "stale_event_skipped";
+  | "stale_event_skipped"
+  | "manual_grant_locked_skipped";
 
 type RevenueCatLifecycleLogPayload = {
   app_user_id: string;
@@ -482,6 +484,9 @@ const mapRevenueCatEventToSubscriptionStatus = (
       return { shouldMutate: true, isSubscribed: currentIsSubscribed };
   }
 };
+
+const hasPermanentPremiumGrant = (entitlement: Record<string, unknown>): boolean =>
+  parseBoolean(entitlement.manualGrantPermanent) === true;
 
 const getBoundedHeuristicDecision = (inputs: DecisionInputs): DecisionOutput => {
   const heuristic = heuristicDecision(inputs);
@@ -817,6 +822,31 @@ export const resetCooldown = functions
     return { ok: true };
   });
 
+export const deleteMyAccount = functions
+  .region("asia-northeast3")
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "Authentication required.");
+    }
+
+    const schema = z.object({ confirmDelete: z.literal(true) });
+    const parsed = schema.safeParse(data);
+    if (!parsed.success) {
+      throw new functions.https.HttpsError(
+        "invalid-argument",
+        `Invalid delete payload: ${formatZodError(parsed.error)}`
+      );
+    }
+
+    const uid = context.auth.uid;
+    const userRef = admin.firestore().doc(`users/${uid}`);
+
+    await admin.firestore().recursiveDelete(userRef);
+    await admin.auth().deleteUser(uid);
+
+    return { ok: true };
+  });
+
 export const revenuecatWebhook = functions
   .region("asia-northeast3")
   .runWith({ secrets: [REVENUECAT_WEBHOOK_AUTH] })
@@ -889,6 +919,16 @@ export const revenuecatWebhook = functions
           : null;
       const currentIsSubscribed =
         typeof entitlement.isSubscribed === "boolean" ? entitlement.isSubscribed : false;
+      const hasPermanentGrant = hasPermanentPremiumGrant(entitlement);
+
+      if (hasPermanentGrant) {
+        return {
+          skipped: true,
+          reason: "manual_grant_locked" as const,
+          previousIsSubscribed: currentIsSubscribed,
+          nextIsSubscribed: true,
+        };
+      }
 
       if (eventId && lastEventId === eventId) {
         return {
@@ -961,6 +1001,16 @@ export const revenuecatWebhook = functions
       });
     } else if (result.skipped && result.reason === "stale_event") {
       logRevenueCatLifecycleEvent("stale_event_skipped", {
+        app_user_id: appUserId,
+        event_id: eventId,
+        event_type: eventType,
+        product_id: productId,
+        expiration_at_ms: expirationAtMs,
+        processed_at: processedAt,
+        is_subscribed: result.nextIsSubscribed,
+      });
+    } else if (result.skipped && result.reason === "manual_grant_locked") {
+      logRevenueCatLifecycleEvent("manual_grant_locked_skipped", {
         app_user_id: appUserId,
         event_id: eventId,
         event_type: eventType,

@@ -3,7 +3,7 @@ import { Href, Redirect, useRouter } from "expo-router";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { getFunctions, httpsCallable } from "firebase/functions";
 import React, { useEffect, useState } from "react";
-import { Linking, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { getUidPrefix, logAnalyticsEvent } from "../../../src/analytics/analytics";
 import { MANAGE_SUBSCRIPTION_URL } from "../../../src/config/billingConfig";
@@ -23,6 +23,8 @@ export default function SettingsIndex() {
   const [authReady, setAuthReady] = useState(false);
   const [uid, setUid] = useState<string | null>(null);
   const [manageFallbackText, setManageFallbackText] = useState<string | null>(null);
+  const [deleteFeedback, setDeleteFeedback] = useState<string | null>(null);
+  const [deletingAccount, setDeletingAccount] = useState(false);
   const entitlement = useEntitlement(authReady, uid);
 
   useEffect(() => {
@@ -133,6 +135,39 @@ export default function SettingsIndex() {
     }
   };
 
+  const handleDeleteAccount = () => {
+    if (deletingAccount) return;
+    Alert.alert(
+      "Delete account?",
+      "This permanently deletes your Lastrep account and associated app data.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            setDeleteFeedback(null);
+            setDeletingAccount(true);
+            try {
+              const callable = httpsCallable<{ confirmDelete: true }, { ok: boolean }>(
+                getFunctions(undefined, FUNCTIONS_REGION),
+                "deleteMyAccount"
+              );
+              await callable({ confirmDelete: true });
+              setDeleteFeedback("Account deleted.");
+              router.replace("/auth/sign-in");
+            } catch (e) {
+              console.log("Failed to delete account", e);
+              setDeleteFeedback("Could not delete account. Please try again.");
+            } finally {
+              setDeletingAccount(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   if (redirectTo) return <Redirect href={redirectTo} />;
 
   return (
@@ -201,6 +236,23 @@ export default function SettingsIndex() {
           <TouchableOpacity style={styles.secondaryButton} onPress={handleSignOut}>
             <Text style={styles.secondaryButtonText}>Log out</Text>
           </TouchableOpacity>
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Delete Account</Text>
+          <TouchableOpacity
+            style={[styles.secondaryButton, styles.deleteButton, deletingAccount && styles.disabledButton]}
+            onPress={handleDeleteAccount}
+            disabled={deletingAccount}
+          >
+            <Text style={[styles.secondaryButtonText, styles.deleteButtonText]}>
+              {deletingAccount ? "Deleting account..." : "Delete account"}
+            </Text>
+          </TouchableOpacity>
+          <Text style={styles.subText}>
+            Permanently deletes your account and associated app data.
+          </Text>
+          {deleteFeedback ? <Text style={styles.subText}>{deleteFeedback}</Text> : null}
         </View>
 
         {__DEV__ ? (
@@ -280,5 +332,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   secondaryButtonText: { color: "#fff", fontWeight: "700", fontSize: 15 },
+  disabledButton: {
+    opacity: 0.6,
+  },
+  deleteButton: {
+    backgroundColor: "rgba(255, 90, 90, 0.16)",
+    borderColor: "rgba(255, 90, 90, 0.5)",
+  },
+  deleteButtonText: {
+    color: "#ffb8b8",
+  },
   devRow: { flexDirection: "row", gap: 12 },
 });

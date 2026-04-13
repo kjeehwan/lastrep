@@ -13,6 +13,7 @@ export const ENTITLEMENT_FIELDS = {
   lastEventTimestampMs: "lastEventTimestampMs",
   lastUpdatedAt: "lastUpdatedAt",
   devOverrideIsSubscribed: "devOverrideIsSubscribed",
+  manualGrantPermanent: "manualGrantPermanent",
 } as const;
 
 export const CLIENT_ENTITLEMENT_FIELDS = [
@@ -30,6 +31,7 @@ export const SERVER_ENTITLEMENT_FIELDS = [
 
 export const OPTIONAL_ENTITLEMENT_FIELDS = [
   ENTITLEMENT_FIELDS.devOverrideIsSubscribed,
+  ENTITLEMENT_FIELDS.manualGrantPermanent,
 ] as const;
 
 export const ENTITLEMENT_DEV_OVERRIDE_POLICY = "emulator_only" as const;
@@ -55,6 +57,11 @@ export interface UserEntitlement {
    * functions and ignored by deployed production functions.
    */
   devOverrideIsSubscribed?: boolean;
+  /**
+   * Server-owned support/reviewer override that keeps entitlement paid and
+   * blocks RevenueCat webhook mutations for this user.
+   */
+  manualGrantPermanent?: boolean;
 }
 
 export type ClientReadableEntitlement = Pick<

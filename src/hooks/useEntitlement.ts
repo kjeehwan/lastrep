@@ -35,10 +35,15 @@ export function useEntitlement(authReady: boolean, uid: string | null): UseEntit
       doc(db, USERS_COLLECTION, uid),
       (snap) => {
         const entitlement = snap.data()?.[USER_ENTITLEMENT_FIELD];
-        const nextSubscribed =
+        const hasPermanentGrant =
           snap.exists() &&
-          typeof entitlement?.[ENTITLEMENT_FIELDS.isSubscribed] === "boolean" &&
-          entitlement?.[ENTITLEMENT_FIELDS.isSubscribed] === true;
+          typeof entitlement?.[ENTITLEMENT_FIELDS.manualGrantPermanent] === "boolean" &&
+          entitlement?.[ENTITLEMENT_FIELDS.manualGrantPermanent] === true;
+        const nextSubscribed =
+          hasPermanentGrant ||
+          (snap.exists() &&
+            typeof entitlement?.[ENTITLEMENT_FIELDS.isSubscribed] === "boolean" &&
+            entitlement?.[ENTITLEMENT_FIELDS.isSubscribed] === true);
         setIsSubscribed(nextSubscribed);
         setState(nextSubscribed ? "active" : "inactive");
       },
