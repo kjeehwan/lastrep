@@ -1,406 +1,541 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect } from "@react-navigation/native";
-import { Href, useRouter } from "expo-router";
-import { getAuth, onAuthStateChanged } from "firebase/auth";
-import { collection, doc, getDoc, getDocs, query, setDoc, Timestamp, where } from "firebase/firestore";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { db } from "../../src/config/firebaseConfig"; // adjust path if needed
+import Slider from "@react-native-community/slider";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Href, Redirect, useRouter } from "expo-router";
+import { onAuthStateChanged } from "firebase/auth";
+import { deleteField, doc, onSnapshot, setDoc, Timestamp, updateDoc } from "firebase/firestore";
+import React, { useEffect, useMemo, useState } from "react";
+import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import type { NormalizedDecisionError, ReasonCode } from "../../src/contracts";
+import { auth, db } from "../../src/config/firebaseConfig";
+import { useEntitlement } from "../../src/hooks/useEntitlement";
+import { useOfflineStatus } from "../../src/hooks/useOfflineStatus";
+import { getTodayDecisionNutritionSummary } from "../../src/nutrition/meals";
+import {
+  getSleepProfile,
+  getSleepSampleAgeHours,
+  isHealthSleepStale,
+  saveManualSleepSample,
+} from "../../src/sleep/sleep";
+import { resolveDecisionSleepInput } from "../../src/sleep/resolveDecisionSleepInput";
+import { getDecision, isNormalizedDecisionError } from "../../src/services/decision/getDecision";
+import { hashDecisionInputs } from "../../src/services/decision/inputHash";
+import type { DecisionInputs, DietPhase, LastResultPayload, TrainingPhase } from "../../src/types/decision";
+import { isExpectedOfflineError } from "../../src/utils/networkErrors";
 
-type PlanDay = { name: string; exercises: string[] };
-type Plan = { goal: string; experience: string; startDate: string; split: PlanDay[] };
+const HOME_INPUTS_KEY = "home-inputs-v1";
+const TRAINING_PHASES: TrainingPhase[] = ["Hypertrophy", "Strength", "Power"];
+const DIET_PHASES: DietPhase[] = ["Cut", "Maintain", "Bulk"];
 
-const PLAN_TEMPLATES: Record<string, PlanDay[]> = {
-  "push-pull-legs": [
-    { name: "Push", exercises: ["Bench Press", "Overhead Press", "Incline DB Press", "Triceps Pushdown"] },
-    { name: "Pull", exercises: ["Deadlift", "Barbell Row", "Lat Pulldown", "Bicep Curl"] },
-    { name: "Legs", exercises: ["Squat", "Romanian Deadlift", "Leg Press", "Calf Raise"] },
-  ],
-  "upper-lower": [
-    { name: "Upper", exercises: ["Bench Press", "Row", "Overhead Press", "Pull Ups"] },
-    { name: "Lower", exercises: ["Squat", "Deadlift", "Lunges", "Leg Curl"] },
-  ],
-  "full-body": [
-    { name: "Full Body A", exercises: ["Squat", "Bench Press", "Row", "Plank"] },
-    { name: "Full Body B", exercises: ["Deadlift", "Overhead Press", "Pull Ups", "Farmer Walk"] },
-  ],
+const isTrainingPhase = (value: string): value is TrainingPhase =>
+  TRAINING_PHASES.includes(value as TrainingPhase);
+const isDietPhase = (value: string): value is DietPhase => DIET_PHASES.includes(value as DietPhase);
+
+const formatDecisionLabel = (decision: string) => decision.replace("_", " ");
+const formatIntensityLabel = (value?: number) => {
+  if (value == null || value === 0) return "No change";
+  const sign = value > 0 ? "+" : "";
+  return `Intensity: ${sign}${value}%`;
 };
 
-const buildPlan = (goal: string, experience: string): PlanDay[] => {
-  // simple mapping: heavier frequency for advanced
-  if (experience === "advanced") return PLAN_TEMPLATES["push-pull-legs"];
-  if (experience === "intermediate") return PLAN_TEMPLATES["upper-lower"];
-  return PLAN_TEMPLATES["full-body"];
+const getReasonMessage = (reasonCode: ReasonCode): string => {
+  switch (reasonCode) {
+    case "FREE_WINDOW_EXHAUSTED":
+      return "Free window is exhausted.";
+    case "DAILY_LIMIT":
+      return "Daily limit reached.";
+    case "COOLDOWN_ACTIVE":
+      return "Please wait before requesting another decision.";
+    default:
+      return "Unable to get a decision right now.";
+  }
 };
 
-const getTodaySuggestion = (plan: Plan | null): PlanDay | null => {
-  if (!plan || !plan.split?.length) return null;
-  const start = new Date(plan.startDate);
-  const today = new Date();
-  const startMid = new Date(start.getFullYear(), start.getMonth(), start.getDate()).getTime();
-  const todayMid = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
-  const diffDays = Math.max(0, Math.floor((todayMid - startMid) / (1000 * 60 * 60 * 24)));
-  const idx = diffDays % plan.split.length;
-  return plan.split[idx];
+const formatCooldownMessage = (cooldownSeconds: number | null): string => {
+  if (cooldownSeconds == null) return "Please wait before requesting another decision.";
+  if (cooldownSeconds <= 0) return "Cooldown complete. Try again now.";
+  const minutes = Math.max(1, Math.ceil(cooldownSeconds / 60));
+  return `Try again in ${minutes} min.`;
 };
 
 export default function Home() {
-  const [user, setUser] = useState<any>(null);
-  const [nickname, setNickname] = useState<string | null>(null);
-  const [weeklyStats, setWeeklyStats] = useState({ workouts: 0, sets: 0, volumeKg: 0 });
-  const [readinessScore, setReadinessScore] = useState<number | null>(null);
-  const [lastReadiness, setLastReadiness] = useState<{ score: number | null; updatedAt?: Date }>({
-    score: null,
-    updatedAt: undefined,
-  });
-  const [savingReadiness, setSavingReadiness] = useState(false);
-  const [plan, setPlan] = useState<any>(null);
-  const [planGoal, setPlanGoal] = useState<string>("build-muscle");
-  const [planExperience, setPlanExperience] = useState<string>("beginner");
   const router = useRouter();
-  const auth = getAuth();
-  const todaySuggestion = useMemo(() => getTodaySuggestion(plan), [plan]);
+  const [redirectTo, setRedirectTo] = useState<Href | null>(null);
+  const [authReady, setAuthReady] = useState(false);
+  const [uid, setUid] = useState<string | null>(null);
+  const [userNickname, setUserNickname] = useState<string | null>(null);
 
-  const fetchStats = useCallback(
-    async (uid: string) => {
-      try {
-        const sevenDaysAgo = Timestamp.fromDate(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000));
-        const workoutsRef = collection(db, "users", uid, "workouts");
-        const q = query(workoutsRef, where("endedAt", ">=", sevenDaysAgo));
-        const docs = await getDocs(q);
-        let workouts = 0;
-        let sets = 0;
-        let volumeKg = 0;
-        docs.forEach((d) => {
-          const data: any = d.data();
-          workouts += 1;
-          sets += Number(data.totalSets || 0);
-          volumeKg += Number(data.totalVolumeKg || 0);
-        });
-        setWeeklyStats({ workouts, sets, volumeKg });
-      } catch (e) {
-        console.log("Error fetching weekly stats", e);
-      }
-    },
-    []
-  );
+  const [sleepHours, setSleepHours] = useState("7");
+  const [soreness, setSoreness] = useState(4);
+  const [fatigue, setFatigue] = useState(4);
+  const [motivation, setMotivation] = useState(6);
+  const [trainingPhase, setTrainingPhase] = useState<TrainingPhase>("Hypertrophy");
+  const [dietPhase, setDietPhase] = useState<DietPhase>("Maintain");
+
+  const [loading, setLoading] = useState(false);
+  const [gateError, setGateError] = useState<NormalizedDecisionError | null>(null);
+  const [cooldownSeconds, setCooldownSeconds] = useState<number | null>(null);
+  const [latestDecision, setLatestDecision] = useState<LastResultPayload | null>(null);
+  const [showAdjustHelp, setShowAdjustHelp] = useState(false);
+  const [lastTapAt, setLastTapAt] = useState(0);
+
+  const entitlement = useEntitlement(authReady, uid);
+  const { isOffline } = useOfflineStatus();
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (!user) router.push("/auth/sign-in");
-      else {
-        setUser(user);
-        try {
-          const ref = doc(db, "users", user.uid);
-          const snap = await getDoc(ref);
-          if (snap.exists()) {
-            const data = snap.data();
-            if (data.nickname) setNickname(data.nickname);
-            if (data.readiness?.score !== undefined) {
-              setReadinessScore(data.readiness.score);
-              setLastReadiness({
-                score: data.readiness.score,
-                updatedAt: data.readiness.updatedAt?.toDate
-                  ? data.readiness.updatedAt.toDate()
-                  : undefined,
-              });
-            }
-            if (data.plan) {
-              const normalizedSplit =
-                (data.plan.split ?? []).map((day: any) => ({
-                  ...day,
-                  exercises: (day.exercises ?? []).map((ex: any) =>
-                    typeof ex === "string" ? ex : ex?.name ?? String(ex)
-                  ),
-                })) ?? [];
-              setPlan({
-                ...data.plan,
-                split: normalizedSplit,
-                startDate: data.plan.startDate?.toDate
-                  ? data.plan.startDate.toDate().toISOString()
-                  : data.plan.startDate || new Date().toISOString(),
-              });
-            }
-          }
-          fetchStats(user.uid);
-        } catch (e) {
-          console.log("Error fetching nickname:", e);
+    const unsub = onAuthStateChanged(auth, (user) => {
+      setAuthReady(true);
+      if (!user) {
+        setUid(null);
+        setUserNickname(null);
+        setLatestDecision(null);
+        setRedirectTo("/auth/sign-in");
+        return;
+      }
+
+      setRedirectTo(null);
+      setUid(user.uid);
+    });
+    return unsub;
+  }, []);
+
+  useEffect(() => {
+    if (!uid) {
+      setUserNickname(null);
+      return;
+    }
+
+    const unsubscribe = onSnapshot(
+      doc(db, "users", uid),
+      (snap) => {
+        const data: any = snap.data();
+        const nickname = typeof data?.nickname === "string" ? data.nickname.trim() : "";
+        setUserNickname(nickname || null);
+
+        const lastResult = data?.usage?.decisions?.lastResult;
+        if (lastResult) {
+          setLatestDecision(lastResult as LastResultPayload);
+        }
+      },
+      (e) => {
+        if (!isExpectedOfflineError(e)) {
+          console.log("Failed to subscribe user profile", e);
         }
       }
-    });
+    );
+
     return unsubscribe;
-  }, [fetchStats]);
+  }, [uid]);
 
-  useFocusEffect(
-    useCallback(() => {
-      if (user?.uid) {
-        fetchStats(user.uid);
+  useEffect(() => {
+    const loadInputs = async () => {
+      try {
+        const raw = await AsyncStorage.getItem(HOME_INPUTS_KEY);
+        if (!raw) return;
+        const parsed = JSON.parse(raw);
+        if (typeof parsed.sleepHours === "string") setSleepHours(parsed.sleepHours);
+        if (typeof parsed.soreness === "number") setSoreness(parsed.soreness);
+        if (typeof parsed.fatigue === "number") setFatigue(parsed.fatigue);
+        if (typeof parsed.motivation === "number") setMotivation(parsed.motivation);
+        if (typeof parsed.trainingPhase === "string" && isTrainingPhase(parsed.trainingPhase)) {
+          setTrainingPhase(parsed.trainingPhase);
+        }
+        if (typeof parsed.dietPhase === "string" && isDietPhase(parsed.dietPhase)) {
+          setDietPhase(parsed.dietPhase);
+        }
+      } catch (e) {
+        console.log("Failed to load home inputs, clearing cache", e);
+        try {
+          await AsyncStorage.removeItem(HOME_INPUTS_KEY);
+        } catch {
+          // no-op
+        }
       }
-    }, [fetchStats, user?.uid])
-  );
+    };
+    loadInputs();
+  }, []);
 
-  const saveReadiness = async () => {
-    if (!user?.uid || readinessScore === null) return;
-    try {
-      setSavingReadiness(true);
-      await setDoc(
-        doc(db, "users", user.uid),
-        { readiness: { score: readinessScore, updatedAt: Timestamp.now() } },
-        { merge: true }
-      );
-      setLastReadiness({ score: readinessScore, updatedAt: new Date() });
-    } catch (e) {
-      console.log("Error saving readiness", e);
-    } finally {
-      setSavingReadiness(false);
-    }
-  };
+  useEffect(() => {
+    const save = async () => {
+      try {
+        await AsyncStorage.setItem(
+          HOME_INPUTS_KEY,
+          JSON.stringify({
+            sleepHours,
+            soreness,
+            fatigue,
+            motivation,
+            trainingPhase,
+            dietPhase,
+          })
+        );
+      } catch (e) {
+        console.log("Failed to save home inputs", e);
+      }
+    };
+    save();
+  }, [sleepHours, soreness, fatigue, motivation, trainingPhase, dietPhase]);
 
-  const savePlan = async () => {
-    if (!user?.uid) return;
-    try {
-      const split = buildPlan(planGoal, planExperience);
-      const payload = {
-        plan: {
-          goal: planGoal,
-          experience: planExperience,
-          startDate: Timestamp.now(),
-          split,
-        },
-      };
-      await setDoc(doc(db, "users", user.uid), payload, { merge: true });
-      setPlan({
-        goal: planGoal,
-        experience: planExperience,
-        startDate: new Date().toISOString(),
-        split,
+  useEffect(() => {
+    if (cooldownSeconds == null || cooldownSeconds <= 0) return;
+    const timer = setInterval(() => {
+      setCooldownSeconds((previous) => {
+        if (previous == null) return previous;
+        return previous > 0 ? previous - 1 : 0;
       });
-    } catch (e) {
-      console.log("Error saving plan", e);
-    }
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [cooldownSeconds]);
+
+  const { parsedSleep, sleepIsInvalid } = useMemo(() => {
+    const value = Number(sleepHours);
+    const invalid = !Number.isFinite(value) || value < 0 || value > 12;
+    return { parsedSleep: invalid ? 0 : value, sleepIsInvalid: invalid };
+  }, [sleepHours]);
+
+  const shouldShowUpgradeCta =
+    gateError?.bucket === "business_gate" && entitlement.state === "inactive";
+
+  const handleOpenPaywallFromGate = () => {
+    if (gateError?.bucket !== "business_gate" || entitlement.state !== "inactive") return;
+
+    const paywallParams =
+      gateError.reasonCode === "COOLDOWN_ACTIVE"
+        ? { sourceScreen: "cooldown_gate", reasonCode: "cooldown_gate" }
+        : { sourceScreen: "home_gate", reasonCode: "decision_limit" };
+
+    router.push({
+      pathname: "/paywall",
+      params: paywallParams,
+    });
   };
 
-  const resetPlan = async () => {
-    if (!user?.uid) return;
+  const handleDecision = async () => {
+    if (!uid || loading) return;
+    const nowMs = Date.now();
+    if (nowMs - lastTapAt < 500) return;
+
+    setLastTapAt(nowMs);
+    if (isOffline) {
+      setGateError({
+        bucket: "other",
+        message: "You're offline. Connect to get today's decision.",
+      });
+      setCooldownSeconds(null);
+      return;
+    }
+    setLoading(true);
+    setGateError(null);
+    setCooldownSeconds(null);
+
     try {
-      await setDoc(doc(db, "users", user.uid), { plan: null }, { merge: true });
-      setPlan(null);
-    } catch (e) {
-      console.log("Error resetting plan", e);
+        let nutrition: DecisionInputs["nutrition"] = null;
+        let effectiveSleepHours = parsedSleep;
+        let sleepSource: DecisionInputs["sleepSource"] = "manual";
+        let sleepSampleAgeHours: DecisionInputs["sleepSampleAgeHours"] = 0;
+        let shouldPersistManualSample = true;
+        try {
+          nutrition = await getTodayDecisionNutritionSummary(uid, dietPhase);
+        } catch (nutritionError) {
+          if (!isExpectedOfflineError(nutritionError)) {
+            console.log("Failed to load nutrition summary", nutritionError);
+          }
+        }
+
+        try {
+          const sleepProfile = await getSleepProfile(uid);
+          const sampleAgeHours = getSleepSampleAgeHours(sleepProfile.sampleRecordedAt);
+          const stale = isHealthSleepStale(sleepProfile, new Date());
+          const resolvedSleep = resolveDecisionSleepInput(parsedSleep, {
+            source: sleepProfile.source,
+            latestSleepHours: sleepProfile.latestSleepHours,
+            sampleAgeHours: stale ? null : sampleAgeHours,
+          });
+          effectiveSleepHours = resolvedSleep.sleepHours;
+          sleepSource = resolvedSleep.sleepSource;
+          sleepSampleAgeHours = resolvedSleep.sleepSampleAgeHours;
+          shouldPersistManualSample = resolvedSleep.shouldPersistManualSample;
+          if (shouldPersistManualSample) {
+            await saveManualSleepSample(uid, parsedSleep);
+          }
+        } catch (sleepError) {
+          if (!isExpectedOfflineError(sleepError)) {
+            console.log("Failed to resolve sleep source", sleepError);
+          }
+        }
+
+      const inputs: DecisionInputs = {
+        sleepHours: effectiveSleepHours,
+        sleepSource,
+        sleepSampleAgeHours,
+        soreness,
+        fatigue,
+        motivation,
+        trainingPhase,
+        dietPhase,
+        nutrition,
+      };
+
+      const result = await getDecision(inputs);
+      const payload: LastResultPayload = {
+        createdAt: Timestamp.now(),
+        inputs,
+        result,
+      };
+      const inputHash = hashDecisionInputs(inputs);
+
+      const userRef = doc(db, "users", uid);
+      await setDoc(
+        userRef,
+        { usage: { decisions: { lastResult: payload, lastInputHash: inputHash } } },
+        { merge: true }
+        );
+        await updateDoc(userRef, {
+          "usage.decisions.lastResult.inputs.phase": deleteField(),
+          "usage.decisions.lastResult.inputs.nutrition.calorieTargetAdherence":
+            deleteField(),
+        });
+
+      setLatestDecision(payload);
+    } catch (error) {
+      if (isNormalizedDecisionError(error)) {
+        setGateError(error);
+        if (error.bucket === "business_gate" && error.reasonCode === "COOLDOWN_ACTIVE") {
+          if (typeof error.retryAfterSeconds === "number") {
+            setCooldownSeconds(error.retryAfterSeconds);
+          }
+        }
+        return;
+      }
+
+      console.log("Decision request failed", error);
+      setGateError({
+        bucket: "other",
+        message: "Something went wrong. Please try again.",
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
-  if (!user) return null;
-
-  // Navigate to Settings page
-  const navigateToSettings = () => {
-    router.push("/settings");  // Navigate to settings page
-  };
+  if (redirectTo) return <Redirect href={redirectTo} />;
 
   return (
     <View style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
-        {/* Left side: Greeting */}
         <View style={styles.headerLeft}>
-          <Text>
-            <Text style={styles.greeting}>Welcome, </Text>
-            <Text style={styles.userName}>
-              {nickname ? nickname : user.email?.split("@")[0]}
-            </Text>
-          </Text>
+          <Text style={styles.greeting}>lastrep</Text>
+          <View style={styles.userRow}>
+            <Text style={styles.userName}>{userNickname ?? "Lifter"}</Text>
+            <View
+              style={[
+                styles.entitlementBadge,
+                entitlement.state === "active"
+                  ? styles.entitlementBadgeActive
+                  : entitlement.state === "inactive"
+                    ? styles.entitlementBadgeInactive
+                    : styles.entitlementBadgeLoading,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.entitlementBadgeText,
+                  entitlement.state === "active"
+                    ? styles.entitlementBadgeTextActive
+                    : styles.entitlementBadgeTextMuted,
+                ]}
+              >
+                {entitlement.state === "active"
+                  ? "Premium"
+                  : entitlement.state === "inactive"
+                    ? "Free"
+                    : "Checking"}
+              </Text>
+            </View>
+          </View>
         </View>
-
-        {/* Right side: Icons */}
         <View style={styles.iconContainer}>
-          <TouchableOpacity onPress={() => router.push("../profile" as Href)}>
-            <Ionicons name="person-circle-outline" size={32} color="#fff" />
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={navigateToSettings}  // Navigate to settings when gear icon is pressed
-            style={{ marginLeft: 14 }}
-          >
+          <TouchableOpacity onPress={() => router.push("/settings" as Href)} style={{ marginLeft: 12 }}>
             <Ionicons name="settings-outline" size={28} color="#fff" />
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* Main Content */}
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Today’s Workout */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Today's Workout</Text>
+          <Text style={styles.sectionTitle}>Inputs</Text>
           <View style={styles.card}>
-            <Text style={styles.cardText}>Start logging your next session.</Text>
-            <TouchableOpacity
-              style={styles.primaryButtonWide}
-              onPress={() => router.push("/(tabs)/workout/log" as Href)}
-            >
-              <Text style={styles.primaryText}>Start Workout</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+            <Text style={styles.label}>Sleep (hours)</Text>
+            <TextInput
+              style={styles.input}
+              value={sleepHours}
+              onChangeText={setSleepHours}
+              keyboardType="numeric"
+              placeholder="7"
+              placeholderTextColor="#7a7a8c"
+            />
+            {sleepIsInvalid ? <Text style={styles.inputHint}>Enter a number between 0 and 12.</Text> : null}
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Readiness</Text>
-          <View style={styles.card}>
-            <Text style={styles.cardText}>How ready do you feel to train today?</Text>
-            <View style={styles.readinessRow}>
-              {[1, 2, 3, 4, 5].map((val) => {
-                const active = readinessScore === val;
-                return (
-                  <TouchableOpacity
-                    key={val}
-                    style={[styles.readinessButton, active && styles.readinessButtonActive]}
-                    onPress={() => setReadinessScore(val)}
-                  >
-                    <Text style={[styles.readinessButtonText, active && styles.readinessButtonTextActive]}>
-                      {val}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-            <TouchableOpacity
-              style={[
-                styles.primaryButtonWide,
-                { marginTop: 8, opacity: readinessScore === null || savingReadiness ? 0.6 : 1 },
-              ]}
-              disabled={readinessScore === null || savingReadiness}
-              onPress={saveReadiness}
-            >
-              <Text style={styles.primaryText}>{savingReadiness ? "Saving..." : "Save readiness"}</Text>
-            </TouchableOpacity>
-            <Text style={[styles.cardText, { marginTop: 10 }]}>
-              {lastReadiness.score !== null
-                ? `Last saved: ${lastReadiness.score}/5${lastReadiness.updatedAt
-                  ? ` · ${lastReadiness.updatedAt.toLocaleDateString()} ${lastReadiness.updatedAt.toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}`
-                  : ""
-                }`
-                : "Not saved yet"}
-            </Text>
-          </View>
-        </View>
+            <Text style={styles.label}>Soreness: {soreness}</Text>
+            <Slider
+              value={soreness}
+              onValueChange={(v: number) => setSoreness(Math.round(v))}
+              minimumValue={0}
+              maximumValue={10}
+              step={1}
+              minimumTrackTintColor="#7b61ff"
+              maximumTrackTintColor="#555"
+              thumbTintColor="#fff"
+            />
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Guided plan</Text>
-          <View style={styles.card}>
-            {plan ? (
-              <>
-                <View style={styles.planHeader}>
-                  <Text style={styles.cardText}>
-                    Goal: {plan.goal?.replace("-", " ")} · {plan.experience}
+            <Text style={styles.label}>Fatigue: {fatigue}</Text>
+            <Slider
+              value={fatigue}
+              onValueChange={(v: number) => setFatigue(Math.round(v))}
+              minimumValue={0}
+              maximumValue={10}
+              step={1}
+              minimumTrackTintColor="#7b61ff"
+              maximumTrackTintColor="#555"
+              thumbTintColor="#fff"
+            />
+
+            <Text style={styles.label}>Motivation: {motivation}</Text>
+            <Slider
+              value={motivation}
+              onValueChange={(v: number) => setMotivation(Math.round(v))}
+              minimumValue={0}
+              maximumValue={10}
+              step={1}
+              minimumTrackTintColor="#7b61ff"
+              maximumTrackTintColor="#555"
+              thumbTintColor="#fff"
+            />
+
+            <Text style={styles.label}>Training phase</Text>
+            <View style={styles.segmentRow}>
+              {TRAINING_PHASES.map((value) => (
+                <TouchableOpacity
+                  key={value}
+                  style={[styles.segmentChip, trainingPhase === value && styles.segmentChipActive]}
+                  onPress={() => setTrainingPhase(value)}
+                >
+                  <Text style={[styles.segmentText, trainingPhase === value && styles.segmentTextActive]}>
+                    {value}
                   </Text>
-                  <TouchableOpacity onPress={resetPlan}>
-                    <Text style={styles.link}>Change</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <Text style={styles.label}>Diet phase</Text>
+            <View style={styles.segmentRow}>
+              {DIET_PHASES.map((value) => (
+                <TouchableOpacity
+                  key={value}
+                  style={[styles.segmentChip, dietPhase === value && styles.segmentChipActive]}
+                  onPress={() => setDietPhase(value)}
+                >
+                  <Text style={[styles.segmentText, dietPhase === value && styles.segmentTextActive]}>
+                    {value}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <TouchableOpacity
+              style={[styles.primaryButtonWide, loading && styles.disabled]}
+              onPress={handleDecision}
+              disabled={loading}
+            >
+              <Text style={styles.primaryText}>{loading ? "Working..." : "Get today's decision"}</Text>
+            </TouchableOpacity>
+
+            {gateError ? (
+              <View style={styles.notice}>
+                <Text style={styles.noticeText}>
+                  {gateError.bucket === "business_gate"
+                    ? getReasonMessage(gateError.reasonCode)
+                    : gateError.message ?? "Unable to get a decision right now."}
+                </Text>
+                {gateError.bucket === "business_gate" && gateError.reasonCode === "COOLDOWN_ACTIVE" ? (
+                  <Text style={styles.noticeSub}>{formatCooldownMessage(cooldownSeconds)}</Text>
+                ) : null}
+                {gateError.bucket === "seatbelt" ? (
+                  <Text style={styles.noticeSub}>Too many requests. Try again shortly.</Text>
+                ) : null}
+                {shouldShowUpgradeCta ? (
+                  <TouchableOpacity style={styles.paywallButton} onPress={handleOpenPaywallFromGate}>
+                    <Text style={styles.paywallText}>Upgrade to Premium</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+            ) : null}
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Today&apos;s decision</Text>
+          <View style={styles.card}>
+            {latestDecision ? (
+              <>
+                <Text style={styles.decisionTitle}>{formatDecisionLabel(latestDecision.result.decision)}</Text>
+                <View style={styles.bulletList}>
+                  {latestDecision.result.explanation.map((line, index) => (
+                    <Text key={`${line}-${index}`} style={styles.bulletItem}>
+                      - {line}
+                    </Text>
+                  ))}
+                </View>
+                <View style={styles.adjustRow}>
+                  <Text style={styles.adjustText}>
+                    {formatIntensityLabel(latestDecision.result.adjustments?.intensityPct)}
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() => setShowAdjustHelp((previous) => !previous)}
+                    style={styles.helpIcon}
+                    accessibilityLabel="What does intensity mean?"
+                  >
+                    <Ionicons name="help-circle-outline" size={18} color="#9aa1c3" />
                   </TouchableOpacity>
                 </View>
-                {todaySuggestion ? (
-                  <>
-                    <Text style={[styles.cardText, { marginBottom: 8 }]}>
-                      Today: {todaySuggestion.name}
-                    </Text>
-                    <View style={styles.bulletList}>
-                      {(todaySuggestion.exercises ?? []).map((ex: any, index: number) => {
-                        const name = typeof ex === "string" ? ex : ex?.name;
-                        if (!name) return null;
-                        const details =
-                          typeof ex === "object" && ex
-                            ? ` (${ex.sets ?? "?"} sets × ${ex.reps ?? "?"} reps)`
-                            : "";
-                        return (
-                          <Text key={`${name}-${index}`} style={styles.bulletItem}>
-                            • {name}
-                            {details}
-                          </Text>
-                        );
-                      })}
-                    </View>
-                    <View style={styles.buttonRow}>
-                      <TouchableOpacity
-                        style={styles.primaryButton}
-                        onPress={() => router.push("/(tabs)/workout/log" as Href)}
-                      >
-                        <Text style={styles.primaryText}>Start suggested</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={styles.secondaryButton}
-                        onPress={() => router.push("/(tabs)/workout/log" as Href)}
-                      >
-                        <Text style={styles.secondaryText}>Start freestyle</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </>
-                ) : (
-                  <Text style={styles.cardText}>No suggestion for today.</Text>
-                )}
+                {showAdjustHelp ? (
+                  <Text style={styles.helpText}>Intensity adjustment = change the weight on your sets.</Text>
+                ) : null}
               </>
             ) : (
-              <>
-                <Text style={styles.cardText}>Pick a split and we’ll suggest today’s workout.</Text>
-                <Text style={styles.smallLabel}>Goal</Text>
-                <View style={styles.chipRow}>
-                  {[
-                    { key: "build-muscle", label: "Build muscle" },
-                    { key: "lose-fat", label: "Lose fat" },
-                    { key: "general-fitness", label: "General" },
-                  ].map((g) => (
-                    <TouchableOpacity
-                      key={g.key}
-                      style={[styles.chip, planGoal === g.key && styles.chipActive]}
-                      onPress={() => setPlanGoal(g.key)}
-                    >
-                      <Text style={[styles.chipText, planGoal === g.key && styles.chipTextActive]}>
-                        {g.label}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-                <Text style={styles.smallLabel}>Experience</Text>
-                <View style={styles.chipRow}>
-                  {["beginner", "intermediate", "advanced"].map((lvl) => (
-                    <TouchableOpacity
-                      key={lvl}
-                      style={[styles.chip, planExperience === lvl && styles.chipActive]}
-                      onPress={() => setPlanExperience(lvl)}
-                    >
-                      <Text
-                        style={[
-                          styles.chipText,
-                          planExperience === lvl && styles.chipTextActive,
-                        ]}
-                      >
-                        {lvl}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-                <TouchableOpacity style={[styles.primaryButtonWide, { marginTop: 8 }]} onPress={savePlan}>
-                  <Text style={styles.primaryText}>Save plan</Text>
-                </TouchableOpacity>
-              </>
+              <Text style={styles.cardText}>No decision yet.</Text>
             )}
           </View>
         </View>
 
-        {/* Stats Summary Placeholder */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>This Week</Text>
-          <View style={styles.statsCard}>
-            <Text style={styles.statsText}>Workouts Completed: {weeklyStats.workouts}</Text>
-            <Text style={styles.statsText}>Total Sets: {weeklyStats.sets}</Text>
-            <Text style={styles.statsText}>Total Weight Lifted: {Math.round(weeklyStats.volumeKg * 10) / 10} kg</Text>
+          <Text style={styles.sectionTitle}>Train</Text>
+          <View style={styles.card}>
+            <Text style={styles.cardText}>Log a full session without templates or history browsing.</Text>
+            <TouchableOpacity
+              style={styles.primaryButtonWide}
+              onPress={() =>
+                router.push(
+                  `/(tabs)/workout/log?trainingPhase=${encodeURIComponent(trainingPhase)}` as Href
+                )
+              }
+            >
+              <Text style={styles.primaryText}>Start workout</Text>
+            </TouchableOpacity>
           </View>
         </View>
 
-        {/* Motivation / Quote */}
-        <View style={styles.motivationCard}>
-          <Text style={styles.quote}>
-            “One more rep isn’t just a number — it’s a mindset.” 💪
-          </Text>
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Nutrition</Text>
+          <View style={styles.card}>
+            <Text style={styles.cardText}>Log today&apos;s meals and keep a simple calorie total.</Text>
+            <TouchableOpacity
+              style={styles.primaryButtonWide}
+              onPress={() => router.push("/nutrition" as Href)}
+            >
+              <Text style={styles.primaryText}>Open nutrition</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </ScrollView>
     </View>
@@ -425,20 +560,50 @@ const styles = StyleSheet.create({
   },
   greeting: {
     color: "#ccc",
-    fontSize: 20,
-    fontWeight: "600",
+    fontSize: 18,
+    fontWeight: "700",
   },
   userName: {
     color: "#fff",
-    fontSize: 20,
+    fontSize: 16,
     fontWeight: "700",
+  },
+  userRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap",
+  },
+  entitlementBadge: {
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  entitlementBadgeActive: {
+    backgroundColor: "#a6e3a1",
+  },
+  entitlementBadgeInactive: {
+    backgroundColor: "rgba(255,255,255,0.14)",
+  },
+  entitlementBadgeLoading: {
+    backgroundColor: "rgba(255,255,255,0.08)",
+  },
+  entitlementBadgeText: {
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  entitlementBadgeTextActive: {
+    color: "#0d0d1a",
+  },
+  entitlementBadgeTextMuted: {
+    color: "#fff",
   },
   iconContainer: {
     flexDirection: "row",
     alignItems: "center",
   },
   scrollContent: {
-    paddingBottom: 100,
+    paddingBottom: 120,
   },
   section: {
     marginTop: 20,
@@ -446,19 +611,31 @@ const styles = StyleSheet.create({
   sectionTitle: {
     color: "#fff",
     fontSize: 20,
-    fontWeight: "700",
+    fontWeight: "800",
     marginBottom: 10,
   },
   card: {
     backgroundColor: "rgba(255,255,255,0.05)",
     borderRadius: 16,
     padding: 20,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.08)",
+    gap: 12,
   },
-  cardText: { color: "#aaa", fontSize: 15, marginBottom: 16 },
-  link: { color: "#7b61ff", fontWeight: "700" },
-  smallLabel: { color: "#ccc", fontSize: 13, marginTop: 4, marginBottom: 6 },
-  chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 6 },
-  chip: {
+  label: { color: "#cfcfe6", fontSize: 14, fontWeight: "600" },
+  input: {
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderColor: "rgba(255,255,255,0.2)",
+    borderWidth: 1,
+    borderRadius: 12,
+    color: "#fff",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+  },
+  inputHint: { color: "#9aa1c3", fontSize: 12 },
+  segmentRow: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
+  segmentChip: {
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 12,
@@ -466,81 +643,42 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.2)",
     backgroundColor: "rgba(255,255,255,0.06)",
   },
-  chipActive: { backgroundColor: "#7b61ff", borderColor: "#7b61ff" },
-  chipText: { color: "#d8daec", fontWeight: "700" },
-  chipTextActive: { color: "#0d0d1a" },
-  planHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  bulletList: { gap: 4, marginBottom: 10 },
-  bulletItem: { color: "#d8daec" },
-  buttonRow: { flexDirection: "row", gap: 10, marginTop: 10 },
-  readinessRow: { flexDirection: "row", justifyContent: "space-between", marginTop: 8, marginBottom: 8 },
-  readinessButton: {
-    flex: 1,
-    marginHorizontal: 4,
-    paddingVertical: 12,
-    borderRadius: 12,
-    backgroundColor: "rgba(255,255,255,0.06)",
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(255,255,255,0.1)",
-    alignItems: "center",
-  },
-  readinessButtonActive: {
-    backgroundColor: "#7b61ff",
-    borderColor: "#7b61ff",
-  },
-  readinessButtonText: { color: "#d2d3e0", fontWeight: "700" },
-  readinessButtonTextActive: { color: "#0d0d1a" },
+  segmentChipActive: { backgroundColor: "#7b61ff", borderColor: "#7b61ff" },
+  segmentText: { color: "#d8daec", fontWeight: "700" },
+  segmentTextActive: { color: "#0d0d1a" },
   primaryButtonWide: {
     backgroundColor: "#7b61ff",
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: "center",
   },
-  primaryButton: {
-    backgroundColor: "#7b61ff",
-    borderRadius: 10,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    flex: 1,
-    alignItems: "center",
-  },
   primaryText: {
     color: "#fff",
     fontWeight: "700",
   },
-  secondaryButton: {
-    backgroundColor: "#fff",
-    borderRadius: 10,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    flex: 1,
-    alignItems: "center",
-    marginLeft: 8,
-  },
-  secondaryText: {
-    color: "#7b61ff",
-    fontWeight: "700",
-  },
-  statsCard: {
-    backgroundColor: "rgba(255,255,255,0.05)",
-    borderRadius: 16,
-    padding: 20,
-  },
-  statsText: {
-    color: "#ccc",
-    fontSize: 15,
-    marginBottom: 6,
-  },
-  motivationCard: {
-    marginTop: 25,
+  disabled: { opacity: 0.6 },
+  cardText: { color: "#aaa", fontSize: 15 },
+  notice: {
     backgroundColor: "rgba(255,255,255,0.08)",
-    borderRadius: 16,
-    padding: 20,
+    borderRadius: 12,
+    padding: 12,
+    gap: 6,
   },
-  quote: {
-    color: "#fff",
-    fontSize: 16,
-    fontStyle: "italic",
-    textAlign: "center",
+  noticeText: { color: "#fff", fontWeight: "700" },
+  noticeSub: { color: "#9aa1c3", fontSize: 12 },
+  paywallButton: {
+    borderColor: "rgba(255,255,255,0.3)",
+    borderWidth: StyleSheet.hairlineWidth * 2,
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: "center",
   },
+  paywallText: { color: "#fff", fontWeight: "700" },
+  decisionTitle: { color: "#fff", fontSize: 22, fontWeight: "800" },
+  bulletList: { gap: 6 },
+  bulletItem: { color: "#d8daec", fontSize: 14 },
+  adjustRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  adjustText: { color: "#9aa1c3", fontSize: 13 },
+  helpIcon: { paddingHorizontal: 4, paddingVertical: 2 },
+  helpText: { color: "#9aa1c3", fontSize: 12 },
 });

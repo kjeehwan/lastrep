@@ -1,4 +1,4 @@
-﻿import AsyncStorage from "@react-native-async-storage/async-storage";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import { GoogleSignin } from "@react-native-google-signin/google-signin";
 import {
@@ -18,7 +18,24 @@ import {
 } from "react-native";
 import LastRepLogo from "../../components/LastRepLogo"; // Static logo component
 import { auth } from "../../src/config/firebaseConfig";
-import { getUserData, saveUserData } from "../../src/userData"; // Firestore helpers
+import { buildDefaultUserDoc, getDecisionUsage, getUserData, saveUserData } from "../../src/userData";
+
+const normalizeGoogleAuthErrorMessage = (error: unknown, fallback: string): string => {
+  const raw =
+    typeof (error as { message?: unknown } | undefined)?.message === "string"
+      ? (error as { message: string }).message
+      : "";
+  const normalized = raw.toLowerCase();
+  if (
+    normalized.includes("gettokens requires a user to be signed in") ||
+    normalized.includes("user cancelled") ||
+    normalized.includes("user canceled") ||
+    normalized.includes("sign_in_cancelled")
+  ) {
+    return "Google sign-in was canceled.";
+  }
+  return raw || fallback;
+};
 
 export default function SignIn() {
   const router = useRouter();
@@ -51,18 +68,29 @@ export default function SignIn() {
     const data = await getUserData(userCredential.user.uid);
     const additionalInfo = getAdditionalUserInfo(userCredential);
 
+    const tzOffsetMinutes = new Date().getTimezoneOffset();
     if (!data && additionalInfo?.isNewUser) {
-      await saveUserData(userCredential.user.uid, {
-        email: userCredential.user.email,
-        name:
-          userCredential.user.displayName ||
-          userCredential.user.email?.split("@")[0] ||
-          "New User",
-        goal: "Build muscle",
-      });
+      await saveUserData(
+        userCredential.user.uid,
+        buildDefaultUserDoc({
+          email: userCredential.user.email,
+          name:
+            userCredential.user.displayName ||
+            userCredential.user.email?.split("@")[0] ||
+            "New User",
+          goal: "Build muscle",
+        }, new Date(), tzOffsetMinutes)
+      );
       await AsyncStorage.setItem("isSignedUp", "true");
       router.push("/onboarding/goal");
       return;
+    }
+
+    if (data) {
+      const normalized = getDecisionUsage(data, new Date(), tzOffsetMinutes);
+      await saveUserData(userCredential.user.uid, {
+        usage: { decisions: normalized },
+      });
     }
 
     router.push("/home");
@@ -85,7 +113,7 @@ export default function SignIn() {
       const userCredential = await signInWithCredential(auth, credential);
       await finalizeSession(userCredential);
     } catch (googleError: any) {
-      setError(googleError.message ?? "Google Sign-In failed");
+      setError(normalizeGoogleAuthErrorMessage(googleError, "Google Sign-In failed"));
     } finally {
       setGoogleBusy(false);
     }
@@ -127,7 +155,7 @@ export default function SignIn() {
       </TouchableOpacity>
 
       <View style={styles.footer}>
-        <Text style={styles.footerText}>Don?셳 have an account? </Text>
+        <Text style={styles.footerText}>Don't have an account? </Text>
         <TouchableOpacity onPress={() => router.push("/auth/sign-up")}>
           <Text style={styles.link}>Sign up!</Text>
         </TouchableOpacity>
@@ -191,8 +219,5 @@ const styles = StyleSheet.create({
     color: "#2a67b1",
   },
 });
-
-
-
 
 

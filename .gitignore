@@ -25,6 +25,7 @@ expo-env.d.ts
 npm-debug.*
 yarn-debug.*
 yarn-error.*
+log.txt
 
 # macOS
 .DS_Store
@@ -47,3 +48,8 @@ app-example
 # sensitive files
 google-services.json
 GoogleService-Info.plist
+
+# EAS / Android build artifacts
+*.aab
+*.apk
+*.apks

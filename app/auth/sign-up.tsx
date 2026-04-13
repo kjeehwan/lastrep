@@ -1,4 +1,4 @@
-﻿import AsyncStorage from "@react-native-async-storage/async-storage";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import { GoogleSignin } from "@react-native-google-signin/google-signin";
 import {
@@ -12,7 +12,47 @@ import React, { useEffect, useState } from "react";
 import { StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import LastRepLogo from "../../components/LastRepLogo"; // Static logo component
 import { auth } from "../../src/config/firebaseConfig";
-import { saveUserData } from "../../src/userData"; // Function to save user data in Firestore
+import { buildDefaultUserDoc, getDecisionUsage, getUserData, saveUserData } from "../../src/userData";
+
+const normalizeGoogleAuthErrorMessage = (error: unknown, fallback: string): string => {
+  const raw =
+    typeof (error as { message?: unknown } | undefined)?.message === "string"
+      ? (error as { message: string }).message
+      : "";
+  const normalized = raw.toLowerCase();
+  if (
+    normalized.includes("gettokens requires a user to be signed in") ||
+    normalized.includes("user cancelled") ||
+    normalized.includes("user canceled") ||
+    normalized.includes("sign_in_cancelled")
+  ) {
+    return "Google sign-up was canceled.";
+  }
+  return raw || fallback;
+};
+
+const normalizeEmailSignUpErrorMessage = (error: unknown): string => {
+  const code =
+    typeof (error as { code?: unknown } | undefined)?.code === "string"
+      ? (error as { code: string }).code.toLowerCase()
+      : "";
+  const raw =
+    typeof (error as { message?: unknown } | undefined)?.message === "string"
+      ? (error as { message: string }).message.toLowerCase()
+      : "";
+
+  if (code.includes("email-already-in-use") || raw.includes("email-already-in-use")) {
+    return "This email is already registered. Try signing in instead.";
+  }
+  if (code.includes("invalid-email") || raw.includes("invalid-email")) {
+    return "Please enter a valid email address.";
+  }
+  if (code.includes("weak-password") || raw.includes("weak-password")) {
+    return "Use a stronger password (at least 6 characters).";
+  }
+
+  return "Sign-up failed. Please check your details and try again.";
+};
 
 export default function SignUp() {
   const [email, setEmail] = useState("");
@@ -34,7 +74,7 @@ export default function SignUp() {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       await finalizeRegistration(userCredential, true);
     } catch (err: any) {
-      setError(err.message); // Show error message if sign-up fails
+      setError(normalizeEmailSignUpErrorMessage(err));
     }
   };
 
@@ -42,18 +82,29 @@ export default function SignUp() {
     const userToken = await userCredential.user.getIdToken(); // Get the Firebase ID token
     await AsyncStorage.setItem("userToken", userToken); // Save the user token
 
+    const tzOffsetMinutes = new Date().getTimezoneOffset();
     if (isNewUser) {
-      await saveUserData(userCredential.user.uid, {
-        email: userCredential.user.email,
-        name:
-          userCredential.user.displayName ||
-          userCredential.user.email?.split("@")[0] ||
-          "New User",
-        goal: "Build muscle",
-      });
+      await saveUserData(
+        userCredential.user.uid,
+        buildDefaultUserDoc({
+          email: userCredential.user.email,
+          name:
+            userCredential.user.displayName ||
+            userCredential.user.email?.split("@")[0] ||
+            "New User",
+          goal: "Build muscle",
+        }, new Date(), tzOffsetMinutes)
+      );
       await AsyncStorage.setItem("isSignedUp", "true");
       router.push("/onboarding/goal"); // Redirect to onboarding after successful sign-up
     } else {
+      const data = await getUserData(userCredential.user.uid);
+      if (data) {
+        const normalized = getDecisionUsage(data, new Date(), tzOffsetMinutes);
+        await saveUserData(userCredential.user.uid, {
+          usage: { decisions: normalized },
+        });
+      }
       router.push("/home");
     }
   };
@@ -75,7 +126,7 @@ export default function SignUp() {
       const additionalInfo = getAdditionalUserInfo(userCredential);
       await finalizeRegistration(userCredential, additionalInfo?.isNewUser ?? false);
     } catch (googleError: any) {
-      setError(googleError.message ?? "Google Sign-Up failed");
+      setError(normalizeGoogleAuthErrorMessage(googleError, "Google Sign-Up failed"));
     } finally {
       setGoogleBusy(false);
     }
@@ -188,7 +239,5 @@ const styles = StyleSheet.create({
     color: "#2a67b1",
   },
 });
-
-
 
 

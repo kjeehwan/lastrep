@@ -1,24 +1,41 @@
 import { Ionicons } from "@expo/vector-icons";
-import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
-import React from "react";
-import CommunityIndex from "./community/index"; // Same for community index
-import Home from "./home"; // Make sure this path matches where your home component is
-import ProfileIndex from "./profile/index"; // Ensure the correct import path
-import WorkoutIndex from "./workout/index"; // Same for workout index
-import WorkoutLog from "./workout/log";
-
-const Tab = createBottomTabNavigator();
+import { Tabs } from "expo-router";
+import { onAuthStateChanged } from "firebase/auth";
+import React, { useEffect, useRef } from "react";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { auth } from "../../src/config/firebaseConfig";
+import { useOfflineStatus } from "../../src/hooks/useOfflineStatus";
+import { autoSyncSleepFromHealthConnectIfEligible } from "../../src/sleep/sleep";
 
 export default function TabsLayout() {
+  const insets = useSafeAreaInsets();
+  const bottomInset = Math.max(insets.bottom, 12);
+  const { isOffline } = useOfflineStatus();
+  const inFlightRef = useRef(false);
+
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (user) => {
+      if (!user || isOffline || inFlightRef.current) return;
+      inFlightRef.current = true;
+      void autoSyncSleepFromHealthConnectIfEligible(user.uid, { minIntervalMinutes: 30 }).finally(
+        () => {
+          inFlightRef.current = false;
+        }
+      );
+    });
+    return unsub;
+  }, [isOffline]);
+
   return (
-    <Tab.Navigator
+    <Tabs
+      initialRouteName="home"
       screenOptions={({ route }) => ({
         headerShown: false,
         tabBarStyle: {
           backgroundColor: "#0d0d1a",
           borderTopColor: "rgba(255,255,255,0.08)",
-          height: 70,
-          paddingBottom: 10,
+          height: 60 + bottomInset,
+          paddingBottom: bottomInset,
           paddingTop: 8,
         },
         tabBarActiveTintColor: "#7b61ff",
@@ -26,9 +43,10 @@ export default function TabsLayout() {
         tabBarIcon: ({ color, size }) => {
           const icons: Record<string, keyof typeof Ionicons.glyphMap> = {
             home: "home-outline",
-            "workout/index": "barbell-outline",
-            "community/index": "people-outline",
-            "profile/index": "person-outline",  // Profile route icon
+            "nutrition/index": "restaurant-outline",
+            workout: "barbell-outline",
+            "sleep/index": "moon-outline",
+            "profile/index": "person-outline",
           };
           return (
             <Ionicons
@@ -40,15 +58,14 @@ export default function TabsLayout() {
         },
       })}
     >
-      <Tab.Screen name="home" component={Home} options={{ title: "Home" }} />
-      <Tab.Screen name="workout/index" component={WorkoutIndex} options={{ title: "Workout" }} />
-      <Tab.Screen
-        name="workout/log"
-        component={WorkoutLog}
-        options={{ title: "Log workout", tabBarButton: () => null, tabBarStyle: { display: "none" } }}
-      />
-      <Tab.Screen name="community/index" component={CommunityIndex} options={{ title: "Community" }} />
-      <Tab.Screen name="profile/index" component={ProfileIndex} options={{ title: "Profile" }} />
-    </Tab.Navigator>
+      <Tabs.Screen name="index" options={{ href: null }} />
+      <Tabs.Screen name="home" options={{ title: "Home" }} />
+      <Tabs.Screen name="workout" options={{ title: "Workout" }} />
+      <Tabs.Screen name="nutrition/index" options={{ title: "Nutrition" }} />
+      <Tabs.Screen name="sleep/index" options={{ title: "Sleep" }} />
+      <Tabs.Screen name="settings/index" options={{ href: null }} />
+      <Tabs.Screen name="community/index" options={{ href: null }} />
+      <Tabs.Screen name="profile/index" options={{ title: "Profile" }} />
+    </Tabs>
   );
 }
