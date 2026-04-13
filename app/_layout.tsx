@@ -19,6 +19,8 @@ export default function RootLayout() {
   const colorScheme = useColorScheme();
   const stackScreens = [
     <Stack.Screen key="tabs" name="(tabs)" options={{ headerShown: false }} />,
+    <Stack.Screen key="auth-sign-in" name="auth/sign-in" options={{ headerShown: false }} />,
+    <Stack.Screen key="auth-sign-up" name="auth/sign-up" options={{ headerShown: false }} />,
     <Stack.Screen key="paywall" name="paywall" options={{ title: "Paywall" }} />,
     <Stack.Screen key="modal" name="modal" options={{ presentation: "modal", title: "Modal" }} />,
   ];
@@ -67,7 +69,7 @@ export default function RootLayout() {
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <Stack>{stackScreens}</Stack>
       <OfflineBanner />
-      <StatusBar style="auto" />
+      <StatusBar style="light" backgroundColor="#0d0d1a" />
     </ThemeProvider>
   );
 }

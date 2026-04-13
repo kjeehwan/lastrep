@@ -4,7 +4,7 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { getAuth } from "firebase/auth";
 import { addDoc, collection, doc, getDoc, getDocs, limit, orderBy, query, Timestamp } from "firebase/firestore";
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { Alert, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, useWindowDimensions } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { db } from "../../../src/config/firebaseConfig";
 import type { Decision } from "../../../src/types/decision";
@@ -71,6 +71,8 @@ const DRAFT_KEY = "workout-log-draft-v1";
 
 export default function WorkoutLog() {
   const router = useRouter();
+  const { width } = useWindowDimensions();
+  const isTabletLayout = width >= 600;
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [showPicker, setShowPicker] = useState(false);
   const [customExercise, setCustomExercise] = useState("");
@@ -813,8 +815,8 @@ export default function WorkoutLog() {
               ) : (
                 ex.sets.map((s, idx) => (
                   <View key={`${ex.id}-set-${idx}`} style={styles.setContainer}>
-                    <View style={styles.setInlineRow}>
-                      <Text style={styles.setLabel}>
+                    <View style={[styles.setInlineRow, isTabletLayout && styles.setInlineRowTablet]}>
+                      <Text style={[styles.setLabel, isTabletLayout && styles.setLabelTablet]}>
                         {idx + 1}
                       </Text>
                       <TouchableOpacity
@@ -826,23 +828,35 @@ export default function WorkoutLog() {
                           {s.done ? <Ionicons name="checkmark" size={14} color="#0d0d1a" /> : null}
                         </View>
                       </TouchableOpacity>
-                      <TextInput
-                        placeholder="Weight"
-                        placeholderTextColor="#7a7a8c"
-                        keyboardType="numeric"
-                        value={formatWeightInput(s.weightKg, unit)}
-                        onChangeText={(v) => updateSetWeight(ex.id, idx, unit, v)}
-                        style={[styles.input, styles.setInput]}
-                      />
-                      <TextInput
-                        placeholder="Reps"
-                        placeholderTextColor="#7a7a8c"
-                        keyboardType="numeric"
-                        value={s.reps}
-                        onChangeText={(v) => updateSetReps(ex.id, idx, v)}
-                        style={[styles.input, styles.setInput, styles.setInputReps]}
-                      />
-                      <View style={styles.actions}>
+                      <View style={[styles.setInputsGroup, isTabletLayout && styles.setInputsGroupTablet]}>
+                        <TextInput
+                          placeholder="Weight"
+                          placeholderTextColor="#7a7a8c"
+                          keyboardType="numeric"
+                          value={formatWeightInput(s.weightKg, unit)}
+                          onChangeText={(v) => updateSetWeight(ex.id, idx, unit, v)}
+                          style={[
+                            styles.input,
+                            styles.setInput,
+                            isTabletLayout && styles.setInputTablet,
+                          ]}
+                        />
+                        <TextInput
+                          placeholder="Reps"
+                          placeholderTextColor="#7a7a8c"
+                          keyboardType="numeric"
+                          value={s.reps}
+                          onChangeText={(v) => updateSetReps(ex.id, idx, v)}
+                          style={[
+                            styles.input,
+                            styles.setInput,
+                            isTabletLayout && styles.setInputTablet,
+                            styles.setInputReps,
+                            isTabletLayout && styles.setInputRepsTablet,
+                          ]}
+                        />
+                      </View>
+                      <View style={[styles.actions, isTabletLayout && styles.actionsTablet]}>
                         <TouchableOpacity
                           onPress={() => deleteSet(ex.id, idx)}
                           style={styles.iconButton}
@@ -1164,9 +1178,15 @@ const styles = StyleSheet.create({
   setText: { color: "#cdd0e0" },
   setTextDone: { color: "#7b61ff", textDecorationLine: "line-through" },
   setInlineRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 6 },
+  setInlineRowTablet: { gap: 14, width: "100%" },
   setLabel: { color: "#cdd0e0", fontWeight: "700", width: 22, textAlign: "center" },
+  setLabelTablet: { width: 28, fontSize: 15 },
+  setInputsGroup: { flexDirection: "row", alignItems: "center", gap: 10 },
+  setInputsGroupTablet: { flex: 1 },
   setInput: { width: 90, minWidth: 80, marginBottom: 0, paddingVertical: 8 },
+  setInputTablet: { flex: 1, width: undefined, minWidth: 140 },
   setInputReps: { marginRight: 8 },
+  setInputRepsTablet: { marginRight: 0 },
   checkboxInline: { paddingRight: 2 },
   checkbox: {
     width: 22,
@@ -1258,6 +1278,7 @@ const styles = StyleSheet.create({
   setContainer: { marginBottom: 6 },
   setInfo: { flexDirection: "row", alignItems: "center", gap: 10, flex: 1 },
   actions: { flexDirection: "row", alignItems: "center", gap: 8, marginLeft: 6 },
+  actionsTablet: { marginLeft: "auto", alignSelf: "stretch", justifyContent: "center" },
   iconButton: {
     padding: 6,
     borderRadius: 8,

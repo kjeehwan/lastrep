@@ -20,6 +20,23 @@ import LastRepLogo from "../../components/LastRepLogo"; // Static logo component
 import { auth } from "../../src/config/firebaseConfig";
 import { buildDefaultUserDoc, getDecisionUsage, getUserData, saveUserData } from "../../src/userData";
 
+const normalizeGoogleAuthErrorMessage = (error: unknown, fallback: string): string => {
+  const raw =
+    typeof (error as { message?: unknown } | undefined)?.message === "string"
+      ? (error as { message: string }).message
+      : "";
+  const normalized = raw.toLowerCase();
+  if (
+    normalized.includes("gettokens requires a user to be signed in") ||
+    normalized.includes("user cancelled") ||
+    normalized.includes("user canceled") ||
+    normalized.includes("sign_in_cancelled")
+  ) {
+    return "Google sign-in was canceled.";
+  }
+  return raw || fallback;
+};
+
 export default function SignIn() {
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -96,7 +113,7 @@ export default function SignIn() {
       const userCredential = await signInWithCredential(auth, credential);
       await finalizeSession(userCredential);
     } catch (googleError: any) {
-      setError(googleError.message ?? "Google Sign-In failed");
+      setError(normalizeGoogleAuthErrorMessage(googleError, "Google Sign-In failed"));
     } finally {
       setGoogleBusy(false);
     }

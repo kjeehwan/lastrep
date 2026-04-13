@@ -14,6 +14,46 @@ import LastRepLogo from "../../components/LastRepLogo"; // Static logo component
 import { auth } from "../../src/config/firebaseConfig";
 import { buildDefaultUserDoc, getDecisionUsage, getUserData, saveUserData } from "../../src/userData";
 
+const normalizeGoogleAuthErrorMessage = (error: unknown, fallback: string): string => {
+  const raw =
+    typeof (error as { message?: unknown } | undefined)?.message === "string"
+      ? (error as { message: string }).message
+      : "";
+  const normalized = raw.toLowerCase();
+  if (
+    normalized.includes("gettokens requires a user to be signed in") ||
+    normalized.includes("user cancelled") ||
+    normalized.includes("user canceled") ||
+    normalized.includes("sign_in_cancelled")
+  ) {
+    return "Google sign-up was canceled.";
+  }
+  return raw || fallback;
+};
+
+const normalizeEmailSignUpErrorMessage = (error: unknown): string => {
+  const code =
+    typeof (error as { code?: unknown } | undefined)?.code === "string"
+      ? (error as { code: string }).code.toLowerCase()
+      : "";
+  const raw =
+    typeof (error as { message?: unknown } | undefined)?.message === "string"
+      ? (error as { message: string }).message.toLowerCase()
+      : "";
+
+  if (code.includes("email-already-in-use") || raw.includes("email-already-in-use")) {
+    return "This email is already registered. Try signing in instead.";
+  }
+  if (code.includes("invalid-email") || raw.includes("invalid-email")) {
+    return "Please enter a valid email address.";
+  }
+  if (code.includes("weak-password") || raw.includes("weak-password")) {
+    return "Use a stronger password (at least 6 characters).";
+  }
+
+  return "Sign-up failed. Please check your details and try again.";
+};
+
 export default function SignUp() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -34,7 +74,7 @@ export default function SignUp() {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       await finalizeRegistration(userCredential, true);
     } catch (err: any) {
-      setError(err.message); // Show error message if sign-up fails
+      setError(normalizeEmailSignUpErrorMessage(err));
     }
   };
 
@@ -86,7 +126,7 @@ export default function SignUp() {
       const additionalInfo = getAdditionalUserInfo(userCredential);
       await finalizeRegistration(userCredential, additionalInfo?.isNewUser ?? false);
     } catch (googleError: any) {
-      setError(googleError.message ?? "Google Sign-Up failed");
+      setError(normalizeGoogleAuthErrorMessage(googleError, "Google Sign-Up failed"));
     } finally {
       setGoogleBusy(false);
     }

@@ -123,13 +123,18 @@ function shouldSuppressRevenueCatLog(logLevel: LOG_LEVEL, message: string): bool
     normalizedMessage.includes("billing service disconnected") ||
     normalizedMessage.includes("billing is disconnected and purchase methods won't work") ||
     normalizedMessage.includes("billing is disconnected and purchase methods won''t work");
+  const isBillingUnavailableNoise =
+    normalizedMessage.includes("billing_unavailable") ||
+    normalizedMessage.includes("billing service unavailable on device") ||
+    normalizedMessage.includes("device or user is not allowed to make the purchase") ||
+    normalizedMessage.includes("purchasenotallowederror");
 
   if (logLevel === LOG_LEVEL.ERROR) {
-    return isCancellationNoise || isBillingDisconnectNoise;
+    return isCancellationNoise || isBillingDisconnectNoise || isBillingUnavailableNoise;
   }
 
   if (logLevel === LOG_LEVEL.WARN) {
-    return isBillingDisconnectNoise;
+    return isBillingDisconnectNoise || isBillingUnavailableNoise;
   }
 
   return false;

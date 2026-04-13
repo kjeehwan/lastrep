@@ -3,7 +3,7 @@ import Slider from "@react-native-community/slider";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Href, Redirect, useRouter } from "expo-router";
 import { onAuthStateChanged } from "firebase/auth";
-import { deleteField, doc, getDoc, setDoc, Timestamp, updateDoc } from "firebase/firestore";
+import { deleteField, doc, onSnapshot, setDoc, Timestamp, updateDoc } from "firebase/firestore";
 import React, { useEffect, useMemo, useState } from "react";
 import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import type { NormalizedDecisionError, ReasonCode } from "../../src/contracts";
@@ -63,7 +63,7 @@ export default function Home() {
   const [redirectTo, setRedirectTo] = useState<Href | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [uid, setUid] = useState<string | null>(null);
-  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [userNickname, setUserNickname] = useState<string | null>(null);
 
   const [sleepHours, setSleepHours] = useState("7");
   const [soreness, setSoreness] = useState(4);
@@ -83,11 +83,11 @@ export default function Home() {
   const { isOffline } = useOfflineStatus();
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (user) => {
+    const unsub = onAuthStateChanged(auth, (user) => {
       setAuthReady(true);
       if (!user) {
         setUid(null);
-        setUserEmail(null);
+        setUserNickname(null);
         setLatestDecision(null);
         setRedirectTo("/auth/sign-in");
         return;
@@ -95,25 +95,37 @@ export default function Home() {
 
       setRedirectTo(null);
       setUid(user.uid);
-      setUserEmail(user.email || null);
-
-      try {
-        const snap = await getDoc(doc(db, "users", user.uid));
-        if (snap.exists()) {
-          const data: any = snap.data();
-          const lastResult = data?.usage?.decisions?.lastResult;
-          if (lastResult) {
-            setLatestDecision(lastResult as LastResultPayload);
-          }
-        }
-      } catch (e) {
-        if (!isExpectedOfflineError(e)) {
-          console.log("Failed to load latest decision", e);
-        }
-      }
     });
     return unsub;
   }, []);
+
+  useEffect(() => {
+    if (!uid) {
+      setUserNickname(null);
+      return;
+    }
+
+    const unsubscribe = onSnapshot(
+      doc(db, "users", uid),
+      (snap) => {
+        const data: any = snap.data();
+        const nickname = typeof data?.nickname === "string" ? data.nickname.trim() : "";
+        setUserNickname(nickname || null);
+
+        const lastResult = data?.usage?.decisions?.lastResult;
+        if (lastResult) {
+          setLatestDecision(lastResult as LastResultPayload);
+        }
+      },
+      (e) => {
+        if (!isExpectedOfflineError(e)) {
+          console.log("Failed to subscribe user profile", e);
+        }
+      }
+    );
+
+    return unsubscribe;
+  }, [uid]);
 
   useEffect(() => {
     const loadInputs = async () => {
@@ -314,7 +326,7 @@ export default function Home() {
         <View style={styles.headerLeft}>
           <Text style={styles.greeting}>lastrep</Text>
           <View style={styles.userRow}>
-            <Text style={styles.userName}>{userEmail ?? "Lifter"}</Text>
+            <Text style={styles.userName}>{userNickname ?? "Lifter"}</Text>
             <View
               style={[
                 styles.entitlementBadge,
