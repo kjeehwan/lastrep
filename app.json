@@ -5,7 +5,7 @@
     "owner": "kjeehwan",
     "version": "1.0.1",
     "orientation": "portrait",
-    "icon": "./assets/images/logo-phone-icon.png",
+    "icon": "./assets/images/logo-splash-512-appicon.png",
     "scheme": "lastrep",
     "userInterfaceStyle": "automatic",
     "ios": {
@@ -21,7 +21,7 @@
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/logo-phone-foreground.png"
+        "foregroundImage": "./assets/images/logo-splash-512-foreground-padded.png"
       },
       "predictiveBackGestureEnabled": false
     },
