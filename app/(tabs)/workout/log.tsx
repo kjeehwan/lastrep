@@ -529,6 +529,28 @@ export default function WorkoutLog() {
     setShowFinishModal(true);
   };
 
+  const discardWorkout = () => {
+    if (!exercises.length && !sessionTitle.trim()) return;
+    Alert.alert("Discard workout?", "This will clear your current workout draft.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Discard",
+        style: "destructive",
+        onPress: () => {
+          setExercises([]);
+          setExerciseUnits({});
+          setSessionTitle("");
+          setBaselineDate(null);
+          setFollowedAnswer(null);
+          setHelpfulAnswer(null);
+          setShowFinishModal(false);
+          startTimeRef.current = new Date();
+          AsyncStorage.removeItem(DRAFT_KEY).catch(() => {});
+        },
+      },
+    ]);
+  };
+
   const saveWorkout = async () => {
     if (saving) return;
     if (!followedAnswer || !helpfulAnswer) {
@@ -593,7 +615,7 @@ export default function WorkoutLog() {
       router.replace("/(tabs)/home");
     } catch (e) {
       console.log("Error saving workout", e);
-      Alert.alert("Save failed", `We couldn't save this workout. ${String(e)}`);
+      Alert.alert("Save failed", "We couldn't save your workout. Please try again.");
     } finally {
       setSaving(false);
     }
@@ -638,8 +660,14 @@ export default function WorkoutLog() {
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
             <Ionicons name="chevron-back" size={22} color="#fff" />
           </TouchableOpacity>
-          <Text style={styles.title}>Workout Log</Text>
-          <View style={styles.headerSpacer} />
+          <Text style={styles.title}>Workout</Text>
+          <TouchableOpacity
+            onPress={discardWorkout}
+            style={[styles.backButton, styles.discardHeaderButton]}
+            disabled={saving}
+          >
+            <Ionicons name="trash-outline" size={18} color="#ffb8b8" />
+          </TouchableOpacity>
         </View>
 
       <View style={styles.card}>
@@ -665,7 +693,7 @@ export default function WorkoutLog() {
         </View>
         <View style={styles.phaseRow}>
           <Text style={styles.muted}>Training phase: {sessionPhase}</Text>
-          <TouchableOpacity onPress={() => router.push("/(tabs)/home")} style={styles.phaseLink}>
+          <TouchableOpacity onPress={() => router.push("/profile")} style={styles.phaseLink}>
             <Text style={styles.phaseLinkText}>Change</Text>
           </TouchableOpacity>
         </View>
@@ -883,20 +911,24 @@ export default function WorkoutLog() {
                   </View>
                 ))
               )}
-              <TouchableOpacity
-                style={styles.primaryButton}
-                onPress={() => addEmptySet(ex.id)}
-              >
-                <Text style={styles.primaryText}>Add set</Text>
-              </TouchableOpacity>
-              {ex.sets.length > 0 ? (
+              <View style={styles.setActionsRow}>
                 <TouchableOpacity
-                  style={[styles.secondaryButton, { marginTop: 8 }]}
-                  onPress={() => duplicateLastSet(ex.id)}
+                  style={[styles.primaryButton, styles.setActionButton]}
+                  onPress={() => addEmptySet(ex.id)}
                 >
-                  <Text style={styles.secondaryText}>Duplicate last set</Text>
+                  <Text style={styles.primaryText}>Add set</Text>
                 </TouchableOpacity>
-              ) : null}
+                {ex.sets.length > 0 ? (
+                  <TouchableOpacity
+                    style={[styles.secondaryButton, styles.setActionButton]}
+                    onPress={() => duplicateLastSet(ex.id)}
+                  >
+                    <Text style={styles.secondaryText}>Duplicate last set</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <View style={styles.setActionButton} />
+                )}
+              </View>
             </View>
           );
         })
@@ -978,7 +1010,7 @@ export default function WorkoutLog() {
         </View>
       ) : null}
 
-        <TouchableOpacity
+      <TouchableOpacity
         style={[styles.secondaryButton, { marginTop: 16, opacity: saving ? 0.6 : 1 }]}
         onPress={finishWorkout}
         disabled={saving}
@@ -1129,6 +1161,11 @@ const styles = StyleSheet.create({
       alignItems: "center",
       justifyContent: "center",
     },
+  discardHeaderButton: {
+    borderColor: "rgba(255,122,122,0.6)",
+    borderWidth: StyleSheet.hairlineWidth * 2,
+    backgroundColor: "rgba(255,122,122,0.15)",
+  },
   headerSpacer: { width: 22 },
   title: { color: "#fff", fontSize: 22, fontWeight: "800" },
   card: {
@@ -1285,6 +1322,8 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.06)",
   },
   actionRow: { flexDirection: "row", gap: 8, marginTop: 6 },
+  setActionsRow: { flexDirection: "row", gap: 8, marginTop: 8 },
+  setActionButton: { flex: 1, marginTop: 0 },
   sessionMeta: {
     flexDirection: "row",
     justifyContent: "space-between",
