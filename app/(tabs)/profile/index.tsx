@@ -11,6 +11,7 @@ import {
   normalizeCalorieTargets,
   saveNutritionProfile,
 } from "../../../src/nutrition/meals";
+import type { DietPhase, TrainingPhase } from "../../../src/types/decision";
 import {
   getHealthConnectAvailability,
   hasHealthSleepPermission,
@@ -26,6 +27,12 @@ const goals = [
   { key: "getStronger", label: "Get Stronger" },
   { key: "improveFitness", label: "Improve Fitness" },
 ];
+const TRAINING_PHASES: TrainingPhase[] = ["Hypertrophy", "Strength", "Power"];
+const DIET_PHASES: DietPhase[] = ["Cut", "Maintain", "Bulk"];
+const isTrainingPhase = (value: unknown): value is TrainingPhase =>
+  typeof value === "string" && TRAINING_PHASES.includes(value as TrainingPhase);
+const isDietPhase = (value: unknown): value is DietPhase =>
+  typeof value === "string" && DIET_PHASES.includes(value as DietPhase);
 
 // Phase 2A: keep only nickname + goal for prompts; remove body metrics
 export default function ProfileIndex() {
@@ -35,6 +42,8 @@ export default function ProfileIndex() {
   const [loading, setLoading] = useState(true);
   const [goal, setGoal] = useState("");
   const [nickname, setNickname] = useState("");
+  const [trainingPhase, setTrainingPhase] = useState<TrainingPhase>("Hypertrophy");
+  const [dietPhase, setDietPhase] = useState<DietPhase>("Maintain");
   const [cutCalories, setCutCalories] = useState("");
   const [maintainCalories, setMaintainCalories] = useState("");
   const [bulkCalories, setBulkCalories] = useState("");
@@ -45,6 +54,7 @@ export default function ProfileIndex() {
   const [healthPermissionState, setHealthPermissionState] = useState<
     "granted" | "denied" | "revoked" | "unavailable" | "unsupported" | "unknown"
   >("unknown");
+  const [saveFeedback, setSaveFeedback] = useState<string | null>(null);
   const [redirectTo, setRedirectTo] = useState<Href | null>(null);
 
   const handleGoBack = () => {
@@ -86,6 +96,8 @@ export default function ProfileIndex() {
         const data = await getUserData(user.uid);
         if (data?.goal) setGoal(data.goal);
         if (data?.nickname) setNickname(data.nickname);
+        if (isTrainingPhase(data?.trainingPhase)) setTrainingPhase(data.trainingPhase);
+        if (isDietPhase(data?.dietPhase)) setDietPhase(data.dietPhase);
         const calorieTargets = normalizeCalorieTargets(
           data?.nutritionProfile?.calorieTargetsByDietPhase
         );
@@ -176,6 +188,7 @@ export default function ProfileIndex() {
 
   const save = async () => {
     if (!uid) return;
+    setSaveFeedback(null);
     const fields = [
       { label: "Cut", value: cutCalories },
       { label: "Maintain", value: maintainCalories },
@@ -205,14 +218,19 @@ export default function ProfileIndex() {
       return;
     }
 
-    await saveUserData(uid, { goal, nickname }, true);
-    await saveUserData(
-      uid,
-      { sleepSettings: { targetHours: Math.round(parsedSleepTarget * 10) / 10 } },
-      true
-    );
-    await saveNutritionProfile(uid, parsedTargets);
-    router.push("/home" as Href);
+    try {
+      await saveUserData(uid, { goal, nickname, trainingPhase, dietPhase }, true);
+      await saveUserData(
+        uid,
+        { sleepSettings: { targetHours: Math.round(parsedSleepTarget * 10) / 10 } },
+        true
+      );
+      await saveNutritionProfile(uid, parsedTargets);
+      setSaveFeedback("Changes saved.");
+    } catch (error) {
+      console.log("Failed to save profile", error);
+      Alert.alert("Save failed", "Couldn't save your changes. Please try again.");
+    }
   };
 
   if (redirectTo) return <Redirect href={redirectTo} />;
@@ -239,83 +257,125 @@ export default function ProfileIndex() {
           <View style={styles.headerSpacer} />
         </View>
 
-        <Text style={styles.sectionTitle}>Nickname</Text>
-        <TextInput
-          placeholder="Your nickname"
-          placeholderTextColor="#7a7a8c"
-          style={styles.input}
-          value={nickname}
-          onChangeText={setNickname}
-        />
-
-        <Text style={styles.sectionTitle}>Goal</Text>
-        <View style={styles.row}>
-          {goals.map((g) => (
-            <TouchableOpacity
-              key={g.key}
-              onPress={() => setGoal(g.key)}
-              style={[styles.chip, goal === g.key && styles.chipActive]}
-            >
-              <Text style={[styles.chipText, goal === g.key && styles.chipTextActive]}>
-                {g.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        <Text style={styles.sectionTitle}>Calorie targets</Text>
-        <Text style={styles.helperText}>
-          Set daily targets by diet phase. Nutrition decisions will use completed days, not partial
-          same-day intake.
-        </Text>
-        <View style={styles.targetRow}>
-          <View style={styles.targetColumn}>
-            <Text style={styles.targetLabel}>Cut</Text>
-            <TextInput
-              placeholder="2200"
-              placeholderTextColor="#7a7a8c"
-              style={styles.input}
-              value={cutCalories}
-              onChangeText={setCutCalories}
-              keyboardType="numeric"
-            />
-          </View>
-          <View style={styles.targetColumn}>
-            <Text style={styles.targetLabel}>Maintain</Text>
-            <TextInput
-              placeholder="2600"
-              placeholderTextColor="#7a7a8c"
-              style={styles.input}
-              value={maintainCalories}
-              onChangeText={setMaintainCalories}
-              keyboardType="numeric"
-            />
-          </View>
-          <View style={styles.targetColumn}>
-            <Text style={styles.targetLabel}>Bulk</Text>
-            <TextInput
-              placeholder="2900"
-              placeholderTextColor="#7a7a8c"
-              style={styles.input}
-              value={bulkCalories}
-              onChangeText={setBulkCalories}
-              keyboardType="numeric"
-            />
-          </View>
-        </View>
-
-        <Text style={styles.sectionTitle}>Sleep target (hours)</Text>
-        <TextInput
-          placeholder="7.0"
-          placeholderTextColor="#7a7a8c"
-          style={styles.input}
-          value={sleepTargetHours}
-          onChangeText={setSleepTargetHours}
-          keyboardType="decimal-pad"
-        />
-
-        <Text style={styles.sectionTitle}>Health Connect</Text>
         <View style={styles.card}>
+          <Text style={styles.cardTitle}>Nickname</Text>
+          <TextInput
+            placeholder="Your nickname"
+            placeholderTextColor="#7a7a8c"
+            style={styles.input}
+            value={nickname}
+            onChangeText={setNickname}
+          />
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Goal</Text>
+          <View style={styles.row}>
+            {goals.map((g) => (
+              <TouchableOpacity
+                key={g.key}
+                onPress={() => setGoal(g.key)}
+                style={[styles.chip, goal === g.key && styles.chipActive]}
+              >
+                <Text style={[styles.chipText, goal === g.key && styles.chipTextActive]}>
+                  {g.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Training phase</Text>
+          <View style={styles.row}>
+            {TRAINING_PHASES.map((phase) => (
+              <TouchableOpacity
+                key={phase}
+                onPress={() => setTrainingPhase(phase)}
+                style={[styles.chip, trainingPhase === phase && styles.chipActive]}
+              >
+                <Text style={[styles.chipText, trainingPhase === phase && styles.chipTextActive]}>
+                  {phase}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Diet phase</Text>
+          <View style={styles.row}>
+            {DIET_PHASES.map((phase) => (
+              <TouchableOpacity
+                key={phase}
+                onPress={() => setDietPhase(phase)}
+                style={[styles.chip, dietPhase === phase && styles.chipActive]}
+              >
+                <Text style={[styles.chipText, dietPhase === phase && styles.chipTextActive]}>
+                  {phase}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Nutrition targets</Text>
+          <Text style={styles.helperText}>
+            Set daily targets by diet phase. Nutrition decisions will use completed days, not partial
+            same-day intake.
+          </Text>
+          <View style={styles.targetRow}>
+            <View style={styles.targetColumn}>
+              <Text style={styles.targetLabel}>Cut</Text>
+              <TextInput
+                placeholder="2200"
+                placeholderTextColor="#7a7a8c"
+                style={styles.input}
+                value={cutCalories}
+                onChangeText={setCutCalories}
+                keyboardType="numeric"
+              />
+            </View>
+            <View style={styles.targetColumn}>
+              <Text style={styles.targetLabel}>Maintain</Text>
+              <TextInput
+                placeholder="2600"
+                placeholderTextColor="#7a7a8c"
+                style={styles.input}
+                value={maintainCalories}
+                onChangeText={setMaintainCalories}
+                keyboardType="numeric"
+              />
+            </View>
+            <View style={styles.targetColumn}>
+              <Text style={styles.targetLabel}>Bulk</Text>
+              <TextInput
+                placeholder="2900"
+                placeholderTextColor="#7a7a8c"
+                style={styles.input}
+                value={bulkCalories}
+                onChangeText={setBulkCalories}
+                keyboardType="numeric"
+              />
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Sleep target</Text>
+          <TextInput
+            placeholder="7.0"
+            placeholderTextColor="#7a7a8c"
+            style={styles.input}
+            value={sleepTargetHours}
+            onChangeText={setSleepTargetHours}
+            keyboardType="decimal-pad"
+          />
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Health Connect</Text>
           <Text style={styles.helperText}>{healthConnectMessage()}</Text>
           <TouchableOpacity
             style={[styles.secondaryButton, healthLoading && styles.buttonDisabled]}
@@ -348,6 +408,7 @@ export default function ProfileIndex() {
         <TouchableOpacity style={styles.save} onPress={save}>
           <Text style={styles.saveText}>Save Changes</Text>
         </TouchableOpacity>
+        {saveFeedback ? <Text style={styles.saveFeedback}>{saveFeedback}</Text> : null}
       </ScrollView>
     </SafeAreaView>
   );
@@ -377,6 +438,7 @@ const styles = StyleSheet.create({
   },
   title: { color: "#fff", fontSize: 22, fontWeight: "800" },
   sectionTitle: { color: "#fff", fontSize: 15, fontWeight: "700", marginTop: 18, marginBottom: 8 },
+  cardTitle: { color: "#fff", fontSize: 15, fontWeight: "700", marginBottom: 8 },
   helperText: { color: "#a5acc1", fontSize: 13, lineHeight: 18 },
   row: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   targetRow: { gap: 10 },
@@ -423,4 +485,5 @@ const styles = StyleSheet.create({
   healthFeedback: { color: "#a5acc1", fontSize: 12, lineHeight: 16 },
   save: { backgroundColor: "#7b61ff", borderRadius: 12, alignItems: "center", paddingVertical: 14, marginTop: 22 },
   saveText: { color: "#fff", fontWeight: "800", fontSize: 15 },
+  saveFeedback: { color: "#a6e3a1", textAlign: "center", fontSize: 13, marginTop: 8 },
 });

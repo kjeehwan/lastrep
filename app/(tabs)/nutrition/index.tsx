@@ -1,5 +1,4 @@
 import { Ionicons } from "@expo/vector-icons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Href, Redirect, useFocusEffect, useRouter } from "expo-router";
 import { onAuthStateChanged } from "firebase/auth";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
@@ -38,13 +37,13 @@ import type { NutritionMeal } from "@/src/contracts";
 import type { DietPhase } from "@/src/types/decision";
 import type { NutritionTrendReport } from "@/src/nutrition/mealHelpers";
 import { isExpectedOfflineError } from "@/src/utils/networkErrors";
+import { getUserData } from "@/src/userData";
 
 const ACCENT = "#7b61ff";
 const MUTED = "#a5acc1";
 const SUCCESS = "#4ade80";
 const WARNING = "#fbbf24";
 const DANGER = "#f87171";
-const HOME_INPUTS_KEY = "home-inputs-v1";
 const DIET_PHASES: DietPhase[] = ["Cut", "Maintain", "Bulk"];
 
 function buildInitialFormValues(): MealFormValues {
@@ -158,27 +157,20 @@ export default function NutritionIndex() {
       let cancelled = false;
       const loadNutritionContext = async () => {
         try {
-          const [profile, rawHomeInputs] = await Promise.all([
+          const [profile, userData] = await Promise.all([
             getNutritionProfile(uid),
-            AsyncStorage.getItem(HOME_INPUTS_KEY),
+            getUserData(uid),
           ]);
 
           if (cancelled) return;
 
           setCalorieTargets(profile.calorieTargetsByDietPhase);
-
-          if (!rawHomeInputs) {
-            setCurrentDietPhase("Maintain");
-            return;
-          }
-
-          const parsed = JSON.parse(rawHomeInputs) as { dietPhase?: string };
-          if (typeof parsed.dietPhase === "string" && isDietPhase(parsed.dietPhase)) {
-            setCurrentDietPhase(parsed.dietPhase);
-            return;
-          }
-
-          setCurrentDietPhase("Maintain");
+          const nextDietPhase = userData?.dietPhase;
+          setCurrentDietPhase(
+            typeof nextDietPhase === "string" && isDietPhase(nextDietPhase)
+              ? nextDietPhase
+              : "Maintain"
+          );
         } catch (error) {
           if (!isExpectedOfflineError(error)) {
             console.log("Failed to load nutrition targets", error);
@@ -501,7 +493,7 @@ export default function NutritionIndex() {
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Today's meals</Text>
+          <Text style={styles.sectionTitle}>Today&apos;s meals</Text>
           {loadingMeals ? <Text style={styles.subText}>Loading meals...</Text> : null}
           {!loadingMeals && meals.length === 0 ? (
             <Text style={styles.subText}>No meals logged yet.</Text>

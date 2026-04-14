@@ -4,8 +4,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Href, Redirect, useRouter } from "expo-router";
 import { onAuthStateChanged } from "firebase/auth";
 import { deleteField, doc, onSnapshot, setDoc, Timestamp, updateDoc } from "firebase/firestore";
-import React, { useEffect, useMemo, useState } from "react";
-import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import React, { useEffect, useState } from "react";
+import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import type { NormalizedDecisionError, ReasonCode } from "../../src/contracts";
 import { auth, db } from "../../src/config/firebaseConfig";
 import { useEntitlement } from "../../src/hooks/useEntitlement";
@@ -15,7 +15,6 @@ import {
   getSleepProfile,
   getSleepSampleAgeHours,
   isHealthSleepStale,
-  saveManualSleepSample,
 } from "../../src/sleep/sleep";
 import { resolveDecisionSleepInput } from "../../src/sleep/resolveDecisionSleepInput";
 import { getDecision, isNormalizedDecisionError } from "../../src/services/decision/getDecision";
@@ -65,18 +64,19 @@ export default function Home() {
   const [uid, setUid] = useState<string | null>(null);
   const [userNickname, setUserNickname] = useState<string | null>(null);
 
-  const [sleepHours, setSleepHours] = useState("7");
   const [soreness, setSoreness] = useState(4);
   const [fatigue, setFatigue] = useState(4);
   const [motivation, setMotivation] = useState(6);
   const [trainingPhase, setTrainingPhase] = useState<TrainingPhase>("Hypertrophy");
   const [dietPhase, setDietPhase] = useState<DietPhase>("Maintain");
+  const [sleepTargetHours, setSleepTargetHours] = useState(7);
 
   const [loading, setLoading] = useState(false);
   const [gateError, setGateError] = useState<NormalizedDecisionError | null>(null);
   const [cooldownSeconds, setCooldownSeconds] = useState<number | null>(null);
   const [latestDecision, setLatestDecision] = useState<LastResultPayload | null>(null);
   const [showAdjustHelp, setShowAdjustHelp] = useState(false);
+  const [showAdjustInputsModal, setShowAdjustInputsModal] = useState(false);
   const [lastTapAt, setLastTapAt] = useState(0);
 
   const entitlement = useEntitlement(authReady, uid);
@@ -111,6 +111,16 @@ export default function Home() {
         const data: any = snap.data();
         const nickname = typeof data?.nickname === "string" ? data.nickname.trim() : "";
         setUserNickname(nickname || null);
+        if (isTrainingPhase(data?.trainingPhase)) {
+          setTrainingPhase(data.trainingPhase);
+        }
+        if (isDietPhase(data?.dietPhase)) {
+          setDietPhase(data.dietPhase);
+        }
+        const target = data?.sleepSettings?.targetHours;
+        if (typeof target === "number" && Number.isFinite(target) && target > 0 && target <= 24) {
+          setSleepTargetHours(Math.round(target * 10) / 10);
+        }
 
         const lastResult = data?.usage?.decisions?.lastResult;
         if (lastResult) {
@@ -133,16 +143,9 @@ export default function Home() {
         const raw = await AsyncStorage.getItem(HOME_INPUTS_KEY);
         if (!raw) return;
         const parsed = JSON.parse(raw);
-        if (typeof parsed.sleepHours === "string") setSleepHours(parsed.sleepHours);
         if (typeof parsed.soreness === "number") setSoreness(parsed.soreness);
         if (typeof parsed.fatigue === "number") setFatigue(parsed.fatigue);
         if (typeof parsed.motivation === "number") setMotivation(parsed.motivation);
-        if (typeof parsed.trainingPhase === "string" && isTrainingPhase(parsed.trainingPhase)) {
-          setTrainingPhase(parsed.trainingPhase);
-        }
-        if (typeof parsed.dietPhase === "string" && isDietPhase(parsed.dietPhase)) {
-          setDietPhase(parsed.dietPhase);
-        }
       } catch (e) {
         console.log("Failed to load home inputs, clearing cache", e);
         try {
@@ -161,12 +164,9 @@ export default function Home() {
         await AsyncStorage.setItem(
           HOME_INPUTS_KEY,
           JSON.stringify({
-            sleepHours,
             soreness,
             fatigue,
             motivation,
-            trainingPhase,
-            dietPhase,
           })
         );
       } catch (e) {
@@ -174,7 +174,7 @@ export default function Home() {
       }
     };
     save();
-  }, [sleepHours, soreness, fatigue, motivation, trainingPhase, dietPhase]);
+  }, [soreness, fatigue, motivation]);
 
   useEffect(() => {
     if (cooldownSeconds == null || cooldownSeconds <= 0) return;
@@ -186,12 +186,6 @@ export default function Home() {
     }, 1000);
     return () => clearInterval(timer);
   }, [cooldownSeconds]);
-
-  const { parsedSleep, sleepIsInvalid } = useMemo(() => {
-    const value = Number(sleepHours);
-    const invalid = !Number.isFinite(value) || value < 0 || value > 12;
-    return { parsedSleep: invalid ? 0 : value, sleepIsInvalid: invalid };
-  }, [sleepHours]);
 
   const shouldShowUpgradeCta =
     gateError?.bucket === "business_gate" && entitlement.state === "inactive";
@@ -230,10 +224,9 @@ export default function Home() {
 
     try {
         let nutrition: DecisionInputs["nutrition"] = null;
-        let effectiveSleepHours = parsedSleep;
+        let effectiveSleepHours = sleepTargetHours;
         let sleepSource: DecisionInputs["sleepSource"] = "manual";
         let sleepSampleAgeHours: DecisionInputs["sleepSampleAgeHours"] = 0;
-        let shouldPersistManualSample = true;
         try {
           nutrition = await getTodayDecisionNutritionSummary(uid, dietPhase);
         } catch (nutritionError) {
@@ -246,7 +239,7 @@ export default function Home() {
           const sleepProfile = await getSleepProfile(uid);
           const sampleAgeHours = getSleepSampleAgeHours(sleepProfile.sampleRecordedAt);
           const stale = isHealthSleepStale(sleepProfile, new Date());
-          const resolvedSleep = resolveDecisionSleepInput(parsedSleep, {
+          const resolvedSleep = resolveDecisionSleepInput(sleepTargetHours, {
             source: sleepProfile.source,
             latestSleepHours: sleepProfile.latestSleepHours,
             sampleAgeHours: stale ? null : sampleAgeHours,
@@ -254,10 +247,6 @@ export default function Home() {
           effectiveSleepHours = resolvedSleep.sleepHours;
           sleepSource = resolvedSleep.sleepSource;
           sleepSampleAgeHours = resolvedSleep.sleepSampleAgeHours;
-          shouldPersistManualSample = resolvedSleep.shouldPersistManualSample;
-          if (shouldPersistManualSample) {
-            await saveManualSleepSample(uid, parsedSleep);
-          }
         } catch (sleepError) {
           if (!isExpectedOfflineError(sleepError)) {
             console.log("Failed to resolve sleep source", sleepError);
@@ -365,82 +354,16 @@ export default function Home() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Inputs</Text>
           <View style={styles.card}>
-            <Text style={styles.label}>Sleep (hours)</Text>
-            <TextInput
-              style={styles.input}
-              value={sleepHours}
-              onChangeText={setSleepHours}
-              keyboardType="numeric"
-              placeholder="7"
-              placeholderTextColor="#7a7a8c"
-            />
-            {sleepIsInvalid ? <Text style={styles.inputHint}>Enter a number between 0 and 12.</Text> : null}
+            <Text style={styles.cardText}>Training: {trainingPhase}</Text>
+            <Text style={styles.cardText}>Diet: {dietPhase}</Text>
+            <Text style={styles.cardText}>Soreness {soreness} · Fatigue {fatigue} · Motivation {motivation}</Text>
 
-            <Text style={styles.label}>Soreness: {soreness}</Text>
-            <Slider
-              value={soreness}
-              onValueChange={(v: number) => setSoreness(Math.round(v))}
-              minimumValue={0}
-              maximumValue={10}
-              step={1}
-              minimumTrackTintColor="#7b61ff"
-              maximumTrackTintColor="#555"
-              thumbTintColor="#fff"
-            />
-
-            <Text style={styles.label}>Fatigue: {fatigue}</Text>
-            <Slider
-              value={fatigue}
-              onValueChange={(v: number) => setFatigue(Math.round(v))}
-              minimumValue={0}
-              maximumValue={10}
-              step={1}
-              minimumTrackTintColor="#7b61ff"
-              maximumTrackTintColor="#555"
-              thumbTintColor="#fff"
-            />
-
-            <Text style={styles.label}>Motivation: {motivation}</Text>
-            <Slider
-              value={motivation}
-              onValueChange={(v: number) => setMotivation(Math.round(v))}
-              minimumValue={0}
-              maximumValue={10}
-              step={1}
-              minimumTrackTintColor="#7b61ff"
-              maximumTrackTintColor="#555"
-              thumbTintColor="#fff"
-            />
-
-            <Text style={styles.label}>Training phase</Text>
-            <View style={styles.segmentRow}>
-              {TRAINING_PHASES.map((value) => (
-                <TouchableOpacity
-                  key={value}
-                  style={[styles.segmentChip, trainingPhase === value && styles.segmentChipActive]}
-                  onPress={() => setTrainingPhase(value)}
-                >
-                  <Text style={[styles.segmentText, trainingPhase === value && styles.segmentTextActive]}>
-                    {value}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <Text style={styles.label}>Diet phase</Text>
-            <View style={styles.segmentRow}>
-              {DIET_PHASES.map((value) => (
-                <TouchableOpacity
-                  key={value}
-                  style={[styles.segmentChip, dietPhase === value && styles.segmentChipActive]}
-                  onPress={() => setDietPhase(value)}
-                >
-                  <Text style={[styles.segmentText, dietPhase === value && styles.segmentTextActive]}>
-                    {value}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+            <TouchableOpacity
+              style={styles.secondaryButtonWide}
+              onPress={() => setShowAdjustInputsModal(true)}
+            >
+              <Text style={styles.secondaryButtonText}>Adjust inputs</Text>
+            </TouchableOpacity>
 
             <TouchableOpacity
               style={[styles.primaryButtonWide, loading && styles.disabled]}
@@ -538,6 +461,57 @@ export default function Home() {
           </View>
         </View>
       </ScrollView>
+
+      <Modal visible={showAdjustInputsModal} transparent animationType="fade">
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Adjust inputs</Text>
+
+            <Text style={styles.label}>Soreness: {soreness}</Text>
+            <Slider
+              value={soreness}
+              onValueChange={(v: number) => setSoreness(Math.round(v))}
+              minimumValue={0}
+              maximumValue={10}
+              step={1}
+              minimumTrackTintColor="#7b61ff"
+              maximumTrackTintColor="#555"
+              thumbTintColor="#fff"
+            />
+
+            <Text style={styles.label}>Fatigue: {fatigue}</Text>
+            <Slider
+              value={fatigue}
+              onValueChange={(v: number) => setFatigue(Math.round(v))}
+              minimumValue={0}
+              maximumValue={10}
+              step={1}
+              minimumTrackTintColor="#7b61ff"
+              maximumTrackTintColor="#555"
+              thumbTintColor="#fff"
+            />
+
+            <Text style={styles.label}>Motivation: {motivation}</Text>
+            <Slider
+              value={motivation}
+              onValueChange={(v: number) => setMotivation(Math.round(v))}
+              minimumValue={0}
+              maximumValue={10}
+              step={1}
+              minimumTrackTintColor="#7b61ff"
+              maximumTrackTintColor="#555"
+              thumbTintColor="#fff"
+            />
+
+            <TouchableOpacity
+              style={[styles.primaryButtonWide, { marginTop: 8 }]}
+              onPress={() => setShowAdjustInputsModal(false)}
+            >
+              <Text style={styles.primaryText}>Done</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -623,29 +597,15 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   label: { color: "#cfcfe6", fontSize: 14, fontWeight: "600" },
-  input: {
-    backgroundColor: "rgba(255,255,255,0.08)",
-    borderColor: "rgba(255,255,255,0.2)",
-    borderWidth: 1,
+  secondaryButtonWide: {
     borderRadius: 12,
-    color: "#fff",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
+    paddingVertical: 12,
+    alignItems: "center",
+    borderWidth: StyleSheet.hairlineWidth * 2,
+    borderColor: "rgba(255,255,255,0.3)",
+    backgroundColor: "rgba(255,255,255,0.05)",
   },
-  inputHint: { color: "#9aa1c3", fontSize: 12 },
-  segmentRow: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
-  segmentChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(255,255,255,0.2)",
-    backgroundColor: "rgba(255,255,255,0.06)",
-  },
-  segmentChipActive: { backgroundColor: "#7b61ff", borderColor: "#7b61ff" },
-  segmentText: { color: "#d8daec", fontWeight: "700" },
-  segmentTextActive: { color: "#0d0d1a" },
+  secondaryButtonText: { color: "#fff", fontWeight: "700" },
   primaryButtonWide: {
     backgroundColor: "#7b61ff",
     borderRadius: 12,
@@ -681,4 +641,21 @@ const styles = StyleSheet.create({
   adjustText: { color: "#9aa1c3", fontSize: 13 },
   helpIcon: { paddingHorizontal: 4, paddingVertical: 2 },
   helpText: { color: "#9aa1c3", fontSize: 12 },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+  },
+  modalCard: {
+    width: "100%",
+    backgroundColor: "#111427",
+    borderRadius: 16,
+    padding: 18,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.08)",
+    gap: 8,
+  },
+  modalTitle: { color: "#fff", fontSize: 18, fontWeight: "800", marginBottom: 4 },
 });
