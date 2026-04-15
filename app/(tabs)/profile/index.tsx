@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Href, Redirect, useFocusEffect, useRouter } from "expo-router";
 import { onAuthStateChanged } from "firebase/auth";
+import { Timestamp } from "firebase/firestore";
 import React, { useCallback, useEffect, useState } from "react";
 import { Alert, Linking, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -34,6 +35,16 @@ const isTrainingPhase = (value: unknown): value is TrainingPhase =>
 const isDietPhase = (value: unknown): value is DietPhase =>
   typeof value === "string" && DIET_PHASES.includes(value as DietPhase);
 
+type TrainingPhaseHistoryEntry = {
+  phase: TrainingPhase;
+  startedAt: Timestamp;
+};
+
+type DietPhaseHistoryEntry = {
+  phase: DietPhase;
+  startedAt: Timestamp;
+};
+
 // Phase 2A: keep only nickname + goal for prompts; remove body metrics
 export default function ProfileIndex() {
   const router = useRouter();
@@ -44,6 +55,14 @@ export default function ProfileIndex() {
   const [nickname, setNickname] = useState("");
   const [trainingPhase, setTrainingPhase] = useState<TrainingPhase>("Hypertrophy");
   const [dietPhase, setDietPhase] = useState<DietPhase>("Maintain");
+  const [initialTrainingPhase, setInitialTrainingPhase] = useState<TrainingPhase>("Hypertrophy");
+  const [initialDietPhase, setInitialDietPhase] = useState<DietPhase>("Maintain");
+  const [trainingPhaseHistory, setTrainingPhaseHistory] = useState<TrainingPhaseHistoryEntry[]>([]);
+  const [dietPhaseHistory, setDietPhaseHistory] = useState<DietPhaseHistoryEntry[]>([]);
+  const [currentTrainingPhaseStartedAt, setCurrentTrainingPhaseStartedAt] = useState<Timestamp | null>(
+    null
+  );
+  const [currentDietPhaseStartedAt, setCurrentDietPhaseStartedAt] = useState<Timestamp | null>(null);
   const [cutCalories, setCutCalories] = useState("");
   const [maintainCalories, setMaintainCalories] = useState("");
   const [bulkCalories, setBulkCalories] = useState("");
@@ -96,8 +115,56 @@ export default function ProfileIndex() {
         const data = await getUserData(user.uid);
         if (data?.goal) setGoal(data.goal);
         if (data?.nickname) setNickname(data.nickname);
-        if (isTrainingPhase(data?.trainingPhase)) setTrainingPhase(data.trainingPhase);
-        if (isDietPhase(data?.dietPhase)) setDietPhase(data.dietPhase);
+        if (isTrainingPhase(data?.trainingPhase)) {
+          setTrainingPhase(data.trainingPhase);
+          setInitialTrainingPhase(data.trainingPhase);
+        }
+        if (isDietPhase(data?.dietPhase)) {
+          setDietPhase(data.dietPhase);
+          setInitialDietPhase(data.dietPhase);
+        }
+        setCurrentTrainingPhaseStartedAt(
+          data?.trainingPhaseStartedAt instanceof Timestamp ? data.trainingPhaseStartedAt : null
+        );
+        setCurrentDietPhaseStartedAt(
+          data?.dietPhaseStartedAt instanceof Timestamp ? data.dietPhaseStartedAt : null
+        );
+        const rawTrainingHistory = Array.isArray(data?.trainingPhaseHistory)
+          ? data.trainingPhaseHistory
+          : [];
+        const rawDietHistory = Array.isArray(data?.dietPhaseHistory) ? data.dietPhaseHistory : [];
+        const parsedTrainingHistory = rawTrainingHistory
+          .map((entry: any) => ({
+            phase: isTrainingPhase(entry?.phase) ? entry.phase : null,
+            startedAt: entry?.startedAt instanceof Timestamp ? entry.startedAt : null,
+          }))
+          .filter(
+            (
+              entry: {
+                phase: TrainingPhase | null;
+                startedAt: Timestamp | null;
+              }
+            ): entry is TrainingPhaseHistoryEntry =>
+              entry.phase != null && entry.startedAt != null
+          )
+          .sort((a, b) => a.startedAt.toMillis() - b.startedAt.toMillis());
+        const parsedDietHistory = rawDietHistory
+          .map((entry: any) => ({
+            phase: isDietPhase(entry?.phase) ? entry.phase : null,
+            startedAt: entry?.startedAt instanceof Timestamp ? entry.startedAt : null,
+          }))
+          .filter(
+            (
+              entry: {
+                phase: DietPhase | null;
+                startedAt: Timestamp | null;
+              }
+            ): entry is DietPhaseHistoryEntry =>
+              entry.phase != null && entry.startedAt != null
+          )
+          .sort((a, b) => a.startedAt.toMillis() - b.startedAt.toMillis());
+        setTrainingPhaseHistory(parsedTrainingHistory);
+        setDietPhaseHistory(parsedDietHistory);
         const calorieTargets = normalizeCalorieTargets(
           data?.nutritionProfile?.calorieTargetsByDietPhase
         );
@@ -219,13 +286,56 @@ export default function ProfileIndex() {
     }
 
     try {
-      await saveUserData(uid, { goal, nickname, trainingPhase, dietPhase }, true);
+      const profilePayload: Record<string, unknown> = { goal, nickname, trainingPhase, dietPhase };
+      let nextTrainingHistory = trainingPhaseHistory;
+      let nextDietHistory = dietPhaseHistory;
+      if (trainingPhase !== initialTrainingPhase) {
+        const now = Timestamp.now();
+        profilePayload.trainingPhaseStartedAt = now;
+        if (trainingPhaseHistory.length === 0) {
+          const baselineStartedAt =
+            currentTrainingPhaseStartedAt ?? Timestamp.fromMillis(Math.max(0, now.toMillis() - 1));
+          nextTrainingHistory = [
+            { phase: initialTrainingPhase, startedAt: baselineStartedAt },
+            { phase: trainingPhase, startedAt: now },
+          ];
+        } else {
+          nextTrainingHistory = [...trainingPhaseHistory, { phase: trainingPhase, startedAt: now }];
+        }
+        profilePayload.trainingPhaseHistory = nextTrainingHistory;
+      }
+      if (dietPhase !== initialDietPhase) {
+        const now = Timestamp.now();
+        profilePayload.dietPhaseStartedAt = now;
+        if (dietPhaseHistory.length === 0) {
+          const baselineStartedAt =
+            currentDietPhaseStartedAt ?? Timestamp.fromMillis(Math.max(0, now.toMillis() - 1));
+          nextDietHistory = [
+            { phase: initialDietPhase, startedAt: baselineStartedAt },
+            { phase: dietPhase, startedAt: now },
+          ];
+        } else {
+          nextDietHistory = [...dietPhaseHistory, { phase: dietPhase, startedAt: now }];
+        }
+        profilePayload.dietPhaseHistory = nextDietHistory;
+      }
+      await saveUserData(uid, profilePayload, true);
       await saveUserData(
         uid,
         { sleepSettings: { targetHours: Math.round(parsedSleepTarget * 10) / 10 } },
         true
       );
       await saveNutritionProfile(uid, parsedTargets);
+      setInitialTrainingPhase(trainingPhase);
+      setInitialDietPhase(dietPhase);
+      setTrainingPhaseHistory(nextTrainingHistory);
+      setDietPhaseHistory(nextDietHistory);
+      setCurrentTrainingPhaseStartedAt(
+        trainingPhase !== initialTrainingPhase ? (profilePayload.trainingPhaseStartedAt as Timestamp) : currentTrainingPhaseStartedAt
+      );
+      setCurrentDietPhaseStartedAt(
+        dietPhase !== initialDietPhase ? (profilePayload.dietPhaseStartedAt as Timestamp) : currentDietPhaseStartedAt
+      );
       setSaveFeedback("Changes saved.");
     } catch (error) {
       console.log("Failed to save profile", error);
