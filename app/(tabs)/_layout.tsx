@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Tabs } from "expo-router";
+import { Href, Tabs } from "expo-router";
 import { onAuthStateChanged } from "firebase/auth";
 import React, { useEffect, useRef } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -60,7 +60,10 @@ export default function TabsLayout() {
     >
       <Tabs.Screen name="index" options={{ href: null }} />
       <Tabs.Screen name="home" options={{ title: "Home" }} />
-      <Tabs.Screen name="workout" options={{ title: "Workout" }} />
+      <Tabs.Screen
+        name="workout"
+        options={{ title: "Workout", href: "/(tabs)/workout/log" as Href }}
+      />
       <Tabs.Screen name="nutrition/index" options={{ title: "Nutrition" }} />
       <Tabs.Screen name="sleep/index" options={{ title: "Sleep" }} />
       <Tabs.Screen name="settings/index" options={{ href: null }} />
