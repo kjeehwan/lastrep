@@ -5,7 +5,7 @@ import { getAuth } from "firebase/auth";
 import { addDoc, collection, doc, getDoc, getDocs, limit, orderBy, query, Timestamp } from "firebase/firestore";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, useWindowDimensions } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { db } from "../../../src/config/firebaseConfig";
 import type { Decision } from "../../../src/types/decision";
 import { isExpectedOfflineError } from "../../../src/utils/networkErrors";
@@ -14,19 +14,31 @@ type Unit = "kg" | "lbs";
 type SetEntry = {
   weightKg: number | null;
   reps: string;
+  rpe?: string;
   done: boolean;
   baselineWeightKg?: number | null;
   baselineReps?: string;
   baselineAdjusted?: boolean;
 };
-type Exercise = { id: string; name: string; sets: SetEntry[] };
+type Exercise = {
+  id: string;
+  name: string;
+  notes?: string;
+  tempo?: string;
+  sets: SetEntry[];
+};
 type FollowedAnswer = "yes" | "partial" | "no";
 type HelpfulAnswer = "yes" | "neutral" | "no";
 type PastWorkout = {
   id: string;
   title: string;
   date: Date;
-  exercises: { name: string; sets: { weightKg: number | null; reps: string }[] }[];
+  exercises: {
+    name: string;
+    notes?: string;
+    tempo?: string;
+    sets: { weightKg: number | null; reps: string; rpe?: string }[];
+  }[];
 };
 
 const EXERCISE_GROUPS = [
@@ -68,10 +80,19 @@ const EXERCISE_GROUPS = [
 ];
 
 const DRAFT_KEY = "workout-log-draft-v1";
+const TEMPO_FORMAT_HINT =
+  "Use eccentric-hold-concentric-hold (e.g. 3-0-X-0). Numbers are seconds, X is explosive.";
+
+const isValidTempo = (value: string) => {
+  const trimmed = value.trim();
+  if (!trimmed) return true;
+  return /^(?:\d+|[xX])-(?:\d+|[xX])-(?:\d+|[xX])-(?:\d+|[xX])$/.test(trimmed);
+};
 
 export default function WorkoutLog() {
   const router = useRouter();
   const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const isTabletLayout = width >= 600;
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [showPicker, setShowPicker] = useState(false);
@@ -90,6 +111,8 @@ export default function WorkoutLog() {
   const [pastWorkouts, setPastWorkouts] = useState<PastWorkout[]>([]);
   const [showRepeatPicker, setShowRepeatPicker] = useState(false);
   const [showFinishModal, setShowFinishModal] = useState(false);
+  const [showTempoHelpModal, setShowTempoHelpModal] = useState(false);
+  const [showDiscardConfirmModal, setShowDiscardConfirmModal] = useState(false);
   const [followedAnswer, setFollowedAnswer] = useState<FollowedAnswer | null>(null);
   const [helpfulAnswer, setHelpfulAnswer] = useState<HelpfulAnswer | null>(null);
   const [baselineDate, setBaselineDate] = useState<Date | null>(null);
@@ -112,16 +135,19 @@ export default function WorkoutLog() {
     return from === "kg" ? value * 2.20462 : value * 0.453592;
   };
 
-  const formatWeight = (weightKg: number | null, targetUnit: Unit) => {
-    if (weightKg === null || Number.isNaN(weightKg)) return "";
-    const val = targetUnit === "kg" ? weightKg : weightKg * 2.20462;
-    return `${Math.round(val * 10) / 10} ${targetUnit}`;
-  };
-
   const formatWeightInput = (weightKg: number | null, targetUnit: Unit) => {
     if (weightKg === null || Number.isNaN(weightKg)) return "";
     const val = targetUnit === "kg" ? weightKg : weightKg * 2.20462;
     return `${Math.round(val * 10) / 10}`;
+  };
+
+  const formatDecisionLabel = (decision?: Decision) =>
+    decision ? decision.replace("_", " ") : "";
+
+  const formatIntensityPct = (value?: number) => {
+    if (value == null) return "0%";
+    const sign = value > 0 ? "+" : "";
+    return `${sign}${value}%`;
   };
 
   const roundWeightKg = (weightKg: number, unit: Unit) => {
@@ -136,21 +162,8 @@ export default function WorkoutLog() {
     return roundedLbs * 0.453592;
   };
 
-  const formatDecisionLabel = (decision?: Decision) =>
-    decision ? decision.replace("_", " ") : "";
+  const getAdjustmentOptions = () => [-20, -10, 0, 10, 20];
 
-  const formatIntensityPct = (value?: number) => {
-    if (value == null) return "0%";
-    const sign = value > 0 ? "+" : "";
-    return `${sign}${value}%`;
-  };
-
-  const getAdjustmentOptions = () => {
-    const decision = latestDecision?.decision;
-    if (decision === "PULL_BACK") return [0, -5, -10, -15, -20];
-    if (decision === "PUSH") return [0, 5, 10, 15, 20];
-    return [0];
-  };
 
   const addExercise = (name: string) => {
     const trimmed = name.trim();
@@ -214,9 +227,15 @@ export default function WorkoutLog() {
             date: rawDate,
             exercises: (data?.exercises || []).map((ex: any) => ({
               name: ex?.name || "Exercise",
+              notes: typeof ex?.notes === "string" ? ex.notes : "",
+              tempo: typeof ex?.tempo === "string" ? ex.tempo : "",
               sets: (ex?.sets || []).map((set: any) => ({
                 weightKg: typeof set?.weightKg === "number" ? set.weightKg : null,
                 reps: String(set?.reps ?? ""),
+                rpe:
+                  typeof set?.rpe === "number" || typeof set?.rpe === "string"
+                    ? String(set.rpe)
+                    : "",
               })),
             })),
           });
@@ -336,7 +355,10 @@ export default function WorkoutLog() {
     setExercises((prev) =>
       prev.map((ex) =>
         ex.id === exerciseId
-          ? { ...ex, sets: [...ex.sets, { weightKg: null, reps: "", done: false }] }
+          ? {
+              ...ex,
+              sets: [...ex.sets, { weightKg: null, reps: "", rpe: "", done: false }],
+            }
           : ex
       )
     );
@@ -357,23 +379,6 @@ export default function WorkoutLog() {
     );
   };
 
-  const deleteSet = (exerciseId: string, setIndex: number) => {
-    setExercises((prev) =>
-      prev.map((ex) =>
-        ex.id === exerciseId
-          ? { ...ex, sets: ex.sets.filter((_, idx) => idx !== setIndex) }
-          : ex
-      )
-    );
-  };
-
-  const openSetMenu = (exerciseId: string, setIndex: number) => {
-    setActiveSetMenu({ exerciseId, setIndex });
-  };
-
-  const closeSetMenu = () => {
-    setActiveSetMenu(null);
-  };
 
   const updateSetWeight = (exerciseId: string, setIndex: number, unit: Unit, value: string) => {
     const weightNum = parseFloat(value);
@@ -412,33 +417,73 @@ export default function WorkoutLog() {
     );
   };
 
+  const updateSetRpe = (exerciseId: string, setIndex: number, value: string) => {
+    setExercises((prev) =>
+      prev.map((ex) =>
+        ex.id === exerciseId
+          ? {
+              ...ex,
+              sets: ex.sets.map((s, idx) => (idx === setIndex ? { ...s, rpe: value } : s)),
+            }
+          : ex
+      )
+    );
+  };
+
+  const updateExerciseNotes = (exerciseId: string, notes: string) => {
+    setExercises((prev) =>
+      prev.map((ex) => (ex.id === exerciseId ? { ...ex, notes } : ex))
+    );
+  };
+
+  const updateExerciseTempo = (exerciseId: string, tempo: string) => {
+    setExercises((prev) =>
+      prev.map((ex) => (ex.id === exerciseId ? { ...ex, tempo } : ex))
+    );
+  };
+
+  const openSetMenu = (exerciseId: string, setIndex: number) => {
+    setActiveSetMenu({ exerciseId, setIndex });
+  };
+
+  const closeSetMenu = () => {
+    setActiveSetMenu(null);
+  };
+
   const applySetAdjustment = (exerciseId: string, setIndex: number, unit: Unit, percent: number) => {
     setExercises((prev) =>
       prev.map((ex) =>
         ex.id === exerciseId
           ? {
-            ...ex,
-            sets: ex.sets.map((s, idx) => {
-              if (idx !== setIndex) return s;
-              if (s.weightKg === null || s.weightKg <= 0) return s;
-              const baseline = s.baselineWeightKg ?? s.weightKg;
-              const adjustedFlag = percent === 0 ? s.baselineAdjusted ?? false : true;
-              if (percent === 0) {
-                return { ...s, baselineWeightKg: baseline, baselineAdjusted: adjustedFlag, weightKg: baseline };
-              }
-              const adjusted = baseline * (1 + percent / 100);
-              return {
-                ...s,
-                baselineWeightKg: baseline,
-                baselineAdjusted: adjustedFlag,
-                weightKg: roundWeightKg(adjusted, unit),
-              };
-            }),
-          }
+              ...ex,
+              sets: ex.sets.map((s, idx) => {
+                if (idx !== setIndex) return s;
+                if (s.weightKg === null || s.weightKg <= 0) return s;
+                const baseline = s.baselineWeightKg ?? s.weightKg;
+                const adjustedFlag = percent === 0 ? s.baselineAdjusted ?? false : true;
+                if (percent === 0) {
+                  return {
+                    ...s,
+                    baselineWeightKg: baseline,
+                    baselineAdjusted: adjustedFlag,
+                    weightKg: baseline,
+                  };
+                }
+                const adjusted = baseline * (1 + percent / 100);
+                return {
+                  ...s,
+                  baselineWeightKg: baseline,
+                  baselineAdjusted: adjustedFlag,
+                  weightKg: roundWeightKg(adjusted, unit),
+                };
+              }),
+            }
           : ex
       )
     );
+    closeSetMenu();
   };
+
 
   const replaceExercise = (exerciseId: string, newName: string) => {
     const trimmed = newName.trim();
@@ -497,17 +542,20 @@ export default function WorkoutLog() {
   };
 
   const applyPastWorkout = (workout: PastWorkout) => {
-    const nextExercises: Exercise[] = workout.exercises.map((ex) => ({
-      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-      name: ex.name,
-      sets: ex.sets.map((s) => ({
-        weightKg: s.weightKg ?? null,
-        reps: s.reps,
-        done: false,
-        baselineWeightKg: s.weightKg ?? null,
-        baselineReps: s.reps,
-      })),
-    }));
+      const nextExercises: Exercise[] = workout.exercises.map((ex) => ({
+        id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        name: ex.name,
+        notes: ex.notes ?? "",
+        tempo: ex.tempo ?? "",
+        sets: ex.sets.map((s) => ({
+          weightKg: s.weightKg ?? null,
+          reps: s.reps,
+          rpe: s.rpe ?? "",
+          done: false,
+          baselineWeightKg: s.weightKg ?? null,
+          baselineReps: s.reps,
+        })),
+      }));
     setExercises(nextExercises);
     setSessionTitle(workout.title || "Workout");
     setBaselineDate(workout.date);
@@ -531,24 +579,20 @@ export default function WorkoutLog() {
 
   const discardWorkout = () => {
     if (!exercises.length && !sessionTitle.trim()) return;
-    Alert.alert("Discard workout?", "This will clear your current workout draft.", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Discard",
-        style: "destructive",
-        onPress: () => {
-          setExercises([]);
-          setExerciseUnits({});
-          setSessionTitle("");
-          setBaselineDate(null);
-          setFollowedAnswer(null);
-          setHelpfulAnswer(null);
-          setShowFinishModal(false);
-          startTimeRef.current = new Date();
-          AsyncStorage.removeItem(DRAFT_KEY).catch(() => {});
-        },
-      },
-    ]);
+    setShowDiscardConfirmModal(true);
+  };
+
+  const confirmDiscardWorkout = () => {
+    setExercises([]);
+    setExerciseUnits({});
+    setSessionTitle("");
+    setBaselineDate(null);
+    setFollowedAnswer(null);
+    setHelpfulAnswer(null);
+    setShowFinishModal(false);
+    setShowDiscardConfirmModal(false);
+    startTimeRef.current = new Date();
+    AsyncStorage.removeItem(DRAFT_KEY).catch(() => {});
   };
 
   const saveWorkout = async () => {
@@ -566,14 +610,45 @@ export default function WorkoutLog() {
       setSaving(true);
       const sanitizedExercises = exercises
         .map((ex) => {
-          const cleanedSets = ex.sets.filter((s) => {
-            const repsVal = String(s.reps || "").trim();
-            if (!repsVal) return false;
-            return true;
-          });
-          return cleanedSets.length ? { ...ex, sets: cleanedSets } : null;
+        const cleanedSets = ex.sets.filter((s) => {
+          const repsVal = String(s.reps || "").trim();
+          if (!repsVal) return false;
+          return true;
+        });
+          return cleanedSets.length
+            ? {
+                ...ex,
+                notes: String(ex.notes || "").trim(),
+                tempo: String(ex.tempo || "").trim(),
+                sets: cleanedSets.map((set) => ({
+                  ...set,
+                  rpe: String(set.rpe || "").trim(),
+                })),
+              }
+            : null;
         })
         .filter(Boolean) as Exercise[];
+
+      const invalidTempoExercise = sanitizedExercises.find((exercise) => !isValidTempo(exercise.tempo || ""));
+      if (invalidTempoExercise) {
+        Alert.alert("Invalid tempo", `${invalidTempoExercise.name}: ${TEMPO_FORMAT_HINT}`);
+        setSaving(false);
+        return;
+      }
+
+      const invalidRpe = sanitizedExercises.find((exercise) =>
+        exercise.sets.some((set) => {
+          const raw = String(set.rpe || "").trim();
+          if (!raw) return false;
+          const parsed = Number(raw);
+          return !Number.isFinite(parsed) || parsed < 1 || parsed > 10;
+        })
+      );
+      if (invalidRpe) {
+        Alert.alert("Invalid RPE", "RPE must be a number between 1 and 10.");
+        setSaving(false);
+        return;
+      }
 
       const totalCleanSets = sanitizedExercises.reduce((sum, ex) => sum + ex.sets.length, 0);
       if (totalCleanSets === 0) {
@@ -588,9 +663,17 @@ export default function WorkoutLog() {
         trainingPhase: sessionPhase,
         exercises: sanitizedExercises.map((ex) => ({
           name: ex.name,
+          notes: String(ex.notes || "").trim(),
+          tempo: String(ex.tempo || "").trim(),
           sets: ex.sets.map((s) => ({
             weightKg: s.weightKg,
             reps: s.reps,
+            rpe:
+              String(s.rpe || "").trim() === ""
+                ? null
+                : Number.isFinite(Number(s.rpe))
+                ? Number(String(s.rpe).trim())
+                : null,
           })),
         })),
         followedRecommendation: followedAnswer || "unknown",
@@ -838,15 +921,64 @@ export default function WorkoutLog() {
                   </ScrollView>
                 </View>
               ) : null}
+              <View style={styles.exerciseMetaNotesSingle}>
+                <Text style={styles.metaLabel}>Notes</Text>
+                <TextInput
+                  placeholder="Add notes"
+                  placeholderTextColor="#7a7a8c"
+                  value={ex.notes ?? ""}
+                  onChangeText={(v) => updateExerciseNotes(ex.id, v)}
+                  style={[styles.input, styles.metaInput]}
+                />
+              </View>
+              <View style={styles.exerciseMetaTempoRow}>
+                <View style={styles.metaLabelRow}>
+                  <Text style={styles.metaLabel}>Tempo</Text>
+                  <TouchableOpacity
+                    style={styles.tempoHelpButton}
+                    onPress={() => setShowTempoHelpModal(true)}
+                    accessibilityLabel="Tempo format help"
+                  >
+                    <Ionicons name="help-circle-outline" size={16} color="#9aa1c3" />
+                  </TouchableOpacity>
+                </View>
+                <TextInput
+                  placeholder="3-0-X-0"
+                  placeholderTextColor="#7a7a8c"
+                  value={ex.tempo ?? ""}
+                  onChangeText={(v) => updateExerciseTempo(ex.id, v)}
+                  autoCapitalize="characters"
+                  style={[
+                    styles.input,
+                    styles.metaInput,
+                    !isValidTempo(ex.tempo ?? "") && styles.metaInputInvalid,
+                  ]}
+                />
+              </View>
+              <View style={[styles.setHeaderRow, isTabletLayout && styles.setHeaderRowTablet]}>
+                <Text style={[styles.setHeaderText, styles.setHeaderSet]}>Set</Text>
+                <Text style={[styles.setHeaderText, styles.setHeaderCheck]}>{"\u2713"}</Text>
+                <View style={styles.setHeaderInputsGroup}>
+                  <Text style={[styles.setHeaderText, styles.setColWeight]}>Weight</Text>
+                  <Text style={[styles.setHeaderText, styles.setColReps]}>Reps</Text>
+                  <Text style={[styles.setHeaderText, styles.setColRpe]}>RPE</Text>
+                </View>
+              </View>
               {ex.sets.length === 0 ? (
                 <Text style={styles.muted}>No sets yet.</Text>
               ) : (
                 ex.sets.map((s, idx) => (
                   <View key={`${ex.id}-set-${idx}`} style={styles.setContainer}>
                     <View style={[styles.setInlineRow, isTabletLayout && styles.setInlineRowTablet]}>
-                      <Text style={[styles.setLabel, isTabletLayout && styles.setLabelTablet]}>
-                        {idx + 1}
-                      </Text>
+                      <TouchableOpacity
+                        onPress={() => openSetMenu(ex.id, idx)}
+                        style={styles.setLabelButton}
+                        accessibilityLabel={`Adjust set ${idx + 1} intensity`}
+                      >
+                        <Text style={[styles.setLabel, isTabletLayout && styles.setLabelTablet]}>
+                          {idx + 1}
+                        </Text>
+                      </TouchableOpacity>
                       <TouchableOpacity
                         style={styles.checkboxInline}
                         onPress={() => toggleSetDone(ex.id, idx)}
@@ -866,6 +998,8 @@ export default function WorkoutLog() {
                           style={[
                             styles.input,
                             styles.setInput,
+                            styles.setInputCompact,
+                            styles.setColWeight,
                             isTabletLayout && styles.setInputTablet,
                           ]}
                         />
@@ -878,36 +1012,29 @@ export default function WorkoutLog() {
                           style={[
                             styles.input,
                             styles.setInput,
+                            styles.setInputCompact,
+                            styles.setColReps,
                             isTabletLayout && styles.setInputTablet,
                             styles.setInputReps,
                             isTabletLayout && styles.setInputRepsTablet,
                           ]}
                         />
-                      </View>
-                      <View style={[styles.actions, isTabletLayout && styles.actionsTablet]}>
-                        <TouchableOpacity
-                          onPress={() => deleteSet(ex.id, idx)}
-                          style={styles.iconButton}
-                        >
-                          <Ionicons name="trash-outline" size={18} color="#ff7a7a" />
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          onPress={() => openSetMenu(ex.id, idx)}
-                          style={styles.iconButton}
-                        >
-                          <Ionicons name="ellipsis-horizontal" size={18} color="#cdd0e0" />
-                        </TouchableOpacity>
+                        <TextInput
+                          placeholder="RPE"
+                          placeholderTextColor="#7a7a8c"
+                          keyboardType="decimal-pad"
+                          value={s.rpe ?? ""}
+                          onChangeText={(v) => updateSetRpe(ex.id, idx, v)}
+                          style={[
+                            styles.input,
+                            styles.setInput,
+                            styles.setInputCompact,
+                            styles.setColRpe,
+                            isTabletLayout && styles.setInputTablet,
+                          ]}
+                        />
                       </View>
                     </View>
-                    {s.baselineAdjusted && (typeof s.baselineWeightKg === "number" || s.baselineReps) ? (
-                      <Text style={styles.baselineInline}>
-                        Baseline:{" "}
-                        {typeof s.baselineWeightKg === "number"
-                          ? `${formatWeight(s.baselineWeightKg, unit)}`
-                          : "-"}{" "}
-                        x {s.baselineReps ?? "-"}
-                      </Text>
-                    ) : null}
                   </View>
                 ))
               )}
@@ -1104,36 +1231,78 @@ export default function WorkoutLog() {
         </View>
       </Modal>
 
-      <Modal visible={Boolean(activeSetMenu)} transparent animationType="slide">
-        <View style={styles.sheetBackdrop}>
-          <View style={styles.sheetCard}>
-            <Text style={styles.modalTitle}>Set options</Text>
-            {activeSetMenu ? (
-              <>
-                <Text style={[styles.modalText, { marginTop: 12 }]}>Apply decision adjustment</Text>
-                <View style={styles.answerRow}>
-                  {getAdjustmentOptions().map((pct) => (
-                    <TouchableOpacity
-                      key={`adj-${pct}`}
-                      style={styles.answerChip}
-                      onPress={() => {
-                        const unit = exerciseUnits[activeSetMenu.exerciseId] || "kg";
-                        applySetAdjustment(activeSetMenu.exerciseId, activeSetMenu.setIndex, unit, pct);
-                      }}
-                    >
-                      <Text style={styles.answerText}>{pct >= 0 ? `+${pct}%` : `${pct}%`}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
+      <Modal visible={showTempoHelpModal} transparent animationType="fade">
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Tempo Guide</Text>
+            <Text style={styles.modalText}>
+              Tempo uses four parts: eccentric - hold - concentric - hold.
+            </Text>
+            <Text style={styles.modalText}>Example: 3-0-X-0</Text>
+            <Text style={styles.modalText}>Numbers are seconds. X means explosive.</Text>
+            <TouchableOpacity
+              style={[styles.primaryButton, styles.modalPrimaryButton]}
+              onPress={() => setShowTempoHelpModal(false)}
+            >
+              <Text style={styles.primaryText}>Got it</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
+      <Modal visible={showDiscardConfirmModal} transparent animationType="fade">
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Discard this workout?</Text>
+            <Text style={styles.modalText}>
+              This will clear your current workout draft. You can&apos;t undo it.
+            </Text>
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.secondaryButton, styles.modalActionButton]}
+                onPress={() => setShowDiscardConfirmModal(false)}
+              >
+                <Text style={styles.secondaryText}>Keep editing</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.dangerButton, styles.modalActionButton]}
+                onPress={confirmDiscardWorkout}
+              >
+                <Text style={styles.primaryText}>Discard</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={Boolean(activeSetMenu)} transparent animationType="slide">
+        <View style={[styles.sheetBackdrop, { paddingBottom: insets.bottom + 72 }]}>
+          <View style={styles.sheetCard}>
+            <Text style={styles.modalTitle}>Adjust set intensity</Text>
+            <Text style={styles.modalText}>
+              Apply percentage to this set&apos;s baseline weight.
+            </Text>
+            <View style={styles.answerRow}>
+              {getAdjustmentOptions().map((pct) => (
                 <TouchableOpacity
-                  style={[styles.secondaryButton, { marginTop: 10 }]}
-                  onPress={closeSetMenu}
+                  key={`adj-${pct}`}
+                  style={styles.answerChip}
+                  onPress={() => {
+                    if (!activeSetMenu) return;
+                    const unit = exerciseUnits[activeSetMenu.exerciseId] || "kg";
+                    applySetAdjustment(activeSetMenu.exerciseId, activeSetMenu.setIndex, unit, pct);
+                  }}
                 >
-                  <Text style={styles.secondaryText}>Close</Text>
+                  <Text style={styles.answerText}>{pct >= 0 ? `+${pct}%` : `${pct}%`}</Text>
                 </TouchableOpacity>
-              </>
-            ) : null}
+              ))}
+            </View>
+            <TouchableOpacity
+              style={[styles.secondaryButton, { marginTop: 12 }]}
+              onPress={closeSetMenu}
+            >
+              <Text style={styles.secondaryText}>Close</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -1211,18 +1380,46 @@ const styles = StyleSheet.create({
   muted: { color: "#a3a3b5" },
   exerciseBlock: { marginTop: 8 },
   exerciseName: { color: "#fff", fontWeight: "700", marginBottom: 4, flex: 1, flexShrink: 1 },
-  setRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 6 },
-  setText: { color: "#cdd0e0" },
-  setTextDone: { color: "#7b61ff", textDecorationLine: "line-through" },
-  setInlineRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 6 },
-  setInlineRowTablet: { gap: 14, width: "100%" },
-  setLabel: { color: "#cdd0e0", fontWeight: "700", width: 22, textAlign: "center" },
+  exerciseMetaNotesSingle: { marginBottom: 6 },
+  exerciseMetaTempoRow: { marginBottom: 8 },
+  metaLabelRow: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 4 },
+  metaLabel: { color: "#cdd0e0", fontSize: 12, fontWeight: "700", marginBottom: 4 },
+  tempoHelpButton: { paddingVertical: 2 },
+  metaInput: { marginBottom: 0, paddingVertical: 8 },
+  metaInputInvalid: {
+    borderWidth: StyleSheet.hairlineWidth * 2,
+    borderColor: "rgba(248,113,113,0.85)",
+  },
+  setHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 4,
+    marginBottom: 2,
+  },
+  setHeaderRowTablet: { gap: 10 },
+  setHeaderText: { color: "#9aa1c3", fontSize: 12, fontWeight: "700" },
+  setHeaderSet: { width: 24, textAlign: "center" },
+  setHeaderCheck: { width: 24, textAlign: "center" },
+  setHeaderInputsGroup: { flex: 1, flexDirection: "row", alignItems: "center", gap: 8 },
+  setColWeight: { flex: 1, textAlign: "center" },
+  setColReps: { flex: 1, textAlign: "center" },
+  setColRpe: { flex: 0.8, textAlign: "center" },
+  setInlineRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 6 },
+  setInlineRowTablet: { gap: 10, width: "100%" },
+  setLabelButton: {
+    width: 24,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  setLabel: { color: "#cdd0e0", fontWeight: "700", fontSize: 13, width: 24, textAlign: "center" },
   setLabelTablet: { width: 28, fontSize: 15 },
-  setInputsGroup: { flexDirection: "row", alignItems: "center", gap: 10 },
+  setInputsGroup: { flex: 1, flexDirection: "row", alignItems: "center", gap: 8 },
   setInputsGroupTablet: { flex: 1 },
-  setInput: { width: 90, minWidth: 80, marginBottom: 0, paddingVertical: 8 },
-  setInputTablet: { flex: 1, width: undefined, minWidth: 140 },
-  setInputReps: { marginRight: 8 },
+  setInput: { marginBottom: 0, paddingVertical: 8 },
+  setInputCompact: { fontSize: 12, paddingHorizontal: 6, textAlign: "center" },
+  setInputTablet: { flex: undefined, width: undefined, minWidth: undefined },
+  setInputReps: { marginRight: 0 },
   setInputRepsTablet: { marginRight: 0 },
   checkboxInline: { paddingRight: 2 },
   checkbox: {
@@ -1313,9 +1510,6 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   setContainer: { marginBottom: 6 },
-  setInfo: { flexDirection: "row", alignItems: "center", gap: 10, flex: 1 },
-  actions: { flexDirection: "row", alignItems: "center", gap: 8, marginLeft: 6 },
-  actionsTablet: { marginLeft: "auto", alignSelf: "stretch", justifyContent: "center" },
   iconButton: {
     padding: 6,
     borderRadius: 8,
@@ -1352,6 +1546,12 @@ const styles = StyleSheet.create({
   modalActions: { flexDirection: "row", gap: 10, marginTop: 12 },
   modalActionButton: { flex: 1 },
   modalPrimaryButton: { marginTop: 0, paddingVertical: 12 },
+  dangerButton: {
+    backgroundColor: "rgba(248,113,113,0.9)",
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: "center",
+  },
   answerRow: { flexDirection: "row", gap: 8, marginTop: 8, flexWrap: "wrap" },
   answerChip: {
     paddingVertical: 8,
@@ -1374,7 +1574,6 @@ const styles = StyleSheet.create({
   },
   baselineText: { color: "#fff", fontWeight: "700" },
   baselineSub: { color: "#c9cde4", marginTop: 4 },
-  baselineInline: { color: "#9aa1c3", fontSize: 12, marginTop: 4 },
   sheetBackdrop: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",

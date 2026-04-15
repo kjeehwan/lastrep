@@ -352,9 +352,15 @@ export default function Home() {
           trainingPhase: typeof data?.trainingPhase === "string" ? data.trainingPhase : null,
           exercises: (data?.exercises ?? []).map((exercise: any) => ({
             name: typeof exercise?.name === "string" ? exercise.name : "Exercise",
+            notes: typeof exercise?.notes === "string" ? exercise.notes : "",
+            tempo: typeof exercise?.tempo === "string" ? exercise.tempo : "",
             sets: (exercise?.sets ?? []).map((set: any) => ({
               weightKg: typeof set?.weightKg === "number" ? set.weightKg : null,
               reps: String(set?.reps ?? ""),
+              rpe:
+                typeof set?.rpe === "number" && Number.isFinite(set.rpe)
+                  ? set.rpe
+                  : null,
             })),
           })),
         });
@@ -1086,6 +1092,21 @@ export default function Home() {
                       {getWorkoutSetCount(workout)} sets - {Math.round(getWorkoutVolumeKg(workout))} kg
                       volume
                     </Text>
+                    {workout.exercises.map((exercise, exerciseIndex) => (
+                      <View key={`${workout.id}-${exercise.name}-${exerciseIndex}`} style={styles.dayExerciseBlock}>
+                        <Text style={styles.dayExerciseName}>{exercise.name}</Text>
+                        {exercise.tempo ? <Text style={styles.noticeSub}>Tempo: {exercise.tempo}</Text> : null}
+                        {exercise.notes ? <Text style={styles.noticeSub}>Notes: {exercise.notes}</Text> : null}
+                        {exercise.sets.map((set, setIndex) => (
+                          <Text key={`${workout.id}-${exerciseIndex}-set-${setIndex}`} style={styles.noticeSub}>
+                            Set {setIndex + 1}:{" "}
+                            {typeof set.weightKg === "number" ? `${Math.round(set.weightKg * 10) / 10} kg` : "-"} x{" "}
+                            {set.reps || "-"}
+                            {typeof set.rpe === "number" ? ` - RPE ${set.rpe}` : ""}
+                          </Text>
+                        ))}
+                      </View>
+                    ))}
                   </View>
                 ))
               )}
@@ -1441,5 +1462,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.08)",
   },
   dayWorkoutTitle: { color: "#fff", fontSize: 14, fontWeight: "700" },
+  dayExerciseBlock: { marginTop: 8, gap: 2 },
+  dayExerciseName: { color: "#d8daec", fontSize: 13, fontWeight: "700" },
   modalTitle: { color: "#fff", fontSize: 18, fontWeight: "800", marginBottom: 4 },
 });

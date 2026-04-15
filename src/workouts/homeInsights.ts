@@ -1,10 +1,13 @@
 type WorkoutSet = {
   weightKg: number | null;
   reps: string;
+  rpe?: number | null;
 };
 
 type WorkoutExercise = {
   name: string;
+  notes?: string;
+  tempo?: string;
   sets: WorkoutSet[];
 };
 
