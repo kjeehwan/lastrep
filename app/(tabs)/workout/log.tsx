@@ -3,7 +3,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { getAuth } from "firebase/auth";
 import { addDoc, collection, doc, getDoc, getDocs, limit, orderBy, query, Timestamp } from "firebase/firestore";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, useWindowDimensions } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { db } from "../../../src/config/firebaseConfig";
@@ -205,7 +205,7 @@ export default function WorkoutLog() {
     return byGroup.filter((item) => item.toLowerCase().includes(normalized));
   }, [replaceGroup, replaceSearch]);
 
-  const loadPastWorkouts = async () => {
+  const loadPastWorkouts = useCallback(async () => {
     try {
       const user = auth.currentUser;
       if (!user) return;
@@ -251,9 +251,9 @@ export default function WorkoutLog() {
         console.log("Failed to load recent exercises", e);
       }
     }
-  };
+  }, [auth]);
 
-  const loadLatestDecision = async () => {
+  const loadLatestDecision = useCallback(async () => {
     try {
       const user = auth.currentUser;
       if (!user) return;
@@ -272,7 +272,7 @@ export default function WorkoutLog() {
         console.log("Failed to load latest decision", e);
       }
     }
-  };
+  }, [auth]);
 
   // Load draft and recent exercises
   useEffect(() => {
@@ -305,7 +305,7 @@ export default function WorkoutLog() {
     };
     loadDraft();
     loadPastWorkouts();
-  }, [auth.currentUser]);
+  }, [auth.currentUser, loadPastWorkouts]);
 
   useEffect(() => {
     if (routerParams.trainingPhase) {
@@ -314,9 +314,9 @@ export default function WorkoutLog() {
   }, [routerParams.trainingPhase]);
 
   useFocusEffect(
-    React.useCallback(() => {
-      loadLatestDecision();
-    }, [auth.currentUser])
+    useCallback(() => {
+      void loadLatestDecision();
+    }, [loadLatestDecision])
   );
 
   // Persist draft
