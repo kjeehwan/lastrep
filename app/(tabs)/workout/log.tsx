@@ -2,13 +2,35 @@ import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { getAuth } from "firebase/auth";
-import { addDoc, collection, doc, getDoc, getDocs, limit, orderBy, query, Timestamp } from "firebase/firestore";
+import {
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+  limit,
+  orderBy,
+  query,
+  setDoc,
+  Timestamp,
+} from "firebase/firestore";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, useWindowDimensions } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { db } from "../../../src/config/firebaseConfig";
 import type { Decision } from "../../../src/types/decision";
 import { isExpectedOfflineError } from "../../../src/utils/networkErrors";
+import {
+  DEFAULT_WORKOUT_TEMPLATES,
+  getAverageRpe,
+  getDominantGroup,
+  goalToLabel,
+  isPhaseGoalAligned,
+  pickTemplate,
+  resolveRecommendationTargets,
+  type WorkoutLike,
+} from "../../../src/workouts/recommendationHeuristics";
 
 type Unit = "kg" | "lbs";
 type SetEntry = {
@@ -39,6 +61,19 @@ type PastWorkout = {
     tempo?: string;
     sets: { weightKg: number | null; reps: string; rpe?: string }[];
   }[];
+};
+
+type Routine = {
+  id: string;
+  name: string;
+  exercises: {
+    name: string;
+    notes?: string;
+    tempo?: string;
+    sets: { reps: string; targetRpe?: string; defaultWeightKg?: number | null }[];
+  }[];
+  createdAt: Date | null;
+  updatedAt: Date | null;
 };
 
 const EXERCISE_GROUPS = [
@@ -109,7 +144,22 @@ export default function WorkoutLog() {
   const [sessionPhase, setSessionPhase] = useState("Hypertrophy");
   const [recentExercises, setRecentExercises] = useState<string[]>([]);
   const [pastWorkouts, setPastWorkouts] = useState<PastWorkout[]>([]);
+  const [routines, setRoutines] = useState<Routine[]>([]);
   const [showRepeatPicker, setShowRepeatPicker] = useState(false);
+  const [showRoutineNameModal, setShowRoutineNameModal] = useState(false);
+  const [showRoutineStartModal, setShowRoutineStartModal] = useState(false);
+  const [showRoutineActionsModal, setShowRoutineActionsModal] = useState(false);
+  const [showRoutineDeleteModal, setShowRoutineDeleteModal] = useState(false);
+  const [routineNameInput, setRoutineNameInput] = useState("");
+  const [routineFormError, setRoutineFormError] = useState<string | null>(null);
+  const [editingRoutineId, setEditingRoutineId] = useState<string | null>(null);
+  const [selectedRoutine, setSelectedRoutine] = useState<Routine | null>(null);
+  const [routineBuilderMode, setRoutineBuilderMode] = useState(false);
+  const [routineSaving, setRoutineSaving] = useState(false);
+  const [uiFeedback, setUiFeedback] = useState<string | null>(null);
+  const [lastAppliedRoutineId, setLastAppliedRoutineId] = useState<string | null>(null);
+  const [recommending, setRecommending] = useState(false);
+  const [recommendationSummary, setRecommendationSummary] = useState<string[]>([]);
   const [showFinishModal, setShowFinishModal] = useState(false);
   const [showTempoHelpModal, setShowTempoHelpModal] = useState(false);
   const [showDiscardConfirmModal, setShowDiscardConfirmModal] = useState(false);
@@ -253,6 +303,43 @@ export default function WorkoutLog() {
     }
   }, [auth]);
 
+  const loadRoutines = useCallback(async () => {
+    try {
+      const user = auth.currentUser;
+      if (!user) return;
+      const routinesRef = collection(db, "users", user.uid, "routines");
+      const snap = await getDocs(query(routinesRef, orderBy("updatedAt", "desc"), limit(50)));
+      const next: Routine[] = [];
+      snap.forEach((docSnap) => {
+        const data: any = docSnap.data();
+        next.push({
+          id: docSnap.id,
+          name: typeof data?.name === "string" && data.name.trim() ? data.name.trim() : "Routine",
+          exercises: (data?.exercises || []).map((exercise: any) => ({
+            name: typeof exercise?.name === "string" ? exercise.name : "Exercise",
+            notes: typeof exercise?.notes === "string" ? exercise.notes : "",
+            tempo: typeof exercise?.tempo === "string" ? exercise.tempo : "",
+            sets: (exercise?.sets || []).map((set: any) => ({
+              reps: String(set?.reps ?? ""),
+              targetRpe:
+                typeof set?.targetRpe === "number" || typeof set?.targetRpe === "string"
+                  ? String(set.targetRpe)
+                  : "",
+              defaultWeightKg: typeof set?.defaultWeightKg === "number" ? set.defaultWeightKg : null,
+            })),
+          })),
+          createdAt: data?.createdAt?.toDate?.() ?? null,
+          updatedAt: data?.updatedAt?.toDate?.() ?? null,
+        });
+      });
+      setRoutines(next);
+    } catch (error) {
+      if (!isExpectedOfflineError(error)) {
+        console.log("Failed to load routines", error);
+      }
+    }
+  }, [auth]);
+
   const loadLatestDecision = useCallback(async () => {
     try {
       const user = auth.currentUser;
@@ -305,7 +392,8 @@ export default function WorkoutLog() {
     };
     loadDraft();
     loadPastWorkouts();
-  }, [auth.currentUser, loadPastWorkouts]);
+    loadRoutines();
+  }, [auth.currentUser, loadPastWorkouts, loadRoutines]);
 
   useEffect(() => {
     if (routerParams.trainingPhase) {
@@ -350,6 +438,12 @@ export default function WorkoutLog() {
     }, 30000);
     return () => clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    if (!uiFeedback) return;
+    const timer = setTimeout(() => setUiFeedback(null), 2800);
+    return () => clearTimeout(timer);
+  }, [uiFeedback]);
 
   const addEmptySet = (exerciseId: string) => {
     setExercises((prev) =>
@@ -591,6 +685,8 @@ export default function WorkoutLog() {
     setHelpfulAnswer(null);
     setShowFinishModal(false);
     setShowDiscardConfirmModal(false);
+    setRecommendationSummary([]);
+    setLastAppliedRoutineId(null);
     startTimeRef.current = new Date();
     AsyncStorage.removeItem(DRAFT_KEY).catch(() => {});
   };
@@ -688,6 +784,8 @@ export default function WorkoutLog() {
       setExerciseUnits({});
       startTimeRef.current = new Date();
       setSessionTitle("");
+      setRecommendationSummary([]);
+      setLastAppliedRoutineId(null);
       setBaselineDate(null);
       AsyncStorage.removeItem(DRAFT_KEY).catch(() => { });
       setShowFinishModal(false);
@@ -726,6 +824,291 @@ export default function WorkoutLog() {
     );
   };
 
+  const buildRoutineExercisesFromEditor = () =>
+    exercises.map((exercise) => ({
+      name: exercise.name,
+      notes: String(exercise.notes || "").trim(),
+      tempo: String(exercise.tempo || "").trim(),
+      sets: exercise.sets.map((set) => ({
+        reps: String(set.reps || "").trim(),
+        targetRpe: String(set.rpe || "").trim(),
+        defaultWeightKg: typeof set.weightKg === "number" ? set.weightKg : null,
+      })),
+    }));
+
+  const startRoutineBuilderEmpty = () => {
+    setExercises([]);
+    setExerciseUnits({});
+    setSessionTitle("");
+    setRoutineBuilderMode(true);
+    setShowRoutineStartModal(false);
+  };
+
+  const startRoutineBuilderWithCurrent = () => {
+    setRoutineBuilderMode(true);
+    setShowRoutineStartModal(false);
+  };
+
+  const beginCreateRoutine = () => {
+    if (!exercises.length && !sessionTitle.trim()) {
+      startRoutineBuilderEmpty();
+      return;
+    }
+    setShowRoutineStartModal(true);
+  };
+
+  const openCreateRoutineModal = () => {
+    setEditingRoutineId(null);
+    setRoutineNameInput(sessionTitle.trim() || "New routine");
+    setRoutineFormError(null);
+    setShowRoutineNameModal(true);
+  };
+
+  const openEditRoutineModal = (routine: Routine) => {
+    setEditingRoutineId(routine.id);
+    setRoutineNameInput(routine.name);
+    setRoutineFormError(null);
+    setRoutineBuilderMode(true);
+    setShowRoutineNameModal(true);
+  };
+
+  const saveRoutine = async () => {
+    const user = auth.currentUser;
+    if (!user || routineSaving) return;
+    const name = routineNameInput.trim();
+    if (!name) {
+      setRoutineFormError("Please enter a routine name.");
+      return;
+    }
+    const routineExercises = buildRoutineExercisesFromEditor();
+    if (!routineExercises.length) {
+      setRoutineFormError("Add at least one exercise before saving a routine.");
+      return;
+    }
+    setRoutineFormError(null);
+    setRoutineSaving(true);
+    try {
+      const payload = {
+        name,
+        exercises: routineExercises,
+        updatedAt: Timestamp.now(),
+        ...(editingRoutineId ? {} : { createdAt: Timestamp.now() }),
+      };
+      if (editingRoutineId) {
+        await setDoc(doc(db, "users", user.uid, "routines", editingRoutineId), payload, { merge: true });
+      } else {
+        await addDoc(collection(db, "users", user.uid, "routines"), payload);
+      }
+      setShowRoutineNameModal(false);
+      setRoutineNameInput("");
+      setEditingRoutineId(null);
+      setRoutineBuilderMode(false);
+      await loadRoutines();
+      setUiFeedback(editingRoutineId ? "Routine updated." : "Routine saved.");
+    } catch (error) {
+      console.log("Failed to save routine", error);
+      setRoutineFormError("Couldn't save routine right now. Please try again.");
+    } finally {
+      setRoutineSaving(false);
+    }
+  };
+
+  const deleteRoutineById = async (routine: Routine) => {
+    const user = auth.currentUser;
+    if (!user) return;
+    try {
+      await deleteDoc(doc(db, "users", user.uid, "routines", routine.id));
+      await loadRoutines();
+      setUiFeedback("Routine deleted.");
+    } catch (error) {
+      console.log("Failed to delete routine", error);
+      setUiFeedback("Couldn't delete routine right now.");
+    }
+  };
+
+  const applyRoutineToEditor = (routine: Routine, mode: "replace" | "append") => {
+    const mapped: Exercise[] = routine.exercises.map((exercise) => ({
+      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      name: exercise.name,
+      notes: exercise.notes ?? "",
+      tempo: exercise.tempo ?? "",
+      sets: exercise.sets.map((set) => ({
+        weightKg: typeof set.defaultWeightKg === "number" ? set.defaultWeightKg : null,
+        reps: set.reps,
+        rpe: set.targetRpe ?? "",
+        done: false,
+        baselineWeightKg: typeof set.defaultWeightKg === "number" ? set.defaultWeightKg : null,
+        baselineReps: set.reps,
+      })),
+    }));
+    setExercises((prev) => (mode === "append" ? [...prev, ...mapped] : mapped));
+    setExerciseUnits((prev) => {
+      const next = { ...prev };
+      mapped.forEach((exercise) => {
+        next[exercise.id] = "kg";
+      });
+      return next;
+    });
+    setSessionTitle(routine.name);
+    if (mode === "replace") {
+      startTimeRef.current = new Date();
+      setLastAppliedRoutineId(routine.id);
+      setUiFeedback(`Applied "${routine.name}".`);
+    } else {
+      setUiFeedback(`Appended "${routine.name}".`);
+      setLastAppliedRoutineId(null);
+    }
+  };
+
+  const handleApplyRoutine = (routine: Routine) => {
+    applyRoutineToEditor(routine, "replace");
+  };
+
+  const appendLastAppliedRoutine = () => {
+    if (!lastAppliedRoutineId) return;
+    const routine = routines.find((item) => item.id === lastAppliedRoutineId);
+    if (!routine) return;
+    applyRoutineToEditor(routine, "append");
+  };
+
+  const openRoutineActions = (routine: Routine) => {
+    setSelectedRoutine(routine);
+    setShowRoutineActionsModal(true);
+  };
+
+  const closeRoutineActions = () => {
+    setShowRoutineActionsModal(false);
+    setSelectedRoutine(null);
+  };
+
+  const handleUpdateSelectedRoutine = () => {
+    if (!selectedRoutine) return;
+    setShowRoutineActionsModal(false);
+    openEditRoutineModal(selectedRoutine);
+  };
+
+  const handleAskDeleteSelectedRoutine = () => {
+    setShowRoutineActionsModal(false);
+    setShowRoutineDeleteModal(true);
+  };
+
+  const handleConfirmDeleteSelectedRoutine = async () => {
+    if (!selectedRoutine) {
+      setShowRoutineDeleteModal(false);
+      return;
+    }
+    await deleteRoutineById(selectedRoutine);
+    setShowRoutineDeleteModal(false);
+    setSelectedRoutine(null);
+  };
+
+  const buildLastKnownWeightMap = () => {
+    const map = new Map<string, number>();
+    pastWorkouts.forEach((workout) => {
+      workout.exercises.forEach((exercise) => {
+        const key = exercise.name.toLowerCase();
+        if (map.has(key)) return;
+        const firstWeight = exercise.sets.find((set) => typeof set.weightKg === "number")?.weightKg;
+        if (typeof firstWeight === "number") {
+          map.set(key, firstWeight);
+        }
+      });
+    });
+    return map;
+  };
+
+  const recommendWorkout = async () => {
+    if (recommending) return;
+    setRecommending(true);
+    try {
+      const user = auth.currentUser;
+      const userSnap = user ? await getDoc(doc(db, "users", user.uid)) : null;
+      const userData: any = userSnap?.data?.() ?? {};
+      const goal = String(userData?.goal || "");
+      const goalLabel = goalToLabel(goal);
+      const trainingPhase =
+        typeof userData?.trainingPhase === "string" ? userData.trainingPhase : sessionPhase;
+      const dietPhase = typeof userData?.dietPhase === "string" ? userData.dietPhase : "Maintain";
+
+      const latestWorkout = pastWorkouts[0] ?? null;
+      const latestWorkoutForHeuristics: WorkoutLike | null = latestWorkout
+        ? {
+            exercises: latestWorkout.exercises.map((exercise) => ({
+              name: exercise.name,
+              sets: exercise.sets.map((set) => ({ rpe: set.rpe })),
+            })),
+          }
+        : null;
+      const yesterdayGroup = getDominantGroup(latestWorkoutForHeuristics);
+      const avgRpe = getAverageRpe(latestWorkoutForHeuristics);
+      const highFatigue = avgRpe != null && avgRpe >= 9;
+      const pickedTemplate = pickTemplate(
+        DEFAULT_WORKOUT_TEMPLATES,
+        yesterdayGroup,
+        Math.max(0, Math.floor(Date.now() / (24 * 60 * 60 * 1000)))
+      );
+      const targets = resolveRecommendationTargets(
+        trainingPhase,
+        goal,
+        dietPhase,
+        latestDecision?.adjustments?.intensityPct ?? 0,
+        highFatigue
+      );
+      const { targetSets, targetReps, intensityPct, tempo } = targets;
+      const intensityFactor = 1 + intensityPct / 100;
+      const lastKnownWeights = buildLastKnownWeightMap();
+      const phaseGoalAligned = isPhaseGoalAligned(trainingPhase, goal);
+
+      const recommendedExercises: Exercise[] = pickedTemplate.exercises.map((name) => {
+        const knownWeight = lastKnownWeights.get(name.toLowerCase());
+        const adjustedWeight =
+          typeof knownWeight === "number" ? Math.round(knownWeight * intensityFactor * 10) / 10 : null;
+        return {
+          id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+          name,
+          notes: "",
+          tempo,
+          sets: Array.from({ length: targetSets }, () => ({
+            weightKg: adjustedWeight,
+            reps: targetReps,
+            rpe: "",
+            done: false,
+            baselineWeightKg: adjustedWeight,
+            baselineReps: targetReps,
+          })),
+        };
+      });
+      setExercises(recommendedExercises);
+      setExerciseUnits(() => {
+        const next: Record<string, Unit> = {};
+        recommendedExercises.forEach((exercise) => {
+          next[exercise.id] = "kg";
+        });
+        return next;
+      });
+      setSessionTitle(`${pickedTemplate.name} (Recommended)`);
+      setRecommendationSummary([
+        phaseGoalAligned
+          ? `Built for your ${trainingPhase} phase in a ${dietPhase} diet context.`
+          : `Prioritized your ${trainingPhase} phase, while keeping your long-term goal (${goalLabel}) in mind.`,
+        yesterdayGroup
+          ? `Avoided repeating yesterday's main focus (${yesterdayGroup}).`
+          : "No recent day focus detected, so a balanced split was selected.",
+        highFatigue
+          ? "Recent RPE trend was high, so today's set count/intensity was reduced."
+          : "Intensity was tuned from your latest decision and training context.",
+      ]);
+      startTimeRef.current = new Date();
+      setUiFeedback("Recommended workout applied.");
+      setLastAppliedRoutineId(null);
+    } catch (error) {
+      console.log("Failed to recommend workout", error);
+      Alert.alert("Recommendation unavailable", "Please try again in a moment.");
+    } finally {
+      setRecommending(false);
+    }
+  };
+
   const totalSets = useMemo(
     () => exercises.reduce((sum, ex) => sum + ex.sets.length, 0),
     [exercises]
@@ -743,7 +1126,7 @@ export default function WorkoutLog() {
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
             <Ionicons name="chevron-back" size={22} color="#fff" />
           </TouchableOpacity>
-          <Text style={styles.title}>Workout</Text>
+          <Text style={styles.title}>{routineBuilderMode ? "Create Routine" : "Workout"}</Text>
           <TouchableOpacity
             onPress={discardWorkout}
             style={[styles.backButton, styles.discardHeaderButton]}
@@ -797,13 +1180,113 @@ export default function WorkoutLog() {
         </View>
       ) : null}
 
-      {pastWorkouts.length > 0 ? (
+      <View style={styles.card}>
+        <Text style={styles.sectionTitle}>Routines</Text>
+        <Text style={styles.muted}>Reuse saved structures instead of rebuilding each session.</Text>
+        <View style={styles.routineActionRow}>
+          <TouchableOpacity
+            style={[styles.primaryButton, styles.routineActionButton, { marginTop: 0 }]}
+            onPress={beginCreateRoutine}
+          >
+            <Text style={styles.primaryText}>Create routine</Text>
+          </TouchableOpacity>
+          {pastWorkouts.length > 0 ? (
+            <TouchableOpacity
+              style={[styles.secondaryButton, styles.routineActionButton]}
+              onPress={() => setShowRepeatPicker(true)}
+            >
+              <Text style={styles.secondaryText}>Repeat past workout</Text>
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.routineActionButton} />
+          )}
+        </View>
+
+        {routineBuilderMode ? (
+          <View style={styles.routineBuilderBanner}>
+            <Text style={styles.recommendationLine}>
+              Routine builder mode: use the workout editor below, then save.
+            </Text>
+            <View style={styles.routineActionRow}>
+              <TouchableOpacity
+                style={[styles.primaryButton, styles.routineActionButton, { marginTop: 0 }]}
+                onPress={openCreateRoutineModal}
+              >
+                <Text style={styles.primaryText}>Save routine</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.secondaryButton, styles.routineActionButton]}
+                onPress={() => setRoutineBuilderMode(false)}
+              >
+                <Text style={styles.secondaryText}>Exit builder</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : null}
+
+        {routines.length === 0 ? (
+          <Text style={[styles.muted, { marginTop: 10 }]}>
+            No routines yet. Tap Create routine to build your first one.
+          </Text>
+        ) : (
+          <View style={{ marginTop: 10, gap: 8 }}>
+            {routines.map((routine) => (
+              <View key={routine.id} style={styles.routineCard}>
+                <View style={styles.routineCardHeader}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.pickerText}>{routine.name}</Text>
+                    <Text style={styles.muted}>
+                      {routine.exercises.map((exercise) => exercise.name).slice(0, 4).join(" | ")}
+                      {routine.exercises.length > 4 ? " | ..." : ""}
+                    </Text>
+                  </View>
+                  <TouchableOpacity style={styles.iconButton} onPress={() => openRoutineActions(routine)}>
+                    <Ionicons name="ellipsis-horizontal" size={16} color="#cdd0e0" />
+                  </TouchableOpacity>
+                </View>
+                <TouchableOpacity style={styles.routineUseButton} onPress={() => handleApplyRoutine(routine)}>
+                  <Text style={styles.primaryText}>Apply routine</Text>
+                </TouchableOpacity>
+              </View>
+            ))}
+          </View>
+        )}
+      </View>
+
+      <View style={styles.card}>
+        <Text style={styles.sectionTitle}>Recommendation</Text>
+        <Text style={styles.muted}>Autofill today&apos;s workout from your context and recent history.</Text>
         <TouchableOpacity
-          style={[styles.secondaryButton, { marginTop: 10 }]}
-          onPress={() => setShowRepeatPicker(true)}
+          style={[styles.primaryButton, { marginTop: 10, opacity: recommending ? 0.7 : 1 }]}
+          onPress={recommendWorkout}
+          disabled={recommending}
         >
-          <Text style={styles.secondaryText}>Repeat past workout</Text>
+          <Text style={styles.primaryText}>
+            {recommending ? "Building recommendation..." : "Recommend workout"}
+          </Text>
         </TouchableOpacity>
+      </View>
+
+      {uiFeedback ? (
+        <View style={styles.feedbackBanner}>
+          <Text style={styles.feedbackBannerText}>{uiFeedback}</Text>
+          {lastAppliedRoutineId ? (
+            <TouchableOpacity onPress={appendLastAppliedRoutine} style={styles.feedbackBannerAction}>
+              <Text style={styles.feedbackBannerActionText}>Append instead</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
+      ) : null}
+
+      {recommendationSummary.length > 0 ? (
+        <View style={styles.recommendationCard}>
+          <Text style={styles.sectionTitle}>Why this workout?</Text>
+          {recommendationSummary.map((line, index) => (
+            <Text key={`rec-line-${index}`} style={styles.recommendationLine}>
+              - {line}
+            </Text>
+          ))}
+        </View>
       ) : null}
 
       {exercises.length === 0 ? (
@@ -1178,6 +1661,131 @@ export default function WorkoutLog() {
         </View>
       </Modal>
 
+      <Modal visible={showRoutineStartModal} transparent animationType="fade">
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Create routine</Text>
+            <Text style={styles.modalText}>
+              Start with an empty editor or use your current workout draft.
+            </Text>
+            <TouchableOpacity
+              style={[styles.primaryButton, { marginTop: 12 }]}
+              onPress={startRoutineBuilderWithCurrent}
+            >
+              <Text style={styles.primaryText}>Use current workout</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.secondaryButton, { marginTop: 10 }]}
+              onPress={startRoutineBuilderEmpty}
+            >
+              <Text style={styles.secondaryText}>Start empty</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.secondaryButton, { marginTop: 10 }]}
+              onPress={() => setShowRoutineStartModal(false)}
+            >
+              <Text style={styles.secondaryText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={showRoutineActionsModal} transparent animationType="fade">
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>
+              {selectedRoutine ? selectedRoutine.name : "Routine actions"}
+            </Text>
+            <Text style={styles.modalText}>Choose what you want to do with this routine.</Text>
+            <TouchableOpacity
+              style={[styles.primaryButton, { marginTop: 12 }]}
+              onPress={handleUpdateSelectedRoutine}
+              disabled={!selectedRoutine}
+            >
+              <Text style={styles.primaryText}>Update from current workout</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.dangerButton, { marginTop: 10 }]}
+              onPress={handleAskDeleteSelectedRoutine}
+              disabled={!selectedRoutine}
+            >
+              <Text style={styles.primaryText}>Delete routine</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.secondaryButton, { marginTop: 10 }]}
+              onPress={closeRoutineActions}
+            >
+              <Text style={styles.secondaryText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={showRoutineDeleteModal} transparent animationType="fade">
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Delete this routine?</Text>
+            <Text style={styles.modalText}>
+              {selectedRoutine
+                ? `This will permanently remove "${selectedRoutine.name}".`
+                : "This will permanently remove this routine."}
+            </Text>
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.secondaryButton, styles.modalActionButton]}
+                onPress={() => {
+                  setShowRoutineDeleteModal(false);
+                  setSelectedRoutine(null);
+                }}
+              >
+                <Text style={styles.secondaryText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.dangerButton, styles.modalActionButton]}
+                onPress={handleConfirmDeleteSelectedRoutine}
+              >
+                <Text style={styles.primaryText}>Delete</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={showRoutineNameModal} transparent animationType="fade">
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>{editingRoutineId ? "Update routine" : "Save routine"}</Text>
+            <TextInput
+              placeholder="Routine name"
+              placeholderTextColor="#7a7a8c"
+              value={routineNameInput}
+              onChangeText={setRoutineNameInput}
+              style={styles.input}
+            />
+            {routineFormError ? <Text style={styles.modalErrorText}>{routineFormError}</Text> : null}
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.secondaryButton, styles.modalActionButton]}
+                onPress={() => {
+                  setShowRoutineNameModal(false);
+                  setEditingRoutineId(null);
+                  setRoutineFormError(null);
+                }}
+              >
+                <Text style={styles.secondaryText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.primaryButton, styles.modalActionButton, styles.modalPrimaryButton]}
+                onPress={saveRoutine}
+                disabled={routineSaving}
+              >
+                <Text style={styles.primaryText}>{routineSaving ? "Saving..." : "Save"}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       <Modal visible={showFinishModal} transparent animationType="fade">
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
@@ -1468,6 +2076,69 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "rgba(255,255,255,0.08)",
   },
+  routineActionRow: { flexDirection: "row", gap: 8, marginTop: 10 },
+  routineActionButton: { flex: 1 },
+  routineBuilderBanner: {
+    marginTop: 10,
+    borderRadius: 12,
+    padding: 10,
+    backgroundColor: "rgba(123,97,255,0.12)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(123,97,255,0.45)",
+    gap: 4,
+  },
+  feedbackBanner: {
+    marginTop: 10,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: "rgba(166,227,161,0.16)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(166,227,161,0.45)",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 8,
+  },
+  feedbackBannerText: { color: "#d7f5d3", fontSize: 12, fontWeight: "700", flex: 1 },
+  feedbackBannerAction: {
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.35)",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  feedbackBannerActionText: { color: "#fff", fontSize: 11, fontWeight: "700" },
+  recommendationCard: {
+    backgroundColor: "rgba(123,97,255,0.12)",
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(123,97,255,0.4)",
+    gap: 4,
+  },
+  recommendationLine: { color: "#d8daec", fontSize: 12, lineHeight: 18 },
+  routineCard: {
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.1)",
+    backgroundColor: "rgba(255,255,255,0.04)",
+    padding: 10,
+    marginBottom: 8,
+    gap: 8,
+  },
+  routineCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  routineUseButton: {
+    backgroundColor: "#7b61ff",
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: "center",
+  },
   toggleRow: {
     flexDirection: "row",
     gap: 8,
@@ -1543,6 +2214,7 @@ const styles = StyleSheet.create({
   },
   modalTitle: { color: "#fff", fontSize: 18, fontWeight: "800", marginBottom: 8 },
   modalText: { color: "#d8daec", marginBottom: 4 },
+  modalErrorText: { color: "#ff9a9a", marginBottom: 8, fontWeight: "600" },
   modalActions: { flexDirection: "row", gap: 10, marginTop: 12 },
   modalActionButton: { flex: 1 },
   modalPrimaryButton: { marginTop: 0, paddingVertical: 12 },
