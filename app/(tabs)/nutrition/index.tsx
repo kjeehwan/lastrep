@@ -3,7 +3,6 @@ import { Href, Redirect, useFocusEffect, useRouter } from "expo-router";
 import { onAuthStateChanged } from "firebase/auth";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Alert,
   ScrollView,
   StyleSheet,
   Text,
@@ -14,6 +13,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { auth } from "@/src/config/firebaseConfig";
 import { useOfflineStatus } from "@/src/hooks/useOfflineStatus";
+import { showAppDialog } from "@/src/ui/appDialog";
 import {
   computeDailyCalorieProgress,
   computeNutritionTotals,
@@ -269,47 +269,51 @@ export default function NutritionIndex() {
   const handleDeleteMeal = (meal: NutritionMeal) => {
     if (!uid) return;
 
-    Alert.alert("Delete meal", `Delete ${meal.name}?`, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            const request = deleteMeal(uid, meal.id);
-            if (isOffline) {
-              void request.catch((error) => {
-                if (!isExpectedOfflineError(error)) {
-                  console.log("Queued meal delete failed", error);
-                  setFeedback("Queued delete failed. Please try again.");
+    showAppDialog({
+      title: "Delete meal",
+      message: `Delete ${meal.name}?`,
+      buttons: [
+        { text: "Cancel", role: "cancel" },
+        {
+          text: "Delete",
+          role: "destructive",
+          onPress: async () => {
+            try {
+              const request = deleteMeal(uid, meal.id);
+              if (isOffline) {
+                void request.catch((error) => {
+                  if (!isExpectedOfflineError(error)) {
+                    console.log("Queued meal delete failed", error);
+                    setFeedback("Queued delete failed. Please try again.");
+                  }
+                });
+                if (editingMealId === meal.id) {
+                  resetForm();
                 }
-              });
+                setFeedback("Deleted offline. Changes will sync when you reconnect.");
+                return;
+              }
+
+              await request;
               if (editingMealId === meal.id) {
                 resetForm();
               }
-              setFeedback("Deleted offline. Changes will sync when you reconnect.");
-              return;
+              setFeedback("Meal deleted.");
+              void fetchHistoryData();
+            } catch (error) {
+              if (!isExpectedOfflineError(error)) {
+                console.log("Failed to delete meal", error);
+              }
+              setFeedback(
+                isExpectedOfflineError(error)
+                  ? "You're offline. Meal changes couldn't be saved."
+                  : "Unable to delete this meal right now."
+              );
             }
-
-            await request;
-            if (editingMealId === meal.id) {
-              resetForm();
-            }
-            setFeedback("Meal deleted.");
-            void fetchHistoryData();
-          } catch (error) {
-            if (!isExpectedOfflineError(error)) {
-              console.log("Failed to delete meal", error);
-            }
-            setFeedback(
-              isExpectedOfflineError(error)
-                ? "You're offline. Meal changes couldn't be saved."
-                : "Unable to delete this meal right now."
-            );
-          }
+          },
         },
-      },
-    ]);
+      ],
+    });
   };
 
   const todayKey = useMemo(() => {

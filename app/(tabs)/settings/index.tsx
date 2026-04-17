@@ -3,12 +3,13 @@ import { Href, Redirect, useRouter } from "expo-router";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { getFunctions, httpsCallable } from "firebase/functions";
 import React, { useEffect, useState } from "react";
-import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Linking, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { getUidPrefix, logAnalyticsEvent } from "../../../src/analytics/analytics";
 import { MANAGE_SUBSCRIPTION_URL } from "../../../src/config/billingConfig";
 import { auth } from "../../../src/config/firebaseConfig";
 import { useEntitlement } from "../../../src/hooks/useEntitlement";
+import { showAppDialog } from "../../../src/ui/appDialog";
 import { getUserData } from "../../../src/userData";
 
 const ACCENT = "#7b61ff";
@@ -137,14 +138,14 @@ export default function SettingsIndex() {
 
   const handleDeleteAccount = () => {
     if (deletingAccount) return;
-    Alert.alert(
-      "Delete account?",
-      "This permanently deletes your Lastrep account and associated app data.",
-      [
-        { text: "Cancel", style: "cancel" },
+    showAppDialog({
+      title: "Delete account?",
+      message: "This permanently deletes your Lastrep account and associated app data.",
+      buttons: [
+        { text: "Cancel", role: "cancel" },
         {
           text: "Delete",
-          style: "destructive",
+          role: "destructive",
           onPress: async () => {
             setDeleteFeedback(null);
             setDeletingAccount(true);
@@ -164,8 +165,8 @@ export default function SettingsIndex() {
             }
           },
         },
-      ]
-    );
+      ],
+    });
   };
 
   if (redirectTo) return <Redirect href={redirectTo} />;

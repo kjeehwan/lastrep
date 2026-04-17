@@ -3,10 +3,11 @@ import { Href, Redirect, useFocusEffect, useRouter } from "expo-router";
 import { onAuthStateChanged } from "firebase/auth";
 import { Timestamp } from "firebase/firestore";
 import React, { useCallback, useEffect, useState } from "react";
-import { Alert, Linking, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { Linking, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { auth } from "../../../src/config/firebaseConfig";
 import { useOfflineStatus } from "../../../src/hooks/useOfflineStatus";
+import { showAppAlert } from "../../../src/ui/appDialog";
 import {
   DEFAULT_CALORIE_TARGETS_BY_DIET_PHASE,
   normalizeCalorieTargets,
@@ -269,7 +270,7 @@ export default function ProfileIndex() {
 
       const parsed = Number(trimmed);
       if (!Number.isFinite(parsed) || parsed <= 0) {
-        Alert.alert(
+        showAppAlert(
           "Invalid calorie target",
           `${field.label} calories must be a positive number or left blank.`
         );
@@ -281,7 +282,7 @@ export default function ProfileIndex() {
 
     const parsedSleepTarget = Number(sleepTargetHours.trim());
     if (!Number.isFinite(parsedSleepTarget) || parsedSleepTarget <= 0 || parsedSleepTarget > 24) {
-      Alert.alert("Invalid sleep target", "Sleep target must be a number between 0 and 24.");
+      showAppAlert("Invalid sleep target", "Sleep target must be a number between 0 and 24.");
       return;
     }
 
@@ -339,7 +340,7 @@ export default function ProfileIndex() {
       setSaveFeedback("Changes saved.");
     } catch (error) {
       console.log("Failed to save profile", error);
-      Alert.alert("Save failed", "Couldn't save your changes. Please try again.");
+      showAppAlert("Save failed", "Couldn't save your changes. Please try again.");
     }
   };
 

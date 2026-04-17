@@ -20,7 +20,7 @@ import {
   where,
 } from "firebase/firestore";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Alert, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import type { NormalizedDecisionError, ReasonCode } from "../../src/contracts";
 import { auth, db } from "../../src/config/firebaseConfig";
 import { useEntitlement } from "../../src/hooks/useEntitlement";
@@ -31,6 +31,7 @@ import {
   getNutritionTrendReport,
   getTodayDecisionNutritionSummary,
 } from "../../src/nutrition/meals";
+import { showAppAlert, showAppDialog } from "../../src/ui/appDialog";
 import { getUserData } from "../../src/userData";
 import {
   getSleepProfile,
@@ -513,10 +514,10 @@ export default function Home() {
       }
       await Promise.all(writes);
       await loadHomeInsights();
-      Alert.alert("Seed complete", "Added sample workouts for the last 4 weeks.");
+      showAppAlert("Seed complete", "Added sample workouts for the last 4 weeks.");
     } catch (error) {
       console.log("Failed to seed sample workouts", error);
-      Alert.alert("Seed failed", "Could not add sample workouts.");
+      showAppAlert("Seed failed", "Could not add sample workouts.");
     } finally {
       setSeedLoading(false);
     }
@@ -535,10 +536,10 @@ export default function Home() {
       });
       await Promise.all(deletes);
       await loadHomeInsights();
-      Alert.alert("Cleared", "Removed seeded workouts.");
+      showAppAlert("Cleared", "Removed seeded workouts.");
     } catch (error) {
       console.log("Failed to clear seeded workouts", error);
-      Alert.alert("Clear failed", "Could not remove seeded workouts.");
+      showAppAlert("Clear failed", "Could not remove seeded workouts.");
     } finally {
       setSeedLoading(false);
     }
@@ -882,14 +883,14 @@ export default function Home() {
                   style={[styles.devButton, styles.devButtonDanger, seedLoading && styles.disabled]}
                   disabled={seedLoading}
                   onPress={() =>
-                    Alert.alert(
-                      "Clear seeded workouts?",
-                      "This removes only workouts created by Seed sample month.",
-                      [
-                        { text: "Cancel", style: "cancel" },
-                        { text: "Clear", style: "destructive", onPress: () => void clearSeededWorkouts() },
-                      ]
-                    )
+                    showAppDialog({
+                      title: "Clear seeded workouts?",
+                      message: "This removes only workouts created by Seed sample month.",
+                      buttons: [
+                        { text: "Cancel", role: "cancel" },
+                        { text: "Clear", role: "destructive", onPress: () => void clearSeededWorkouts() },
+                      ],
+                    })
                   }
                 >
                   <Text style={styles.devButtonText}>Clear seeded</Text>
