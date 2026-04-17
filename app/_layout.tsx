@@ -4,8 +4,10 @@ import { StatusBar } from 'expo-status-bar';
 import { onAuthStateChanged } from 'firebase/auth';
 import { useEffect } from 'react';
 import 'react-native-reanimated';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import OfflineBanner from '@/components/OfflineBanner';
+import AppDialogHost from '@/components/AppDialogHost';
 import { auth } from '@/src/config/firebaseConfig';
 import { initializeRevenueCat, syncRevenueCatIdentity } from '@/src/billing/revenuecat';
 import { logAnalyticsRuntimeDiagnostics } from '@/src/analytics/analytics';
@@ -66,10 +68,13 @@ export default function RootLayout() {
   }, []);
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>{stackScreens}</Stack>
-      <OfflineBanner />
-      <StatusBar style="light" backgroundColor="#0d0d1a" />
-    </ThemeProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+        <Stack>{stackScreens}</Stack>
+        <OfflineBanner />
+        <AppDialogHost />
+        <StatusBar style="light" backgroundColor="#0d0d1a" />
+      </ThemeProvider>
+    </GestureHandlerRootView>
   );
 }
