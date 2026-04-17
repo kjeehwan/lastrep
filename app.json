@@ -5,7 +5,7 @@
     "owner": "kjeehwan",
     "version": "1.0.1",
     "orientation": "portrait",
-    "icon": "./assets/images/logo-splash-512-appicon.png",
+    "icon": "./assets/images/logo-splash-512-appicon-v3.png",
     "scheme": "lastrep",
     "userInterfaceStyle": "automatic",
     "ios": {
@@ -21,7 +21,7 @@
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/logo-splash-512-foreground-padded.png"
+        "foregroundImage": "./assets/images/logo-splash-512-foreground-padded-v3.png"
       },
       "predictiveBackGestureEnabled": false
     },
@@ -36,7 +36,7 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/logo-splash.png",
+          "image": "./assets/images/logo-splash-v2.png",
           "imageWidth": 220,
           "resizeMode": "contain",
           "backgroundColor": "#ffffff",
