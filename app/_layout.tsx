@@ -40,6 +40,9 @@ export default function RootLayout() {
   useEffect(() => {
     if (__DEV__) {
       void logAnalyticsRuntimeDiagnostics();
+      // Dev client builds are not used for real Play billing validation.
+      // Skip RevenueCat bootstrap to avoid noisy configuration errors.
+      return;
     }
 
     let canceled = false;

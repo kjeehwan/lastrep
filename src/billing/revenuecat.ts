@@ -36,6 +36,17 @@ export type BillingError = {
 
 const UID_PREFIX_LENGTH = 8;
 const IS_ANDROID = Platform.OS === "android";
+const DEV_ANDROID_PACKAGE_SUFFIX = ".dev";
+
+type ExpoConstantsModule = {
+  default?: {
+    expoConfig?: {
+      android?: {
+        package?: string;
+      };
+    };
+  };
+};
 
 let configured = false;
 let configurePromise: Promise<void> | null = null;
@@ -50,6 +61,24 @@ function toUidPrefix(uid?: string | null): string | undefined {
 
 function logBillingEvent(event: BillingLogEvent) {
   console.log(`[billing] ${JSON.stringify(event)}`);
+}
+
+function getAndroidPackageName(): string | undefined {
+  try {
+    const constantsModule = require("expo-constants") as ExpoConstantsModule;
+    return constantsModule.default?.expoConfig?.android?.package;
+  } catch {
+    return undefined;
+  }
+}
+
+function isDevAndroidPackage(): boolean {
+  const packageName = getAndroidPackageName();
+  return Boolean(packageName && packageName.endsWith(DEV_ANDROID_PACKAGE_SUFFIX));
+}
+
+export function isDevBillingBuild(): boolean {
+  return IS_ANDROID && isDevAndroidPackage();
 }
 
 function toBillingError(error: unknown): BillingError {
@@ -128,9 +157,27 @@ function shouldSuppressRevenueCatLog(logLevel: LOG_LEVEL, message: string): bool
     normalizedMessage.includes("billing service unavailable on device") ||
     normalizedMessage.includes("device or user is not allowed to make the purchase") ||
     normalizedMessage.includes("purchasenotallowederror");
+  const isDevOfferingsConfigNoise =
+    isDevAndroidPackage() &&
+    (normalizedMessage.includes("none of the products registered in the revenuecat dashboard") ||
+      normalizedMessage.includes("could be fetched from the play store") ||
+      normalizedMessage.includes("offerings-empty") ||
+      normalizedMessage.includes("error fetching offerings") ||
+      normalizedMessage.includes("could not find productdetails") ||
+      normalizedMessage.includes("missing productdetails") ||
+      normalizedMessage.includes("product_not_found") ||
+      normalizedMessage.includes("configuring-products"));
+
+  if (isDevOfferingsConfigNoise) {
+    return true;
+  }
 
   if (logLevel === LOG_LEVEL.ERROR) {
-    return isCancellationNoise || isBillingDisconnectNoise || isBillingUnavailableNoise;
+    return (
+      isCancellationNoise ||
+      isBillingDisconnectNoise ||
+      isBillingUnavailableNoise
+    );
   }
 
   if (logLevel === LOG_LEVEL.WARN) {
@@ -138,6 +185,36 @@ function shouldSuppressRevenueCatLog(logLevel: LOG_LEVEL, message: string): bool
   }
 
   return false;
+}
+
+export function isExpectedDevBillingConfigurationError(error: unknown): boolean {
+  if (!isDevAndroidPackage()) {
+    return false;
+  }
+
+  const code =
+    typeof (error as { code?: unknown } | undefined)?.code === "string"
+      ? (error as { code: string }).code
+      : "";
+  const message =
+    typeof (error as { message?: unknown } | undefined)?.message === "string"
+      ? (error as { message: string }).message
+      : "";
+  const debugMessage =
+    typeof (error as { underlyingErrorMessage?: unknown } | undefined)?.underlyingErrorMessage ===
+    "string"
+      ? (error as { underlyingErrorMessage: string }).underlyingErrorMessage
+      : "";
+  const combined = `${code} ${message} ${debugMessage}`.toLowerCase();
+
+  return (
+    combined.includes("configurationerror") ||
+    combined.includes("none of the products registered in the revenuecat dashboard") ||
+    combined.includes("could be fetched from the play store") ||
+    combined.includes("offerings-empty") ||
+    combined.includes("billing_unavailable") ||
+    combined.includes("purchasenotallowederror")
+  );
 }
 
 function revenueCatLogHandler(logLevel: LOG_LEVEL, message: string) {
@@ -434,4 +511,3 @@ export async function getAppUserId(): Promise<string> {
   await configureRevenueCat();
   return runBillingOperation("getAppUserId", () => Purchases.getAppUserID(), activeFirebaseUid);
 }
-

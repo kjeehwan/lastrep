@@ -27,6 +27,8 @@ import {
   ensureRevenueCatLoggedIn,
   getAppUserId,
   getOfferings,
+  isDevBillingBuild,
+  isExpectedDevBillingConfigurationError,
   purchasePackage,
   restorePurchases,
   syncRevenueCatPurchases,
@@ -146,6 +148,7 @@ export default function PaywallScreen() {
   const [manageFallbackText, setManageFallbackText] = useState<string | null>(null);
   const [activationStartedAt, setActivationStartedAt] = useState<number | null>(null);
   const [pendingEntitlementAction, setPendingEntitlementAction] = useState<PendingEntitlementAction>(null);
+  const devBillingBuild = __DEV__ || isDevBillingBuild();
 
   const entitlement = useEntitlement(authReady, uid);
   const currentOffering = useMemo(() => getDefaultOffering(offerings), [offerings]);
@@ -186,6 +189,13 @@ export default function PaywallScreen() {
 
     const load = async () => {
       if (!authReady || !uid || entitlement.state === "loading") return;
+      if (devBillingBuild) {
+        setOfferings(null);
+        setIdentityReady(true);
+        setScreenState("idle");
+        setFeedback("Billing is unavailable in Lastrep Dev. Use the Play-installed app to test subscriptions.");
+        return;
+      }
 
       setOfferingsLoading(true);
       setIdentityReady(false);
@@ -214,15 +224,22 @@ export default function PaywallScreen() {
         });
       } catch (error) {
         if (canceled) return;
-        console.log("Failed to load paywall", error);
+        const isExpectedDevError = isExpectedDevBillingConfigurationError(error);
+        if (!isExpectedDevError) {
+          console.log("Failed to load paywall", error);
+        }
         logBillingLifecycleEvent("offerings_fetched", {
           ...getCommonAnalyticsParams(sourceScreen, reasonCode, entitlement.state, uid),
-          result_status: "error",
+          result_status: isExpectedDevError ? "dev_billing_unavailable" : "error",
           error_code: getDiagnosticErrorCode(error),
         });
         setOfferings(null);
-        setScreenState("error");
-        setFeedback("Unable to load plans right now.");
+        setScreenState(isExpectedDevError ? "idle" : "error");
+        setFeedback(
+          isExpectedDevError
+            ? "Billing is unavailable in this dev build. Use the Play-installed app to test purchases."
+            : "Unable to load plans right now."
+        );
       } finally {
         if (!canceled) {
           setOfferingsLoading(false);
@@ -234,7 +251,7 @@ export default function PaywallScreen() {
     return () => {
       canceled = true;
     };
-  }, [authReady, entitlement.state, uid]);
+  }, [authReady, devBillingBuild, entitlement.state, uid]);
 
   useEffect(() => {
     if (entitlement.state !== "active") return;
@@ -283,6 +300,7 @@ export default function PaywallScreen() {
   const canInteract =
     authReady &&
     uid !== null &&
+    !devBillingBuild &&
     entitlement.state !== "loading" &&
     identityReady &&
     !offeringsLoading &&
@@ -290,6 +308,10 @@ export default function PaywallScreen() {
     pendingEntitlementAction === null;
 
   const handlePurchase = async (selectedPackage: PurchasesPackage) => {
+    if (devBillingBuild) {
+      setFeedback("Billing test is disabled in Lastrep Dev. Open the Play-installed app.");
+      return;
+    }
     if (!uid || !canInteract) return;
 
     setScreenState("loading");
@@ -358,6 +380,10 @@ export default function PaywallScreen() {
   };
 
   const handleRestore = async () => {
+    if (devBillingBuild) {
+      setFeedback("Restore is disabled in Lastrep Dev. Open the Play-installed app.");
+      return;
+    }
     if (!uid || !canInteract) return;
     if (entitlement.state === "active") {
       setScreenState("idle");
@@ -507,7 +533,7 @@ export default function PaywallScreen() {
           entitlement.state !== "active" &&
           Date.now() - activationStartedAt >= 30000 ? (
             <Text style={styles.noticeSub}>
-              If it doesn't activate within ~30 seconds, reopen the app or tap Restore.
+              If it does not activate within ~30 seconds, reopen the app or tap Restore.
             </Text>
           ) : null}
         </View>
