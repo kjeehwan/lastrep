@@ -17,8 +17,8 @@ import type { DietPhase, TrainingPhase } from "../../../src/types/decision";
 import {
   getHealthConnectAvailability,
   hasHealthSleepPermission,
+  openHealthConnectAppPermissionsScreen,
   openHealthConnectDataManagementScreen,
-  requestHealthSleepPermission,
   type HealthConnectAvailability,
 } from "../../../src/sleep/sleep";
 import { getUserData, saveUserData } from "../../../src/userData";
@@ -231,27 +231,20 @@ export default function ProfileIndex() {
     await Linking.openURL(url);
   };
 
-  const handleOpenHealthConnectSettings = async () => {
-    const opened = await openHealthConnectDataManagementScreen();
-    if (!opened) {
-      setHealthFeedback("Unable to open Health Connect settings on this device.");
-    }
-  };
-
-  const handleGrantHealthPermission = async () => {
+  const handleConnectHealthPermission = async () => {
     if (isOffline) {
-      setHealthFeedback("You're offline. Reconnect to grant permission.");
+      setHealthFeedback("You're offline. Reconnect to continue.");
       return;
     }
-    setHealthFeedback("Requesting Health Connect permission...");
-    try {
-      const granted = await requestHealthSleepPermission();
-      setHealthFeedback(granted ? "Health Connect permission granted." : "Health Connect permission denied.");
-    } catch {
-      setHealthFeedback("Unable to request Health Connect permission right now.");
-    } finally {
-      await refreshHealthConnectStatus();
+    setHealthFeedback("Opening Health Connect app permissions...");
+    const opened =
+      (await openHealthConnectAppPermissionsScreen()) ||
+      (await openHealthConnectDataManagementScreen());
+    if (!opened) {
+      setHealthFeedback("Unable to open Health Connect settings on this device.");
+      return;
     }
+    await refreshHealthConnectStatus();
   };
 
   const save = async () => {
@@ -488,13 +481,18 @@ export default function ProfileIndex() {
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Health Connect</Text>
           <Text style={styles.helperText}>{healthConnectMessage()}</Text>
-          <TouchableOpacity
-            style={[styles.secondaryButton, healthLoading && styles.buttonDisabled]}
-            disabled={healthLoading}
-            onPress={handleOpenHealthConnectSettings}
-          >
-            <Text style={styles.secondaryButtonText}>Open Health Connect settings</Text>
-          </TouchableOpacity>
+          <View style={styles.healthActionsRow}>
+            <TouchableOpacity
+              style={[styles.secondaryButton, styles.healthActionButton, healthLoading && styles.buttonDisabled]}
+              disabled={healthLoading}
+              onPress={handleConnectHealthPermission}
+            >
+              <Text style={styles.secondaryButtonText}>🔗 Connect</Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.healthHint}>
+            In Health Connect: App permissions {"->"} Lastrep {"->"} Allow all.
+          </Text>
           {healthAvailability === "provider_update_required" ? (
             <TouchableOpacity
               style={[styles.secondaryButton, healthLoading && styles.buttonDisabled]}
@@ -504,15 +502,6 @@ export default function ProfileIndex() {
               <Text style={styles.secondaryButtonText}>Open Play Store</Text>
             </TouchableOpacity>
           ) : null}
-          {(healthPermissionState === "denied" || healthPermissionState === "revoked") && (
-            <TouchableOpacity
-              style={[styles.secondaryButton, healthLoading && styles.buttonDisabled]}
-              disabled={healthLoading}
-              onPress={handleGrantHealthPermission}
-            >
-              <Text style={styles.secondaryButtonText}>Grant Health Connect permission</Text>
-            </TouchableOpacity>
-          )}
           {healthFeedback ? <Text style={styles.healthFeedback}>{healthFeedback}</Text> : null}
         </View>
 
@@ -592,8 +581,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   secondaryButtonText: { color: "#fff", fontSize: 14, fontWeight: "600" },
+  healthActionsRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  healthActionButton: {
+    flex: 1,
+  },
   buttonDisabled: { opacity: 0.6 },
   healthFeedback: { color: "#a5acc1", fontSize: 12, lineHeight: 16 },
+  healthHint: { color: "#a5acc1", fontSize: 12, lineHeight: 16 },
   save: { backgroundColor: "#7b61ff", borderRadius: 12, alignItems: "center", paddingVertical: 14, marginTop: 22 },
   saveText: { color: "#fff", fontWeight: "800", fontSize: 15 },
   saveFeedback: { color: "#a6e3a1", textAlign: "center", fontSize: 13, marginTop: 8 },

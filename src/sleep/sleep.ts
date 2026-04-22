@@ -38,6 +38,7 @@ const sleepReadPermission: Permission = {
   accessType: "read",
   recordType: "SleepSession",
 };
+const LASTREP_ANDROID_PACKAGES = ["com.kjeehwan.lastrep.dev", "com.kjeehwan.lastrep"] as const;
 
 const loadHealthConnect = async (): Promise<HealthConnectModule> =>
   import("react-native-health-connect");
@@ -278,6 +279,34 @@ export const openHealthConnectDataManagementScreen = async (): Promise<boolean> 
     }
     const healthConnect = await loadHealthConnect();
     healthConnect.openHealthConnectDataManagement();
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+export const openHealthConnectAppPermissionsScreen = async (): Promise<boolean> => {
+  if (Platform.OS !== "android") return false;
+  try {
+    const availability = await getHealthConnectAvailability();
+    if (availability !== "available" && availability !== "provider_update_required") {
+      return false;
+    }
+    const healthConnect = await loadHealthConnect();
+    const openDataManagement = healthConnect.openHealthConnectDataManagement as unknown as (
+      packageName?: string
+    ) => void;
+
+    for (const packageName of LASTREP_ANDROID_PACKAGES) {
+      try {
+        openDataManagement(packageName);
+        return true;
+      } catch {
+        // Try the next known package name.
+      }
+    }
+
+    openDataManagement();
     return true;
   } catch {
     return false;
