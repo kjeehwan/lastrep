@@ -122,7 +122,7 @@ export default function SignIn() {
       });
     }
 
-    router.push("/home");
+    router.replace("/(tabs)/home");
   };
 
   const handleGooglePress = async () => {
@@ -155,6 +155,7 @@ export default function SignIn() {
       <TextInput
         style={styles.input}
         placeholder="Email"
+        placeholderTextColor="#777"
         value={email}
         onChangeText={setEmail}
         autoCapitalize="none"
@@ -163,7 +164,13 @@ export default function SignIn() {
       <TextInput
         style={styles.input}
         placeholder="Password"
-        secureTextEntry
+        placeholderTextColor="#777"
+        secureTextEntry={true}
+        autoCapitalize="none"
+        autoCorrect={false}
+        textContentType="password"
+        autoComplete="password"
+        selectionColor="#2a67b1"
         value={password}
         onChangeText={setPassword}
       />
@@ -208,6 +215,7 @@ const styles = StyleSheet.create({
     paddingLeft: 12,
     borderRadius: 12,
     backgroundColor: "#fff",
+    color: "#111",
   },
   button: {
     backgroundColor: "#2a67b1",

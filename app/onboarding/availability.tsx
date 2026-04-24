@@ -1,14 +1,15 @@
+import Slider from "@react-native-community/slider";
 import { useRouter } from "expo-router";
 import { getAuth } from "firebase/auth";
 import { MotiView } from "moti";
 import React, { useState } from "react";
-import { ScrollView, StyleSheet, Text, TouchableOpacity } from "react-native";
+import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import OnboardingLayout from "../../components/OnboardingLayout";
-import { saveUserData } from "../../src/userData"; // Import Firestore save function
+import { saveUserData } from "../../src/userData";
 
 const AvailabilityScreen = () => {
-  const [availability, setAvailability] = useState("");
+  const [availabilityDays, setAvailabilityDays] = useState(4);
   const router = useRouter();
 
   const handleNext = async () => {
@@ -18,61 +19,67 @@ const AvailabilityScreen = () => {
       console.error("No authenticated user found");
       return;
     }
+
     const userId = user.uid;
-    await saveUserData(userId, { availability }); // Save availability to Firestore
+    await saveUserData(userId, {
+      availability: `${availabilityDays}`,
+      availabilityDays,
+    });
     router.push("/onboarding/nickname");
   };
-
-  const options = [
-    { id: "2-3", label: "2–3 Days" },
-    { id: "4-5", label: "4–5 Days" },
-    { id: "6+", label: "6+ Days" },
-  ];
 
   return (
     <OnboardingLayout
       title="How many days per week can you train?"
       onSkip={() => router.push("/onboarding/nickname")}
+      onBack={() => router.push("/onboarding/experience")}
     >
       <SafeAreaView style={styles.safeArea} edges={["bottom"]}>
-        <ScrollView contentContainerStyle={styles.optionsContainer}>
-          {options.map((item, idx) => (
-            <MotiView
-              key={item.id}
-              from={{ opacity: 0, translateY: 20 }}
-              animate={{ opacity: 1, translateY: 0 }}
-              transition={{ delay: idx * 100, duration: 400 }}
-            >
-              <TouchableOpacity
-                style={[
-                  styles.optionCard,
-                  availability === item.id && styles.selected,
-                ]}
-                onPress={() => setAvailability(item.id)}
-              >
+        <MotiView
+          from={{ opacity: 0, translateY: 20 }}
+          animate={{ opacity: 1, translateY: 0 }}
+          transition={{ duration: 400 }}
+          style={styles.sliderCard}
+        >
+          <Text style={styles.valueText}>{availabilityDays} Days</Text>
+          <Slider
+            value={availabilityDays}
+            minimumValue={1}
+            maximumValue={7}
+            step={1}
+            minimumTrackTintColor="#7b61ff"
+            maximumTrackTintColor="rgba(255,255,255,0.35)"
+            thumbTintColor="#fff"
+            onValueChange={(value: number) => setAvailabilityDays(Math.round(value))}
+          />
+          <View style={styles.tickMarksRow}>
+            {[1, 2, 3, 4, 5, 6, 7].map((day) => (
+              <View key={`tick-${day}`} style={styles.tickColumn}>
+                <View
+                  style={[
+                    styles.tickMark,
+                    day === availabilityDays && styles.tickMarkActive,
+                  ]}
+                />
                 <Text
                   style={[
-                    styles.optionText,
-                    availability === item.id && styles.optionTextActive,
+                    styles.tickLabel,
+                    day === availabilityDays && styles.tickLabelActive,
                   ]}
                 >
-                  {item.label}
+                  {day}
                 </Text>
-              </TouchableOpacity>
-            </MotiView>
-          ))}
-        </ScrollView>
+              </View>
+            ))}
+          </View>
+        </MotiView>
 
         <MotiView
           from={{ opacity: 0, translateY: 10 }}
           animate={{ opacity: 1, translateY: 0 }}
-          transition={{ delay: 400, duration: 400 }}
+          transition={{ delay: 300, duration: 400 }}
         >
-          <TouchableOpacity
-            style={[styles.nextButton, !availability && styles.disabled]}
-            disabled={!availability}
-            onPress={handleNext}
-          >
+          <TouchableOpacity style={styles.nextButton} onPress={handleNext}>
             <Text style={styles.nextText}>Next</Text>
           </TouchableOpacity>
         </MotiView>
@@ -82,37 +89,61 @@ const AvailabilityScreen = () => {
 };
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, justifyContent: "center" },
-  optionsContainer: { gap: 14 },
-  optionCard: {
+  safeArea: {
+    flex: 1,
+    justifyContent: "center",
+    gap: 20,
+  },
+  sliderCard: {
     backgroundColor: "rgba(255,255,255,0.15)",
     borderRadius: 14,
-    paddingVertical: 18,
-    alignItems: "center",
+    paddingVertical: 24,
+    paddingHorizontal: 16,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.3)",
-    marginBottom: 12,
   },
-  selected: {
-    backgroundColor: "white",
-    borderColor: "#7b61ff",
-  },
-  optionText: {
+  valueText: {
     color: "#fff",
-    fontSize: 18,
-    fontWeight: "600",
+    fontSize: 26,
+    fontWeight: "800",
+    textAlign: "center",
+    marginBottom: 8,
   },
-  optionTextActive: {
-    color: "#4a90e2",
+  tickMarksRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 8,
+    paddingHorizontal: 4,
+  },
+  tickColumn: {
+    width: 18,
+    alignItems: "center",
+    gap: 4,
+  },
+  tickMark: {
+    width: 2,
+    height: 8,
+    borderRadius: 1,
+    backgroundColor: "rgba(216,218,236,0.55)",
+  },
+  tickMarkActive: {
+    backgroundColor: "#ffffff",
+    height: 10,
+  },
+  tickLabel: {
+    color: "#d8daec",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  tickLabelActive: {
+    color: "#ffffff",
   },
   nextButton: {
     backgroundColor: "#2a67b1",
     paddingVertical: 16,
     borderRadius: 12,
     alignItems: "center",
-    marginTop: 20,
   },
-  disabled: { opacity: 0.5 },
   nextText: { color: "#fff", fontSize: 18, fontWeight: "700" },
 });
 

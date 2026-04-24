@@ -105,7 +105,7 @@ export default function SignUp() {
           usage: { decisions: normalized },
         });
       }
-      router.push("/home");
+      router.replace("/(tabs)/home");
     }
   };
 
@@ -140,6 +140,7 @@ export default function SignUp() {
       <TextInput
         style={styles.input}
         placeholder="Email"
+        placeholderTextColor="#777"
         value={email}
         onChangeText={setEmail}
         autoCapitalize="none"
@@ -148,7 +149,13 @@ export default function SignUp() {
       <TextInput
         style={styles.input}
         placeholder="Password"
-        secureTextEntry
+        placeholderTextColor="#777"
+        secureTextEntry={true}
+        autoCapitalize="none"
+        autoCorrect={false}
+        textContentType="password"
+        autoComplete="password"
+        selectionColor="#2a67b1"
         value={password}
         onChangeText={setPassword}
       />
@@ -198,6 +205,7 @@ const styles = StyleSheet.create({
     paddingLeft: 12,
     borderRadius: 12,
     backgroundColor: "#fff",
+    color: "#111",
   },
   button: {
     backgroundColor: "#2a67b1",
@@ -239,5 +247,3 @@ const styles = StyleSheet.create({
     color: "#2a67b1",
   },
 });
-
-

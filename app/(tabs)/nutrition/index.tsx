@@ -423,14 +423,6 @@ export default function NutritionIndex() {
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Feature access</Text>
-          <Text style={styles.subText}>Free now: meal logging, daily intake, 7-day trends, and history.</Text>
-          <Text style={styles.subText}>
-            Premium later: deeper multi-week insights and advanced nutrition-performance coaching.
-          </Text>
-        </View>
-
-        <View style={styles.card}>
           <Text style={styles.sectionTitle}>{editingMealId ? "Edit meal" : "Add meal"}</Text>
 
           <Text style={styles.label}>Meal name</Text>

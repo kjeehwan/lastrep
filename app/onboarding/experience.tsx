@@ -34,6 +34,7 @@ const ExperienceScreen = () => {
     <OnboardingLayout
       title="What’s your experience level?"
       onSkip={() => router.push("/onboarding/availability")}
+      onBack={() => router.push("/onboarding/goal")}
     >
       <SafeAreaView style={styles.safeArea} edges={["bottom"]}>
         {options.map((item, idx) => (

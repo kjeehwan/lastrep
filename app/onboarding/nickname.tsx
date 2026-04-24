@@ -21,13 +21,14 @@ const NicknameScreen = () => {
     }
     const userId = user.uid;
     await saveUserData(userId, { nickname }); // Save nickname to Firestore
-    router.push("/onboarding/preview"); // Navigate to the home screen after saving the nickname
+    router.replace("/(tabs)/home");
   };
 
   return (
     <OnboardingLayout
       title="What’s your nickname?"
-      onSkip={() => router.push("/home")}
+      onSkip={() => router.replace("/(tabs)/home")}
+      onBack={() => router.push("/onboarding/availability")}
     >
       <SafeAreaView style={styles.safeArea} edges={["bottom"]}>
         <MotiView
@@ -55,7 +56,7 @@ const NicknameScreen = () => {
             disabled={!nickname}
             onPress={handleFinish}
           >
-            <Text style={styles.buttonText}>Finish</Text>
+            <Text style={styles.buttonText}>Start Lastrep</Text>
           </TouchableOpacity>
         </MotiView>
       </SafeAreaView>

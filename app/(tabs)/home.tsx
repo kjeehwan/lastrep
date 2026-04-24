@@ -20,7 +20,7 @@ import {
   where,
 } from "firebase/firestore";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { BackHandler, Modal, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import type { NormalizedDecisionError, ReasonCode } from "../../src/contracts";
 import { auth, db } from "../../src/config/firebaseConfig";
 import { useEntitlement } from "../../src/hooks/useEntitlement";
@@ -52,8 +52,15 @@ import {
   toDateKey,
   type WorkoutSummary,
 } from "../../src/workouts/homeInsights";
+import {
+  buildProgramCalendarEntryForDate,
+  buildWorkoutCountByDateMap,
+  normalizeProgram,
+  type WorkoutProgram,
+} from "../../src/workouts/program";
 
-const HOME_INPUTS_KEY = "home-inputs-v1";
+const HOME_INPUTS_KEY_PREFIX = "home-inputs-v1";
+const HOME_FIRST_TIME_BANNER_KEY_PREFIX = "home-first-time-banner-dismissed-v1";
 const TRAINING_PHASES: TrainingPhase[] = ["Hypertrophy", "Strength", "Power"];
 const DIET_PHASES: DietPhase[] = ["Cut", "Maintain", "Bulk"];
 
@@ -114,6 +121,19 @@ type SleepSnapshot = {
   nightsCaptured: number;
 };
 
+type DashboardMetricKey =
+  | "workouts"
+  | "volume"
+  | "adherence"
+  | "calories"
+  | "sleep"
+  | "improving";
+
+type GraphPoint = {
+  label: string;
+  value: number;
+};
+
 type TrainingPhaseHistoryEntry = {
   phase: TrainingPhase;
   startedAt: Timestamp;
@@ -142,6 +162,7 @@ export default function Home() {
   const [authReady, setAuthReady] = useState(false);
   const [uid, setUid] = useState<string | null>(null);
   const [userNickname, setUserNickname] = useState<string | null>(null);
+  const [showFirstTimeBanner, setShowFirstTimeBanner] = useState(false);
 
   const [soreness, setSoreness] = useState(4);
   const [fatigue, setFatigue] = useState(4);
@@ -156,7 +177,11 @@ export default function Home() {
   const [latestDecision, setLatestDecision] = useState<LastResultPayload | null>(null);
   const [showAdjustHelp, setShowAdjustHelp] = useState(false);
   const [showAdjustInputsModal, setShowAdjustInputsModal] = useState(false);
+  const [showCalendarModal, setShowCalendarModal] = useState(false);
   const [showDayModal, setShowDayModal] = useState(false);
+  const [activeDashboardMetric, setActiveDashboardMetric] = useState<DashboardMetricKey | null>(
+    null
+  );
   const [lastTapAt, setLastTapAt] = useState(0);
   const [calendarMonth, setCalendarMonth] = useState(() => {
     const now = new Date();
@@ -165,16 +190,20 @@ export default function Home() {
   const [selectedDateKey, setSelectedDateKey] = useState(() => toDateKey(new Date()));
   const [workoutsLoading, setWorkoutsLoading] = useState(false);
   const [workouts, setWorkouts] = useState<WorkoutSummary[]>([]);
+  const [workoutProgram, setWorkoutProgram] = useState<WorkoutProgram | null>(null);
   const [insightsError, setInsightsError] = useState<string | null>(null);
   const [seedLoading, setSeedLoading] = useState(false);
   const [nutritionSnapshot, setNutritionSnapshot] = useState<NutritionSnapshot>({
     averageCalories: null,
     consistencyScore: null,
   });
+  const [nutritionCalorieHistory, setNutritionCalorieHistory] = useState<GraphPoint[]>([]);
+  const [nutritionAdherenceHistory, setNutritionAdherenceHistory] = useState<GraphPoint[]>([]);
   const [sleepSnapshot, setSleepSnapshot] = useState<SleepSnapshot>({
     averageSleepHours: null,
     nightsCaptured: 0,
   });
+  const [sleepHistory, setSleepHistory] = useState<GraphPoint[]>([]);
   const [trainingPhaseStartedAt, setTrainingPhaseStartedAt] = useState<Timestamp | null>(null);
   const [dietPhaseStartedAt, setDietPhaseStartedAt] = useState<Timestamp | null>(null);
   const [trainingPhaseHistory, setTrainingPhaseHistory] = useState<TrainingPhaseHistoryEntry[]>([]);
@@ -189,6 +218,7 @@ export default function Home() {
       if (!user) {
         setUid(null);
         setUserNickname(null);
+        setShowFirstTimeBanner(false);
         setLatestDecision(null);
         setRedirectTo("/auth/sign-in");
         return;
@@ -199,6 +229,25 @@ export default function Home() {
     });
     return unsub;
   }, []);
+
+  useEffect(() => {
+    if (!uid) return;
+    let active = true;
+    (async () => {
+      try {
+        const key = `${HOME_FIRST_TIME_BANNER_KEY_PREFIX}:${uid}`;
+        const raw = await AsyncStorage.getItem(key);
+        if (!active) return;
+        setShowFirstTimeBanner(raw !== "true");
+      } catch {
+        if (!active) return;
+        setShowFirstTimeBanner(true);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [uid]);
 
   useEffect(() => {
     if (!uid) {
@@ -218,6 +267,7 @@ export default function Home() {
         if (isDietPhase(data?.dietPhase)) {
           setDietPhase(data.dietPhase);
         }
+        setWorkoutProgram(normalizeProgram(data?.workoutProgram));
         setTrainingPhaseStartedAt(
           data?.trainingPhaseStartedAt instanceof Timestamp ? data.trainingPhaseStartedAt : null
         );
@@ -282,8 +332,10 @@ export default function Home() {
 
   useEffect(() => {
     const loadInputs = async () => {
+      if (!uid) return;
+      const key = `${HOME_INPUTS_KEY_PREFIX}:${uid}`;
       try {
-        const raw = await AsyncStorage.getItem(HOME_INPUTS_KEY);
+        const raw = await AsyncStorage.getItem(key);
         if (!raw) return;
         const parsed = JSON.parse(raw);
         if (typeof parsed.soreness === "number") setSoreness(parsed.soreness);
@@ -292,20 +344,22 @@ export default function Home() {
       } catch (e) {
         console.log("Failed to load home inputs, clearing cache", e);
         try {
-          await AsyncStorage.removeItem(HOME_INPUTS_KEY);
+          await AsyncStorage.removeItem(key);
         } catch {
           // no-op
         }
       }
     };
-    loadInputs();
-  }, []);
+    void loadInputs();
+  }, [uid]);
 
   useEffect(() => {
     const save = async () => {
+      if (!uid) return;
+      const key = `${HOME_INPUTS_KEY_PREFIX}:${uid}`;
       try {
         await AsyncStorage.setItem(
-          HOME_INPUTS_KEY,
+          key,
           JSON.stringify({
             soreness,
             fatigue,
@@ -316,8 +370,8 @@ export default function Home() {
         console.log("Failed to save home inputs", e);
       }
     };
-    save();
-  }, [soreness, fatigue, motivation]);
+    void save();
+  }, [uid, soreness, fatigue, motivation]);
 
   useEffect(() => {
     if (cooldownSeconds == null || cooldownSeconds <= 0) return;
@@ -384,10 +438,32 @@ export default function Home() {
           averageCalories: nutritionTrends.averageCalories ?? null,
           consistencyScore: nutritionTrends.consistencyScore ?? null,
         });
+        const calorieHistory = [...nutritionTrends.dailyHistory]
+          .reverse()
+          .map((entry) => ({
+            label: entry.dateKey.slice(5),
+            value: entry.calories,
+          }));
+        const adherenceHistory = [...nutritionTrends.dailyHistory]
+          .reverse()
+          .map((entry) => ({
+            label: entry.dateKey.slice(5),
+            value: entry.adherence === "on_target" ? 100 : entry.adherence ? 0 : 50,
+          }));
+        setNutritionCalorieHistory(calorieHistory);
+        setNutritionAdherenceHistory(adherenceHistory);
         const recentSleep = sleepProfile.recentNightlyHours ?? [];
         const sleepValues = recentSleep
           .map((entry) => entry.sleepHours)
           .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+        const nextSleepHistory = [...recentSleep]
+          .reverse()
+          .map((entry) => ({
+            label: entry.dateKey.slice(5),
+            value: entry.sleepHours,
+          }))
+          .filter((entry) => Number.isFinite(entry.value));
+        setSleepHistory(nextSleepHistory);
         const avgSleep =
           sleepValues.length > 0
             ? Math.round(
@@ -424,6 +500,17 @@ export default function Home() {
     }, [loadHomeInsights])
   );
 
+  useFocusEffect(
+    useCallback(() => {
+      if (Platform.OS !== "android") return undefined;
+      const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+        BackHandler.exitApp();
+        return true;
+      });
+      return () => subscription.remove();
+    }, [])
+  );
+
   const daySummaryMap = useMemo(() => getDaySummaryMap(workouts), [workouts]);
   const selectedDaySummary = daySummaryMap.get(selectedDateKey) ?? null;
   const calendarMatrix = useMemo(() => getCalendarMatrix(calendarMonth), [calendarMonth]);
@@ -454,6 +541,95 @@ export default function Home() {
     () => workouts.filter((workout) => toDateKey(workout.date) === selectedDateKey),
     [workouts, selectedDateKey]
   );
+  const workoutCountByDate = useMemo(
+    () => buildWorkoutCountByDateMap(workouts.map((workout) => workout.date)),
+    [workouts]
+  );
+  const selectedProgramEntry = useMemo(
+    () =>
+      workoutProgram
+        ? buildProgramCalendarEntryForDate(
+            new Date(`${selectedDateKey}T12:00:00`),
+            workoutProgram,
+            workoutCountByDate
+          )
+        : null,
+    [selectedDateKey, workoutCountByDate, workoutProgram]
+  );
+
+  const dashboardGraphTitle = useMemo(() => {
+    switch (activeDashboardMetric) {
+      case "workouts":
+        return "Workouts Completed";
+      case "volume":
+        return "Volume Trend";
+      case "adherence":
+        return "Adherence Trend";
+      case "calories":
+        return "Calories Trend";
+      case "sleep":
+        return "Sleep Trend";
+      case "improving":
+        return "Improvement Signal";
+      default:
+        return "";
+    }
+  }, [activeDashboardMetric]);
+
+  const dashboardGraphUnit = useMemo(() => {
+    switch (activeDashboardMetric) {
+      case "volume":
+        return "kg";
+      case "calories":
+        return "kcal";
+      case "sleep":
+        return "h";
+      case "adherence":
+      case "improving":
+        return "%";
+      default:
+        return "";
+    }
+  }, [activeDashboardMetric]);
+
+  const dashboardGraphData = useMemo<GraphPoint[]>(() => {
+    switch (activeDashboardMetric) {
+      case "workouts":
+        return [
+          { label: "Last wk", value: weeklyMetrics.workoutsLastWeek },
+          { label: "This wk", value: weeklyMetrics.workoutsThisWeek },
+        ];
+      case "volume":
+        return [
+          { label: "Last wk", value: Math.round(weeklyMetrics.avgVolumeLastWeek) },
+          { label: "This wk", value: Math.round(weeklyMetrics.avgVolumeThisWeek) },
+        ];
+      case "adherence":
+        return nutritionAdherenceHistory;
+      case "calories":
+        return nutritionCalorieHistory;
+      case "sleep":
+        return sleepHistory;
+      case "improving":
+        return [
+          { label: "Volume", value: weeklyMetrics.improvingByVolume ? 100 : 0 },
+          { label: "Sets", value: weeklyMetrics.improvingBySets ? 100 : 0 },
+        ];
+      default:
+        return [];
+    }
+  }, [
+    activeDashboardMetric,
+    nutritionAdherenceHistory,
+    nutritionCalorieHistory,
+    sleepHistory,
+    weeklyMetrics.avgVolumeLastWeek,
+    weeklyMetrics.avgVolumeThisWeek,
+    weeklyMetrics.improvingBySets,
+    weeklyMetrics.improvingByVolume,
+    weeklyMetrics.workoutsLastWeek,
+    weeklyMetrics.workoutsThisWeek,
+  ]);
 
   const seedSampleMonth = async () => {
     if (!uid || seedLoading) return;
@@ -686,6 +862,27 @@ export default function Home() {
 
   if (redirectTo) return <Redirect href={redirectTo} />;
 
+  const dismissFirstTimeBanner = async () => {
+    if (!uid) return;
+    setShowFirstTimeBanner(false);
+    try {
+      const key = `${HOME_FIRST_TIME_BANNER_KEY_PREFIX}:${uid}`;
+      await AsyncStorage.setItem(key, "true");
+    } catch {
+      // no-op
+    }
+  };
+
+  const openWorkoutLog = async () => {
+    router.push("/(tabs)/workout/log" as Href);
+  };
+
+  const openRoutineBuilder = async () => {
+    router.push("/(tabs)/workout/log?createRoutine=1" as Href);
+  };
+
+  const shouldShowFirstTimeBanner = showFirstTimeBanner && workouts.length === 0;
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -721,6 +918,9 @@ export default function Home() {
           </View>
         </View>
         <View style={styles.iconContainer}>
+          <TouchableOpacity onPress={() => setShowCalendarModal(true)}>
+            <Ionicons name="calendar-outline" size={26} color="#fff" />
+          </TouchableOpacity>
           <TouchableOpacity onPress={() => router.push("/settings" as Href)} style={{ marginLeft: 12 }}>
             <Ionicons name="settings-outline" size={28} color="#fff" />
           </TouchableOpacity>
@@ -728,197 +928,66 @@ export default function Home() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Calendar</Text>
-          <View style={styles.card}>
-            <View style={styles.calendarHeaderRow}>
-              <TouchableOpacity
-                style={styles.calendarNavButton}
-                onPress={() =>
-                  setCalendarMonth(
-                    (previous) => new Date(previous.getFullYear(), previous.getMonth() - 1, 1)
-                  )
-                }
-              >
-                <Ionicons name="chevron-back" size={18} color="#fff" />
-              </TouchableOpacity>
-              <Text style={styles.calendarMonthText}>
-                {MONTH_LABELS[calendarMonth.getMonth()]} {calendarMonth.getFullYear()}
-              </Text>
-              <TouchableOpacity
-                style={styles.calendarNavButton}
-                onPress={() =>
-                  setCalendarMonth(
-                    (previous) => new Date(previous.getFullYear(), previous.getMonth() + 1, 1)
-                  )
-                }
-              >
-                <Ionicons name="chevron-forward" size={18} color="#fff" />
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.calendarWeekdayRow}>
-              {WEEKDAY_LABELS.map((label, index) => (
-                <Text key={`${label}-${index}`} style={styles.calendarWeekdayText}>
-                  {label}
+        {shouldShowFirstTimeBanner ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Get Started</Text>
+            <View style={[styles.card, styles.firstTimeBannerCard]}>
+              <View style={styles.firstTimeBannerHeader}>
+                <Text style={[styles.cardText, styles.firstTimeBannerText]}>
+                  Set up your first routine or jump into your first workout.
                 </Text>
-              ))}
-            </View>
-
-            {visibleCalendarWeeks.map((week, weekIndex) => (
-              <View key={`week-${weekIndex}`} style={styles.calendarWeekRow}>
-                {week.map((day) => {
-                  const dateKey = toDateKey(day);
-                  const inCurrentMonth = day.getMonth() === calendarMonth.getMonth();
-                  const isToday = dateKey === toDateKey(new Date());
-                  const isSelected = dateKey === selectedDateKey;
-                  const daySummary = daySummaryMap.get(dateKey);
-                  const dayTrainingPhase = resolvePhaseForDate(
-                    day,
-                    trainingPhaseHistory,
-                    trainingPhase
-                  );
-                  const dayDietPhase = resolvePhaseForDate(day, dietPhaseHistory, dietPhase);
-                  return (
-                    <TouchableOpacity
-                      key={dateKey}
-                      style={[
-                        styles.calendarDayCell,
-                        !inCurrentMonth && styles.calendarDayCellOutOfMonth,
-                        isSelected && styles.calendarDayCellSelected,
-                        isToday && styles.calendarDayCellToday,
-                      ]}
-                      onPress={() => {
-                        setSelectedDateKey(dateKey);
-                        setShowDayModal(true);
-                      }}
-                    >
-                      <Text
-                        style={[
-                          styles.calendarDayText,
-                          !inCurrentMonth && styles.calendarDayTextMuted,
-                          isSelected && styles.calendarDayTextSelected,
-                        ]}
-                      >
-                        {day.getDate()}
-                      </Text>
-                      <View style={styles.phaseTracks}>
-                        <View
-                          style={[
-                            styles.phaseTrack,
-                            { backgroundColor: TRAINING_PHASE_COLORS[dayTrainingPhase] },
-                          ]}
-                        />
-                        <View
-                          style={[
-                            styles.phaseTrack,
-                            { backgroundColor: DIET_PHASE_COLORS[dayDietPhase] },
-                          ]}
-                        />
-                      </View>
-                      <View
-                        style={[
-                          styles.calendarWorkoutDot,
-                          !daySummary?.workoutCount && styles.calendarWorkoutDotHidden,
-                        ]}
-                      />
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            ))}
-
-            <View style={styles.phaseWeekRow}>
-              <View
-                style={[
-                  styles.phasePill,
-                  { borderColor: TRAINING_PHASE_COLORS[trainingPhase] },
-                ]}
-              >
-                <View
-                  style={[
-                    styles.phasePillDot,
-                    { backgroundColor: TRAINING_PHASE_COLORS[trainingPhase] },
-                  ]}
-                />
-                <Text style={styles.phaseWeekText}>
-                  Training: {trainingPhase} - Week {trainingPhaseWeek}
-                </Text>
-              </View>
-              <View
-                style={[
-                  styles.phasePill,
-                  { borderColor: DIET_PHASE_COLORS[dietPhase] },
-                ]}
-              >
-                <View
-                  style={[
-                    styles.phasePillDot,
-                    { backgroundColor: DIET_PHASE_COLORS[dietPhase] },
-                  ]}
-                />
-                <Text style={styles.phaseWeekText}>
-                  Diet: {dietPhase} - Week {dietPhaseWeek}
-                </Text>
-              </View>
-            </View>
-
-            <Text style={styles.cardText}>
-              {selectedDaySummary
-                ? `${selectedDateKey}: ${selectedDaySummary.workoutCount} workout(s), ${selectedDaySummary.totalSets} sets, ${Math.round(selectedDaySummary.totalVolumeKg)} kg volume`
-                : `${selectedDateKey}: no workouts logged`}
-            </Text>
-            {__DEV__ ? (
-              <View style={styles.devActionsRow}>
-                <TouchableOpacity
-                  style={[styles.devButton, seedLoading && styles.disabled]}
-                  disabled={seedLoading}
-                  onPress={seedSampleMonth}
-                >
-                  <Text style={styles.devButtonText}>
-                    {seedLoading ? "Working..." : "Seed sample month"}
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.devButton, styles.devButtonDanger, seedLoading && styles.disabled]}
-                  disabled={seedLoading}
-                  onPress={() =>
-                    showAppDialog({
-                      title: "Clear seeded workouts?",
-                      message: "This removes only workouts created by Seed sample month.",
-                      buttons: [
-                        { text: "Cancel", role: "cancel" },
-                        { text: "Clear", role: "destructive", onPress: () => void clearSeededWorkouts() },
-                      ],
-                    })
-                  }
-                >
-                  <Text style={styles.devButtonText}>Clear seeded</Text>
+                <TouchableOpacity onPress={() => void dismissFirstTimeBanner()} style={styles.firstTimeDismiss}>
+                  <Ionicons name="close" size={16} color="#cfd3eb" />
                 </TouchableOpacity>
               </View>
-            ) : null}
+              <View style={styles.firstTimeActions}>
+                <TouchableOpacity
+                  style={[styles.secondaryButtonWide, styles.firstTimeActionButton]}
+                  onPress={() => void openRoutineBuilder()}
+                >
+                  <Text style={styles.secondaryButtonText}>Create routine</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.primaryButtonWide, styles.firstTimeActionButton]}
+                  onPress={() => void openWorkoutLog()}
+                >
+                  <Text style={styles.primaryText}>Start workout</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
           </View>
-        </View>
+        ) : null}
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Dashboard</Text>
           <View style={styles.card}>
             <View style={styles.metricRow}>
-              <View style={styles.metricChip}>
+              <TouchableOpacity
+                style={styles.metricChip}
+                onPress={() => setActiveDashboardMetric("workouts")}
+              >
                 <Text style={styles.metricLabel}>Workouts</Text>
                 <Text style={styles.metricValue}>{weeklyMetrics.workoutsThisWeek}</Text>
                 <Text style={styles.metricSub}>Last week: {weeklyMetrics.workoutsLastWeek}</Text>
-              </View>
-              <View style={styles.metricChip}>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.metricChip}
+                onPress={() => setActiveDashboardMetric("volume")}
+              >
                 <Text style={styles.metricLabel}>Volume trend</Text>
-                <Text style={styles.metricValue}>{Math.round(weeklyMetrics.avgVolumeThisWeek)}</Text>
+                <Text style={styles.metricValue}>
+                  {Math.round(weeklyMetrics.avgVolumeThisWeek)} kg
+                </Text>
                 <Text style={styles.metricSub}>
                   {weeklyMetrics.improvingByVolume ? "Improving" : "Flat/Down"} vs last week
                 </Text>
-              </View>
+              </TouchableOpacity>
             </View>
             <View style={styles.metricRow}>
-              <View style={styles.metricChip}>
+              <TouchableOpacity
+                style={styles.metricChip}
+                onPress={() => setActiveDashboardMetric("adherence")}
+              >
                 <Text style={styles.metricLabel}>Adherence</Text>
                 <Text style={styles.metricValue}>
                   {nutritionSnapshot.consistencyScore == null
@@ -926,8 +995,11 @@ export default function Home() {
                     : `${nutritionSnapshot.consistencyScore}%`}
                 </Text>
                 <Text style={styles.metricSub}>Calories on-target consistency</Text>
-              </View>
-              <View style={styles.metricChip}>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.metricChip}
+                onPress={() => setActiveDashboardMetric("calories")}
+              >
                 <Text style={styles.metricLabel}>Calories</Text>
                 <Text style={styles.metricValue}>
                   {nutritionSnapshot.averageCalories == null
@@ -935,10 +1007,13 @@ export default function Home() {
                     : `${Math.round(nutritionSnapshot.averageCalories)}`}
                 </Text>
                 <Text style={styles.metricSub}>Avg daily (last 7 full days)</Text>
-              </View>
+              </TouchableOpacity>
             </View>
             <View style={styles.metricRow}>
-              <View style={styles.metricChip}>
+              <TouchableOpacity
+                style={styles.metricChip}
+                onPress={() => setActiveDashboardMetric("sleep")}
+              >
                 <Text style={styles.metricLabel}>Sleep trend</Text>
                 <Text style={styles.metricValue}>
                   {sleepSnapshot.averageSleepHours == null
@@ -946,8 +1021,11 @@ export default function Home() {
                     : `${sleepSnapshot.averageSleepHours}h`}
                 </Text>
                 <Text style={styles.metricSub}>{sleepSnapshot.nightsCaptured} nights captured</Text>
-              </View>
-              <View style={styles.metricChip}>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.metricChip}
+                onPress={() => setActiveDashboardMetric("improving")}
+              >
                 <Text style={styles.metricLabel}>Are you improving?</Text>
                 <Text style={styles.metricValue}>
                   {weeklyMetrics.improvingByVolume || weeklyMetrics.improvingBySets
@@ -955,7 +1033,7 @@ export default function Home() {
                     : "Not yet"}
                 </Text>
                 <Text style={styles.metricSub}>Based on weekly sets/volume</Text>
-              </View>
+              </TouchableOpacity>
             </View>
             {workoutsLoading ? <Text style={styles.cardText}>Refreshing dashboard...</Text> : null}
             {insightsError ? <Text style={styles.noticeSub}>{insightsError}</Text> : null}
@@ -967,21 +1045,22 @@ export default function Home() {
             <Text style={styles.cardText}>
               Soreness {soreness} - Fatigue {fatigue} - Motivation {motivation}
             </Text>
+            <View style={styles.inputActionsRow}>
+              <TouchableOpacity
+                style={[styles.secondaryButtonWide, styles.inputActionButton]}
+                onPress={() => setShowAdjustInputsModal(true)}
+              >
+                <Text style={styles.secondaryButtonText}>Adjust inputs</Text>
+              </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.secondaryButtonWide}
-              onPress={() => setShowAdjustInputsModal(true)}
-            >
-              <Text style={styles.secondaryButtonText}>Adjust inputs</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.primaryButtonWide, loading && styles.disabled]}
-              onPress={handleDecision}
-              disabled={loading}
-            >
-              <Text style={styles.primaryText}>{loading ? "Working..." : "Get today's decision"}</Text>
-            </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.primaryButtonWide, styles.inputActionButton, loading && styles.disabled]}
+                onPress={handleDecision}
+                disabled={loading}
+              >
+                <Text style={styles.primaryText}>{loading ? "Working..." : "Get today's decision"}</Text>
+              </TouchableOpacity>
+            </View>
 
             {gateError ? (
               <View style={styles.notice}>
@@ -1041,36 +1120,236 @@ export default function Home() {
           </View>
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Train</Text>
-          <View style={styles.card}>
-            <Text style={styles.cardText}>Log a full session without templates or history browsing.</Text>
-            <TouchableOpacity
-              style={styles.primaryButtonWide}
-              onPress={() =>
-                router.push(
-                  `/(tabs)/workout/log?trainingPhase=${encodeURIComponent(trainingPhase)}` as Href
-                )
-              }
-            >
-              <Text style={styles.primaryText}>Start workout</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Nutrition</Text>
-          <View style={styles.card}>
-            <Text style={styles.cardText}>Log today&apos;s meals and keep a simple calorie total.</Text>
-            <TouchableOpacity
-              style={styles.primaryButtonWide}
-              onPress={() => router.push("/nutrition" as Href)}
-            >
-              <Text style={styles.primaryText}>Open nutrition</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
       </ScrollView>
+
+      <Modal visible={showCalendarModal} transparent animationType="fade">
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <View style={styles.calendarModalHeaderRow}>
+              <Text style={styles.modalTitle}>Calendar</Text>
+              <TouchableOpacity onPress={() => setShowCalendarModal(false)} style={styles.calendarCloseButton}>
+                <Ionicons name="close" size={18} color="#fff" />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.calendarHeaderRow}>
+              <TouchableOpacity
+                style={styles.calendarNavButton}
+                onPress={() =>
+                  setCalendarMonth(
+                    (previous) => new Date(previous.getFullYear(), previous.getMonth() - 1, 1)
+                  )
+                }
+              >
+                <Ionicons name="chevron-back" size={18} color="#fff" />
+              </TouchableOpacity>
+              <Text style={styles.calendarMonthText}>
+                {MONTH_LABELS[calendarMonth.getMonth()]} {calendarMonth.getFullYear()}
+              </Text>
+              <TouchableOpacity
+                style={styles.calendarNavButton}
+                onPress={() =>
+                  setCalendarMonth(
+                    (previous) => new Date(previous.getFullYear(), previous.getMonth() + 1, 1)
+                  )
+                }
+              >
+                <Ionicons name="chevron-forward" size={18} color="#fff" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.calendarWeekdayRow}>
+              {WEEKDAY_LABELS.map((label, index) => (
+                <Text key={`${label}-${index}`} style={styles.calendarWeekdayText}>
+                  {label}
+                </Text>
+              ))}
+            </View>
+
+            {visibleCalendarWeeks.map((week, weekIndex) => (
+              <View key={`week-${weekIndex}`} style={styles.calendarWeekRow}>
+                {week.map((day) => {
+                  const dateKey = toDateKey(day);
+                  const inCurrentMonth = day.getMonth() === calendarMonth.getMonth();
+                  const isToday = dateKey === toDateKey(new Date());
+                  const isSelected = dateKey === selectedDateKey;
+                  const daySummary = daySummaryMap.get(dateKey);
+                  const programEntry = workoutProgram
+                    ? buildProgramCalendarEntryForDate(day, workoutProgram, workoutCountByDate)
+                    : null;
+                  const dayTrainingPhase = resolvePhaseForDate(
+                    day,
+                    trainingPhaseHistory,
+                    trainingPhase
+                  );
+                  const dayDietPhase = resolvePhaseForDate(day, dietPhaseHistory, dietPhase);
+                  return (
+                    <TouchableOpacity
+                      key={dateKey}
+                      style={[
+                        styles.calendarDayCell,
+                        !inCurrentMonth && styles.calendarDayCellOutOfMonth,
+                        isSelected && styles.calendarDayCellSelected,
+                        isToday && styles.calendarDayCellToday,
+                      ]}
+                      onPress={() => {
+                        setSelectedDateKey(dateKey);
+                        setShowDayModal(true);
+                      }}
+                    >
+                      <Text
+                        style={[
+                          styles.calendarDayText,
+                          !inCurrentMonth && styles.calendarDayTextMuted,
+                          isSelected && styles.calendarDayTextSelected,
+                        ]}
+                      >
+                        {day.getDate()}
+                      </Text>
+                      <View style={styles.phaseTracks}>
+                        <View
+                          style={[
+                            styles.phaseTrack,
+                            { backgroundColor: TRAINING_PHASE_COLORS[dayTrainingPhase] },
+                          ]}
+                        />
+                        <View
+                          style={[
+                            styles.phaseTrack,
+                            { backgroundColor: DIET_PHASE_COLORS[dayDietPhase] },
+                          ]}
+                        />
+                      </View>
+                      <View
+                        style={[
+                          styles.calendarWorkoutDot,
+                          !daySummary?.workoutCount && styles.calendarWorkoutDotHidden,
+                        ]}
+                      />
+                      {programEntry ? (
+                        <Text style={styles.calendarProgramTag}>
+                          {programEntry.type === "rest" ? "R" : `D${programEntry.dayNumber}`}
+                        </Text>
+                      ) : null}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            ))}
+
+            <View style={styles.phaseWeekRow}>
+              <View
+                style={[
+                  styles.phasePill,
+                  { borderColor: TRAINING_PHASE_COLORS[trainingPhase] },
+                ]}
+              >
+                <View
+                  style={[
+                    styles.phasePillDot,
+                    { backgroundColor: TRAINING_PHASE_COLORS[trainingPhase] },
+                  ]}
+                />
+                <Text style={styles.phaseWeekText}>
+                  Training: {trainingPhase} - Week {trainingPhaseWeek}
+                </Text>
+              </View>
+              <View
+                style={[
+                  styles.phasePill,
+                  { borderColor: DIET_PHASE_COLORS[dietPhase] },
+                ]}
+              >
+                <View
+                  style={[
+                    styles.phasePillDot,
+                    { backgroundColor: DIET_PHASE_COLORS[dietPhase] },
+                  ]}
+                />
+                <Text style={styles.phaseWeekText}>
+                  Diet: {dietPhase} - Week {dietPhaseWeek}
+                </Text>
+              </View>
+            </View>
+
+            <Text style={styles.cardText}>
+              {selectedDaySummary
+                ? `${selectedDateKey}: ${selectedDaySummary.workoutCount} workout(s), ${selectedDaySummary.totalSets} sets, ${Math.round(selectedDaySummary.totalVolumeKg)} kg volume`
+                : `${selectedDateKey}: no workouts logged`}
+            </Text>
+            {selectedProgramEntry ? (
+              <Text style={styles.noticeSub}>
+                Program:{" "}
+                {selectedProgramEntry.type === "rest"
+                  ? "Rest"
+                  : `Day ${selectedProgramEntry.dayNumber} (${selectedProgramEntry.title})`}
+              </Text>
+            ) : null}
+            {__DEV__ ? (
+              <View style={styles.devActionsRow}>
+                <TouchableOpacity
+                  style={[styles.devButton, seedLoading && styles.disabled]}
+                  disabled={seedLoading}
+                  onPress={seedSampleMonth}
+                >
+                  <Text style={styles.devButtonText}>
+                    {seedLoading ? "Working..." : "Seed sample month"}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.devButton, styles.devButtonDanger, seedLoading && styles.disabled]}
+                  disabled={seedLoading}
+                  onPress={() =>
+                    showAppDialog({
+                      title: "Clear seeded workouts?",
+                      message: "This removes only workouts created by Seed sample month.",
+                      buttons: [
+                        { text: "Cancel", role: "cancel" },
+                        { text: "Clear", role: "destructive", onPress: () => void clearSeededWorkouts() },
+                      ],
+                    })
+                  }
+                >
+                  <Text style={styles.devButtonText}>Clear seeded</Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={activeDashboardMetric != null} transparent animationType="fade">
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <View style={styles.calendarModalHeaderRow}>
+              <Text style={styles.modalTitle}>{dashboardGraphTitle}</Text>
+              <TouchableOpacity onPress={() => setActiveDashboardMetric(null)} style={styles.calendarCloseButton}>
+                <Ionicons name="close" size={18} color="#fff" />
+              </TouchableOpacity>
+            </View>
+            {dashboardGraphData.length === 0 ? (
+              <Text style={styles.cardText}>No data yet.</Text>
+            ) : (
+              <View style={styles.graphContainer}>
+                {dashboardGraphData.map((point) => {
+                  const maxValue =
+                    Math.max(...dashboardGraphData.map((item) => item.value), 1);
+                  const barHeight = Math.max(8, (point.value / maxValue) * 120);
+                  return (
+                    <View key={`${point.label}-${point.value}`} style={styles.graphBarWrap}>
+                      <Text style={styles.graphValueText}>
+                        {Math.round(point.value)}
+                        {dashboardGraphUnit ? ` ${dashboardGraphUnit}` : ""}
+                      </Text>
+                      <View style={[styles.graphBar, { height: barHeight }]} />
+                      <Text style={styles.graphLabelText}>{point.label}</Text>
+                    </View>
+                  );
+                })}
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
 
       <Modal visible={showDayModal} transparent animationType="fade">
         <View style={styles.modalBackdrop}>
@@ -1257,6 +1536,36 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.08)",
     gap: 12,
   },
+  firstTimeBannerCard: {
+    marginTop: 0,
+  },
+  firstTimeBannerHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  firstTimeBannerText: {
+    flex: 1,
+    maxWidth: "82%",
+    lineHeight: 20,
+    marginTop: 1,
+  },
+  firstTimeDismiss: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.08)",
+  },
+  firstTimeActions: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  firstTimeActionButton: {
+    flex: 1,
+  },
   calendarHeaderRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -1319,6 +1628,12 @@ const styles = StyleSheet.create({
   },
   calendarWorkoutDotHidden: {
     opacity: 0,
+  },
+  calendarProgramTag: {
+    color: "#cdd1ea",
+    fontSize: 9,
+    fontWeight: "800",
+    marginTop: 1,
   },
   phaseTracks: {
     width: "100%",
@@ -1405,6 +1720,13 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     alignItems: "center",
   },
+  inputActionsRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  inputActionButton: {
+    flex: 1,
+  },
   primaryText: {
     color: "#fff",
     fontWeight: "700",
@@ -1449,6 +1771,50 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "rgba(255,255,255,0.08)",
     gap: 8,
+  },
+  calendarModalHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  calendarCloseButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.08)",
+  },
+  graphContainer: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    gap: 6,
+    marginTop: 8,
+    minHeight: 160,
+  },
+  graphBarWrap: {
+    flex: 1,
+    alignItems: "center",
+    gap: 6,
+  },
+  graphBar: {
+    width: "85%",
+    borderRadius: 8,
+    backgroundColor: "#7b61ff",
+    minHeight: 8,
+  },
+  graphValueText: {
+    color: "#d8daec",
+    fontSize: 11,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  graphLabelText: {
+    color: "#9aa1c3",
+    fontSize: 10,
+    fontWeight: "600",
+    textAlign: "center",
   },
   dayModalScroll: {
     maxHeight: 320,

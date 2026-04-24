@@ -2,13 +2,14 @@ import { LinearGradient } from "expo-linear-gradient";
 import { MotiView } from "moti";
 import React from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context"; // ✅ modern SafeAreaView
+import { SafeAreaView } from "react-native-safe-area-context";
 
 type OnboardingLayoutProps = {
   title: string;
   children: React.ReactNode;
   showSkip?: boolean;
   onSkip?: () => void;
+  onBack?: () => void;
 };
 
 export default function OnboardingLayout({
@@ -16,25 +17,42 @@ export default function OnboardingLayout({
   children,
   showSkip = true,
   onSkip,
+  onBack,
 }: OnboardingLayoutProps) {
   return (
     <LinearGradient colors={["#4a90e2", "#7b61ff"]} style={styles.gradient}>
       <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
-        {/* ✅ Animated Skip Button */}
-        {showSkip && onSkip && (
+        <View style={styles.topRow}>
+          <MotiView
+            from={{ opacity: 0, translateY: -5 }}
+            animate={{ opacity: 1, translateY: 0 }}
+            transition={{ type: "timing", delay: 120, duration: 300 }}
+            style={styles.topActionSlot}
+          >
+            {onBack ? (
+              <TouchableOpacity onPress={onBack} style={styles.actionButton}>
+                <Text style={styles.actionText}>‹ Back</Text>
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.topActionPlaceholder} />
+            )}
+          </MotiView>
           <MotiView
             from={{ opacity: 0, translateY: -5 }}
             animate={{ opacity: 1, translateY: 0 }}
             transition={{ type: "timing", delay: 200, duration: 400 }}
-            style={styles.skipWrapper}
+            style={styles.topActionSlot}
           >
-            <TouchableOpacity onPress={onSkip} style={styles.skipButton}>
-              <Text style={styles.skipText}>Skip</Text>
-            </TouchableOpacity>
+            {showSkip && onSkip ? (
+              <TouchableOpacity onPress={onSkip} style={styles.actionButton}>
+                <Text style={styles.actionText}>Skip ›</Text>
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.topActionPlaceholder} />
+            )}
           </MotiView>
-        )}
+        </View>
 
-        {/* ✅ Animated Main Content */}
         <MotiView
           from={{ opacity: 0, translateY: 20 }}
           animate={{ opacity: 1, translateY: 0 }}
@@ -52,7 +70,28 @@ export default function OnboardingLayout({
 const styles = StyleSheet.create({
   gradient: { flex: 1 },
   safe: { flex: 1 },
-  container: { flex: 1, padding: 24, justifyContent: "center" },
+  topRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingTop: 10,
+  },
+  topActionSlot: {
+    width: 88,
+    alignItems: "flex-start",
+  },
+  topActionPlaceholder: {
+    width: 88,
+    height: 34,
+  },
+  container: {
+    flex: 1,
+    paddingHorizontal: 24,
+    paddingBottom: 24,
+    paddingTop: 34,
+    justifyContent: "center",
+  },
   header: {
     fontSize: 28,
     fontWeight: "800",
@@ -61,17 +100,13 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   content: { flexGrow: 1 },
-  skipWrapper: {
-    position: "absolute",
-    top: 20,
-    right: 20,
-    zIndex: 10,
-  },
-  skipButton: {
+  actionButton: {
     backgroundColor: "rgba(255,255,255,0.15)",
     borderRadius: 20,
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 7,
+    minWidth: 84,
+    alignItems: "center",
   },
-  skipText: { color: "#fff", fontSize: 16, opacity: 0.9, fontWeight: "600" },
+  actionText: { color: "#fff", fontSize: 15, opacity: 0.95, fontWeight: "700" },
 });

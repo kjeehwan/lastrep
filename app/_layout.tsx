@@ -23,6 +23,7 @@ export default function RootLayout() {
     <Stack.Screen key="tabs" name="(tabs)" options={{ headerShown: false }} />,
     <Stack.Screen key="auth-sign-in" name="auth/sign-in" options={{ headerShown: false }} />,
     <Stack.Screen key="auth-sign-up" name="auth/sign-up" options={{ headerShown: false }} />,
+    <Stack.Screen key="onboarding" name="onboarding" options={{ headerShown: false }} />,
     <Stack.Screen key="paywall" name="paywall" options={{ title: "Paywall" }} />,
     <Stack.Screen key="modal" name="modal" options={{ presentation: "modal", title: "Modal" }} />,
   ];
