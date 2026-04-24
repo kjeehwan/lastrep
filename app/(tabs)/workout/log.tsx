@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { getAuth } from "firebase/auth";
+import { getAuth, onAuthStateChanged } from "firebase/auth";
 import {
   addDoc,
   collection,
@@ -100,9 +100,11 @@ type Routine = {
   updatedAt: Date | null;
 };
 
-const DRAFT_KEY = "workout-log-draft-v1";
+const DRAFT_KEY_PREFIX = "workout-log-draft-v1";
 const FAVORITES_KEY = "workout-favorite-exercises-v1";
+const FAVORITES_KEY_PREFIX = "workout-favorite-exercises-v1";
 const REST_PREFS_KEY = "workout-rest-preferences-v1";
+const REST_PREFS_KEY_PREFIX = "workout-rest-preferences-v1";
 const TEMPO_FORMAT_HINT =
   "Use eccentric-hold-concentric-hold (e.g. 3-0-X-0). Numbers are seconds, X is explosive.";
 const TEMPO_TOKENS = ["X", "0", "1", "2", "3"] as const;
@@ -144,6 +146,7 @@ export default function WorkoutLog() {
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [exerciseUnits, setExerciseUnits] = useState<Record<string, Unit>>({});
   const [favoriteExercises, setFavoriteExercises] = useState<string[]>([]);
+  const [favoritesHydratedUid, setFavoritesHydratedUid] = useState<string | null>(null);
   const [freeDbCatalog, setFreeDbCatalog] = useState<ExerciseCatalogItem[]>([]);
   const [replaceTarget, setReplaceTarget] = useState<string | null>(null);
   const [replaceSearch, setReplaceSearch] = useState("");
@@ -162,6 +165,7 @@ export default function WorkoutLog() {
   const [showRestTimerModal, setShowRestTimerModal] = useState(false);
   const [activeRestTimerExerciseId, setActiveRestTimerExerciseId] = useState<string | null>(null);
   const [restPreferenceByName, setRestPreferenceByName] = useState<Record<string, number>>({});
+  const [restPrefsHydratedUid, setRestPrefsHydratedUid] = useState<string | null>(null);
   const [restPreferenceByExercise, setRestPreferenceByExercise] = useState<Record<string, number>>({});
   const [restCustomInputByExercise, setRestCustomInputByExercise] = useState<Record<string, string>>({});
   const [restTimerByExercise, setRestTimerByExercise] = useState<
@@ -205,10 +209,20 @@ export default function WorkoutLog() {
     exerciseId: string;
     setIndex: number;
   } | null>(null);
-  const routerParams = useLocalSearchParams<{ trainingPhase?: string }>();
+  const routerParams = useLocalSearchParams<{ trainingPhase?: string; createRoutine?: string }>();
   const auth = getAuth();
+  const [activeUid, setActiveUid] = useState<string | null>(auth.currentUser?.uid ?? null);
   const startTimeRef = useRef<Date>(new Date());
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const createRoutineParamHandledRef = useRef(false);
+  const getDraftKey = useCallback((uid: string) => `${DRAFT_KEY_PREFIX}:${uid}`, []);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setActiveUid(user?.uid ?? null);
+    });
+    return unsubscribe;
+  }, [auth]);
 
   const convertWeight = (value: number, from: Unit, to: Unit) => {
     if (Number.isNaN(value)) return null;
@@ -522,7 +536,20 @@ export default function WorkoutLog() {
   useEffect(() => {
     const loadDraft = async () => {
       try {
-        const raw = await AsyncStorage.getItem(DRAFT_KEY);
+        const user = auth.currentUser;
+        if (!user) return;
+        const raw = await AsyncStorage.getItem(getDraftKey(user.uid));
+        if (!raw) {
+          // No draft for this account: clear any in-memory state from previous account/session.
+          setExercises([]);
+          setExerciseUnits({});
+          setRestPreferenceByExercise({});
+          setRestCustomInputByExercise({});
+          setRestTimerByExercise({});
+          setSessionTitle("");
+          startTimeRef.current = new Date();
+          return;
+        }
         if (raw) {
           const parsed = JSON.parse(raw);
           if (parsed.exercises) {
@@ -552,7 +579,10 @@ export default function WorkoutLog() {
       } catch (e) {
         console.log("Failed to load draft, clearing cache", e);
         try {
-          await AsyncStorage.removeItem(DRAFT_KEY);
+          const user = auth.currentUser;
+          if (user) {
+            await AsyncStorage.removeItem(getDraftKey(user.uid));
+          }
         } catch {
           // no-op
         }
@@ -561,7 +591,7 @@ export default function WorkoutLog() {
     loadDraft();
     loadPastWorkouts();
     loadRoutines();
-  }, [auth.currentUser, loadPastWorkouts, loadRoutines]);
+  }, [auth.currentUser, loadPastWorkouts, loadRoutines, auth, getDraftKey]);
 
   useEffect(() => {
     if (routerParams.trainingPhase) {
@@ -569,9 +599,34 @@ export default function WorkoutLog() {
     }
   }, [routerParams.trainingPhase]);
 
+  useEffect(() => {
+    const shouldCreateRoutine = String(routerParams.createRoutine ?? "") === "1";
+    if (!shouldCreateRoutine) {
+      createRoutineParamHandledRef.current = false;
+      return;
+    }
+    if (createRoutineParamHandledRef.current) return;
+    createRoutineParamHandledRef.current = true;
+    setRoutineBuilderMode(true);
+    setShowRoutineStartModal(true);
+    setRoutineFormError(null);
+    setRoutineNameInput("");
+    router.replace("/(tabs)/workout/log");
+  }, [router, routerParams.createRoutine]);
+
   const loadFavoriteExercises = useCallback(async () => {
+    if (!activeUid) {
+      setFavoriteExercises([]);
+      setFavoritesHydratedUid(null);
+      return;
+    }
     try {
-      const raw = await AsyncStorage.getItem(FAVORITES_KEY);
+      const scopedKey = `${FAVORITES_KEY_PREFIX}:${activeUid}`;
+      let raw = await AsyncStorage.getItem(scopedKey);
+      // Backward compatibility with pre-scoped favorites key.
+      if (!raw) {
+        raw = await AsyncStorage.getItem(FAVORITES_KEY);
+      }
       if (!raw) {
         setFavoriteExercises([]);
         return;
@@ -579,11 +634,16 @@ export default function WorkoutLog() {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
         setFavoriteExercises(parsed.filter((value) => typeof value === "string"));
+      } else {
+        setFavoriteExercises([]);
       }
     } catch (error) {
       console.log("Failed to load favorite exercises", error);
+      setFavoriteExercises([]);
+    } finally {
+      setFavoritesHydratedUid(activeUid);
     }
-  }, []);
+  }, [activeUid]);
 
   useFocusEffect(
     useCallback(() => {
@@ -591,7 +651,7 @@ export default function WorkoutLog() {
       void loadLatestDecision();
       void loadFavoriteExercises();
       void (async () => {
-        const pendingExerciseName = await popPendingExerciseSelection();
+        const pendingExerciseName = await popPendingExerciseSelection(activeUid);
         if (!active || !pendingExerciseName) return;
         addExercise(pendingExerciseName);
         setUiFeedback(`Added ${pendingExerciseName}.`);
@@ -599,15 +659,17 @@ export default function WorkoutLog() {
       return () => {
         active = false;
       };
-    }, [loadLatestDecision, loadFavoriteExercises, addExercise])
+    }, [loadLatestDecision, loadFavoriteExercises, addExercise, activeUid])
   );
 
   // Persist draft
   useEffect(() => {
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
+      const user = auth.currentUser;
+      if (!user) return;
       AsyncStorage.setItem(
-        DRAFT_KEY,
+        getDraftKey(user.uid),
         JSON.stringify({
           exercises,
           exerciseUnits,
@@ -619,7 +681,7 @@ export default function WorkoutLog() {
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
     };
-  }, [exercises, exerciseUnits, sessionTitle]);
+  }, [exercises, exerciseUnits, sessionTitle, auth, getDraftKey]);
 
   // Elapsed timer
   useEffect(() => {
@@ -658,16 +720,31 @@ export default function WorkoutLog() {
   }, []);
 
   useEffect(() => {
-    AsyncStorage.setItem(FAVORITES_KEY, JSON.stringify(favoriteExercises)).catch((error) =>
+    if (!activeUid || favoritesHydratedUid !== activeUid) return;
+    const scopedKey = `${FAVORITES_KEY_PREFIX}:${activeUid}`;
+    AsyncStorage.setItem(scopedKey, JSON.stringify(favoriteExercises)).catch((error) =>
       console.log("Failed to save favorite exercises", error)
     );
-  }, [favoriteExercises]);
+  }, [favoriteExercises, activeUid, favoritesHydratedUid]);
 
   useEffect(() => {
+    if (!activeUid) {
+      setRestPreferenceByName({});
+      setRestPrefsHydratedUid(null);
+      return;
+    }
     const loadRestPreferences = async () => {
       try {
-        const raw = await AsyncStorage.getItem(REST_PREFS_KEY);
-        if (!raw) return;
+        const scopedKey = `${REST_PREFS_KEY_PREFIX}:${activeUid}`;
+        let raw = await AsyncStorage.getItem(scopedKey);
+        // Backward compatibility with pre-scoped rest prefs key.
+        if (!raw) {
+          raw = await AsyncStorage.getItem(REST_PREFS_KEY);
+        }
+        if (!raw) {
+          setRestPreferenceByName({});
+          return;
+        }
         const parsed = JSON.parse(raw);
         if (parsed && typeof parsed === "object") {
           const next: Record<string, number> = {};
@@ -678,26 +755,32 @@ export default function WorkoutLog() {
             }
           });
           setRestPreferenceByName(next);
+        } else {
+          setRestPreferenceByName({});
         }
       } catch (error) {
         console.log("Failed to load rest preferences", error);
+        setRestPreferenceByName({});
+      } finally {
+        setRestPrefsHydratedUid(activeUid);
       }
     };
-    loadRestPreferences();
-  }, []);
+    void loadRestPreferences();
+  }, [activeUid]);
 
   useEffect(() => {
-    AsyncStorage.setItem(REST_PREFS_KEY, JSON.stringify(restPreferenceByName)).catch((error) =>
+    if (!activeUid || restPrefsHydratedUid !== activeUid) return;
+    const scopedKey = `${REST_PREFS_KEY_PREFIX}:${activeUid}`;
+    AsyncStorage.setItem(scopedKey, JSON.stringify(restPreferenceByName)).catch((error) =>
       console.log("Failed to save rest preferences", error)
     );
-  }, [restPreferenceByName]);
+  }, [restPreferenceByName, activeUid, restPrefsHydratedUid]);
 
   useEffect(() => {
     if (!exercises.length) return;
     setRestPreferenceByExercise((prev) => {
-      const next = { ...prev };
+      const next: Record<string, number> = {};
       exercises.forEach((exercise) => {
-        if (next[exercise.id] != null) return;
         const key = exercise.name.trim().toLowerCase();
         next[exercise.id] = restPreferenceByName[key] ?? 90;
       });
@@ -706,10 +789,17 @@ export default function WorkoutLog() {
     setRestTimerByExercise((prev) => {
       const next = { ...prev };
       exercises.forEach((exercise) => {
-        if (next[exercise.id]) return;
         const key = exercise.name.trim().toLowerCase();
         const restSeconds = restPreferenceByName[key] ?? 90;
-        next[exercise.id] = { remainingSec: restSeconds, running: false };
+        const current = next[exercise.id];
+        if (!current) {
+          next[exercise.id] = { remainingSec: restSeconds, running: false };
+          return;
+        }
+        // Keep active countdowns, but align idle timers to the saved preference.
+        if (!current.running && current.remainingSec !== restSeconds) {
+          next[exercise.id] = { remainingSec: restSeconds, running: false };
+        }
       });
       return next;
     });
@@ -1220,7 +1310,10 @@ export default function WorkoutLog() {
     setRecommendationSummary([]);
     setLastAppliedRoutineId(null);
     startTimeRef.current = new Date();
-    AsyncStorage.removeItem(DRAFT_KEY).catch(() => {});
+    const user = auth.currentUser;
+    if (user) {
+      AsyncStorage.removeItem(getDraftKey(user.uid)).catch(() => {});
+    }
   };
 
   const saveWorkout = async () => {
@@ -1322,7 +1415,7 @@ export default function WorkoutLog() {
       setRecommendationSummary([]);
       setLastAppliedRoutineId(null);
       setBaselineDate(null);
-      AsyncStorage.removeItem(DRAFT_KEY).catch(() => { });
+      AsyncStorage.removeItem(getDraftKey(user.uid)).catch(() => { });
       setShowFinishModal(false);
       await loadPastWorkouts();
       if (!__DEV__) {
@@ -1524,6 +1617,14 @@ export default function WorkoutLog() {
     applyRoutineToEditor(routine, "replace");
   };
 
+  const handleRepeatPastWorkoutPress = () => {
+    if (pastWorkouts.length === 0) {
+      setUiFeedback("No previous workouts yet. Finish one workout to enable repeat.");
+      return;
+    }
+    setShowRepeatPicker(true);
+  };
+
   const appendLastAppliedRoutine = () => {
     if (!lastAppliedRoutineId) return;
     const routine = routines.find((item) => item.id === lastAppliedRoutineId);
@@ -1717,6 +1818,11 @@ export default function WorkoutLog() {
         : null,
     [activeExerciseActionId, exercises]
   );
+  const activeActionIsFavorite = useMemo(() => {
+    if (!activeActionExercise) return false;
+    const needle = activeActionExercise.name.trim().toLowerCase();
+    return favoriteExercises.some((entry) => entry.toLowerCase() === needle);
+  }, [activeActionExercise, favoriteExercises]);
   const activeActionUnit = activeExerciseActionId ? exerciseUnits[activeExerciseActionId] || "kg" : "kg";
 
   return (
@@ -1795,16 +1901,12 @@ export default function WorkoutLog() {
           >
             <Text style={styles.primaryText}>Create routine</Text>
           </TouchableOpacity>
-          {pastWorkouts.length > 0 ? (
-            <TouchableOpacity
-              style={[styles.secondaryButton, styles.routineActionButton]}
-              onPress={() => setShowRepeatPicker(true)}
-            >
-              <Text style={styles.secondaryText}>Repeat past workout</Text>
-            </TouchableOpacity>
-          ) : (
-            <View style={styles.routineActionButton} />
-          )}
+          <TouchableOpacity
+            style={[styles.secondaryButton, styles.routineActionButton]}
+            onPress={handleRepeatPastWorkoutPress}
+          >
+            <Text style={styles.secondaryText}>Repeat past workout</Text>
+          </TouchableOpacity>
         </View>
 
         {routineBuilderMode ? (
@@ -2325,11 +2427,16 @@ export default function WorkoutLog() {
                   onPress={() => {
                     if (!activeActionExercise) return;
                     toggleFavoriteExercise(activeActionExercise.name);
-                    closeExerciseActions();
                   }}
                 >
-                  <Ionicons name="star-outline" size={18} color="#ffd166" />
-                  <Text style={styles.exerciseOptionText}>Add to favorites</Text>
+                  <Ionicons
+                    name={activeActionIsFavorite ? "star" : "star-outline"}
+                    size={18}
+                    color="#ffd166"
+                  />
+                  <Text style={styles.exerciseOptionText}>
+                    {activeActionIsFavorite ? "Added to favorites" : "Add to favorites"}
+                  </Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity

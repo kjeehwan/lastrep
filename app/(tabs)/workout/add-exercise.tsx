@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { getAuth, onAuthStateChanged } from "firebase/auth";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   FlatList,
@@ -21,9 +22,12 @@ import {
 } from "../../../src/workouts/exerciseCatalog";
 
 const FAVORITES_KEY = "workout-favorite-exercises-v1";
+const FAVORITES_KEY_PREFIX = "workout-favorite-exercises-v1";
 
 export default function AddExerciseScreen() {
   const router = useRouter();
+  const auth = getAuth();
+  const [activeUid, setActiveUid] = useState<string | null>(auth.currentUser?.uid ?? null);
   const params = useLocalSearchParams<{ recent?: string }>();
   const [searchQuery, setSearchQuery] = useState("");
   const [activeGroup, setActiveGroup] = useState<string>("all");
@@ -53,9 +57,26 @@ export default function AddExerciseScreen() {
   );
 
   useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setActiveUid(user?.uid ?? null);
+    });
+    return unsubscribe;
+  }, [auth]);
+
+  useEffect(() => {
     const loadFavorites = async () => {
       try {
-        const raw = await AsyncStorage.getItem(FAVORITES_KEY);
+        if (!activeUid) {
+          setFavoriteExercises([]);
+          return;
+        }
+        setFavoriteExercises([]);
+        const scopedKey = activeUid ? `${FAVORITES_KEY_PREFIX}:${activeUid}` : FAVORITES_KEY;
+        let raw = await AsyncStorage.getItem(scopedKey);
+        // Backward compatibility with pre-scoped favorites key.
+        if (!raw) {
+          raw = await AsyncStorage.getItem(FAVORITES_KEY);
+        }
         if (!raw) return;
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) {
@@ -66,7 +87,7 @@ export default function AddExerciseScreen() {
       }
     };
     void loadFavorites();
-  }, []);
+  }, [activeUid]);
 
   useEffect(() => {
     let cancelled = false;
@@ -128,19 +149,20 @@ export default function AddExerciseScreen() {
       const next = exists
         ? prev.filter((entry) => entry.toLowerCase() !== needle)
         : [...prev, name.trim()];
-      AsyncStorage.setItem(FAVORITES_KEY, JSON.stringify(next)).catch(() => {});
+      const scopedKey = activeUid ? `${FAVORITES_KEY_PREFIX}:${activeUid}` : FAVORITES_KEY;
+      AsyncStorage.setItem(scopedKey, JSON.stringify(next)).catch(() => {});
       return next;
     });
-  }, []);
+  }, [activeUid]);
 
   const submitSelection = useCallback(
     async (name: string) => {
       const trimmed = name.trim();
       if (!trimmed) return;
-      await setPendingExerciseSelection(trimmed);
+      await setPendingExerciseSelection(trimmed, activeUid);
       router.back();
     },
-    [router]
+    [activeUid, router]
   );
 
   return (
