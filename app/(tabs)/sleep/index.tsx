@@ -1,8 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Href, Redirect, useFocusEffect, useRouter } from "expo-router";
 import { onAuthStateChanged } from "firebase/auth";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { auth } from "@/src/config/firebaseConfig";
 import type { SleepNightlySummary } from "@/src/contracts";
@@ -18,11 +19,13 @@ import {
   hasHealthSleepPermission,
   type HealthConnectAvailability,
 } from "@/src/sleep/sleep";
+import { showAppDialog } from "@/src/ui/appDialog";
 import { getUserData } from "@/src/userData";
 import { isExpectedOfflineError } from "@/src/utils/networkErrors";
 
 const ACCENT = "#7b61ff";
 const MUTED = "#a5acc1";
+const SLEEP_SYNC_CONFIRM_KEY_PREFIX = "sleep-sync-confirmed-v1";
 
 const formatTimestamp = (value: Date | null): string =>
   value ? value.toLocaleString() : "Not synced yet";
@@ -31,9 +34,9 @@ export default function SleepIndex() {
   const { isOffline } = useOfflineStatus();
   const [redirectTo, setRedirectTo] = useState<Href | null>(null);
   const [uid, setUid] = useState<string | null>(null);
+  const [accountLabel, setAccountLabel] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [feedback, setFeedback] = useState<string | null>(null);
-  const [sleepHours, setSleepHours] = useState<number | null>(null);
   const [sleepSource, setSleepSource] = useState<"manual" | "health">("manual");
   const [sleepOriginLabel, setSleepOriginLabel] = useState<string | null>(null);
   const [sampleRecordedAt, setSampleRecordedAt] = useState<Date | null>(null);
@@ -48,7 +51,6 @@ export default function SleepIndex() {
   const [availability, setAvailability] = useState<HealthConnectAvailability>("unsupported");
 
   const applyProfile = useCallback((profile: Awaited<ReturnType<typeof getSleepProfile>>) => {
-    setSleepHours(profile.latestSleepHours);
     setSleepSource(profile.source);
     setSleepOriginLabel(profile.originLabel);
     setSampleRecordedAt(profile.sampleRecordedAt?.toDate() ?? null);
@@ -117,11 +119,13 @@ export default function SleepIndex() {
     const unsub = onAuthStateChanged(auth, (user) => {
       if (!user) {
         setUid(null);
+        setAccountLabel(null);
         setRedirectTo("/auth/sign-in");
         setLoading(false);
         return;
       }
       setUid(user.uid);
+      setAccountLabel(user.email?.trim() || user.uid);
       setRedirectTo(null);
       void getUserData(user.uid).then((data) => {
         const target = data?.sleepSettings?.targetHours;
@@ -189,30 +193,8 @@ export default function SleepIndex() {
     [lastNightStatus, trendConsistencyPct]
   );
 
-  const handleSync = async () => {
-    if (!uid) return;
-    if (isOffline) {
-      setFeedback("You're offline. Reconnect to sync sleep from Health Connect.");
-      return;
-    }
-    if (loading) {
-      setFeedback("Still checking sleep access. Try again in a moment.");
-      return;
-    }
-    if (availability === "provider_update_required") {
-      setFeedback("Sync is unavailable until Health Connect is installed or updated.");
-      return;
-    }
-    if (availability !== "available") {
-      setFeedback("Health Connect is not available right now. If you're offline, reconnect and try again.");
-      return;
-    }
-    if (permissionState !== "granted") {
-      setFeedback("Sync is unavailable until Sleep permission is granted in Health Connect.");
-      return;
-    }
-
-    const result = await syncSleepFromHealthConnect(uid);
+  const performSync = async (activeUid: string) => {
+    const result = await syncSleepFromHealthConnect(activeUid);
     switch (result.status) {
       case "success":
         setFeedback(`Synced ${result.sleepHours.toFixed(1)} hours from Health Connect.`);
@@ -236,6 +218,54 @@ export default function SleepIndex() {
         break;
     }
     await refreshSleep({ resetFeedback: false });
+  };
+
+  const handleSync = async () => {
+    if (!uid) return;
+    if (isOffline) {
+      setFeedback("You're offline. Reconnect to sync sleep from Health Connect.");
+      return;
+    }
+    if (loading) {
+      setFeedback("Still checking sleep access. Try again in a moment.");
+      return;
+    }
+    if (availability === "provider_update_required") {
+      setFeedback("Sync is unavailable until Health Connect is installed or updated.");
+      return;
+    }
+    if (availability !== "available") {
+      setFeedback("Health Connect is not available right now. If you're offline, reconnect and try again.");
+      return;
+    }
+    if (permissionState !== "granted") {
+      setFeedback("Sync is unavailable until Sleep permission is granted in Health Connect.");
+      return;
+    }
+
+    const confirmationKey = `${SLEEP_SYNC_CONFIRM_KEY_PREFIX}:${uid}`;
+    const confirmationValue = await AsyncStorage.getItem(confirmationKey);
+    if (confirmationValue !== "true") {
+      showAppDialog({
+        title: "Confirm account for sleep sync",
+        message: `Import this device's Health Connect sleep data into ${accountLabel ?? "the current account"}?`,
+        buttons: [
+          { text: "Cancel", role: "cancel" },
+          {
+            text: "Import",
+            role: "default",
+            onPress: () => {
+              void (async () => {
+                await AsyncStorage.setItem(confirmationKey, "true");
+                await performSync(uid);
+              })();
+            },
+          },
+        ],
+      });
+      return;
+    }
+    await performSync(uid);
   };
 
   const handleManualOverride = async () => {
@@ -287,6 +317,9 @@ export default function SleepIndex() {
 
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Current sleep summary</Text>
+          <Text style={styles.subText}>
+            Linked account: {accountLabel ?? "Not signed in"}
+          </Text>
           <Text style={styles.valueText}>
             {lastNightSummary ? `${lastNightSummary.sleepHours.toFixed(1)} hours` : "No sample yet"}
           </Text>

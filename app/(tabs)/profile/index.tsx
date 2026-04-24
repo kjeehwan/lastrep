@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import Slider from "@react-native-community/slider";
 import { Href, Redirect, useFocusEffect, useRouter } from "expo-router";
 import { onAuthStateChanged } from "firebase/auth";
 import { Timestamp } from "firebase/firestore";
@@ -16,6 +17,7 @@ import {
 import type { DietPhase, TrainingPhase } from "../../../src/types/decision";
 import {
   getHealthConnectAvailability,
+  getSleepProfile,
   hasHealthSleepPermission,
   openHealthConnectAppPermissionsScreen,
   openHealthConnectDataManagementScreen,
@@ -35,6 +37,21 @@ const isTrainingPhase = (value: unknown): value is TrainingPhase =>
   typeof value === "string" && TRAINING_PHASES.includes(value as TrainingPhase);
 const isDietPhase = (value: unknown): value is DietPhase =>
   typeof value === "string" && DIET_PHASES.includes(value as DietPhase);
+const isAvailabilityDays = (value: unknown): value is number =>
+  typeof value === "number" && Number.isFinite(value) && value >= 1 && value <= 7;
+const mapLegacyAvailabilityToDays = (value: unknown): number | null => {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim();
+  if (!normalized) return null;
+  if (/^\d+$/.test(normalized)) {
+    const parsed = Number(normalized);
+    return isAvailabilityDays(parsed) ? parsed : null;
+  }
+  if (normalized === "2-3") return 3;
+  if (normalized === "4-5") return 5;
+  if (normalized === "6+") return 6;
+  return null;
+};
 
 type TrainingPhaseHistoryEntry = {
   phase: TrainingPhase;
@@ -67,6 +84,7 @@ export default function ProfileIndex() {
   const [cutCalories, setCutCalories] = useState("");
   const [maintainCalories, setMaintainCalories] = useState("");
   const [bulkCalories, setBulkCalories] = useState("");
+  const [availabilityDays, setAvailabilityDays] = useState(4);
   const [sleepTargetHours, setSleepTargetHours] = useState("7");
   const [healthFeedback, setHealthFeedback] = useState<string | null>(null);
   const [healthLoading, setHealthLoading] = useState(false);
@@ -76,6 +94,8 @@ export default function ProfileIndex() {
   >("unknown");
   const [saveFeedback, setSaveFeedback] = useState<string | null>(null);
   const [redirectTo, setRedirectTo] = useState<Href | null>(null);
+  const [connectedAccountLabel, setConnectedAccountLabel] = useState<string | null>(null);
+  const [lastSleepSyncLabel, setLastSleepSyncLabel] = useState<string>("Not synced yet");
 
   const handleGoBack = () => {
     if (router.canGoBack()) {
@@ -111,9 +131,15 @@ export default function ProfileIndex() {
         setRedirectTo("/auth/sign-in");
         return;
       }
+      setConnectedAccountLabel(user.email?.trim() || user.uid);
       setUid(user.uid);
       try {
-        const data = await getUserData(user.uid);
+        const [data, sleepProfile] = await Promise.all([getUserData(user.uid), getSleepProfile(user.uid)]);
+        setLastSleepSyncLabel(
+          sleepProfile.lastSyncedAt
+            ? sleepProfile.lastSyncedAt.toDate().toLocaleString()
+            : "Not synced yet"
+        );
         if (data?.goal) setGoal(data.goal);
         if (data?.nickname) setNickname(data.nickname);
         if (isTrainingPhase(data?.trainingPhase)) {
@@ -182,6 +208,14 @@ export default function ProfileIndex() {
         if (typeof sleepTarget === "number" && sleepTarget > 0) {
           setSleepTargetHours(String(Math.round(sleepTarget * 10) / 10));
         }
+        if (isAvailabilityDays(data?.availabilityDays)) {
+          setAvailabilityDays(Math.round(data.availabilityDays));
+        } else {
+          const mappedDays = mapLegacyAvailabilityToDays(data?.availability);
+          if (mappedDays != null) {
+            setAvailabilityDays(mappedDays);
+          }
+        }
       } catch (e) {
         console.log("Error fetching user data", e);
       } finally {
@@ -195,8 +229,17 @@ export default function ProfileIndex() {
   useFocusEffect(
     useCallback(() => {
       void refreshHealthConnectStatus();
+      if (uid) {
+        void getSleepProfile(uid).then((sleepProfile) => {
+          setLastSleepSyncLabel(
+            sleepProfile.lastSyncedAt
+              ? sleepProfile.lastSyncedAt.toDate().toLocaleString()
+              : "Not synced yet"
+          );
+        });
+      }
       return undefined;
-    }, [refreshHealthConnectStatus])
+    }, [refreshHealthConnectStatus, uid])
   );
 
   const healthConnectMessage = () => {
@@ -280,7 +323,14 @@ export default function ProfileIndex() {
     }
 
     try {
-      const profilePayload: Record<string, unknown> = { goal, nickname, trainingPhase, dietPhase };
+      const profilePayload: Record<string, unknown> = {
+        goal,
+        nickname,
+        trainingPhase,
+        dietPhase,
+        availabilityDays,
+        availability: `${availabilityDays}`,
+      };
       let nextTrainingHistory = trainingPhaseHistory;
       let nextDietHistory = dietPhaseHistory;
       if (trainingPhase !== initialTrainingPhase) {
@@ -424,6 +474,41 @@ export default function ProfileIndex() {
         </View>
 
         <View style={styles.card}>
+          <Text style={styles.cardTitle}>Availability</Text>
+          <Text style={styles.availabilityValue}>{availabilityDays} days / week</Text>
+          <Slider
+            value={availabilityDays}
+            minimumValue={1}
+            maximumValue={7}
+            step={1}
+            minimumTrackTintColor="#7b61ff"
+            maximumTrackTintColor="rgba(255,255,255,0.35)"
+            thumbTintColor="#fff"
+            onValueChange={(value: number) => setAvailabilityDays(Math.round(value))}
+          />
+          <View style={styles.availabilityTicksRow}>
+            {[1, 2, 3, 4, 5, 6, 7].map((day) => (
+              <View key={`availability-${day}`} style={styles.availabilityTickCol}>
+                <View
+                  style={[
+                    styles.availabilityTick,
+                    day === availabilityDays && styles.availabilityTickActive,
+                  ]}
+                />
+                <Text
+                  style={[
+                    styles.availabilityTickLabel,
+                    day === availabilityDays && styles.availabilityTickLabelActive,
+                  ]}
+                >
+                  {day}
+                </Text>
+              </View>
+            ))}
+          </View>
+        </View>
+
+        <View style={styles.card}>
           <Text style={styles.cardTitle}>Nutrition targets</Text>
           <Text style={styles.helperText}>
             Set daily targets by diet phase. Nutrition decisions will use completed days, not partial
@@ -480,6 +565,12 @@ export default function ProfileIndex() {
 
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Health Connect</Text>
+          <Text style={styles.helperText}>
+            Linked account: {connectedAccountLabel ?? "Not signed in"}
+          </Text>
+          <Text style={styles.helperText}>
+            Last sleep sync for this account: {lastSleepSyncLabel}
+          </Text>
           <Text style={styles.helperText}>{healthConnectMessage()}</Text>
           <View style={styles.healthActionsRow}>
             <TouchableOpacity
@@ -540,6 +631,36 @@ const styles = StyleSheet.create({
   sectionTitle: { color: "#fff", fontSize: 15, fontWeight: "700", marginTop: 18, marginBottom: 8 },
   cardTitle: { color: "#fff", fontSize: 15, fontWeight: "700", marginBottom: 8 },
   helperText: { color: "#a5acc1", fontSize: 13, lineHeight: 18 },
+  availabilityValue: { color: "#fff", fontSize: 18, fontWeight: "700", marginBottom: 2 },
+  availabilityTicksRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 4,
+    paddingHorizontal: 2,
+  },
+  availabilityTickCol: {
+    width: 18,
+    alignItems: "center",
+    gap: 4,
+  },
+  availabilityTick: {
+    width: 2,
+    height: 8,
+    borderRadius: 1,
+    backgroundColor: "rgba(216,218,236,0.55)",
+  },
+  availabilityTickActive: {
+    height: 10,
+    backgroundColor: "#fff",
+  },
+  availabilityTickLabel: {
+    color: "#d8daec",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  availabilityTickLabelActive: {
+    color: "#fff",
+  },
   row: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   targetRow: { gap: 10 },
   card: {
