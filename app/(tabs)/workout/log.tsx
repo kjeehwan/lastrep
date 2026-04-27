@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Audio } from "expo-av";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { getAuth, onAuthStateChanged } from "firebase/auth";
 import {
@@ -17,7 +18,10 @@ import {
 } from "firebase/firestore";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Keyboard,
   Modal,
+  KeyboardAvoidingView,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -30,9 +34,11 @@ import {
 import Slider from "@react-native-community/slider";
 import { Image } from "expo-image";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import { NativeViewGestureHandler } from "react-native-gesture-handler";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import { db } from "../../../src/config/firebaseConfig";
+import WorkoutGestureTextInput from "../../../src/components/WorkoutGestureTextInput";
+import WorkoutSetList from "../../../src/components/WorkoutSetList";
 import type { Decision } from "../../../src/types/decision";
 import { showAppAlert, showAppDialog } from "../../../src/ui/appDialog";
 import { isExpectedOfflineError } from "../../../src/utils/networkErrors";
@@ -179,6 +185,7 @@ export default function WorkoutLog() {
   const [pastWorkouts, setPastWorkouts] = useState<PastWorkout[]>([]);
   const [routines, setRoutines] = useState<Routine[]>([]);
   const [showRepeatPicker, setShowRepeatPicker] = useState(false);
+  const [showMyRoutinesModal, setShowMyRoutinesModal] = useState(false);
   const [showRoutineNameModal, setShowRoutineNameModal] = useState(false);
   const [showRoutineStartModal, setShowRoutineStartModal] = useState(false);
   const [showRoutineActionsModal, setShowRoutineActionsModal] = useState(false);
@@ -194,6 +201,7 @@ export default function WorkoutLog() {
   const [recommending, setRecommending] = useState(false);
   const [recommendationSummary, setRecommendationSummary] = useState<string[]>([]);
   const [showFinishModal, setShowFinishModal] = useState(false);
+  const [showFinishTitleInput, setShowFinishTitleInput] = useState(false);
   const [showTempoEditorModal, setShowTempoEditorModal] = useState(false);
   const [activeTempoExerciseId, setActiveTempoExerciseId] = useState<string | null>(null);
   const [tempoDraftIndices, setTempoDraftIndices] = useState<number[]>([...DEFAULT_TEMPO_INDICES]);
@@ -209,13 +217,34 @@ export default function WorkoutLog() {
     exerciseId: string;
     setIndex: number;
   } | null>(null);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const routerParams = useLocalSearchParams<{ trainingPhase?: string; createRoutine?: string }>();
   const auth = getAuth();
   const [activeUid, setActiveUid] = useState<string | null>(auth.currentUser?.uid ?? null);
+  const scrollNativeGesture = useMemo(() => Gesture.Native(), []);
   const startTimeRef = useRef<Date>(new Date());
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const createRoutineParamHandledRef = useRef(false);
+  const lastCompletedSetByExerciseRef = useRef<Record<string, number>>({});
+  const lastSetToggleAtRef = useRef<Record<string, number>>({});
+  const gongSoundRef = useRef<Audio.Sound | null>(null);
+  const restTimerSnapshotRef = useRef<Record<string, { remainingSec: number; running: boolean }>>({});
   const getDraftKey = useCallback((uid: string) => `${DRAFT_KEY_PREFIX}:${uid}`, []);
+
+  const playGong = useCallback(async () => {
+    try {
+      if (!gongSoundRef.current) {
+        const { sound } = await Audio.Sound.createAsync(
+          require("../../../assets/sounds/gong.wav"),
+          { shouldPlay: false, volume: 1.0 }
+        );
+        gongSoundRef.current = sound;
+      }
+      await gongSoundRef.current.replayAsync();
+    } catch (error) {
+      console.log("Failed to play rest gong", error);
+    }
+  }, []);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -223,6 +252,19 @@ export default function WorkoutLog() {
     });
     return unsubscribe;
   }, [auth]);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener("keyboardDidShow", (event) => {
+      setKeyboardHeight(event.endCoordinates?.height ?? 0);
+    });
+    const hideSub = Keyboard.addListener("keyboardDidHide", () => {
+      setKeyboardHeight(0);
+    });
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   const convertWeight = (value: number, from: Unit, to: Unit) => {
     if (Number.isNaN(value)) return null;
@@ -828,6 +870,32 @@ export default function WorkoutLog() {
   }, [restTimerByExercise]);
 
   useEffect(() => {
+    const previous = restTimerSnapshotRef.current;
+    Object.entries(restTimerByExercise).forEach(([exerciseId, timer]) => {
+      const prior = previous[exerciseId];
+      const completedNow =
+        prior != null &&
+        prior.running &&
+        prior.remainingSec > 0 &&
+        !timer.running &&
+        timer.remainingSec === 0;
+      if (completedNow) {
+        void playGong();
+      }
+    });
+    restTimerSnapshotRef.current = restTimerByExercise;
+  }, [restTimerByExercise, playGong]);
+
+  useEffect(() => {
+    return () => {
+      if (gongSoundRef.current) {
+        void gongSoundRef.current.unloadAsync();
+        gongSoundRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
     if (!undoDeletedSet) return;
     const timeout = setTimeout(() => setUndoDeletedSet(null), 5000);
     return () => clearTimeout(timeout);
@@ -879,26 +947,38 @@ export default function WorkoutLog() {
     );
   };
 
-  const toggleSetDone = (exerciseId: string, setIndex: number) => {
-    let shouldAutoStartRest = false;
+  const setSetDone = (exerciseId: string, setIndex: number, nextDone: boolean) => {
     setExercises((prev) =>
       prev.map((ex) =>
         ex.id === exerciseId
           ? {
               ...ex,
-              sets: ex.sets.map((s, idx) => {
-                if (idx !== setIndex) return s;
-                const nextDone = !s.done;
-                if (nextDone) shouldAutoStartRest = true;
-                return { ...s, done: nextDone };
-              }),
+              sets: ex.sets.map((s, idx) => (idx === setIndex ? { ...s, done: nextDone } : s)),
             }
           : ex
       )
     );
-    if (shouldAutoStartRest) {
+  };
+
+  const toggleSetDone = (exerciseId: string, setIndex: number) => {
+    const toggleKey = `${exerciseId}:${setIndex}`;
+    const now = Date.now();
+    const lastToggleAt = lastSetToggleAtRef.current[toggleKey] ?? 0;
+    if (now - lastToggleAt < 120) return;
+    lastSetToggleAtRef.current[toggleKey] = now;
+
+    const exercise = exercises.find((ex) => ex.id === exerciseId);
+    const targetSet = exercise?.sets?.[setIndex];
+    if (!targetSet) return;
+    const nextDone = !targetSet.done;
+    setSetDone(exerciseId, setIndex, nextDone);
+    if (nextDone) {
+      lastCompletedSetByExerciseRef.current[exerciseId] = setIndex;
       startRestTimer(exerciseId);
+      return;
     }
+    resetRestTimer(exerciseId);
+    delete lastCompletedSetByExerciseRef.current[exerciseId];
   };
 
 
@@ -1287,6 +1367,7 @@ export default function WorkoutLog() {
     if (!exercises.length) return;
     setFollowedAnswer(null);
     setHelpfulAnswer(null);
+    setShowFinishTitleInput(!sessionTitle.trim());
     setShowFinishModal(true);
   };
 
@@ -1305,6 +1386,7 @@ export default function WorkoutLog() {
     setBaselineDate(null);
     setFollowedAnswer(null);
     setHelpfulAnswer(null);
+    setShowFinishTitleInput(false);
     setShowFinishModal(false);
     setShowDiscardConfirmModal(false);
     setRecommendationSummary([]);
@@ -1401,9 +1483,9 @@ export default function WorkoutLog() {
         helpful: helpfulAnswer || "unknown",
         createdAt: Timestamp.now(),
       };
-      const docRef = await addDoc(collection(db, "users", user.uid, "workouts"), payload);
+      await addDoc(collection(db, "users", user.uid, "workouts"), payload);
       if (__DEV__) {
-        showAppAlert("Workout saved", `Saved as ${docRef.id}`);
+        showAppAlert("Workout saved", "Nice work.");
       }
         setExercises([]);
         setExerciseUnits({});
@@ -1417,6 +1499,7 @@ export default function WorkoutLog() {
       setBaselineDate(null);
       AsyncStorage.removeItem(getDraftKey(user.uid)).catch(() => { });
       setShowFinishModal(false);
+      setShowFinishTitleInput(false);
       await loadPastWorkouts();
       if (!__DEV__) {
         showAppAlert("Workout saved", "Nice work.");
@@ -1827,12 +1910,19 @@ export default function WorkoutLog() {
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.content}
-        keyboardShouldPersistTaps="handled"
-        scrollEventThrottle={16}
+      <KeyboardAvoidingView
+        style={styles.keyboardAvoiding}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? insets.top : 0}
       >
+        <GestureDetector gesture={scrollNativeGesture}>
+          <ScrollView
+            style={styles.container}
+            contentContainerStyle={[styles.content, { paddingBottom: 140 + keyboardHeight }]}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+            scrollEventThrottle={16}
+          >
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
             <Ionicons name="chevron-back" size={22} color="#fff" />
@@ -1908,6 +1998,18 @@ export default function WorkoutLog() {
             <Text style={styles.secondaryText}>Repeat past workout</Text>
           </TouchableOpacity>
         </View>
+        <TouchableOpacity
+          style={[styles.secondaryButton, { marginTop: 10 }, routines.length === 0 && styles.disabled]}
+          onPress={() => setShowMyRoutinesModal(true)}
+          disabled={routines.length === 0}
+        >
+          <Text style={styles.secondaryText}>My routines</Text>
+        </TouchableOpacity>
+        {routines.length === 0 ? (
+          <Text style={[styles.muted, { marginTop: 8 }]}>
+            No routines yet. Tap Create routine to build your first one.
+          </Text>
+        ) : null}
 
         {routineBuilderMode ? (
           <View style={styles.routineBuilderBanner}>
@@ -1930,34 +2032,6 @@ export default function WorkoutLog() {
             </View>
           </View>
         ) : null}
-
-        {routines.length === 0 ? (
-          <Text style={[styles.muted, { marginTop: 10 }]}>
-            No routines yet. Tap Create routine to build your first one.
-          </Text>
-        ) : (
-          <View style={{ marginTop: 10, gap: 8 }}>
-            {routines.map((routine) => (
-              <View key={routine.id} style={styles.routineCard}>
-                <View style={styles.routineCardHeader}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.pickerText}>{routine.name}</Text>
-                    <Text style={styles.muted}>
-                      {routine.exercises.map((exercise) => exercise.name).slice(0, 4).join(" | ")}
-                      {routine.exercises.length > 4 ? " | ..." : ""}
-                    </Text>
-                  </View>
-                  <TouchableOpacity style={styles.iconButton} onPress={() => openRoutineActions(routine)}>
-                    <Ionicons name="ellipsis-horizontal" size={16} color="#cdd0e0" />
-                  </TouchableOpacity>
-                </View>
-                <TouchableOpacity style={styles.routineUseButton} onPress={() => handleApplyRoutine(routine)}>
-                  <Text style={styles.primaryText}>Apply routine</Text>
-                </TouchableOpacity>
-              </View>
-            ))}
-          </View>
-        )}
       </View>
 
       <View style={styles.card}>
@@ -2156,14 +2230,54 @@ export default function WorkoutLog() {
               </View>
               {ex.sets.length === 0 ? (
                 <Text style={styles.muted}>No sets yet.</Text>
+              ) : Platform.OS === "android" ? (
+                <WorkoutSetList
+                  style={{ height: Math.max(ex.sets.length, 1) * 52 }}
+                  sets={ex.sets.map((set) => ({
+                    weight: formatWeightInput(set.weightKg, unit),
+                    reps: set.reps,
+                    rpe: set.rpe ?? "",
+                    done: set.done,
+                  }))}
+                  onSetChange={({ nativeEvent }) => {
+                    const idx = nativeEvent.index;
+                    if (typeof idx !== "number" || idx < 0 || idx >= ex.sets.length) return;
+                    if (nativeEvent.field === "weight") {
+                      updateSetWeight(ex.id, idx, unit, nativeEvent.value ?? "");
+                      return;
+                    }
+                    if (nativeEvent.field === "reps") {
+                      updateSetReps(ex.id, idx, nativeEvent.value ?? "");
+                      return;
+                    }
+                    updateSetRpe(ex.id, idx, nativeEvent.value ?? "");
+                  }}
+                  onToggleDone={({ nativeEvent }) => {
+                    const idx = nativeEvent.index;
+                    if (typeof idx !== "number" || idx < 0 || idx >= ex.sets.length) return;
+                    toggleSetDone(ex.id, idx);
+                  }}
+                  onDeleteSet={({ nativeEvent }) => {
+                    const idx = nativeEvent.index;
+                    if (typeof idx !== "number" || idx < 0 || idx >= ex.sets.length) return;
+                    removeSetWithUndo(ex.id, idx);
+                  }}
+                  onSetLabelPress={({ nativeEvent }) => {
+                    const idx = nativeEvent.index;
+                    if (typeof idx !== "number" || idx < 0 || idx >= ex.sets.length) return;
+                    openSetMenu(ex.id, idx);
+                  }}
+                />
               ) : (
                 ex.sets.map((s, idx) => (
                   <ReanimatedSwipeable
                     key={`${ex.id}-set-${idx}`}
+                    simultaneousWithExternalGesture={scrollNativeGesture}
                     friction={1.2}
                     rightThreshold={12}
                     overshootRight={false}
-                    dragOffsetFromRightEdge={8}
+                    dragOffsetFromLeftEdge={24}
+                    dragOffsetFromRightEdge={24}
                     renderRightActions={() => (
                       <View style={styles.swipeDeleteContainer}>
                         <TouchableOpacity
@@ -2197,59 +2311,53 @@ export default function WorkoutLog() {
                           </View>
                         </TouchableOpacity>
                         <View style={[styles.setInputsGroup, isTabletLayout && styles.setInputsGroupTablet]}>
-                          <NativeViewGestureHandler disallowInterruption>
-                            <TextInput
-                              placeholder="Weight"
-                              placeholderTextColor="#7a7a8c"
-                              keyboardType="numeric"
-                              value={formatWeightInput(s.weightKg, unit)}
-                              onChangeText={(v) => updateSetWeight(ex.id, idx, unit, v)}
-                              selectTextOnFocus={false}
-                              style={[
-                                styles.input,
-                                styles.setInput,
-                                styles.setInputCompact,
-                                styles.setColWeight,
-                                isTabletLayout && styles.setInputTablet,
-                              ]}
-                            />
-                          </NativeViewGestureHandler>
-                          <NativeViewGestureHandler disallowInterruption>
-                            <TextInput
-                              placeholder="Reps"
-                              placeholderTextColor="#7a7a8c"
-                              keyboardType="numeric"
-                              value={s.reps}
-                              onChangeText={(v) => updateSetReps(ex.id, idx, v)}
-                              selectTextOnFocus={false}
-                              style={[
-                                styles.input,
-                                styles.setInput,
-                                styles.setInputCompact,
-                                styles.setColReps,
-                                isTabletLayout && styles.setInputTablet,
-                                styles.setInputReps,
-                                isTabletLayout && styles.setInputRepsTablet,
-                              ]}
-                            />
-                          </NativeViewGestureHandler>
-                          <NativeViewGestureHandler disallowInterruption>
-                            <TextInput
-                              placeholder="RPE"
-                              placeholderTextColor="#7a7a8c"
-                              keyboardType="decimal-pad"
-                              value={s.rpe ?? ""}
-                              onChangeText={(v) => updateSetRpe(ex.id, idx, v)}
-                              selectTextOnFocus={false}
-                              style={[
-                                styles.input,
-                                styles.setInput,
-                                styles.setInputCompact,
-                                styles.setColRpe,
-                                isTabletLayout && styles.setInputTablet,
-                              ]}
-                            />
-                          </NativeViewGestureHandler>
+                          <WorkoutGestureTextInput
+                            placeholder="Weight"
+                            placeholderTextColor="#7a7a8c"
+                            keyboardType="numeric"
+                            value={formatWeightInput(s.weightKg, unit)}
+                            onChangeText={(v) => updateSetWeight(ex.id, idx, unit, v)}
+                            selectTextOnFocus={false}
+                            style={[
+                              styles.input,
+                              styles.setInput,
+                              styles.setInputCompact,
+                              styles.setColWeight,
+                              isTabletLayout && styles.setInputTablet,
+                            ]}
+                          />
+                          <WorkoutGestureTextInput
+                            placeholder="Reps"
+                            placeholderTextColor="#7a7a8c"
+                            keyboardType="numeric"
+                            value={s.reps}
+                            onChangeText={(v) => updateSetReps(ex.id, idx, v)}
+                            selectTextOnFocus={false}
+                            style={[
+                              styles.input,
+                              styles.setInput,
+                              styles.setInputCompact,
+                              styles.setColReps,
+                              isTabletLayout && styles.setInputTablet,
+                              styles.setInputReps,
+                              isTabletLayout && styles.setInputRepsTablet,
+                            ]}
+                          />
+                          <WorkoutGestureTextInput
+                            placeholder="RPE"
+                            placeholderTextColor="#7a7a8c"
+                            keyboardType="decimal-pad"
+                            value={s.rpe ?? ""}
+                            onChangeText={(v) => updateSetRpe(ex.id, idx, v)}
+                            selectTextOnFocus={false}
+                            style={[
+                              styles.input,
+                              styles.setInput,
+                              styles.setInputCompact,
+                              styles.setColRpe,
+                              isTabletLayout && styles.setInputTablet,
+                            ]}
+                          />
                         </View>
                       </View>
                     </View>
@@ -2320,6 +2428,51 @@ export default function WorkoutLog() {
             <TouchableOpacity
               style={[styles.secondaryButton, { marginTop: 10 }]}
               onPress={() => setShowRepeatPicker(false)}
+            >
+              <Text style={styles.secondaryText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={showMyRoutinesModal} transparent animationType="fade">
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>My routines</Text>
+            {routines.length === 0 ? (
+              <Text style={styles.modalText}>No routines saved yet.</Text>
+            ) : (
+              <ScrollView style={{ maxHeight: 320 }}>
+                {routines.map((routine) => (
+                  <View key={`my-routine-${routine.id}`} style={styles.routineCard}>
+                    <View style={styles.routineCardHeader}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.pickerText}>{routine.name}</Text>
+                        <Text style={styles.muted}>
+                          {routine.exercises.map((exercise) => exercise.name).slice(0, 4).join(" | ")}
+                          {routine.exercises.length > 4 ? " | ..." : ""}
+                        </Text>
+                      </View>
+                      <TouchableOpacity style={styles.iconButton} onPress={() => openRoutineActions(routine)}>
+                        <Ionicons name="ellipsis-horizontal" size={16} color="#cdd0e0" />
+                      </TouchableOpacity>
+                    </View>
+                    <TouchableOpacity
+                      style={styles.routineUseButton}
+                      onPress={() => {
+                        handleApplyRoutine(routine);
+                        setShowMyRoutinesModal(false);
+                      }}
+                    >
+                      <Text style={styles.primaryText}>Apply routine</Text>
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </ScrollView>
+            )}
+            <TouchableOpacity
+              style={[styles.secondaryButton, { marginTop: 10 }]}
+              onPress={() => setShowMyRoutinesModal(false)}
             >
               <Text style={styles.secondaryText}>Close</Text>
             </TouchableOpacity>
@@ -2689,14 +2842,18 @@ export default function WorkoutLog() {
             <Text style={styles.modalTitle}>Quick questions</Text>
             <Text style={styles.modalText}>Followed recommendation?</Text>
             <View style={styles.answerRow}>
-              {(["yes", "partial", "no"] as FollowedAnswer[]).map((val) => (
+              {([
+                { value: "yes", label: "Yes" },
+                { value: "partial", label: "Partial" },
+                { value: "no", label: "No" },
+              ] as const).map((option) => (
                 <TouchableOpacity
-                  key={val}
-                  style={[styles.answerChip, followedAnswer === val && styles.answerChipActive]}
-                  onPress={() => setFollowedAnswer(val)}
+                  key={option.value}
+                  style={[styles.answerChip, followedAnswer === option.value && styles.answerChipActive]}
+                  onPress={() => setFollowedAnswer(option.value)}
                 >
-                  <Text style={[styles.answerText, followedAnswer === val && styles.answerTextActive]}>
-                    {val}
+                  <Text style={[styles.answerText, followedAnswer === option.value && styles.answerTextActive]}>
+                    {option.label}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -2704,23 +2861,42 @@ export default function WorkoutLog() {
 
             <Text style={[styles.modalText, { marginTop: 12 }]}>Helpful?</Text>
             <View style={styles.answerRow}>
-              {(["yes", "neutral", "no"] as HelpfulAnswer[]).map((val) => (
+              {([
+                { value: "yes", label: "Yes" },
+                { value: "neutral", label: "Neutral" },
+                { value: "no", label: "No" },
+              ] as const).map((option) => (
                 <TouchableOpacity
-                  key={val}
-                  style={[styles.answerChip, helpfulAnswer === val && styles.answerChipActive]}
-                  onPress={() => setHelpfulAnswer(val)}
+                  key={option.value}
+                  style={[styles.answerChip, helpfulAnswer === option.value && styles.answerChipActive]}
+                  onPress={() => setHelpfulAnswer(option.value)}
                 >
-                  <Text style={[styles.answerText, helpfulAnswer === val && styles.answerTextActive]}>
-                    {val}
+                  <Text style={[styles.answerText, helpfulAnswer === option.value && styles.answerTextActive]}>
+                    {option.label}
                   </Text>
                 </TouchableOpacity>
               ))}
             </View>
+            {showFinishTitleInput ? (
+              <>
+                <Text style={[styles.modalText, { marginTop: 12 }]}>Optional session title</Text>
+                <TextInput
+                  placeholder="e.g., Upper body"
+                  placeholderTextColor="#7a7a8c"
+                  value={sessionTitle}
+                  onChangeText={setSessionTitle}
+                  style={styles.input}
+                />
+              </>
+            ) : null}
 
             <View style={styles.modalActions}>
               <TouchableOpacity
                 style={[styles.secondaryButton, styles.modalActionButton]}
-                onPress={() => setShowFinishModal(false)}
+                onPress={() => {
+                  setShowFinishModal(false);
+                  setShowFinishTitleInput(false);
+                }}
               >
                 <Text style={styles.secondaryText}>Cancel</Text>
               </TouchableOpacity>
@@ -2851,13 +3027,16 @@ export default function WorkoutLog() {
         </View>
       </Modal>
 
-      </ScrollView>
+          </ScrollView>
+        </GestureDetector>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#0d0d1a" },
+  keyboardAvoiding: { flex: 1 },
   container: { flex: 1, backgroundColor: "#0d0d1a" },
   content: { padding: 20, paddingTop: 20, paddingBottom: 140 },
   header: {
@@ -2992,8 +3171,8 @@ const styles = StyleSheet.create({
   setLabelTablet: { width: 28, fontSize: 15 },
   setInputsGroup: { flex: 1, flexDirection: "row", alignItems: "center", gap: 8 },
   setInputsGroupTablet: { flex: 1 },
-  setInput: { marginBottom: 0, paddingVertical: 8 },
-  setInputCompact: { fontSize: 12, paddingHorizontal: 6, textAlign: "center" },
+  setInput: { marginBottom: 0, paddingVertical: 10, minHeight: 40 },
+  setInputCompact: { fontSize: 15, paddingHorizontal: 8, textAlign: "center" },
   setInputTablet: { flex: undefined, width: undefined, minWidth: undefined },
   setInputReps: { marginRight: 0 },
   setInputRepsTablet: { marginRight: 0 },
