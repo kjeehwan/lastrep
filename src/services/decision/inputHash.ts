@@ -1,6 +1,23 @@
-import { sha256 } from "@noble/hashes/sha256";
-import { bytesToHex } from "@noble/hashes/utils";
 import type { DecisionInputs } from "../../types/decision";
+
+const fnv1a64Hex = (input: string): string => {
+  let hash = 0xcbf29ce484222325n;
+  const prime = 0x100000001b3n;
+  for (let i = 0; i < input.length; i += 1) {
+    hash ^= BigInt(input.charCodeAt(i));
+    hash = (hash * prime) & 0xffffffffffffffffn;
+  }
+  return hash.toString(16).padStart(16, "0");
+};
+
+const stableHashHex = (input: string): string => {
+  // Compose multiple FNV-1a passes to get a longer deterministic key.
+  const p1 = fnv1a64Hex(input);
+  const p2 = fnv1a64Hex(`salt:1|${input}`);
+  const p3 = fnv1a64Hex(`salt:2|${input}`);
+  const p4 = fnv1a64Hex(`salt:3|${input}`);
+  return `${p1}${p2}${p3}${p4}`;
+};
 
 export const hashDecisionInputs = (inputs: DecisionInputs): string => {
   const normalized = {
@@ -25,6 +42,5 @@ export const hashDecisionInputs = (inputs: DecisionInputs): string => {
       : null,
   };
   const json = JSON.stringify(normalized);
-  const data = new TextEncoder().encode(json);
-  return bytesToHex(sha256(data));
+  return stableHashHex(json);
 };

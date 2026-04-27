@@ -3,6 +3,7 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { onAuthStateChanged } from 'firebase/auth';
 import { useEffect } from 'react';
+import { LogBox } from 'react-native';
 import 'react-native-reanimated';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
@@ -17,8 +18,34 @@ export const unstable_settings = {
   anchor: '(tabs)',
 };
 
+if (__DEV__) {
+  const warnGuard = globalThis as unknown as { __lastrepWarnFilterInstalled?: boolean };
+  if (!warnGuard.__lastrepWarnFilterInstalled) {
+    const originalWarn = console.warn.bind(console);
+    console.warn = (...args: unknown[]) => {
+      const first = args[0];
+      if (
+        typeof first === 'string' &&
+        first.includes('SafeAreaView has been deprecated and will be removed in a future release')
+      ) {
+        return;
+      }
+      originalWarn(...args);
+    };
+    warnGuard.__lastrepWarnFilterInstalled = true;
+  }
+}
+
 export default function RootLayout() {
   const colorScheme = useColorScheme();
+
+  useEffect(() => {
+    if (!__DEV__) return;
+    LogBox.ignoreLogs([
+      "SafeAreaView has been deprecated and will be removed in a future release. Please use 'react-native-safe-area-context' instead.",
+    ]);
+  }, []);
+
   const stackScreens = [
     <Stack.Screen key="tabs" name="(tabs)" options={{ headerShown: false }} />,
     <Stack.Screen key="auth-sign-in" name="auth/sign-in" options={{ headerShown: false }} />,

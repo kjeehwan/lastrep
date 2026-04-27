@@ -50,7 +50,7 @@ const splashImage = isDevVariant
   ? "./assets/images/logo-splash-dev.png"
   : "./assets/images/logo-splash-v2.png";
 
-const plugins = (baseConfig.plugins ?? []).map((plugin) => {
+const mappedPlugins = (baseConfig.plugins ?? []).map((plugin) => {
   if (Array.isArray(plugin) && plugin[0] === "expo-splash-screen") {
     return [
       "expo-splash-screen",
@@ -62,6 +62,12 @@ const plugins = (baseConfig.plugins ?? []).map((plugin) => {
   }
   return plugin;
 });
+
+const plugins = mappedPlugins.some(
+  (plugin) => plugin === "expo-audio" || (Array.isArray(plugin) && plugin[0] === "expo-audio")
+)
+  ? mappedPlugins
+  : [...mappedPlugins, "expo-audio"];
 
 const config: ExpoConfig = {
   ...baseConfig,
@@ -83,3 +89,4 @@ const config: ExpoConfig = {
 };
 
 export default config;
+

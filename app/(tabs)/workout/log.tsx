@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Audio } from "expo-av";
+import { createAudioPlayer } from "expo-audio";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { getAuth, onAuthStateChanged } from "firebase/auth";
 import {
@@ -227,20 +227,17 @@ export default function WorkoutLog() {
   const createRoutineParamHandledRef = useRef(false);
   const lastCompletedSetByExerciseRef = useRef<Record<string, number>>({});
   const lastSetToggleAtRef = useRef<Record<string, number>>({});
-  const gongSoundRef = useRef<Audio.Sound | null>(null);
+  const gongPlayerRef = useRef<ReturnType<typeof createAudioPlayer> | null>(null);
   const restTimerSnapshotRef = useRef<Record<string, { remainingSec: number; running: boolean }>>({});
   const getDraftKey = useCallback((uid: string) => `${DRAFT_KEY_PREFIX}:${uid}`, []);
 
   const playGong = useCallback(async () => {
     try {
-      if (!gongSoundRef.current) {
-        const { sound } = await Audio.Sound.createAsync(
-          require("../../../assets/sounds/gong.wav"),
-          { shouldPlay: false, volume: 1.0 }
-        );
-        gongSoundRef.current = sound;
+      if (!gongPlayerRef.current) {
+        gongPlayerRef.current = createAudioPlayer(require("../../../assets/sounds/gong.wav"));
       }
-      await gongSoundRef.current.replayAsync();
+      gongPlayerRef.current.seekTo(0);
+      gongPlayerRef.current.play();
     } catch (error) {
       console.log("Failed to play rest gong", error);
     }
@@ -888,9 +885,9 @@ export default function WorkoutLog() {
 
   useEffect(() => {
     return () => {
-      if (gongSoundRef.current) {
-        void gongSoundRef.current.unloadAsync();
-        gongSoundRef.current = null;
+      if (gongPlayerRef.current) {
+        gongPlayerRef.current.release();
+        gongPlayerRef.current = null;
       }
     };
   }, []);
