@@ -2,12 +2,18 @@ type WorkoutSet = {
   weightKg: number | null;
   reps: string;
   rpe?: number | null;
+  distanceKm?: number | null;
+  durationSec?: number | null;
+  zone?: string | null;
+  setType?: "warmup" | "normal" | "failure" | "drop" | null;
 };
 
 type WorkoutExercise = {
   name: string;
   notes?: string;
   tempo?: string;
+  zone?: string;
+  mode?: "resistance" | "cardio";
   sets: WorkoutSet[];
 };
 

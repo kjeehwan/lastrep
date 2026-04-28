@@ -23,6 +23,32 @@ import {
 
 const FAVORITES_KEY = "workout-favorite-exercises-v1";
 const FAVORITES_KEY_PREFIX = "workout-favorite-exercises-v1";
+const normalizeSearch = (value: string) =>
+  value
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+const isSubsequence = (needle: string, haystack: string) => {
+  if (!needle) return true;
+  let index = 0;
+  for (let i = 0; i < haystack.length && index < needle.length; i += 1) {
+    if (haystack[i] === needle[index]) index += 1;
+  }
+  return index === needle.length;
+};
+const scoreExerciseSearch = (needle: string, searchableText: string, title: string) => {
+  if (!needle) return 1;
+  let score = 0;
+  if (title.startsWith(needle)) score += 120;
+  if (title.includes(needle)) score += 80;
+  if (searchableText.includes(needle)) score += 60;
+  const tokens = needle.split(" ").filter(Boolean);
+  const tokenHits = tokens.filter((token) => searchableText.includes(token)).length;
+  score += tokenHits * 20;
+  if (isSubsequence(needle.replace(/\s+/g, ""), title.replace(/\s+/g, ""))) score += 20;
+  return score;
+};
 
 export default function AddExerciseScreen() {
   const router = useRouter();
@@ -113,23 +139,28 @@ export default function AddExerciseScreen() {
       activeGroup === "all" || activeGroup === "favorites" || activeGroup === "recent"
         ? "all"
         : (activeGroup as ExerciseGroupKey);
-    const needle = searchQuery.trim().toLowerCase();
+    const needle = normalizeSearch(searchQuery);
     const base = group === "all" ? catalog : catalog.filter((item) => item.group === group);
-    const matches = needle
-      ? base.filter((item) => {
-          const haystack = [
+    const matches = base
+      .map((item) => {
+        const haystack = normalizeSearch(
+          [
             item.name,
             ...item.aliases,
             ...item.primaryMuscles,
             ...item.secondaryMuscles,
             ...item.equipment,
             item.movementPattern,
-          ]
-            .join(" ")
-            .toLowerCase();
-          return haystack.includes(needle);
-        })
-      : base;
+          ].join(" ")
+        );
+        return {
+          item,
+          score: scoreExerciseSearch(needle, haystack, normalizeSearch(item.name)),
+        };
+      })
+      .filter((entry) => entry.score > 0)
+      .sort((a, b) => b.score - a.score || a.item.name.localeCompare(b.item.name))
+      .map((entry) => entry.item);
 
     const filteredByTab = matches.filter((item) => {
       const name = item.name.toLowerCase();
@@ -138,7 +169,7 @@ export default function AddExerciseScreen() {
       return true;
     });
 
-    return filteredByTab.sort((a, b) => a.name.localeCompare(b.name));
+    return filteredByTab;
   }, [activeGroup, searchQuery, catalog, favoriteSet, recentSet]);
 
   const toggleFavorite = useCallback(async (name: string) => {

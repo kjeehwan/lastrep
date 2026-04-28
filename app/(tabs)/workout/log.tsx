@@ -61,12 +61,19 @@ import {
   resolveRecommendationTargets,
   type WorkoutLike,
 } from "../../../src/workouts/recommendationHeuristics";
+import { getCalendarMatrix } from "../../../src/workouts/homeInsights";
 
-type Unit = "kg" | "lbs";
+type Unit = "kg" | "lbs" | "km" | "mi";
+type SetType = "warmup" | "normal" | "failure" | "drop";
+type ExerciseMode = "resistance" | "cardio";
 type SetEntry = {
   weightKg: number | null;
   reps: string;
   rpe?: string;
+  distanceKm?: number | null;
+  durationSec?: number | null;
+  zone?: string;
+  setType?: SetType;
   done: boolean;
   baselineWeightKg?: number | null;
   baselineReps?: string;
@@ -77,6 +84,8 @@ type Exercise = {
   name: string;
   notes?: string;
   tempo?: string;
+  cardioSessionType?: "steady" | "intervals" | "sprint" | "recovery";
+  cardioEffortLevel?: "easy" | "moderate" | "hard" | "max";
   sets: SetEntry[];
 };
 type FollowedAnswer = "yes" | "partial" | "no";
@@ -85,11 +94,24 @@ type PastWorkout = {
   id: string;
   title: string;
   date: Date;
+  durationMin?: number | null;
   exercises: {
     name: string;
     notes?: string;
     tempo?: string;
-    sets: { weightKg: number | null; reps: string; rpe?: string }[];
+    zone?: string;
+    mode?: ExerciseMode;
+    cardioSessionType?: "steady" | "intervals" | "sprint" | "recovery";
+    cardioEffortLevel?: "easy" | "moderate" | "hard" | "max";
+    sets: {
+      weightKg: number | null;
+      reps: string;
+      rpe?: string;
+      distanceKm?: number | null;
+      durationSec?: number | null;
+      zone?: string;
+      setType?: SetType;
+    }[];
   }[];
 };
 
@@ -100,7 +122,19 @@ type Routine = {
     name: string;
     notes?: string;
     tempo?: string;
-    sets: { reps: string; targetRpe?: string; defaultWeightKg?: number | null }[];
+    zone?: string;
+    mode?: ExerciseMode;
+    cardioSessionType?: "steady" | "intervals" | "sprint" | "recovery";
+    cardioEffortLevel?: "easy" | "moderate" | "hard" | "max";
+    sets: {
+      reps: string;
+      targetRpe?: string;
+      defaultWeightKg?: number | null;
+      defaultDistanceKm?: number | null;
+      defaultDurationSec?: number | null;
+      defaultZone?: string;
+      setType?: SetType;
+    }[];
   }[];
   createdAt: Date | null;
   updatedAt: Date | null;
@@ -116,6 +150,47 @@ const TEMPO_FORMAT_HINT =
 const TEMPO_TOKENS = ["X", "0", "1", "2", "3"] as const;
 const DEFAULT_TEMPO = "3-0-X-0";
 const DEFAULT_TEMPO_INDICES = [4, 1, 0, 1];
+const WEEKDAY_LABELS = ["S", "M", "T", "W", "T", "F", "S"] as const;
+const MONTH_LABELS = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+] as const;
+const SET_TYPE_LABELS: { value: SetType; title: string; marker: string; description: string }[] = [
+  { value: "warmup", title: "Warm-up", marker: "W", description: "Prep set with lighter load." },
+  { value: "normal", title: "Normal", marker: "N", description: "Standard working set." },
+  { value: "failure", title: "Failure", marker: "F", description: "Set pushed to failure." },
+  { value: "drop", title: "Drop", marker: "D", description: "Immediately reduce load and continue." },
+];
+const CARDIO_SESSION_TYPES = [
+  { value: "steady", label: "Steady" },
+  { value: "intervals", label: "Intervals" },
+  { value: "sprint", label: "Sprint" },
+  { value: "recovery", label: "Recovery" },
+] as const;
+const CARDIO_EFFORT_LEVELS = [
+  { value: "easy", label: "Easy" },
+  { value: "moderate", label: "Moderate" },
+  { value: "hard", label: "Hard" },
+  { value: "max", label: "Max" },
+] as const;
+const isValidSetType = (value: string): value is SetType =>
+  value === "warmup" || value === "normal" || value === "failure" || value === "drop";
+const toSetType = (value: unknown): SetType =>
+  typeof value === "string" && isValidSetType(value) ? value : "normal";
+const toLocalDateKey = (date: Date) =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
+    date.getDate()
+  ).padStart(2, "0")}`;
 
 const isValidTempo = (value: string) => {
   const trimmed = value.trim();
@@ -179,7 +254,32 @@ export default function WorkoutLog() {
   >({});
   const [saving, setSaving] = useState(false);
   const [sessionTitle, setSessionTitle] = useState("");
-  const [elapsedMinutes, setElapsedMinutes] = useState(0);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [workoutTimerRunning, setWorkoutTimerRunning] = useState(false);
+  const [sessionDateText, setSessionDateText] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(
+      now.getDate()
+    ).padStart(2, "0")}`;
+  });
+  const [showDatePickerModal, setShowDatePickerModal] = useState(false);
+  const [datePickerMonth, setDatePickerMonth] = useState(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  });
+  const [showDurationModal, setShowDurationModal] = useState(false);
+  const [durationAdjustHoursText, setDurationAdjustHoursText] = useState("00");
+  const [durationAdjustMinutesText, setDurationAdjustMinutesText] = useState("00");
+  const [showCardioTimeModal, setShowCardioTimeModal] = useState(false);
+  const [cardioTimeTarget, setCardioTimeTarget] = useState<{ exerciseId: string; setIndex: number } | null>(null);
+  const [cardioTimeHoursText, setCardioTimeHoursText] = useState("00");
+  const [cardioTimeMinutesText, setCardioTimeMinutesText] = useState("00");
+  const [showCardioDistanceModal, setShowCardioDistanceModal] = useState(false);
+  const [cardioDistanceTarget, setCardioDistanceTarget] = useState<{ exerciseId: string; setIndex: number } | null>(
+    null
+  );
+  const [cardioDistanceWholeText, setCardioDistanceWholeText] = useState("0");
+  const [cardioDistanceDecimalText, setCardioDistanceDecimalText] = useState("00");
   const [sessionPhase, setSessionPhase] = useState("Hypertrophy");
   const [recentExercises, setRecentExercises] = useState<string[]>([]);
   const [pastWorkouts, setPastWorkouts] = useState<PastWorkout[]>([]);
@@ -222,7 +322,7 @@ export default function WorkoutLog() {
   const auth = getAuth();
   const [activeUid, setActiveUid] = useState<string | null>(auth.currentUser?.uid ?? null);
   const scrollNativeGesture = useMemo(() => Gesture.Native(), []);
-  const startTimeRef = useRef<Date>(new Date());
+  const workoutStartedAtMsRef = useRef<number | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const createRoutineParamHandledRef = useRef(false);
   const lastCompletedSetByExerciseRef = useRef<Record<string, number>>({});
@@ -297,6 +397,77 @@ export default function WorkoutLog() {
   };
 
   const getAdjustmentOptions = () => [-20, -10, 0, 10, 20];
+  const normalizeExerciseName = (value: string) => value.trim().toLowerCase();
+  const getSetTypeMarker = (set: SetEntry, index: number) => {
+    const type = toSetType(set.setType);
+    if (type === "warmup") return "W";
+    if (type === "failure") return "F";
+    if (type === "drop") return "D";
+    return `${index + 1}`;
+  };
+  const parseSessionDate = (raw: string): Date | null => {
+    const trimmed = raw.trim();
+    const match = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!match) return null;
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    const date = new Date(year, month - 1, day, 12, 0, 0, 0);
+    if (
+      date.getFullYear() !== year ||
+      date.getMonth() + 1 !== month ||
+      date.getDate() !== day
+    ) {
+      return null;
+    }
+    return date;
+  };
+  const formatElapsedTimer = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${String(secs).padStart(2, "0")}`;
+  };
+  const parseDistanceKm = (raw: string, unit: Unit): number | null => {
+    const trimmed = raw.trim();
+    if (!trimmed) return null;
+    const parsed = Number(trimmed);
+    if (!Number.isFinite(parsed) || parsed < 0) return null;
+    if (unit === "km") return parsed;
+    if (unit === "mi") return parsed * 1.60934;
+    return parsed;
+  };
+  const formatDistanceInput = (distanceKm: number | null, unit: Unit) => {
+    if (distanceKm == null || Number.isNaN(distanceKm)) return "";
+    const value = unit === "mi" ? distanceKm / 1.60934 : distanceKm;
+    return `${Math.round(value * 100) / 100}`;
+  };
+  const parseDurationSecFromInput = (raw: string): number | null => {
+    const trimmed = raw.trim();
+    if (!trimmed) return null;
+    const hhmmss = trimmed.match(/^(\d{1,2}):(\d{2})$/);
+    if (hhmmss) {
+      const minutes = Number(hhmmss[1]);
+      const seconds = Number(hhmmss[2]);
+      if (!Number.isFinite(minutes) || !Number.isFinite(seconds) || seconds > 59) return null;
+      return minutes * 60 + seconds;
+    }
+    const parsed = Number(trimmed);
+    if (!Number.isFinite(parsed) || parsed < 0) return null;
+    return Math.round(parsed);
+  };
+  const formatDurationHoursMinutes = (durationSec: number | null) => {
+    if (durationSec == null || Number.isNaN(durationSec)) return "";
+    const totalMinutes = Math.floor(durationSec / 60);
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+  };
+  const formatDurationInput = (durationSec: number | null) => {
+    if (durationSec == null || Number.isNaN(durationSec)) return "";
+    const minutes = Math.floor(durationSec / 60);
+    const seconds = durationSec % 60;
+    return `${minutes}:${String(seconds).padStart(2, "0")}`;
+  };
 
   const getSavedRestPreference = useCallback(
     (exerciseName: string) => {
@@ -307,6 +478,16 @@ export default function WorkoutLog() {
   );
 
   const imageLookupKey = (exerciseName: string) => exerciseName.trim().toLowerCase();
+  const getExerciseModeByName = useCallback(
+    (exerciseName: string): ExerciseMode => {
+      const key = exerciseName.trim().toLowerCase();
+      const found = [...EXERCISE_CATALOG, ...freeDbCatalog].find(
+        (item) => item.name.trim().toLowerCase() === key
+      );
+      return found?.group === "cardio" ? "cardio" : "resistance";
+    },
+    [freeDbCatalog]
+  );
 
 
   const addExercise = useCallback(
@@ -314,6 +495,7 @@ export default function WorkoutLog() {
       const trimmed = name.trim();
       if (!trimmed) return;
       const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      const mode = getExerciseModeByName(trimmed);
       const restSeconds = getSavedRestPreference(trimmed);
       setExercises((prev) => {
         const exists = prev.some((e) => e.name.toLowerCase() === trimmed.toLowerCase());
@@ -323,17 +505,29 @@ export default function WorkoutLog() {
           {
             id,
             name: trimmed,
-            sets: [{ weightKg: null, reps: "", rpe: "", done: false }],
+            tempo: mode === "cardio" ? "" : undefined,
+            sets: [
+              {
+                weightKg: null,
+                reps: "",
+                rpe: "",
+                distanceKm: null,
+                durationSec: null,
+                zone: "",
+                setType: "normal",
+                done: false,
+              },
+            ],
           },
         ];
       });
-      // default to kg for new exercise
-      setExerciseUnits((prev) => ({ ...prev, [id]: "kg" }));
+      // default to kg for resistance and km for cardio
+      setExerciseUnits((prev) => ({ ...prev, [id]: mode === "cardio" ? "km" : "kg" }));
       setRestPreferenceByExercise((prev) => ({ ...prev, [id]: restSeconds }));
       setRestCustomInputByExercise((prev) => ({ ...prev, [id]: "" }));
       setRestTimerByExercise((prev) => ({ ...prev, [id]: { remainingSec: restSeconds, running: false } }));
     },
-    [getSavedRestPreference]
+    [getExerciseModeByName, getSavedRestPreference]
   );
 
   const openAddExercise = useCallback(() => {
@@ -405,10 +599,77 @@ export default function WorkoutLog() {
     (name: string) => catalogIndex.byName.get(name.trim().toLowerCase()) ?? null,
     [catalogIndex]
   );
+  const getExerciseMode = useCallback(
+    (exerciseName: string): ExerciseMode =>
+      findCatalogExercise(exerciseName)?.group === "cardio" ? "cardio" : "resistance",
+    [findCatalogExercise]
+  );
+  const getExerciseZone = useCallback((exercise: Exercise) => {
+    const explicit = String(exercise.tempo || "").trim();
+    if (explicit) return explicit;
+    const firstSetZone = exercise.sets.find((set) => String(set.zone || "").trim())?.zone;
+    return String(firstSetZone || "").trim();
+  }, []);
+  const formatLastSetSummary = useCallback(
+    (set: {
+      weightKg: number | null;
+      reps: string;
+      rpe?: string;
+      distanceKm?: number | null;
+      durationSec?: number | null;
+      zone?: string;
+    }) => {
+      const unit: Unit = "kg";
+      const distance = formatDistanceInput(set.distanceKm ?? null, unit);
+      const duration = formatDurationInput(set.durationSec ?? null);
+      const zone = String(set.zone || "").trim();
+      if (distance || duration || zone) {
+        const distText = distance ? `${distance} km` : "-";
+        const timeText = formatDurationHoursMinutes(set.durationSec ?? null) || duration || "-";
+        if (zone) {
+          return `${distText} in ${timeText} · Z${zone}`;
+        }
+        return `${distText} in ${timeText}`;
+      }
+      const weight = formatWeightInput(set.weightKg, unit) || "-";
+      const reps = String(set.reps || "").trim() || "-";
+      const rpe = String(set.rpe || "").trim();
+      if (set.weightKg == null || set.weightKg <= 0) {
+        return `${reps} reps${rpe ? ` @ RPE ${rpe}` : ""}`;
+      }
+      return `${weight} kg x ${reps}${rpe ? ` @ RPE ${rpe}` : ""}`;
+    },
+    []
+  );
 
   const searchMergedCatalog = useCallback(
     (params: { query: string; group: ExerciseGroupKey | "all" }) => {
-      const needle = params.query.trim().toLowerCase();
+      const normalize = (value: string) =>
+        value
+          .toLowerCase()
+          .replace(/[^a-z0-9\s]/g, " ")
+          .replace(/\s+/g, " ")
+          .trim();
+      const isSubsequenceLocal = (needleValue: string, haystack: string) => {
+        if (!needleValue) return true;
+        let index = 0;
+        for (let i = 0; i < haystack.length && index < needleValue.length; i += 1) {
+          if (haystack[i] === needleValue[index]) index += 1;
+        }
+        return index === needleValue.length;
+      };
+      const scoreSearch = (needleValue: string, title: string, haystack: string) => {
+        if (!needleValue) return 1;
+        let score = 0;
+        if (title.startsWith(needleValue)) score += 120;
+        if (title.includes(needleValue)) score += 80;
+        if (haystack.includes(needleValue)) score += 60;
+        const tokens = needleValue.split(" ").filter(Boolean);
+        score += tokens.filter((token) => haystack.includes(token)).length * 20;
+        if (isSubsequenceLocal(needleValue.replace(/\s+/g, ""), title.replace(/\s+/g, ""))) score += 20;
+        return score;
+      };
+      const needle = normalize(params.query);
       let pool = catalogIndex.groups[params.group];
       if (!needle) {
         return pool.map((entry) => entry.item);
@@ -419,7 +680,14 @@ export default function WorkoutLog() {
         seen.add(entry.nameLower);
         return true;
       });
-      return deduped.filter((entry) => entry.searchText.includes(needle)).map((entry) => entry.item);
+      return deduped
+        .map((entry) => ({
+          item: entry.item,
+          score: scoreSearch(needle, normalize(entry.item.name), normalize(entry.searchText)),
+        }))
+        .filter((entry) => entry.score > 0)
+        .sort((a, b) => b.score - a.score || a.item.name.localeCompare(b.item.name))
+        .map((entry) => entry.item);
     },
     [catalogIndex]
   );
@@ -485,10 +753,30 @@ export default function WorkoutLog() {
             id: docSnap.id,
             title: data?.title || "Workout",
             date: rawDate,
+            durationMin:
+              typeof data?.durationMin === "number" && Number.isFinite(data.durationMin)
+                ? data.durationMin
+                : null,
             exercises: (data?.exercises || []).map((ex: any) => ({
               name: ex?.name || "Exercise",
               notes: typeof ex?.notes === "string" ? ex.notes : "",
               tempo: typeof ex?.tempo === "string" ? ex.tempo : "",
+              zone: typeof ex?.zone === "string" ? ex.zone : "",
+              mode: ex?.mode === "cardio" ? "cardio" : "resistance",
+              cardioSessionType:
+                ex?.cardioSessionType === "steady" ||
+                ex?.cardioSessionType === "intervals" ||
+                ex?.cardioSessionType === "sprint" ||
+                ex?.cardioSessionType === "recovery"
+                  ? ex.cardioSessionType
+                  : undefined,
+              cardioEffortLevel:
+                ex?.cardioEffortLevel === "easy" ||
+                ex?.cardioEffortLevel === "moderate" ||
+                ex?.cardioEffortLevel === "hard" ||
+                ex?.cardioEffortLevel === "max"
+                  ? ex.cardioEffortLevel
+                  : undefined,
               sets: (ex?.sets || []).map((set: any) => ({
                 weightKg: typeof set?.weightKg === "number" ? set.weightKg : null,
                 reps: String(set?.reps ?? ""),
@@ -496,6 +784,10 @@ export default function WorkoutLog() {
                   typeof set?.rpe === "number" || typeof set?.rpe === "string"
                     ? String(set.rpe)
                     : "",
+                distanceKm: typeof set?.distanceKm === "number" ? set.distanceKm : null,
+                durationSec: typeof set?.durationSec === "number" ? set.durationSec : null,
+                zone: typeof set?.zone === "string" ? set.zone : "",
+                setType: toSetType(set?.setType),
               })),
             })),
           });
@@ -529,6 +821,22 @@ export default function WorkoutLog() {
             name: typeof exercise?.name === "string" ? exercise.name : "Exercise",
             notes: typeof exercise?.notes === "string" ? exercise.notes : "",
             tempo: typeof exercise?.tempo === "string" ? exercise.tempo : "",
+            zone: typeof exercise?.zone === "string" ? exercise.zone : "",
+            mode: exercise?.mode === "cardio" ? "cardio" : "resistance",
+            cardioSessionType:
+              exercise?.cardioSessionType === "steady" ||
+              exercise?.cardioSessionType === "intervals" ||
+              exercise?.cardioSessionType === "sprint" ||
+              exercise?.cardioSessionType === "recovery"
+                ? exercise.cardioSessionType
+                : undefined,
+            cardioEffortLevel:
+              exercise?.cardioEffortLevel === "easy" ||
+              exercise?.cardioEffortLevel === "moderate" ||
+              exercise?.cardioEffortLevel === "hard" ||
+              exercise?.cardioEffortLevel === "max"
+                ? exercise.cardioEffortLevel
+                : undefined,
             sets: (exercise?.sets || []).map((set: any) => ({
               reps: String(set?.reps ?? ""),
               targetRpe:
@@ -536,6 +844,10 @@ export default function WorkoutLog() {
                   ? String(set.targetRpe)
                   : "",
               defaultWeightKg: typeof set?.defaultWeightKg === "number" ? set.defaultWeightKg : null,
+              defaultDistanceKm: typeof set?.defaultDistanceKm === "number" ? set.defaultDistanceKm : null,
+              defaultDurationSec: typeof set?.defaultDurationSec === "number" ? set.defaultDurationSec : null,
+              defaultZone: typeof set?.defaultZone === "string" ? set.defaultZone : "",
+              setType: toSetType(set?.setType),
             })),
           })),
           createdAt: data?.createdAt?.toDate?.() ?? null,
@@ -586,16 +898,58 @@ export default function WorkoutLog() {
           setRestCustomInputByExercise({});
           setRestTimerByExercise({});
           setSessionTitle("");
-          startTimeRef.current = new Date();
+          setSessionDateText(toLocalDateKey(new Date()));
+          setElapsedSeconds(0);
+          setWorkoutTimerRunning(false);
+          workoutStartedAtMsRef.current = null;
           return;
         }
         if (raw) {
           const parsed = JSON.parse(raw);
           if (parsed.exercises) {
-            setExercises(parsed.exercises);
+            const hydratedExercises: Exercise[] = (parsed.exercises as any[]).map((exercise: any) => ({
+              id: typeof exercise?.id === "string" ? exercise.id : `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+              name: typeof exercise?.name === "string" ? exercise.name : "Exercise",
+              notes: typeof exercise?.notes === "string" ? exercise.notes : "",
+              tempo: typeof exercise?.tempo === "string" ? exercise.tempo : "",
+              cardioSessionType:
+                exercise?.cardioSessionType === "steady" ||
+                exercise?.cardioSessionType === "intervals" ||
+                exercise?.cardioSessionType === "sprint" ||
+                exercise?.cardioSessionType === "recovery"
+                  ? exercise.cardioSessionType
+                  : undefined,
+              cardioEffortLevel:
+                exercise?.cardioEffortLevel === "easy" ||
+                exercise?.cardioEffortLevel === "moderate" ||
+                exercise?.cardioEffortLevel === "hard" ||
+                exercise?.cardioEffortLevel === "max"
+                  ? exercise.cardioEffortLevel
+                  : undefined,
+              sets: Array.isArray(exercise?.sets)
+                ? exercise.sets.map((set: any) => ({
+                    weightKg: typeof set?.weightKg === "number" ? set.weightKg : null,
+                    reps: String(set?.reps ?? ""),
+                    rpe:
+                      typeof set?.rpe === "number" || typeof set?.rpe === "string"
+                        ? String(set.rpe)
+                        : "",
+                    distanceKm: typeof set?.distanceKm === "number" ? set.distanceKm : null,
+                    durationSec: typeof set?.durationSec === "number" ? set.durationSec : null,
+                    zone: typeof set?.zone === "string" ? set.zone : "",
+                    setType: toSetType(set?.setType),
+                    done: Boolean(set?.done),
+                    baselineWeightKg: typeof set?.baselineWeightKg === "number" ? set.baselineWeightKg : null,
+                    baselineReps:
+                      typeof set?.baselineReps === "string" ? set.baselineReps : String(set?.reps ?? ""),
+                    baselineAdjusted: Boolean(set?.baselineAdjusted),
+                  }))
+                : [],
+            }));
+            setExercises(hydratedExercises);
             const initialRestPrefs: Record<string, number> = {};
             const initialRestTimers: Record<string, { remainingSec: number; running: boolean }> = {};
-            parsed.exercises.forEach((exercise: Exercise) => {
+            hydratedExercises.forEach((exercise: Exercise) => {
               initialRestPrefs[exercise.id] = 90;
               initialRestTimers[exercise.id] = { remainingSec: 90, running: false };
             });
@@ -605,15 +959,16 @@ export default function WorkoutLog() {
           }
           if (parsed.exerciseUnits) setExerciseUnits(parsed.exerciseUnits);
           if (parsed.sessionTitle) setSessionTitle(parsed.sessionTitle);
-          if (parsed.startTime) {
-            const savedStart = new Date(parsed.startTime);
-            const now = new Date();
-            const sameDay =
-              savedStart.getFullYear() === now.getFullYear() &&
-              savedStart.getMonth() === now.getMonth() &&
-              savedStart.getDate() === now.getDate();
-            startTimeRef.current = sameDay ? savedStart : now;
+          if (typeof parsed.sessionDateText === "string" && parseSessionDate(parsed.sessionDateText)) {
+            setSessionDateText(parsed.sessionDateText);
           }
+          setElapsedSeconds(
+            typeof parsed.elapsedSeconds === "number" && Number.isFinite(parsed.elapsedSeconds)
+              ? Math.max(0, Math.round(parsed.elapsedSeconds))
+              : 0
+          );
+          setWorkoutTimerRunning(false);
+          workoutStartedAtMsRef.current = null;
         }
       } catch (e) {
         console.log("Failed to load draft, clearing cache", e);
@@ -713,27 +1068,30 @@ export default function WorkoutLog() {
           exercises,
           exerciseUnits,
           sessionTitle,
-          startTime: startTimeRef.current.toISOString(),
+          sessionDateText,
+          elapsedSeconds,
+          workoutTimerRunning,
         })
       ).catch((e) => console.log("Failed to save draft", e));
     }, 400);
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
     };
-  }, [exercises, exerciseUnits, sessionTitle, auth, getDraftKey]);
+  }, [exercises, exerciseUnits, sessionTitle, sessionDateText, elapsedSeconds, workoutTimerRunning, auth, getDraftKey]);
 
   // Elapsed timer
   useEffect(() => {
-    const updateElapsed = () => {
-      const diff = Date.now() - startTimeRef.current.getTime();
-      setElapsedMinutes(Math.max(0, Math.floor(diff / 60000)));
-    };
-    updateElapsed();
+    if (!workoutTimerRunning) return;
+    if (workoutStartedAtMsRef.current == null) {
+      workoutStartedAtMsRef.current = Date.now() - elapsedSeconds * 1000;
+    }
     const id = setInterval(() => {
-      updateElapsed();
-    }, 30000);
+      const startMs = workoutStartedAtMsRef.current ?? Date.now();
+      const diff = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
+      setElapsedSeconds(diff);
+    }, 1000);
     return () => clearInterval(id);
-  }, []);
+  }, [workoutTimerRunning, elapsedSeconds]);
 
   useEffect(() => {
     if (!uiFeedback) return;
@@ -937,7 +1295,19 @@ export default function WorkoutLog() {
         ex.id === exerciseId
           ? {
               ...ex,
-              sets: [...ex.sets, { weightKg: null, reps: "", rpe: "", done: false }],
+              sets: [
+                ...ex.sets,
+                {
+                  weightKg: null,
+                  reps: "",
+                  rpe: "",
+                  distanceKm: null,
+                  durationSec: null,
+                  zone: "",
+                  setType: "normal",
+                  done: false,
+                },
+              ],
             }
           : ex
       )
@@ -980,20 +1350,25 @@ export default function WorkoutLog() {
 
 
   const updateSetWeight = (exerciseId: string, setIndex: number, unit: Unit, value: string) => {
-    const weightNum = parseFloat(value);
-    const weightKg =
-      value.trim() === "" || Number.isNaN(weightNum)
-        ? null
-        : unit === "kg"
-          ? weightNum
-          : convertWeight(weightNum, "lbs", "kg");
     setExercises((prev) =>
       prev.map((ex) =>
         ex.id === exerciseId
           ? {
             ...ex,
             sets: ex.sets.map((s, idx) =>
-              idx === setIndex ? { ...s, weightKg } : s
+              idx === setIndex
+                ? getExerciseMode(ex.name) === "cardio"
+                  ? { ...s, distanceKm: parseDistanceKm(value, unit) }
+                  : {
+                      ...s,
+                      weightKg:
+                        value.trim() === "" || Number.isNaN(parseFloat(value))
+                          ? null
+                          : unit === "kg"
+                            ? parseFloat(value)
+                            : convertWeight(parseFloat(value), "lbs", "kg"),
+                    }
+                : s
             ),
           }
           : ex
@@ -1008,7 +1383,11 @@ export default function WorkoutLog() {
           ? {
             ...ex,
             sets: ex.sets.map((s, idx) =>
-              idx === setIndex ? { ...s, reps: value } : s
+              idx === setIndex
+                ? getExerciseMode(ex.name) === "cardio"
+                  ? { ...s, durationSec: parseDurationSecFromInput(value) }
+                  : { ...s, reps: value }
+                : s
             ),
           }
           : ex
@@ -1022,7 +1401,25 @@ export default function WorkoutLog() {
         ex.id === exerciseId
           ? {
               ...ex,
-              sets: ex.sets.map((s, idx) => (idx === setIndex ? { ...s, rpe: value } : s)),
+              sets: ex.sets.map((s, idx) =>
+                idx === setIndex
+                  ? getExerciseMode(ex.name) === "cardio"
+                    ? { ...s, zone: value }
+                    : { ...s, rpe: value }
+                  : s
+              ),
+            }
+          : ex
+      )
+    );
+  };
+  const updateSetType = (exerciseId: string, setIndex: number, setType: SetType) => {
+    setExercises((prev) =>
+      prev.map((ex) =>
+        ex.id === exerciseId
+          ? {
+              ...ex,
+              sets: ex.sets.map((s, idx) => (idx === setIndex ? { ...s, setType } : s)),
             }
           : ex
       )
@@ -1039,6 +1436,92 @@ export default function WorkoutLog() {
     setExercises((prev) =>
       prev.map((ex) => (ex.id === exerciseId ? { ...ex, tempo } : ex))
     );
+  };
+  const updateCardioSessionType = (
+    exerciseId: string,
+    value: "steady" | "intervals" | "sprint" | "recovery"
+  ) => {
+    setExercises((prev) => prev.map((ex) => (ex.id === exerciseId ? { ...ex, cardioSessionType: value } : ex)));
+  };
+  const updateCardioEffortLevel = (
+    exerciseId: string,
+    value: "easy" | "moderate" | "hard" | "max"
+  ) => {
+    setExercises((prev) => prev.map((ex) => (ex.id === exerciseId ? { ...ex, cardioEffortLevel: value } : ex)));
+  };
+  const openCardioTimeModal = (exerciseId: string, setIndex: number, currentSec: number | null | undefined) => {
+    const sec = Math.max(0, currentSec ?? 0);
+    const hours = Math.floor(sec / 3600);
+    const minutes = Math.floor((sec % 3600) / 60);
+    setCardioTimeHoursText(String(hours).padStart(2, "0"));
+    setCardioTimeMinutesText(String(minutes).padStart(2, "0"));
+    setCardioTimeTarget({ exerciseId, setIndex });
+    setShowCardioTimeModal(true);
+  };
+  const resetCardioTimeModal = () => {
+    setCardioTimeHoursText("00");
+    setCardioTimeMinutesText("00");
+  };
+  const applyCardioTimeModal = () => {
+    if (!cardioTimeTarget) return;
+    const h = Number(cardioTimeHoursText.trim());
+    const m = Number(cardioTimeMinutesText.trim());
+    if (!Number.isFinite(h) || !Number.isFinite(m) || h < 0 || m < 0 || m > 59) {
+      showAppAlert("Invalid time", "Use non-negative hours and minutes (minutes 0-59).");
+      return;
+    }
+    const nextSec = Math.round(h) * 3600 + Math.round(m) * 60;
+    setExercises((prev) =>
+      prev.map((ex) =>
+        ex.id === cardioTimeTarget.exerciseId
+          ? {
+              ...ex,
+              sets: ex.sets.map((s, idx) => (idx === cardioTimeTarget.setIndex ? { ...s, durationSec: nextSec } : s)),
+            }
+          : ex
+      )
+    );
+    setShowCardioTimeModal(false);
+    setCardioTimeTarget(null);
+  };
+  const openCardioDistanceModal = (exerciseId: string, setIndex: number, currentKm: number | null, unit: Unit) => {
+    const display = currentKm == null ? 0 : unit === "mi" ? currentKm / 1.60934 : currentKm;
+    const normalized = Math.max(0, Math.round(display * 100) / 100);
+    const whole = Math.floor(normalized);
+    const decimal = Math.round((normalized - whole) * 100);
+    setCardioDistanceWholeText(String(whole));
+    setCardioDistanceDecimalText(String(decimal).padStart(2, "0"));
+    setCardioDistanceTarget({ exerciseId, setIndex });
+    setShowCardioDistanceModal(true);
+  };
+  const resetCardioDistanceModal = () => {
+    setCardioDistanceWholeText("0");
+    setCardioDistanceDecimalText("00");
+  };
+  const applyCardioDistanceModal = (unit: Unit) => {
+    if (!cardioDistanceTarget) return;
+    const whole = Number(cardioDistanceWholeText.trim());
+    const decimalRaw = cardioDistanceDecimalText.trim();
+    const decimal = Number(decimalRaw);
+    if (!Number.isFinite(whole) || !Number.isFinite(decimal) || whole < 0 || decimal < 0 || decimal > 99) {
+      showAppAlert("Invalid distance", "Use valid whole and decimal values (decimal 00-99).");
+      return;
+    }
+    const decimalPart = decimalRaw.length <= 1 ? decimal / 10 : decimal / 100;
+    const combined = whole + decimalPart;
+    const km = unit === "mi" ? combined * 1.60934 : combined;
+    setExercises((prev) =>
+      prev.map((ex) =>
+        ex.id === cardioDistanceTarget.exerciseId
+          ? {
+              ...ex,
+              sets: ex.sets.map((s, idx) => (idx === cardioDistanceTarget.setIndex ? { ...s, distanceKm: km } : s)),
+            }
+          : ex
+      )
+    );
+    setShowCardioDistanceModal(false);
+    setCardioDistanceTarget(null);
   };
 
   const toggleFavoriteExercise = useCallback((exerciseName: string) => {
@@ -1208,6 +1691,54 @@ export default function WorkoutLog() {
     updateExerciseTempo(activeTempoExerciseId, formatTempoFromIndices(tempoDraftIndices));
     closeTempoEditor();
   };
+  const elapsedMinutes = Math.floor(elapsedSeconds / 60);
+  const openDatePicker = () => {
+    const parsed = parseSessionDate(sessionDateText) ?? new Date();
+    setDatePickerMonth(new Date(parsed.getFullYear(), parsed.getMonth(), 1));
+    setShowDatePickerModal(true);
+  };
+  const openDurationAdjustModal = () => {
+    if (workoutTimerRunning) {
+      setWorkoutTimerRunning(false);
+      workoutStartedAtMsRef.current = null;
+    }
+    const hours = Math.floor(elapsedSeconds / 3600);
+    const minutes = Math.floor((elapsedSeconds % 3600) / 60);
+    setDurationAdjustHoursText(String(hours).padStart(2, "0"));
+    setDurationAdjustMinutesText(String(minutes).padStart(2, "0"));
+    setShowDurationModal(true);
+  };
+  const startWorkoutTimer = () => {
+    if (workoutTimerRunning) return;
+    workoutStartedAtMsRef.current = Date.now() - elapsedSeconds * 1000;
+    setWorkoutTimerRunning(true);
+  };
+  const applyDurationAdjustment = () => {
+    const parsedHours = Number(durationAdjustHoursText.trim());
+    const parsedMinutes = Number(durationAdjustMinutesText.trim());
+    if (
+      !Number.isFinite(parsedHours) ||
+      !Number.isFinite(parsedMinutes) ||
+      parsedHours < 0 ||
+      parsedMinutes < 0 ||
+      parsedMinutes > 59
+    ) {
+      showAppAlert("Invalid duration", "Use non-negative hours and minutes (minutes 0-59).");
+      return;
+    }
+    const nextSeconds = Math.max(0, Math.round(parsedHours) * 3600 + Math.round(parsedMinutes) * 60);
+    setElapsedSeconds(nextSeconds);
+    setWorkoutTimerRunning(false);
+    workoutStartedAtMsRef.current = null;
+    setShowDurationModal(false);
+  };
+  const resetDurationTimer = () => {
+    setElapsedSeconds(0);
+    setWorkoutTimerRunning(false);
+    workoutStartedAtMsRef.current = null;
+    setDurationAdjustHoursText("00");
+    setDurationAdjustMinutesText("00");
+  };
 
   const applySetAdjustment = (exerciseId: string, setIndex: number, unit: Unit, percent: number) => {
     setExercises((prev) =>
@@ -1217,6 +1748,7 @@ export default function WorkoutLog() {
               ...ex,
               sets: ex.sets.map((s, idx) => {
                 if (idx !== setIndex) return s;
+                if (getExerciseMode(ex.name) === "cardio") return s;
                 if (s.weightKg === null || s.weightKg <= 0) return s;
                 const baseline = s.baselineWeightKg ?? s.weightKg;
                 const adjustedFlag = percent === 0 ? s.baselineAdjusted ?? false : true;
@@ -1320,11 +1852,17 @@ export default function WorkoutLog() {
         id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
         name: ex.name,
         notes: ex.notes ?? "",
-        tempo: ex.tempo ?? "",
+        tempo: (ex.mode === "cardio" ? ex.zone : ex.tempo) ?? "",
+        cardioSessionType: ex.cardioSessionType,
+        cardioEffortLevel: ex.cardioEffortLevel,
         sets: ex.sets.map((s) => ({
           weightKg: s.weightKg ?? null,
           reps: s.reps,
           rpe: s.rpe ?? "",
+          distanceKm: s.distanceKm ?? null,
+          durationSec: s.durationSec ?? null,
+          zone: s.zone ?? "",
+          setType: toSetType(s.setType),
           done: false,
           baselineWeightKg: s.weightKg ?? null,
           baselineReps: s.reps,
@@ -1332,11 +1870,19 @@ export default function WorkoutLog() {
       }));
     setExercises(nextExercises);
     setSessionTitle(workout.title || "Workout");
+    setSessionDateText(toLocalDateKey(workout.date));
+    setElapsedSeconds(
+      typeof workout.durationMin === "number" && Number.isFinite(workout.durationMin)
+        ? Math.max(0, Math.round(workout.durationMin * 60))
+        : 0
+    );
+    setWorkoutTimerRunning(false);
+    workoutStartedAtMsRef.current = null;
     setBaselineDate(workout.date);
     setExerciseUnits(() => {
       const next: Record<string, Unit> = {};
       nextExercises.forEach((ex) => {
-        next[ex.id] = "kg";
+        next[ex.id] = getExerciseMode(ex.name) === "cardio" ? "km" : "kg";
       });
       return next;
     });
@@ -1356,7 +1902,6 @@ export default function WorkoutLog() {
       });
       return next;
     });
-    startTimeRef.current = new Date();
     setShowRepeatPicker(false);
   };
 
@@ -1380,6 +1925,10 @@ export default function WorkoutLog() {
     setRestCustomInputByExercise({});
     setRestTimerByExercise({});
     setSessionTitle("");
+    setSessionDateText(toLocalDateKey(new Date()));
+    setElapsedSeconds(0);
+    setWorkoutTimerRunning(false);
+    workoutStartedAtMsRef.current = null;
     setBaselineDate(null);
     setFollowedAnswer(null);
     setHelpfulAnswer(null);
@@ -1388,7 +1937,6 @@ export default function WorkoutLog() {
     setShowDiscardConfirmModal(false);
     setRecommendationSummary([]);
     setLastAppliedRoutineId(null);
-    startTimeRef.current = new Date();
     const user = auth.currentUser;
     if (user) {
       AsyncStorage.removeItem(getDraftKey(user.uid)).catch(() => {});
@@ -1408,28 +1956,47 @@ export default function WorkoutLog() {
     }
     try {
       setSaving(true);
+      const parsedSessionDate = parseSessionDate(sessionDateText);
+      if (!parsedSessionDate) {
+        showAppAlert("Invalid date", "Use YYYY-MM-DD format.");
+        setSaving(false);
+        return;
+      }
       const sanitizedExercises = exercises
         .map((ex) => {
+        const mode = getExerciseMode(ex.name);
         const cleanedSets = ex.sets.filter((s) => {
-          const repsVal = String(s.reps || "").trim();
-          if (!repsVal) return false;
-          return true;
+          if (mode === "cardio") {
+            const hasDistance = typeof s.distanceKm === "number" && s.distanceKm >= 0;
+            const hasDuration = typeof s.durationSec === "number" && s.durationSec >= 0;
+            const hasZone = String(s.zone || "").trim().length > 0;
+            return hasDistance || hasDuration || hasZone;
+          }
+          return Boolean(String(s.reps || "").trim());
         });
           return cleanedSets.length
             ? {
                 ...ex,
+                mode,
                 notes: String(ex.notes || "").trim(),
-                tempo: String(ex.tempo || "").trim(),
+                tempo: mode === "cardio" ? "" : String(ex.tempo || "").trim(),
+                zone: mode === "cardio" ? String(getExerciseZone(ex) || "").trim() : "",
+                cardioSessionType: ex.cardioSessionType,
+                cardioEffortLevel: ex.cardioEffortLevel,
                 sets: cleanedSets.map((set) => ({
                   ...set,
-                  rpe: String(set.rpe || "").trim(),
+                  rpe: mode === "cardio" ? "" : String(set.rpe || "").trim(),
+                  zone: String(set.zone || "").trim(),
+                  setType: toSetType(set.setType),
                 })),
               }
             : null;
         })
-        .filter(Boolean) as Exercise[];
+        .filter(Boolean) as (Exercise & { mode: ExerciseMode; zone?: string })[];
 
-      const invalidTempoExercise = sanitizedExercises.find((exercise) => !isValidTempo(exercise.tempo || ""));
+      const invalidTempoExercise = sanitizedExercises.find(
+        (exercise) => exercise.mode !== "cardio" && !isValidTempo(exercise.tempo || "")
+      );
       if (invalidTempoExercise) {
         showAppAlert("Invalid tempo", `${invalidTempoExercise.name}: ${TEMPO_FORMAT_HINT}`);
         setSaving(false);
@@ -1437,6 +2004,7 @@ export default function WorkoutLog() {
       }
 
       const invalidRpe = sanitizedExercises.find((exercise) =>
+        exercise.mode !== "cardio" &&
         exercise.sets.some((set) => {
           const raw = String(set.rpe || "").trim();
           if (!raw) return false;
@@ -1459,17 +2027,26 @@ export default function WorkoutLog() {
 
       const payload = {
         title: sessionTitle || "Workout",
-        date: Timestamp.fromDate(new Date()),
+        date: Timestamp.fromDate(parsedSessionDate),
+        durationMin: elapsedMinutes,
         trainingPhase: sessionPhase,
         exercises: sanitizedExercises.map((ex) => ({
           name: ex.name,
+          mode: ex.mode,
           notes: String(ex.notes || "").trim(),
-          tempo: String(ex.tempo || "").trim(),
+          tempo: ex.mode === "cardio" ? "" : String(ex.tempo || "").trim(),
+          zone: ex.mode === "cardio" ? String(ex.zone || "").trim() : "",
+          cardioSessionType: ex.mode === "cardio" ? ex.cardioSessionType ?? null : null,
+          cardioEffortLevel: ex.mode === "cardio" ? ex.cardioEffortLevel ?? null : null,
           sets: ex.sets.map((s) => ({
-            weightKg: s.weightKg,
-            reps: s.reps,
+            weightKg: ex.mode === "cardio" ? null : s.weightKg,
+            reps: ex.mode === "cardio" ? "" : s.reps,
+            distanceKm: ex.mode === "cardio" ? s.distanceKm ?? null : null,
+            durationSec: ex.mode === "cardio" ? s.durationSec ?? null : null,
+            zone: ex.mode === "cardio" ? String(s.zone || "").trim() : null,
+            setType: toSetType(s.setType),
             rpe:
-              String(s.rpe || "").trim() === ""
+              ex.mode === "cardio" || String(s.rpe || "").trim() === ""
                 ? null
                 : Number.isFinite(Number(s.rpe))
                 ? Number(String(s.rpe).trim())
@@ -1489,8 +2066,11 @@ export default function WorkoutLog() {
         setRestPreferenceByExercise({});
         setRestCustomInputByExercise({});
         setRestTimerByExercise({});
-      startTimeRef.current = new Date();
       setSessionTitle("");
+      setSessionDateText(toLocalDateKey(new Date()));
+      setElapsedSeconds(0);
+      setWorkoutTimerRunning(false);
+      workoutStartedAtMsRef.current = null;
       setRecommendationSummary([]);
       setLastAppliedRoutineId(null);
       setBaselineDate(null);
@@ -1526,7 +2106,7 @@ export default function WorkoutLog() {
         const last = ex.sets[ex.sets.length - 1];
         return {
           ...ex,
-          sets: [...ex.sets, { ...last, done: false }],
+          sets: [...ex.sets, { ...last, done: false, setType: "normal" }],
         };
       })
     );
@@ -1536,11 +2116,22 @@ export default function WorkoutLog() {
     exercises.map((exercise) => ({
       name: exercise.name,
       notes: String(exercise.notes || "").trim(),
-      tempo: String(exercise.tempo || "").trim(),
+      tempo: getExerciseMode(exercise.name) === "cardio" ? "" : String(exercise.tempo || "").trim(),
+      zone: getExerciseMode(exercise.name) === "cardio" ? String(getExerciseZone(exercise) || "").trim() : "",
+      mode: getExerciseMode(exercise.name),
+      cardioSessionType:
+        getExerciseMode(exercise.name) === "cardio" ? exercise.cardioSessionType ?? null : null,
+      cardioEffortLevel:
+        getExerciseMode(exercise.name) === "cardio" ? exercise.cardioEffortLevel ?? null : null,
       sets: exercise.sets.map((set) => ({
         reps: String(set.reps || "").trim(),
-        targetRpe: String(set.rpe || "").trim(),
+        targetRpe:
+          getExerciseMode(exercise.name) === "cardio" ? String(set.zone || "").trim() : String(set.rpe || "").trim(),
         defaultWeightKg: typeof set.weightKg === "number" ? set.weightKg : null,
+        defaultDistanceKm: typeof set.distanceKm === "number" ? set.distanceKm : null,
+        defaultDurationSec: typeof set.durationSec === "number" ? set.durationSec : null,
+        defaultZone: String(set.zone || "").trim(),
+        setType: toSetType(set.setType),
       })),
     }));
 
@@ -1551,6 +2142,10 @@ export default function WorkoutLog() {
     setRestCustomInputByExercise({});
     setRestTimerByExercise({});
     setSessionTitle("");
+    setSessionDateText(toLocalDateKey(new Date()));
+    setElapsedSeconds(0);
+    setWorkoutTimerRunning(false);
+    workoutStartedAtMsRef.current = null;
     setRoutineBuilderMode(true);
     setShowRoutineStartModal(false);
   };
@@ -1642,11 +2237,17 @@ export default function WorkoutLog() {
       id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
       name: exercise.name,
       notes: exercise.notes ?? "",
-      tempo: exercise.tempo ?? "",
+      tempo: (exercise.mode === "cardio" ? exercise.zone : exercise.tempo) ?? "",
+      cardioSessionType: exercise.cardioSessionType,
+      cardioEffortLevel: exercise.cardioEffortLevel,
       sets: exercise.sets.map((set) => ({
         weightKg: typeof set.defaultWeightKg === "number" ? set.defaultWeightKg : null,
         reps: set.reps,
-        rpe: set.targetRpe ?? "",
+        rpe: exercise.mode === "cardio" ? "" : set.targetRpe ?? "",
+        distanceKm: typeof set.defaultDistanceKm === "number" ? set.defaultDistanceKm : null,
+        durationSec: typeof set.defaultDurationSec === "number" ? set.defaultDurationSec : null,
+        zone: set.defaultZone ?? "",
+        setType: toSetType(set.setType),
         done: false,
         baselineWeightKg: typeof set.defaultWeightKg === "number" ? set.defaultWeightKg : null,
         baselineReps: set.reps,
@@ -1656,7 +2257,7 @@ export default function WorkoutLog() {
     setExerciseUnits((prev) => {
       const next = { ...prev };
       mapped.forEach((exercise) => {
-        next[exercise.id] = "kg";
+        next[exercise.id] = getExerciseMode(exercise.name) === "cardio" ? "km" : "kg";
       });
       return next;
     });
@@ -1684,7 +2285,10 @@ export default function WorkoutLog() {
     });
     setSessionTitle(routine.name);
     if (mode === "replace") {
-      startTimeRef.current = new Date();
+      setSessionDateText(toLocalDateKey(new Date()));
+      setElapsedSeconds(0);
+      setWorkoutTimerRunning(false);
+      workoutStartedAtMsRef.current = null;
       setLastAppliedRoutineId(routine.id);
       setUiFeedback(`Applied "${routine.name}".`);
     } else {
@@ -1813,6 +2417,10 @@ export default function WorkoutLog() {
             weightKg: adjustedWeight,
             reps: targetReps,
             rpe: "",
+            distanceKm: null,
+            durationSec: null,
+            zone: "",
+            setType: "normal" as SetType,
             done: false,
             baselineWeightKg: adjustedWeight,
             baselineReps: targetReps,
@@ -1850,6 +2458,10 @@ export default function WorkoutLog() {
         return next;
       });
       setSessionTitle(`${pickedTemplate.name} (Recommended)`);
+      setSessionDateText(toLocalDateKey(new Date()));
+      setElapsedSeconds(0);
+      setWorkoutTimerRunning(false);
+      workoutStartedAtMsRef.current = null;
       setRecommendationSummary([
         phaseGoalAligned
           ? `Built for your ${trainingPhase} phase in a ${dietPhase} diet context.`
@@ -1861,7 +2473,6 @@ export default function WorkoutLog() {
           ? "Recent RPE trend was high, so today's set count/intensity was reduced."
           : "Intensity was tuned from your latest decision and training context.",
       ]);
-      startTimeRef.current = new Date();
       setUiFeedback("Recommended workout applied.");
       setLastAppliedRoutineId(null);
     } catch (error) {
@@ -1903,7 +2514,30 @@ export default function WorkoutLog() {
     const needle = activeActionExercise.name.trim().toLowerCase();
     return favoriteExercises.some((entry) => entry.toLowerCase() === needle);
   }, [activeActionExercise, favoriteExercises]);
-  const activeActionUnit = activeExerciseActionId ? exerciseUnits[activeExerciseActionId] || "kg" : "kg";
+  const activeActionUnit = activeExerciseActionId
+    ? exerciseUnits[activeExerciseActionId] || (activeActionMode === "cardio" ? "km" : "kg")
+    : "kg";
+  const activeActionMode =
+    activeActionExercise && getExerciseMode(activeActionExercise.name) === "cardio" ? "cardio" : "resistance";
+  const previousExerciseSetsByName = useMemo(() => {
+    const map = new Map<string, PastWorkout["exercises"][number]["sets"]>();
+    for (const workout of pastWorkouts) {
+      for (const exercise of workout.exercises) {
+        const key = normalizeExerciseName(exercise.name);
+        if (!key || map.has(key)) continue;
+        map.set(key, exercise.sets ?? []);
+      }
+    }
+    return map;
+  }, [pastWorkouts]);
+  const activeSetExercise = useMemo(() => {
+    if (!activeSetMenu) return null;
+    return exercises.find((exercise) => exercise.id === activeSetMenu.exerciseId) ?? null;
+  }, [activeSetMenu, exercises]);
+  const activeSet = useMemo(() => {
+    if (!activeSetMenu || !activeSetExercise) return null;
+    return activeSetExercise.sets[activeSetMenu.setIndex] ?? null;
+  }, [activeSetExercise, activeSetMenu]);
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
@@ -1943,17 +2577,29 @@ export default function WorkoutLog() {
           onChangeText={setSessionTitle}
           style={styles.input}
         />
-        <View style={styles.sessionMeta}>
-          <Text style={styles.muted}>
-            {new Date(startTimeRef.current).toLocaleDateString(undefined, {
-              weekday: "short",
-              month: "short",
-              day: "numeric",
-            })}
-          </Text>
-          <Text style={styles.muted}>
-            Duration: {elapsedMinutes} min
-          </Text>
+        <View style={styles.sessionButtonRow}>
+          <TouchableOpacity style={[styles.secondaryButton, styles.sessionActionButton]} onPress={openDatePicker}>
+            <Text style={styles.secondaryText}>
+              Date:{" "}
+              {parseSessionDate(sessionDateText)?.toLocaleDateString(undefined, {
+                month: "short",
+                day: "numeric",
+                year: "numeric",
+              }) ?? sessionDateText}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[workoutTimerRunning ? styles.primaryButton : styles.secondaryButton, styles.sessionActionButton]}
+            onPress={workoutTimerRunning ? openDurationAdjustModal : startWorkoutTimer}
+          >
+            <Text style={workoutTimerRunning ? styles.primaryText : styles.secondaryText}>
+              {workoutTimerRunning
+                ? formatElapsedTimer(elapsedSeconds)
+                : elapsedSeconds > 0
+                ? "Resume Workout"
+                : "Start Workout"}
+            </Text>
+          </TouchableOpacity>
         </View>
         <View style={styles.phaseRow}>
           <Text style={styles.muted}>Training phase: {sessionPhase}</Text>
@@ -2079,6 +2725,18 @@ export default function WorkoutLog() {
       ) : (
         exercises.map((ex) => {
           const unit = exerciseUnits[ex.id] || "kg";
+          const mode = getExerciseMode(ex.name);
+          const isCardio = mode === "cardio";
+          const weightLabel = isCardio
+            ? "Distance"
+            : unit === "kg"
+            ? "kg"
+            : unit === "lbs"
+            ? "lbs"
+            : "Weight";
+          const repsLabel = isCardio ? "Time" : "Reps";
+          const rpeLabel = isCardio ? "Zone" : "RPE";
+          const previousSets = previousExerciseSetsByName.get(normalizeExerciseName(ex.name)) ?? [];
           const exerciseCatalogItem = findCatalogExercise(ex.name);
           const remoteDemoImages = exerciseImageMap[imageLookupKey(ex.name)] ?? [];
           const demoThumbnailUri = remoteDemoImages[0] ?? null;
@@ -2196,44 +2854,59 @@ export default function WorkoutLog() {
                   style={[styles.input, styles.metaInput]}
                 />
               </View>
-              <View style={styles.inlineTipRow}>
-                <TouchableOpacity
-                  style={styles.restTimerInlineButton}
-                  onPress={() => openTempoEditor(ex.id, ex.tempo)}
-                >
-                  <Ionicons name="speedometer-outline" size={14} color="#cdd0e0" />
-                  <Text style={styles.restTimerInlineText}>
-                    Tempo {(ex.tempo ?? "").trim() || DEFAULT_TEMPO}
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.restTimerInlineButton}
-                  onPress={() => openRestTimerModal(ex.id)}
-                >
-                  <Ionicons name="timer-outline" size={14} color="#cdd0e0" />
-                  <Text style={styles.restTimerInlineText}>
-                    Rest {restDisplayMin}:{restDisplaySec}
-                  </Text>
-                </TouchableOpacity>
-              </View>
+              {!isCardio ? (
+                <View style={styles.inlineTipRow}>
+                  <TouchableOpacity
+                    style={styles.restTimerInlineButton}
+                    onPress={() => openTempoEditor(ex.id, ex.tempo)}
+                  >
+                    <Ionicons name="speedometer-outline" size={14} color="#cdd0e0" />
+                    <Text style={styles.restTimerInlineText}>
+                      Tempo {(ex.tempo ?? "").trim() || DEFAULT_TEMPO}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.restTimerInlineButton}
+                    onPress={() => openRestTimerModal(ex.id)}
+                  >
+                    <Ionicons name="timer-outline" size={14} color="#cdd0e0" />
+                    <Text style={styles.restTimerInlineText}>
+                      Rest {restDisplayMin}:{restDisplaySec}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              ) : null}
               <View style={[styles.setHeaderRow, isTabletLayout && styles.setHeaderRowTablet]}>
-                <Text style={[styles.setHeaderText, styles.setHeaderSet]}>Set</Text>
+                {!isCardio ? <Text style={[styles.setHeaderText, styles.setHeaderSet]}>Set</Text> : null}
                 <Text style={[styles.setHeaderText, styles.setHeaderCheck]}>{"\u2713"}</Text>
+                <Text style={[styles.setHeaderText, styles.setHeaderLast]}>Last</Text>
                 <View style={styles.setHeaderInputsGroup}>
-                  <Text style={[styles.setHeaderText, styles.setColWeight]}>Weight</Text>
-                  <Text style={[styles.setHeaderText, styles.setColReps]}>Reps</Text>
-                  <Text style={[styles.setHeaderText, styles.setColRpe]}>RPE</Text>
+                  <Text style={[styles.setHeaderText, styles.setColReps]}>{isCardio ? "Time" : weightLabel}</Text>
+                  <Text style={[styles.setHeaderText, styles.setColWeight]}>
+                    {isCardio ? String(unit).toLowerCase() : repsLabel}
+                  </Text>
+                  {!isCardio ? <Text style={[styles.setHeaderText, styles.setColRpe]}>{rpeLabel}</Text> : null}
                 </View>
               </View>
               {ex.sets.length === 0 ? (
                 <Text style={styles.muted}>No sets yet.</Text>
-              ) : Platform.OS === "android" ? (
+              ) : Platform.OS === "android" && !isCardio ? (
                 <WorkoutSetList
+                  key={`native-set-list-${ex.id}-${ex.sets
+                    .map((set, idx) => `${idx}:${getSetTypeMarker(set, idx)}`)
+                    .join("|")}`}
                   style={{ height: Math.max(ex.sets.length, 1) * 52 }}
-                  sets={ex.sets.map((set) => ({
-                    weight: formatWeightInput(set.weightKg, unit),
-                    reps: set.reps,
-                    rpe: set.rpe ?? "",
+                  weightLabel={weightLabel}
+                  repsLabel={repsLabel}
+                  rpeLabel={rpeLabel}
+                  sets={ex.sets.map((set, idx) => ({
+                    marker: getSetTypeMarker(set, idx),
+                    last: previousSets[idx] ? formatLastSetSummary(previousSets[idx]) : "-",
+                    weight: isCardio
+                      ? formatDistanceInput(set.distanceKm ?? null, unit)
+                      : formatWeightInput(set.weightKg, unit),
+                    reps: isCardio ? formatDurationInput(set.durationSec ?? null) : set.reps,
+                    rpe: isCardio ? String(set.zone || "") : set.rpe ?? "",
                     done: set.done,
                   }))}
                   onSetChange={({ nativeEvent }) => {
@@ -2289,15 +2962,17 @@ export default function WorkoutLog() {
                   >
                     <View style={styles.setContainer}>
                       <View style={[styles.setInlineRow, isTabletLayout && styles.setInlineRowTablet]}>
-                        <TouchableOpacity
-                          onPress={() => openSetMenu(ex.id, idx)}
-                          style={styles.setLabelButton}
-                          accessibilityLabel={`Adjust set ${idx + 1} intensity`}
-                        >
-                          <Text style={[styles.setLabel, isTabletLayout && styles.setLabelTablet]}>
-                            {idx + 1}
-                          </Text>
-                        </TouchableOpacity>
+                        {!isCardio ? (
+                          <TouchableOpacity
+                            onPress={() => openSetMenu(ex.id, idx)}
+                            style={styles.setLabelButton}
+                            accessibilityLabel={`Adjust set ${idx + 1} intensity`}
+                          >
+                            <Text style={[styles.setLabel, isTabletLayout && styles.setLabelTablet]}>
+                              {getSetTypeMarker(s, idx)}
+                            </Text>
+                          </TouchableOpacity>
+                        ) : null}
                         <TouchableOpacity
                           style={styles.checkboxInline}
                           onPress={() => toggleSetDone(ex.id, idx)}
@@ -2307,60 +2982,138 @@ export default function WorkoutLog() {
                             {s.done ? <Ionicons name="checkmark" size={14} color="#0d0d1a" /> : null}
                           </View>
                         </TouchableOpacity>
+                        <Text style={styles.lastSetText}>
+                          {previousSets[idx] ? formatLastSetSummary(previousSets[idx]) : "-"}
+                        </Text>
                         <View style={[styles.setInputsGroup, isTabletLayout && styles.setInputsGroupTablet]}>
-                          <WorkoutGestureTextInput
-                            placeholder="Weight"
-                            placeholderTextColor="#7a7a8c"
-                            keyboardType="numeric"
-                            value={formatWeightInput(s.weightKg, unit)}
-                            onChangeText={(v) => updateSetWeight(ex.id, idx, unit, v)}
-                            selectTextOnFocus={false}
-                            style={[
-                              styles.input,
-                              styles.setInput,
-                              styles.setInputCompact,
-                              styles.setColWeight,
-                              isTabletLayout && styles.setInputTablet,
-                            ]}
-                          />
-                          <WorkoutGestureTextInput
-                            placeholder="Reps"
-                            placeholderTextColor="#7a7a8c"
-                            keyboardType="numeric"
-                            value={s.reps}
-                            onChangeText={(v) => updateSetReps(ex.id, idx, v)}
-                            selectTextOnFocus={false}
-                            style={[
-                              styles.input,
-                              styles.setInput,
-                              styles.setInputCompact,
-                              styles.setColReps,
-                              isTabletLayout && styles.setInputTablet,
-                              styles.setInputReps,
-                              isTabletLayout && styles.setInputRepsTablet,
-                            ]}
-                          />
-                          <WorkoutGestureTextInput
-                            placeholder="RPE"
-                            placeholderTextColor="#7a7a8c"
-                            keyboardType="decimal-pad"
-                            value={s.rpe ?? ""}
-                            onChangeText={(v) => updateSetRpe(ex.id, idx, v)}
-                            selectTextOnFocus={false}
-                            style={[
-                              styles.input,
-                              styles.setInput,
-                              styles.setInputCompact,
-                              styles.setColRpe,
-                              isTabletLayout && styles.setInputTablet,
-                            ]}
-                          />
+                          {isCardio ? (
+                            <>
+                              <TouchableOpacity
+                                style={[styles.input, styles.setInput, styles.setInputCompact, styles.setColReps]}
+                                onPress={() => openCardioTimeModal(ex.id, idx, s.durationSec)}
+                              >
+                                <Text style={styles.cardioTapValue}>
+                                  {formatDurationHoursMinutes(s.durationSec ?? null) || "hh:mm"}
+                                </Text>
+                              </TouchableOpacity>
+                              <TouchableOpacity
+                                style={[styles.input, styles.setInput, styles.setInputCompact, styles.setColWeight]}
+                                onPress={() => openCardioDistanceModal(ex.id, idx, s.distanceKm ?? null, unit)}
+                              >
+                                <Text style={styles.cardioTapValue}>
+                                  {formatDistanceInput(s.distanceKm ?? null, unit) || String(unit)}
+                                </Text>
+                              </TouchableOpacity>
+                            </>
+                          ) : (
+                            <>
+                              <WorkoutGestureTextInput
+                                placeholder={weightLabel}
+                                placeholderTextColor="#7a7a8c"
+                                keyboardType="numeric"
+                                value={formatWeightInput(s.weightKg, unit)}
+                                onChangeText={(v) => updateSetWeight(ex.id, idx, unit, v)}
+                                selectTextOnFocus={false}
+                                style={[
+                                  styles.input,
+                                  styles.setInput,
+                                  styles.setInputCompact,
+                                  styles.setColWeight,
+                                  isTabletLayout && styles.setInputTablet,
+                                ]}
+                              />
+                              <WorkoutGestureTextInput
+                                placeholder={repsLabel}
+                                placeholderTextColor="#7a7a8c"
+                                keyboardType="numeric"
+                                value={s.reps}
+                                onChangeText={(v) => updateSetReps(ex.id, idx, v)}
+                                selectTextOnFocus={false}
+                                style={[
+                                  styles.input,
+                                  styles.setInput,
+                                  styles.setInputCompact,
+                                  styles.setColReps,
+                                  isTabletLayout && styles.setInputTablet,
+                                  styles.setInputReps,
+                                  isTabletLayout && styles.setInputRepsTablet,
+                                ]}
+                              />
+                              <WorkoutGestureTextInput
+                                placeholder={rpeLabel}
+                                placeholderTextColor="#7a7a8c"
+                                keyboardType="decimal-pad"
+                                value={s.rpe ?? ""}
+                                onChangeText={(v) => updateSetRpe(ex.id, idx, v)}
+                                selectTextOnFocus={false}
+                                style={[
+                                  styles.input,
+                                  styles.setInput,
+                                  styles.setInputCompact,
+                                  styles.setColRpe,
+                                  isTabletLayout && styles.setInputTablet,
+                                ]}
+                              />
+                            </>
+                          )}
                         </View>
                       </View>
                     </View>
                   </ReanimatedSwipeable>
                 ))
               )}
+              {isCardio ? (
+                <>
+                  <View style={styles.cardioMetaRow}>
+                    <Text style={styles.cardioMetaLabel}>Session Type</Text>
+                    <View style={styles.answerRow}>
+                      {CARDIO_SESSION_TYPES.map((option) => (
+                        <TouchableOpacity
+                          key={`cardio-session-${ex.id}-${option.value}`}
+                          style={[
+                            styles.answerChip,
+                            ex.cardioSessionType === option.value && styles.answerChipActive,
+                          ]}
+                          onPress={() => updateCardioSessionType(ex.id, option.value)}
+                        >
+                          <Text
+                            style={[
+                              styles.answerText,
+                              ex.cardioSessionType === option.value && styles.answerTextActive,
+                            ]}
+                          >
+                            {option.label}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                  <View style={styles.cardioMetaRow}>
+                    <Text style={styles.cardioMetaLabel}>Effort Level</Text>
+                    <View style={styles.answerRow}>
+                      {CARDIO_EFFORT_LEVELS.map((option) => (
+                        <TouchableOpacity
+                          key={`cardio-effort-${ex.id}-${option.value}`}
+                          style={[
+                            styles.answerChip,
+                            ex.cardioEffortLevel === option.value && styles.answerChipActive,
+                          ]}
+                          onPress={() => updateCardioEffortLevel(ex.id, option.value)}
+                        >
+                          <Text
+                            style={[
+                              styles.answerText,
+                              ex.cardioEffortLevel === option.value && styles.answerTextActive,
+                            ]}
+                          >
+                            {option.label}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                </>
+              ) : null}
               <View style={styles.setActionsRow}>
                 <TouchableOpacity
                   style={[styles.primaryButton, styles.setActionButton]}
@@ -2531,9 +3284,14 @@ export default function WorkoutLog() {
                 </Text>
 
                 <View style={styles.exerciseOptionRow}>
-                  <Ionicons name="barbell-outline" size={18} color="#cdd0e0" />
+                  <Ionicons
+                    name={activeActionMode === "cardio" ? "map-outline" : "barbell-outline"}
+                    size={18}
+                    color="#cdd0e0"
+                  />
                   <View style={styles.exerciseOptionUnits}>
-                    {(["kg", "lbs"] as Unit[]).map((option) => (
+                    {(activeActionMode === "cardio" ? (["km", "mi"] as Unit[]) : (["kg", "lbs"] as Unit[])).map(
+                      (option) => (
                       <TouchableOpacity
                         key={`unit-${option}`}
                         style={[
@@ -2554,7 +3312,8 @@ export default function WorkoutLog() {
                           {option}
                         </Text>
                       </TouchableOpacity>
-                    ))}
+                      )
+                    )}
                   </View>
                 </View>
 
@@ -2833,6 +3592,258 @@ export default function WorkoutLog() {
         </View>
       </Modal>
 
+      <Modal visible={showDatePickerModal} transparent animationType="fade">
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <View style={styles.calendarHeader}>
+              <TouchableOpacity
+                style={styles.iconButton}
+                onPress={() =>
+                  setDatePickerMonth(
+                    (prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1)
+                  )
+                }
+              >
+                <Ionicons name="chevron-back" size={16} color="#cdd0e0" />
+              </TouchableOpacity>
+              <Text style={styles.modalTitle}>
+                {MONTH_LABELS[datePickerMonth.getMonth()]} {datePickerMonth.getFullYear()}
+              </Text>
+              <TouchableOpacity
+                style={styles.iconButton}
+                onPress={() =>
+                  setDatePickerMonth(
+                    (prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1)
+                  )
+                }
+              >
+                <Ionicons name="chevron-forward" size={16} color="#cdd0e0" />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.calendarWeekRow}>
+              {WEEKDAY_LABELS.map((label, index) => (
+                <Text key={`wk-${label}-${index}`} style={styles.calendarWeekdayText}>
+                  {label}
+                </Text>
+              ))}
+            </View>
+            {getCalendarMatrix(datePickerMonth).map((week, weekIndex) => (
+              <View key={`wk-row-${weekIndex}`} style={styles.calendarWeekRow}>
+                {week.map((day) => {
+                  const dayKey = toLocalDateKey(day);
+                  const isActiveMonth = day.getMonth() === datePickerMonth.getMonth();
+                  const selected = dayKey === sessionDateText;
+                  return (
+                    <TouchableOpacity
+                      key={`day-${dayKey}`}
+                      style={[
+                        styles.calendarDayButton,
+                        !isActiveMonth && styles.calendarDayOutside,
+                        selected && styles.calendarDaySelected,
+                      ]}
+                      onPress={() => {
+                        setSessionDateText(dayKey);
+                        setShowDatePickerModal(false);
+                      }}
+                    >
+                      <Text
+                        style={[
+                          styles.calendarDayText,
+                          !isActiveMonth && styles.calendarDayTextOutside,
+                          selected && styles.calendarDayTextSelected,
+                        ]}
+                      >
+                        {day.getDate()}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            ))}
+            <TouchableOpacity
+              style={[styles.secondaryButton, { marginTop: 10 }]}
+              onPress={() => setShowDatePickerModal(false)}
+            >
+              <Text style={styles.secondaryText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={showDurationModal} transparent animationType="fade">
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Adjust duration</Text>
+            <Text style={styles.modalText}>Set workout duration (hours and minutes).</Text>
+            <View style={styles.durationFieldRow}>
+              <TextInput
+                placeholder="00"
+                placeholderTextColor="#7a7a8c"
+                value={durationAdjustHoursText}
+                onChangeText={setDurationAdjustHoursText}
+                keyboardType="numeric"
+                maxLength={2}
+                style={styles.durationFieldInput}
+              />
+              <Text style={styles.durationFieldColon}>:</Text>
+              <TextInput
+                placeholder="00"
+                placeholderTextColor="#7a7a8c"
+                value={durationAdjustMinutesText}
+                onChangeText={setDurationAdjustMinutesText}
+                keyboardType="numeric"
+                maxLength={2}
+                style={styles.durationFieldInput}
+              />
+            </View>
+            <View style={styles.durationFieldLabelRow}>
+              <Text style={styles.durationFieldLabel}>Hours</Text>
+              <Text style={styles.durationFieldLabel}>Minutes</Text>
+            </View>
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.secondaryButton, styles.modalActionButton]}
+                onPress={() => setShowDurationModal(false)}
+              >
+                <Text style={styles.secondaryText}>Close</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.secondaryButton, styles.modalActionButton]}
+                onPress={resetDurationTimer}
+              >
+                <Text style={styles.secondaryText}>Reset</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.primaryButton, styles.modalActionButton, styles.modalPrimaryButton]}
+                onPress={applyDurationAdjustment}
+              >
+                <Text style={styles.primaryText}>Apply</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={showCardioTimeModal} transparent animationType="fade">
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Set Cardio Time</Text>
+            <View style={styles.durationFieldRow}>
+              <TextInput
+                placeholder="00"
+                placeholderTextColor="#7a7a8c"
+                value={cardioTimeHoursText}
+                onChangeText={setCardioTimeHoursText}
+                keyboardType="numeric"
+                maxLength={2}
+                style={styles.durationFieldInput}
+              />
+              <Text style={styles.durationFieldColon}>:</Text>
+              <TextInput
+                placeholder="00"
+                placeholderTextColor="#7a7a8c"
+                value={cardioTimeMinutesText}
+                onChangeText={setCardioTimeMinutesText}
+                keyboardType="numeric"
+                maxLength={2}
+                style={styles.durationFieldInput}
+              />
+            </View>
+            <View style={styles.durationFieldLabelRow}>
+              <Text style={styles.durationFieldLabel}>Hours</Text>
+              <Text style={styles.durationFieldLabel}>Minutes</Text>
+            </View>
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.secondaryButton, styles.modalActionButton]}
+                onPress={() => {
+                  setShowCardioTimeModal(false);
+                  setCardioTimeTarget(null);
+                }}
+              >
+                <Text style={styles.secondaryText}>Close</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.secondaryButton, styles.modalActionButton]}
+                onPress={resetCardioTimeModal}
+              >
+                <Text style={styles.secondaryText}>Reset</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.primaryButton, styles.modalActionButton, styles.modalPrimaryButton]}
+                onPress={applyCardioTimeModal}
+              >
+                <Text style={styles.primaryText}>Apply</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={showCardioDistanceModal} transparent animationType="fade">
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Set Distance</Text>
+            <Text style={styles.modalText}>Whole and decimal values.</Text>
+            <View style={styles.durationFieldRow}>
+              <TextInput
+                placeholder="0"
+                placeholderTextColor="#7a7a8c"
+                value={cardioDistanceWholeText}
+                onChangeText={setCardioDistanceWholeText}
+                keyboardType="numeric"
+                maxLength={3}
+                style={styles.durationFieldInput}
+              />
+              <Text style={styles.durationFieldColon}>.</Text>
+              <TextInput
+                placeholder="00"
+                placeholderTextColor="#7a7a8c"
+                value={cardioDistanceDecimalText}
+                onChangeText={setCardioDistanceDecimalText}
+                keyboardType="numeric"
+                maxLength={2}
+                style={styles.durationFieldInput}
+              />
+              <Text style={styles.distanceUnitSuffix}>
+                {cardioDistanceTarget ? String(exerciseUnits[cardioDistanceTarget.exerciseId] || "km") : "km"}
+              </Text>
+            </View>
+            <View style={styles.durationFieldLabelRow}>
+              <Text style={styles.durationFieldLabel}>Whole</Text>
+              <Text style={styles.durationFieldLabel}>Decimal</Text>
+            </View>
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.secondaryButton, styles.modalActionButton]}
+                onPress={() => {
+                  setShowCardioDistanceModal(false);
+                  setCardioDistanceTarget(null);
+                }}
+              >
+                <Text style={styles.secondaryText}>Close</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.secondaryButton, styles.modalActionButton]}
+                onPress={resetCardioDistanceModal}
+              >
+                <Text style={styles.secondaryText}>Reset</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.primaryButton, styles.modalActionButton, styles.modalPrimaryButton]}
+                onPress={() => {
+                  if (!cardioDistanceTarget) return;
+                  const exerciseUnit = exerciseUnits[cardioDistanceTarget.exerciseId] || "km";
+                  applyCardioDistanceModal(exerciseUnit);
+                }}
+              >
+                <Text style={styles.primaryText}>Apply</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       <Modal visible={showFinishModal} transparent animationType="fade">
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
@@ -2995,25 +4006,68 @@ export default function WorkoutLog() {
       <Modal visible={Boolean(activeSetMenu)} transparent animationType="slide">
         <View style={[styles.sheetBackdrop, { paddingBottom: insets.bottom + 72 }]}>
           <View style={styles.sheetCard}>
-            <Text style={styles.modalTitle}>Adjust set intensity</Text>
-            <Text style={styles.modalText}>
-              Apply percentage to this set&apos;s baseline weight.
-            </Text>
+            <View style={styles.sheetTitleRow}>
+              <Text style={styles.modalTitle}>Set options</Text>
+              <TouchableOpacity
+                style={styles.iconButton}
+                onPress={() =>
+                  showAppAlert(
+                    "Set types",
+                    "Warm-up: lighter prep set.\nNormal: standard working set.\nFailure: pushed to failure.\nDrop: reduce load and continue."
+                  )
+                }
+              >
+                <Ionicons name="help-circle-outline" size={18} color="#cdd0e0" />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.modalText}>Set type</Text>
             <View style={styles.answerRow}>
-              {getAdjustmentOptions().map((pct) => (
+              {SET_TYPE_LABELS.map((typeOption) => (
                 <TouchableOpacity
-                  key={`adj-${pct}`}
-                  style={styles.answerChip}
+                  key={`set-type-${typeOption.value}`}
+                  style={[
+                    styles.answerChip,
+                    toSetType(activeSet?.setType) === typeOption.value && styles.answerChipActive,
+                  ]}
                   onPress={() => {
                     if (!activeSetMenu) return;
-                    const unit = exerciseUnits[activeSetMenu.exerciseId] || "kg";
-                    applySetAdjustment(activeSetMenu.exerciseId, activeSetMenu.setIndex, unit, pct);
+                    updateSetType(activeSetMenu.exerciseId, activeSetMenu.setIndex, typeOption.value);
+                    closeSetMenu();
                   }}
                 >
-                  <Text style={styles.answerText}>{pct >= 0 ? `+${pct}%` : `${pct}%`}</Text>
+                  <Text
+                    style={[
+                      styles.answerText,
+                      toSetType(activeSet?.setType) === typeOption.value && styles.answerTextActive,
+                    ]}
+                  >
+                    {typeOption.title}
+                  </Text>
                 </TouchableOpacity>
               ))}
             </View>
+            {activeSetExercise && getExerciseMode(activeSetExercise.name) !== "cardio" ? (
+              <>
+                <Text style={[styles.modalText, { marginTop: 10 }]}>
+                  Apply percentage to this set&apos;s baseline weight.
+                </Text>
+                <View style={styles.answerRow}>
+                  {getAdjustmentOptions().map((pct) => (
+                    <TouchableOpacity
+                      key={`adj-${pct}`}
+                      style={styles.answerChip}
+                      onPress={() => {
+                        if (!activeSetMenu) return;
+                        const unit = exerciseUnits[activeSetMenu.exerciseId] || "kg";
+                        applySetAdjustment(activeSetMenu.exerciseId, activeSetMenu.setIndex, unit, pct);
+                      }}
+                    >
+                      <Text style={styles.answerText}>{pct >= 0 ? `+${pct}%` : `${pct}%`}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </>
+            ) : null}
             <TouchableOpacity
               style={[styles.secondaryButton, { marginTop: 12 }]}
               onPress={closeSetMenu}
@@ -3081,6 +4135,8 @@ const styles = StyleSheet.create({
     columnGap: 10,
     rowGap: 8,
   },
+  sessionButtonRow: { flexDirection: "row", gap: 10, marginBottom: 10 },
+  sessionActionButton: { flex: 1, marginTop: 0 },
   halfInput: { flexBasis: "48%", flexGrow: 1, minWidth: 120, marginBottom: 0 },
   primaryButton: {
     backgroundColor: "#7b61ff",
@@ -3097,6 +4153,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   secondaryText: { color: "#7b61ff", fontWeight: "700" },
+  disabled: { opacity: 0.5 },
   muted: { color: "#a3a3b5" },
   exerciseBlock: { marginTop: 8 },
   exerciseName: { color: "#fff", fontWeight: "700", marginBottom: 0, flex: 1, flexShrink: 1, marginLeft: 6 },
@@ -3120,6 +4177,30 @@ const styles = StyleSheet.create({
   },
   exerciseMetaNotesSingle: { marginTop: 12, marginBottom: 8 },
   inlineTipRow: { flexDirection: "row", gap: 8, marginBottom: 8 },
+  inlineZoneInputWrap: {
+    marginBottom: 0,
+    flex: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.2)",
+    backgroundColor: "rgba(255,255,255,0.04)",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  inlineZoneInput: {
+    flex: 1,
+    marginBottom: 0,
+    backgroundColor: "transparent",
+    paddingVertical: 2,
+    paddingHorizontal: 0,
+    borderRadius: 0,
+    textAlign: "left",
+    fontSize: 12,
+    color: "#d8daec",
+  },
   restTimerInlineButton: {
     marginBottom: 0,
     flex: 1,
@@ -3134,6 +4215,32 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   restTimerInlineText: { color: "#d8daec", fontSize: 12, fontWeight: "700" },
+  durationFieldRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginBottom: 6,
+  },
+  durationFieldInput: {
+    width: 88,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    color: "#fff",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    textAlign: "center",
+    fontSize: 28,
+    fontWeight: "800",
+  },
+  durationFieldColon: { color: "#fff", fontSize: 28, fontWeight: "800" },
+  durationFieldLabelRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 36,
+    marginBottom: 8,
+  },
+  durationFieldLabel: { color: "#9aa1c3", fontSize: 12, fontWeight: "700" },
   tempoSliderRow: { marginBottom: 10 },
   tempoSliderLabel: { color: "#d8daec", marginBottom: 4, fontWeight: "600" },
   tempoSlider: { width: "100%", height: 28 },
@@ -3142,6 +4249,31 @@ const styles = StyleSheet.create({
   restCustomInput: { flex: 1, marginBottom: 0, paddingVertical: 8 },
   restCustomApply: { paddingVertical: 10, paddingHorizontal: 14 },
   metaInput: { marginBottom: 0, paddingVertical: 8 },
+  sheetTitleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  calendarHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+  calendarWeekRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 6,
+  },
+  calendarWeekdayText: { color: "#9aa1c3", width: 34, textAlign: "center", fontWeight: "700" },
+  calendarDayButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  calendarDayOutside: { opacity: 0.45 },
+  calendarDaySelected: { backgroundColor: "#7b61ff" },
+  calendarDayText: { color: "#cdd0e0", fontWeight: "600" },
+  calendarDayTextOutside: { color: "#7d84a8" },
+  calendarDayTextSelected: { color: "#fff", fontWeight: "700" },
   setHeaderRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -3153,6 +4285,7 @@ const styles = StyleSheet.create({
   setHeaderText: { color: "#9aa1c3", fontSize: 12, fontWeight: "700" },
   setHeaderSet: { width: 24, textAlign: "center" },
   setHeaderCheck: { width: 24, textAlign: "center" },
+  setHeaderLast: { width: 84 },
   setHeaderInputsGroup: { flex: 1, flexDirection: "row", alignItems: "center", gap: 8 },
   setColWeight: { flex: 1, textAlign: "center" },
   setColReps: { flex: 1, textAlign: "center" },
@@ -3166,6 +4299,11 @@ const styles = StyleSheet.create({
   },
   setLabel: { color: "#cdd0e0", fontWeight: "700", fontSize: 13, width: 24, textAlign: "center" },
   setLabelTablet: { width: 28, fontSize: 15 },
+  lastSetText: { width: 84, color: "#aab0cc", fontSize: 11, lineHeight: 14 },
+  cardioTapValue: { color: "#fff", textAlign: "center", fontWeight: "700" },
+  cardioMetaRow: { marginTop: 8 },
+  cardioMetaLabel: { color: "#9aa1c3", fontSize: 12, fontWeight: "700", marginBottom: 6 },
+  distanceUnitSuffix: { color: "#cdd0e0", fontSize: 16, fontWeight: "700", marginLeft: 4 },
   setInputsGroup: { flex: 1, flexDirection: "row", alignItems: "center", gap: 8 },
   setInputsGroupTablet: { flex: 1 },
   setInput: { marginBottom: 0, paddingVertical: 10, minHeight: 40 },
@@ -3411,14 +4549,14 @@ const styles = StyleSheet.create({
   answerRow: { flexDirection: "row", gap: 8, marginTop: 8, flexWrap: "wrap" },
   answerChip: {
     paddingVertical: 8,
-    paddingHorizontal: 12,
+    paddingHorizontal: 9,
     borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "rgba(255,255,255,0.3)",
     backgroundColor: "rgba(255,255,255,0.05)",
   },
   answerChipActive: { backgroundColor: "#7b61ff", borderColor: "#7b61ff" },
-  answerText: { color: "#d8daec", fontWeight: "700" },
+  answerText: { color: "#d8daec", fontWeight: "700", fontSize: 12 },
   answerTextActive: { color: "#0d0d1a" },
   baselineBanner: {
     backgroundColor: "rgba(123,97,255,0.12)",

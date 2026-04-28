@@ -292,7 +292,10 @@ export default function Home() {
             ): entry is TrainingPhaseHistoryEntry =>
               entry.phase != null && entry.startedAt != null
           )
-          .sort((a, b) => a.startedAt.toMillis() - b.startedAt.toMillis());
+          .sort(
+            (a: TrainingPhaseHistoryEntry, b: TrainingPhaseHistoryEntry) =>
+              a.startedAt.toMillis() - b.startedAt.toMillis()
+          );
         const parsedDietHistory = rawDietHistory
           .map((entry: any) => ({
             phase: isDietPhase(entry?.phase) ? entry.phase : null,
@@ -307,7 +310,10 @@ export default function Home() {
             ): entry is DietPhaseHistoryEntry =>
               entry.phase != null && entry.startedAt != null
           )
-          .sort((a, b) => a.startedAt.toMillis() - b.startedAt.toMillis());
+          .sort(
+            (a: DietPhaseHistoryEntry, b: DietPhaseHistoryEntry) =>
+              a.startedAt.toMillis() - b.startedAt.toMillis()
+          );
         setTrainingPhaseHistory(parsedTrainingHistory);
         setDietPhaseHistory(parsedDietHistory);
         const target = data?.sleepSettings?.targetHours;
@@ -409,9 +415,15 @@ export default function Home() {
             name: typeof exercise?.name === "string" ? exercise.name : "Exercise",
             notes: typeof exercise?.notes === "string" ? exercise.notes : "",
             tempo: typeof exercise?.tempo === "string" ? exercise.tempo : "",
+            zone: typeof exercise?.zone === "string" ? exercise.zone : "",
+            mode: exercise?.mode === "cardio" ? "cardio" : "resistance",
             sets: (exercise?.sets ?? []).map((set: any) => ({
               weightKg: typeof set?.weightKg === "number" ? set.weightKg : null,
               reps: String(set?.reps ?? ""),
+              distanceKm: typeof set?.distanceKm === "number" ? set.distanceKm : null,
+              durationSec: typeof set?.durationSec === "number" ? set.durationSec : null,
+              zone: typeof set?.zone === "string" ? set.zone : null,
+              setType: typeof set?.setType === "string" ? set.setType : null,
               rpe:
                 typeof set?.rpe === "number" && Number.isFinite(set.rpe)
                   ? set.rpe
@@ -1375,14 +1387,32 @@ export default function Home() {
                     {workout.exercises.map((exercise, exerciseIndex) => (
                       <View key={`${workout.id}-${exercise.name}-${exerciseIndex}`} style={styles.dayExerciseBlock}>
                         <Text style={styles.dayExerciseName}>{exercise.name}</Text>
-                        {exercise.tempo ? <Text style={styles.noticeSub}>Tempo: {exercise.tempo}</Text> : null}
+                        {exercise.mode === "cardio" ? (
+                          <Text style={styles.noticeSub}>Zone: {exercise.zone || "-"}</Text>
+                        ) : exercise.tempo ? (
+                          <Text style={styles.noticeSub}>Tempo: {exercise.tempo}</Text>
+                        ) : null}
                         {exercise.notes ? <Text style={styles.noticeSub}>Notes: {exercise.notes}</Text> : null}
                         {exercise.sets.map((set, setIndex) => (
                           <Text key={`${workout.id}-${exerciseIndex}-set-${setIndex}`} style={styles.noticeSub}>
-                            Set {setIndex + 1}:{" "}
-                            {typeof set.weightKg === "number" ? `${Math.round(set.weightKg * 10) / 10} kg` : "-"} x{" "}
-                            {set.reps || "-"}
-                            {typeof set.rpe === "number" ? ` - RPE ${set.rpe}` : ""}
+                            Set{" "}
+                            {set.setType === "warmup"
+                              ? "W"
+                              : set.setType === "failure"
+                              ? "F"
+                              : set.setType === "drop"
+                              ? "D"
+                              : setIndex + 1}
+                            :{" "}
+                            {exercise.mode === "cardio"
+                              ? `${typeof set.distanceKm === "number" ? `${Math.round(set.distanceKm * 100) / 100} km` : "-"} · ${
+                                  typeof set.durationSec === "number"
+                                    ? `${Math.floor(set.durationSec / 60)}:${String(set.durationSec % 60).padStart(2, "0")}`
+                                    : "-"
+                                }${set.zone ? ` · Zone ${set.zone}` : ""}`
+                              : `${typeof set.weightKg === "number" ? `${Math.round(set.weightKg * 10) / 10} kg` : "-"} x ${
+                                  set.reps || "-"
+                                }${typeof set.rpe === "number" ? ` - RPE ${set.rpe}` : ""}`}
                           </Text>
                         ))}
                       </View>
