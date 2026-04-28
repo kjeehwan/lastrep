@@ -6,6 +6,8 @@ import {
 } from "react-native";
 
 export type WorkoutSetUi = {
+  marker: string;
+  last: string;
   weight: string;
   reps: string;
   rpe: string;
@@ -24,6 +26,9 @@ type SetLabelPressEvent = NativeSyntheticEvent<{ index: number }>;
 
 type NativeProps = {
   sets: WorkoutSetUi[];
+  weightLabel?: string;
+  repsLabel?: string;
+  rpeLabel?: string;
   style?: ViewStyle;
   onSetChange?: (event: SetChangeEvent) => void;
   onToggleDone?: (event: ToggleDoneEvent) => void;

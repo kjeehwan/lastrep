@@ -31,6 +31,8 @@ class WorkoutSetListManager : SimpleViewManager<WorkoutSetListView>() {
         val set = sets.getMap(i) ?: continue
         items.add(
           WorkoutSetItem(
+            marker = set.getStringOrEmpty("marker"),
+            last = set.getStringOrEmpty("last"),
             weight = set.getStringOrEmpty("weight"),
             reps = set.getStringOrEmpty("reps"),
             rpe = set.getStringOrEmpty("rpe"),
@@ -40,6 +42,33 @@ class WorkoutSetListManager : SimpleViewManager<WorkoutSetListView>() {
       }
     }
     view.setItems(items)
+  }
+
+  @ReactProp(name = "weightLabel")
+  fun setWeightLabel(view: WorkoutSetListView, value: String?) {
+    view.setColumnLabels(
+      weight = value ?: "Weight",
+      reps = view.repsLabel,
+      rpe = view.rpeLabel
+    )
+  }
+
+  @ReactProp(name = "repsLabel")
+  fun setRepsLabel(view: WorkoutSetListView, value: String?) {
+    view.setColumnLabels(
+      weight = view.weightLabel,
+      reps = value ?: "Reps",
+      rpe = view.rpeLabel
+    )
+  }
+
+  @ReactProp(name = "rpeLabel")
+  fun setRpeLabel(view: WorkoutSetListView, value: String?) {
+    view.setColumnLabels(
+      weight = view.weightLabel,
+      reps = view.repsLabel,
+      rpe = value ?: "RPE"
+    )
   }
 
   override fun getExportedCustomDirectEventTypeConstants(): MutableMap<String, Any> =
@@ -54,4 +83,3 @@ class WorkoutSetListManager : SimpleViewManager<WorkoutSetListView>() {
     return if (hasKey(key) && !isNull(key)) getString(key) ?: "" else ""
   }
 }
-

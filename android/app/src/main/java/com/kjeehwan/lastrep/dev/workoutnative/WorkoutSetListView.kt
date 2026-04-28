@@ -28,6 +28,8 @@ import com.facebook.react.uimanager.events.RCTEventEmitter
 import kotlin.math.abs
 
 data class WorkoutSetItem(
+  val marker: String,
+  val last: String,
   val weight: String,
   val reps: String,
   val rpe: String,
@@ -38,6 +40,7 @@ private data class WorkoutSetRowBinding(
   val root: View,
   val setLabel: TextView,
   val check: AppCompatTextView,
+  val last: TextView,
   val weight: AppCompatEditText,
   val reps: AppCompatEditText,
   val rpe: AppCompatEditText
@@ -62,6 +65,9 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
   }
 
   var reactTagForEvents: Int = View.NO_ID
+  var weightLabel: String = "Weight"
+  var repsLabel: String = "Reps"
+  var rpeLabel: String = "RPE"
 
   init {
     orientation = VERTICAL
@@ -127,6 +133,13 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
     adapter.setItems(items)
   }
 
+  fun setColumnLabels(weight: String, reps: String, rpe: String) {
+    weightLabel = weight
+    repsLabel = reps
+    rpeLabel = rpe
+    adapter.setColumnLabels(weight, reps, rpe)
+  }
+
   private fun emitChange(index: Int, field: String, value: String) {
     if (reactTagForEvents == View.NO_ID) return
     val payload = Arguments.createMap()
@@ -178,6 +191,9 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
     private val onSetLabelPress: (Int) -> Unit
   ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
     private val items = mutableListOf<WorkoutSetItem>()
+    private var weightHint: String = "Weight"
+    private var repsHint: String = "Reps"
+    private var rpeHint: String = "RPE"
 
     fun setItems(next: List<WorkoutSetItem>) {
       if (items.size == next.size) {
@@ -186,6 +202,8 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
           val current = items[i]
           val incoming = next[i]
           if (
+            current.marker != incoming.marker ||
+            current.last != incoming.last ||
             current.weight != incoming.weight ||
             current.reps != incoming.reps ||
             current.rpe != incoming.rpe ||
@@ -205,6 +223,13 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
       }
       items.clear()
       items.addAll(next)
+      notifyDataSetChanged()
+    }
+
+    fun setColumnLabels(weight: String, reps: String, rpe: String) {
+      weightHint = weight
+      repsHint = reps
+      rpeHint = rpe
       notifyDataSetChanged()
     }
 
@@ -249,6 +274,14 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
       }
       root.addView(check)
 
+      val last = TextView(context).apply {
+        setTextColor(Color.parseColor("#AAB0CC"))
+        textSize = 11f
+        maxLines = 3
+        setLineSpacing(0f, 1.05f)
+      }
+      root.addView(last, LayoutParams(dp(84f), LayoutParams.WRAP_CONTENT).apply { marginStart = dp(2f) })
+
       val weight = createInput(context, "Weight", InputType.TYPE_CLASS_NUMBER)
       val reps = createInput(context, "Reps", InputType.TYPE_CLASS_NUMBER)
       val rpe = createInput(
@@ -261,7 +294,7 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
       root.addView(reps, LayoutParams(0, dp(40f), 1f).apply { marginStart = dp(6f) })
       root.addView(rpe, LayoutParams(0, dp(40f), 0.8f).apply { marginStart = dp(6f) })
 
-      return WorkoutSetRowBinding(root, setLabel, check, weight, reps, rpe)
+      return WorkoutSetRowBinding(root, setLabel, check, last, weight, reps, rpe)
     }
 
     private fun createInput(context: Context, hint: String, inputType: Int): AppCompatEditText {
@@ -321,10 +354,11 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
 
       fun bind(position: Int, item: WorkoutSetItem) {
         boundIndex = position
-        binding.setLabel.text = (position + 1).toString()
+        binding.setLabel.text = item.marker.ifBlank { (position + 1).toString() }
         binding.setLabel.setOnClickListener {
           if (boundIndex >= 0) onSetLabelPress(boundIndex)
         }
+        binding.last.text = item.last.ifBlank { "-" }
         localDone = item.done
         applyCheckStyle(localDone)
         binding.check.setOnClickListener {
@@ -346,6 +380,9 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
         if (!binding.rpe.isFocused && (binding.rpe.text?.toString() ?: "") != item.rpe) {
           binding.rpe.setText(item.rpe)
         }
+        binding.weight.hint = weightHint
+        binding.reps.hint = repsHint
+        binding.rpe.hint = rpeHint
 
         if (!binding.weight.isFocused) {
           binding.weight.setSelection((binding.weight.text?.length ?: 0).coerceAtLeast(0))
@@ -391,5 +428,4 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
 
   }
 }
-
 
