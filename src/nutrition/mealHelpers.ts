@@ -145,10 +145,12 @@ export function normalizeCalorieTargets(
 
 export function buildNutritionProfile(
   calorieTargetsByDietPhase: NutritionCalorieTargetsByDietPhase,
+  proteinTargetGrams: number | null = null,
   updatedAt: Timestamp | null = Timestamp.now()
 ): NutritionProfile {
   return {
     calorieTargetsByDietPhase,
+    proteinTargetGrams,
     updatedAt,
   };
 }

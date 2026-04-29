@@ -84,6 +84,7 @@ export default function ProfileIndex() {
   const [cutCalories, setCutCalories] = useState("");
   const [maintainCalories, setMaintainCalories] = useState("");
   const [bulkCalories, setBulkCalories] = useState("");
+  const [proteinTargetGrams, setProteinTargetGrams] = useState("");
   const [availabilityDays, setAvailabilityDays] = useState(4);
   const [sleepTargetHours, setSleepTargetHours] = useState("7");
   const [healthFeedback, setHealthFeedback] = useState<string | null>(null);
@@ -195,6 +196,13 @@ export default function ProfileIndex() {
         const calorieTargets = normalizeCalorieTargets(
           data?.nutritionProfile?.calorieTargetsByDietPhase
         );
+        if (
+          typeof data?.nutritionProfile?.proteinTargetGrams === "number" &&
+          Number.isFinite(data.nutritionProfile.proteinTargetGrams) &&
+          data.nutritionProfile.proteinTargetGrams > 0
+        ) {
+          setProteinTargetGrams(String(Math.round(data.nutritionProfile.proteinTargetGrams)));
+        }
         setCutCalories(
           calorieTargets.Cut == null ? "" : String(calorieTargets.Cut)
         );
@@ -321,6 +329,16 @@ export default function ProfileIndex() {
       showAppAlert("Invalid sleep target", "Sleep target must be a number between 0 and 24.");
       return;
     }
+    const parsedProteinTarget = proteinTargetGrams.trim()
+      ? Number(proteinTargetGrams.trim())
+      : null;
+    if (
+      parsedProteinTarget != null &&
+      (!Number.isFinite(parsedProteinTarget) || parsedProteinTarget <= 0)
+    ) {
+      showAppAlert("Invalid protein target", "Protein target must be a positive number or blank.");
+      return;
+    }
 
     try {
       const profilePayload: Record<string, unknown> = {
@@ -369,7 +387,11 @@ export default function ProfileIndex() {
         { sleepSettings: { targetHours: Math.round(parsedSleepTarget * 10) / 10 } },
         true
       );
-      await saveNutritionProfile(uid, parsedTargets);
+      await saveNutritionProfile(
+        uid,
+        parsedTargets,
+        parsedProteinTarget == null ? null : Math.round(parsedProteinTarget)
+      );
       setInitialTrainingPhase(trainingPhase);
       setInitialDietPhase(dietPhase);
       setTrainingPhaseHistory(nextTrainingHistory);
@@ -551,6 +573,15 @@ export default function ProfileIndex() {
               />
             </View>
           </View>
+          <Text style={styles.targetLabel}>Protein target (g/day)</Text>
+          <TextInput
+            placeholder="160"
+            placeholderTextColor="#7a7a8c"
+            style={styles.input}
+            value={proteinTargetGrams}
+            onChangeText={setProteinTargetGrams}
+            keyboardType="numeric"
+          />
         </View>
 
         <View style={styles.card}>

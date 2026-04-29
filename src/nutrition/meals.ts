@@ -34,7 +34,6 @@ import {
   buildDecisionNutritionSummary,
   buildTrendReport,
   buildNutritionProfile,
-  DEFAULT_CALORIE_TARGETS_BY_DIET_PHASE,
   getCalorieTargetForDietPhase,
   normalizeCalorieTargets,
 } from "./mealHelpers";
@@ -89,6 +88,7 @@ function mapMealDoc(mealDoc: QueryDocumentSnapshot<DocumentData>): NutritionMeal
     name: data.name,
     calories: data.calories,
     proteinGrams: data.proteinGrams ?? null,
+    mealSection: data.mealSection ?? null,
     loggedAt: data.loggedAt,
     updatedAt: data.updatedAt,
   };
@@ -169,24 +169,37 @@ export async function getRecentMeals(
 export async function getNutritionProfile(uid: string): Promise<NutritionProfile> {
   const snapshot = await getDoc(doc(db, USERS_COLLECTION, uid));
   const data = snapshot.data()?.[USER_NUTRITION_PROFILE_FIELD] as
-    | { calorieTargetsByDietPhase?: unknown; updatedAt?: Timestamp | null }
+    | {
+        calorieTargetsByDietPhase?: unknown;
+        proteinTargetGrams?: unknown;
+        updatedAt?: Timestamp | null;
+      }
     | undefined;
+  const proteinTargetGrams =
+    typeof data?.proteinTargetGrams === "number" &&
+    Number.isFinite(data.proteinTargetGrams) &&
+    data.proteinTargetGrams > 0
+      ? Math.round(data.proteinTargetGrams)
+      : null;
 
   return buildNutritionProfile(
     normalizeCalorieTargets(data?.calorieTargetsByDietPhase),
+    proteinTargetGrams,
     data?.updatedAt ?? null
   );
 }
 
 export async function saveNutritionProfile(
   uid: string,
-  calorieTargetsByDietPhase: NutritionCalorieTargetsByDietPhase
+  calorieTargetsByDietPhase: NutritionCalorieTargetsByDietPhase,
+  proteinTargetGrams: number | null = null
 ): Promise<void> {
   await setDoc(
     doc(db, USERS_COLLECTION, uid),
     {
       [USER_NUTRITION_PROFILE_FIELD]: buildNutritionProfile(
         calorieTargetsByDietPhase,
+        proteinTargetGrams,
         Timestamp.now()
       ),
     },

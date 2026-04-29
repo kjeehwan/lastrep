@@ -63,11 +63,16 @@ const mappedPlugins = (baseConfig.plugins ?? []).map((plugin) => {
   return plugin;
 });
 
-const plugins = mappedPlugins.some(
-  (plugin) => plugin === "expo-audio" || (Array.isArray(plugin) && plugin[0] === "expo-audio")
-)
-  ? mappedPlugins
-  : [...mappedPlugins, "expo-audio"];
+const requiredPlugins = ["expo-audio"] as const;
+let plugins = [...mappedPlugins];
+for (const requiredPlugin of requiredPlugins) {
+  const exists = plugins.some(
+    (plugin) => plugin === requiredPlugin || (Array.isArray(plugin) && plugin[0] === requiredPlugin)
+  );
+  if (!exists) {
+    plugins = [...plugins, requiredPlugin];
+  }
+}
 
 const config: ExpoConfig = {
   ...baseConfig,

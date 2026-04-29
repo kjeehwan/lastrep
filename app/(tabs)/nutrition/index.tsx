@@ -3,6 +3,8 @@ import { Href, Redirect, useFocusEffect, useRouter } from "expo-router";
 import { onAuthStateChanged } from "firebase/auth";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  KeyboardAvoidingView,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -33,6 +35,13 @@ import {
   updateMeal,
   type MealFormValues,
 } from "@/src/nutrition/meals";
+import {
+  computeFromFood,
+  formatServingLabel,
+  searchFoodsAsync,
+  type FoodEntryMode,
+  type FoodItem,
+} from "@/src/nutrition/foodDb";
 import type { NutritionMeal } from "@/src/contracts";
 import type { DietPhase } from "@/src/types/decision";
 import type { NutritionTrendReport } from "@/src/nutrition/mealHelpers";
@@ -52,6 +61,8 @@ function buildInitialFormValues(): MealFormValues {
     time: getDefaultMealTime(),
   };
 }
+
+const DEFAULT_MEAL_SECTIONS = ["Breakfast", "Snack 1", "Lunch", "Snack 2", "Dinner", "Snack 3"];
 
 function isDietPhase(value: string): value is DietPhase {
   return DIET_PHASES.includes(value as DietPhase);
@@ -74,6 +85,15 @@ export default function NutritionIndex() {
   const [trendReport, setTrendReport] = useState<NutritionTrendReport | null>(null);
   const [loadingTrends, setLoadingTrends] = useState(false);
   const [recentMeals, setRecentMeals] = useState<NutritionMeal[]>([]);
+  const [proteinTargetGrams, setProteinTargetGrams] = useState<number | null>(null);
+  const [mealSection, setMealSection] = useState<string>(DEFAULT_MEAL_SECTIONS[0]);
+  const [extraSnackSections, setExtraSnackSections] = useState<string[]>([]);
+  const [foodQuery, setFoodQuery] = useState("");
+  const [debouncedFoodQuery, setDebouncedFoodQuery] = useState("");
+  const [foodResults, setFoodResults] = useState<FoodItem[]>([]);
+  const [selectedFood, setSelectedFood] = useState<FoodItem | null>(null);
+  const [entryMode, setEntryMode] = useState<FoodEntryMode>("grams");
+  const [entryValue, setEntryValue] = useState("");
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -92,6 +112,13 @@ export default function NutritionIndex() {
 
     return unsubscribe;
   }, []);
+
+  useEffect(() => {
+    const handle = setTimeout(() => {
+      setDebouncedFoodQuery(foodQuery);
+    }, 120);
+    return () => clearTimeout(handle);
+  }, [foodQuery]);
 
   const calorieTarget = useMemo(
     () => getCalorieTargetForDietPhase(calorieTargets, currentDietPhase),
@@ -165,6 +192,7 @@ export default function NutritionIndex() {
           if (cancelled) return;
 
           setCalorieTargets(profile.calorieTargetsByDietPhase);
+          setProteinTargetGrams(profile.proteinTargetGrams ?? null);
           const nextDietPhase = userData?.dietPhase;
           setCurrentDietPhase(
             typeof nextDietPhase === "string" && isDietPhase(nextDietPhase)
@@ -186,6 +214,31 @@ export default function NutritionIndex() {
   );
 
   const totals = useMemo(() => computeNutritionTotals(meals), [meals]);
+  const allMealSections = useMemo(
+    () => [...DEFAULT_MEAL_SECTIONS, ...extraSnackSections],
+    [extraSnackSections]
+  );
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      const results = await searchFoodsAsync(debouncedFoodQuery, 20);
+      if (!cancelled) setFoodResults(results);
+    };
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [debouncedFoodQuery]);
+  const mealsBySection = useMemo(() => {
+    const grouped = new Map<string, NutritionMeal[]>();
+    for (const section of allMealSections) grouped.set(section, []);
+    for (const meal of meals) {
+      const key = meal.mealSection?.trim() || DEFAULT_MEAL_SECTIONS[0];
+      if (!grouped.has(key)) grouped.set(key, []);
+      grouped.get(key)!.push(meal);
+    }
+    return grouped;
+  }, [meals, allMealSections]);
   const calorieProgress = useMemo(
     () => computeDailyCalorieProgress(totals.calories, calorieTarget),
     [totals.calories, calorieTarget]
@@ -202,10 +255,29 @@ export default function NutritionIndex() {
   const resetForm = () => {
     setEditingMealId(null);
     setFormValues(buildInitialFormValues());
+    setSelectedFood(null);
+    setFoodQuery("");
+    setEntryValue("");
+    setEntryMode("grams");
   };
 
   const handleChange = (field: keyof MealFormValues, value: string) => {
     setFormValues((previous) => ({ ...previous, [field]: value }));
+  };
+
+  const handleSelectFood = (food: FoodItem) => {
+    setSelectedFood(food);
+    setFoodQuery(food.name);
+    if (entryValue.trim()) {
+      applyFoodConversion(food, entryMode, entryValue);
+    }
+  };
+
+  const handleEntryValueChange = (value: string) => {
+    setEntryValue(value);
+    if (selectedFood) {
+      applyFoodConversion(selectedFood, entryMode, value);
+    }
   };
 
   const handleSubmit = async () => {
@@ -222,8 +294,8 @@ export default function NutritionIndex() {
 
     try {
       const request = editingMealId
-        ? updateMeal(uid, editingMealId, parsed.payload)
-        : createMeal(uid, parsed.payload);
+        ? updateMeal(uid, editingMealId, { ...parsed.payload, mealSection })
+        : createMeal(uid, { ...parsed.payload, mealSection });
 
       if (isOffline) {
         void request.catch((error) => {
@@ -263,7 +335,29 @@ export default function NutritionIndex() {
       proteinGrams: meal.proteinGrams == null ? "" : String(meal.proteinGrams),
       time: toEditableTime(meal.loggedAt),
     });
+    setMealSection(meal.mealSection?.trim() || DEFAULT_MEAL_SECTIONS[0]);
+    setSelectedFood(null);
+    setFoodQuery(meal.name);
+    setEntryValue("");
     setFeedback(null);
+  };
+
+  const handleAddSnackSection = () => {
+    const nextNumber = extraSnackSections.length + 4;
+    const label = `Snack ${nextNumber}`;
+    setExtraSnackSections((prev) => [...prev, label]);
+    setMealSection(label);
+  };
+
+  const applyFoodConversion = (food: FoodItem, mode: FoodEntryMode, value: string) => {
+    const converted = computeFromFood(food, mode, value);
+    if (!converted) return;
+    setFormValues((prev) => ({
+      ...prev,
+      name: food.name,
+      calories: String(Math.round(converted.calories)),
+      proteinGrams: String(Math.round(converted.proteinGrams)),
+    }));
   };
 
   const handleDeleteMeal = (meal: NutritionMeal) => {
@@ -356,7 +450,18 @@ export default function NutritionIndex() {
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
-      <ScrollView contentContainerStyle={styles.content} style={styles.container} bounces>
+      <KeyboardAvoidingView
+        style={styles.keyboardAvoid}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 10 : 18}
+      >
+      <ScrollView
+        contentContainerStyle={styles.content}
+        style={styles.container}
+        bounces
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+      >
         <View style={styles.header}>
           <TouchableOpacity style={styles.backButton} onPress={handleGoBack}>
             <Ionicons name="chevron-back" size={22} color="#fff" />
@@ -381,7 +486,11 @@ export default function NutritionIndex() {
             <View style={styles.totalChip}>
               <Text style={styles.totalLabel}>Protein</Text>
               <Text style={styles.totalValue}>
-                {totals.proteinGrams > 0 ? `${totals.proteinGrams} g` : "-"}
+                {proteinTargetGrams != null
+                  ? `${totals.proteinGrams} / ${proteinTargetGrams} g`
+                  : totals.proteinGrams > 0
+                    ? `${totals.proteinGrams} g`
+                    : "-"}
               </Text>
             </View>
             <View style={styles.totalChip}>
@@ -424,6 +533,79 @@ export default function NutritionIndex() {
 
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>{editingMealId ? "Edit meal" : "Add meal"}</Text>
+
+          <Text style={styles.label}>Meal section</Text>
+          <View style={styles.rowWrap}>
+            {allMealSections.map((section) => (
+              <TouchableOpacity
+                key={section}
+                style={[styles.chip, mealSection === section && styles.chipActive]}
+                onPress={() => setMealSection(section)}
+              >
+                <Text style={[styles.chipText, mealSection === section && styles.chipTextActive]}>
+                  {section}
+                </Text>
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity style={styles.chip} onPress={handleAddSnackSection}>
+              <Text style={styles.chipText}>+ Snack</Text>
+            </TouchableOpacity>
+          </View>
+
+          <Text style={styles.label}>Food search</Text>
+          <TextInput
+            style={styles.input}
+            value={foodQuery}
+            onChangeText={setFoodQuery}
+            placeholder="Search food (e.g., chicken breast)"
+            placeholderTextColor="#7a7a8c"
+          />
+          {foodQuery.trim() ? (
+            <View style={styles.searchResultsBox}>
+                {foodResults.slice(0, 20).map((item) => (
+                  <TouchableOpacity key={item.id} style={styles.searchRow} onPress={() => handleSelectFood(item)}>
+                    <Text style={styles.searchTitle}>{item.name}</Text>
+                    <Text style={styles.subText}>{formatServingLabel(item.servingLabel)}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+          ) : null}
+
+          {selectedFood ? (
+            <>
+              <Text style={styles.label}>Entry mode</Text>
+              <View style={styles.rowWrap}>
+                {(["grams", "servings", "calories"] as FoodEntryMode[]).map((mode) => (
+                  <TouchableOpacity
+                    key={mode}
+                    style={[styles.chip, entryMode === mode && styles.chipActive]}
+                    onPress={() => {
+                      setEntryMode(mode);
+                      if (entryValue.trim()) applyFoodConversion(selectedFood, mode, entryValue);
+                    }}
+                  >
+                    <Text style={[styles.chipText, entryMode === mode && styles.chipTextActive]}>
+                      {mode === "grams" ? "Grams" : mode === "servings" ? "Servings" : "Calories"}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <TextInput
+                style={styles.input}
+                value={entryValue}
+                onChangeText={handleEntryValueChange}
+                keyboardType="decimal-pad"
+                placeholder={
+                  entryMode === "grams"
+                    ? "170"
+                    : entryMode === "servings"
+                      ? "1.5"
+                      : "450"
+                }
+                placeholderTextColor="#7a7a8c"
+              />
+            </>
+          ) : null}
 
           <Text style={styles.label}>Meal name</Text>
           <TextInput
@@ -494,26 +676,35 @@ export default function NutritionIndex() {
           {!loadingMeals && meals.length === 0 ? (
             <Text style={styles.subText}>No meals logged yet.</Text>
           ) : null}
-          {meals.map((meal) => (
-            <View key={meal.id} style={styles.mealRow}>
-              <View style={styles.mealBody}>
-                <Text style={styles.mealTitle}>{meal.name}</Text>
-                <Text style={styles.subText}>
-                  {meal.calories} kcal
-                  {meal.proteinGrams != null ? ` - ${meal.proteinGrams} g protein` : ""}
-                  {` - ${formatMealTime(meal.loggedAt)}`}
-                </Text>
+          {allMealSections.map((section) => {
+            const sectionMeals = mealsBySection.get(section) ?? [];
+            return (
+              <View key={section} style={styles.sectionMealsBlock}>
+                <Text style={styles.mealSectionTitle}>{section}</Text>
+                {sectionMeals.length === 0 ? <Text style={styles.subText}>No entries.</Text> : null}
+                {sectionMeals.map((meal) => (
+                  <View key={meal.id} style={styles.mealRow}>
+                    <View style={styles.mealBody}>
+                      <Text style={styles.mealTitle}>{meal.name}</Text>
+                      <Text style={styles.subText}>
+                        {meal.calories} kcal
+                        {meal.proteinGrams != null ? ` - ${meal.proteinGrams} g protein` : ""}
+                        {` - ${formatMealTime(meal.loggedAt)}`}
+                      </Text>
+                    </View>
+                    <View style={styles.mealActions}>
+                      <TouchableOpacity style={styles.iconButton} onPress={() => handleEditMeal(meal)}>
+                        <Ionicons name="create-outline" size={18} color="#fff" />
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.iconButton} onPress={() => handleDeleteMeal(meal)}>
+                        <Ionicons name="trash-outline" size={18} color="#ff8f8f" />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ))}
               </View>
-              <View style={styles.mealActions}>
-                <TouchableOpacity style={styles.iconButton} onPress={() => handleEditMeal(meal)}>
-                  <Ionicons name="create-outline" size={18} color="#fff" />
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.iconButton} onPress={() => handleDeleteMeal(meal)}>
-                  <Ionicons name="trash-outline" size={18} color="#ff8f8f" />
-                </TouchableOpacity>
-              </View>
-            </View>
-          ))}
+            );
+          })}
         </View>
 
         <View style={styles.card}>
@@ -560,6 +751,7 @@ export default function NutritionIndex() {
           ))}
         </View>
       </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -568,6 +760,9 @@ const styles = StyleSheet.create({
   safe: {
     flex: 1,
     backgroundColor: "#0d0d1a",
+  },
+  keyboardAvoid: {
+    flex: 1,
   },
   container: {
     flex: 1,
@@ -643,6 +838,50 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600",
   },
+  rowWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  chip: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.2)",
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    backgroundColor: "rgba(255,255,255,0.06)",
+  },
+  chipActive: {
+    backgroundColor: "#fff",
+    borderColor: ACCENT,
+  },
+  chipText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  chipTextActive: {
+    color: "#4a90e2",
+    fontWeight: "700",
+  },
+  searchResultsBox: {
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+    borderRadius: 12,
+    overflow: "hidden",
+    backgroundColor: "rgba(255,255,255,0.04)",
+  },
+  searchRow: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "rgba(255,255,255,0.08)",
+  },
+  searchTitle: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "600",
+  },
   fieldRow: {
     flexDirection: "row",
     gap: 10,
@@ -711,6 +950,15 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: "rgba(255,255,255,0.05)",
+  },
+  sectionMealsBlock: {
+    gap: 6,
+  },
+  mealSectionTitle: {
+    color: "#d8daec",
+    fontSize: 13,
+    fontWeight: "700",
+    marginTop: 4,
   },
   mealBody: {
     flex: 1,
