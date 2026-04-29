@@ -253,7 +253,7 @@ export default function ProfileIndex() {
       return "Health Connect is only supported on Android.";
     }
     if (healthPermissionState === "granted") {
-      return "You have granted Health Connect permission. You can sync sleep data now.";
+      return "Connected. Sleep data can now sync from Health Connect.";
     }
     if (healthPermissionState === "denied" || healthPermissionState === "revoked") {
       return "Sleep permission is required. Grant Health Connect permission to sync sleep data.";
@@ -279,7 +279,7 @@ export default function ProfileIndex() {
       setHealthFeedback("You're offline. Reconnect to continue.");
       return;
     }
-    setHealthFeedback("Opening Health Connect app permissions...");
+    setHealthFeedback(null);
     const opened =
       (await openHealthConnectAppPermissionsScreen()) ||
       (await openHealthConnectDataManagementScreen());
@@ -386,6 +386,8 @@ export default function ProfileIndex() {
       showAppAlert("Save failed", "Couldn't save your changes. Please try again.");
     }
   };
+
+  const isHealthConnected = healthPermissionState === "granted";
 
   if (redirectTo) return <Redirect href={redirectTo} />;
   if (loading) {
@@ -574,16 +576,25 @@ export default function ProfileIndex() {
           <Text style={styles.helperText}>{healthConnectMessage()}</Text>
           <View style={styles.healthActionsRow}>
             <TouchableOpacity
-              style={[styles.secondaryButton, styles.healthActionButton, healthLoading && styles.buttonDisabled]}
+              style={[
+                styles.secondaryButton,
+                styles.healthActionButton,
+                isHealthConnected && styles.connectedButton,
+                healthLoading && styles.buttonDisabled,
+              ]}
               disabled={healthLoading}
               onPress={handleConnectHealthPermission}
             >
-              <Text style={styles.secondaryButtonText}>🔗 Connect</Text>
+              <Text style={[styles.secondaryButtonText, isHealthConnected && styles.connectedButtonText]}>
+                {isHealthConnected ? "Connected" : "🔗 Connect"}
+              </Text>
             </TouchableOpacity>
           </View>
-          <Text style={styles.healthHint}>
-            In Health Connect: App permissions {"->"} Lastrep {"->"} Allow all.
-          </Text>
+          {!isHealthConnected ? (
+            <Text style={styles.healthHint}>
+              In Health Connect: App permissions {"->"} Lastrep Dev {"->"} Allow all.
+            </Text>
+          ) : null}
           {healthAvailability === "provider_update_required" ? (
             <TouchableOpacity
               style={[styles.secondaryButton, healthLoading && styles.buttonDisabled]}
@@ -712,6 +723,13 @@ const styles = StyleSheet.create({
   buttonDisabled: { opacity: 0.6 },
   healthFeedback: { color: "#a5acc1", fontSize: 12, lineHeight: 16 },
   healthHint: { color: "#a5acc1", fontSize: 12, lineHeight: 16 },
+  connectedButton: {
+    borderColor: "#37c26b",
+    backgroundColor: "rgba(55,194,107,0.16)",
+  },
+  connectedButtonText: {
+    color: "#c6f5d8",
+  },
   save: { backgroundColor: "#7b61ff", borderRadius: 12, alignItems: "center", paddingVertical: 14, marginTop: 22 },
   saveText: { color: "#fff", fontWeight: "800", fontSize: 15 },
   saveFeedback: { color: "#a6e3a1", textAlign: "center", fontSize: 13, marginTop: 8 },
