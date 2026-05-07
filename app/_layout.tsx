@@ -1,4 +1,5 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
+import * as SplashScreen from 'expo-splash-screen';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -17,6 +18,10 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 export const unstable_settings = {
   anchor: '(tabs)',
 };
+
+void SplashScreen.preventAutoHideAsync().catch(() => {
+  // already prevented or unavailable
+});
 
 if (__DEV__) {
   const warnGuard = globalThis as unknown as { __lastrepWarnFilterInstalled?: boolean };
@@ -44,6 +49,23 @@ export default function RootLayout() {
     LogBox.ignoreLogs([
       "SafeAreaView has been deprecated and will be removed in a future release. Please use 'react-native-safe-area-context' instead.",
     ]);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const warmNutritionSearch = async () => {
+      try {
+        const foodDb = await import('@/src/nutrition/foodDb');
+        if (cancelled) return;
+        await foodDb.prewarmFoodSearch();
+      } catch {
+        // Best-effort warmup only.
+      }
+    };
+    void warmNutritionSearch();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const stackScreens = [

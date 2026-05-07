@@ -27,6 +27,7 @@ const source = String(readArg("--source", "normalized")).toLowerCase();
 const maxRows = Number(readArg("--max", "50000"));
 const includeBranded = String(readArg("--include-branded", "false")).toLowerCase() === "true";
 const mergeWithExisting = String(readArg("--merge-existing", "false")).toLowerCase() === "true";
+const canonicalKeepListPath = path.resolve("./scripts/canonical-food-keep-list.json");
 
 if (!inputPath) {
   console.error("Missing --in path");
@@ -72,6 +73,16 @@ const fromNormalized = (row, idx) => ({
   servingGrams: toFinite(row.servingGrams),
   caloriesPer100g: toFinite(row.caloriesPer100g),
   proteinPer100g: toFinite(row.proteinPer100g),
+  carbsPer100g: toFinite(row.carbsPer100g ?? row.carbPer100g ?? row.carbohydratesPer100g),
+  fatPer100g: toFinite(row.fatPer100g ?? row.fatsPer100g),
+  foodFamilies: Array.isArray(row.foodFamilies) ? row.foodFamilies : undefined,
+  foodForms: Array.isArray(row.foodForms) ? row.foodForms : undefined,
+  isBaseFood: typeof row.isBaseFood === "boolean" ? row.isBaseFood : undefined,
+  isPrepared: typeof row.isPrepared === "boolean" ? row.isPrepared : undefined,
+  isComboMeal: typeof row.isComboMeal === "boolean" ? row.isComboMeal : undefined,
+  isBranded: typeof row.isBranded === "boolean" ? row.isBranded : undefined,
+  isDerivative: typeof row.isDerivative === "boolean" ? row.isDerivative : undefined,
+  isStaple: typeof row.isStaple === "boolean" ? row.isStaple : undefined,
 });
 
 const findUsdaNutrient = (foodNutrients, names) => {
@@ -91,6 +102,8 @@ const fromUsda = (row, idx) => {
   const fdcId = row?.fdcId ?? row?.id ?? idx + 1;
   const calories = findUsdaNutrient(row?.foodNutrients, ["energy", "kcal"]);
   const protein = findUsdaNutrient(row?.foodNutrients, ["protein"]);
+  const carbs = findUsdaNutrient(row?.foodNutrients, ["carbohydrate"]);
+  const fat = findUsdaNutrient(row?.foodNutrients, ["total lipid", "fat"]);
   const servingGrams = toFinite(row?.servingSize) ?? 100;
   const servingUnit = String(row?.servingSizeUnit ?? "g").toLowerCase();
   const servingLabel = `${servingGrams} ${servingUnit}`;
@@ -103,6 +116,8 @@ const fromUsda = (row, idx) => {
     servingGrams,
     caloriesPer100g: calories,
     proteinPer100g: protein,
+    carbsPer100g: carbs,
+    fatPer100g: fat,
   };
 };
 
@@ -115,6 +130,8 @@ const fromOff = (row, idx) => {
       return kj == null ? null : kj * 0.239005736;
     })();
   const protein = toFinite(nutr.proteins_100g);
+  const carbs = toFinite(nutr.carbohydrates_100g);
+  const fat = toFinite(nutr.fat_100g);
   const servingLabelRaw = String(row?.serving_size ?? "").trim();
   let servingGrams = 100;
   if (servingLabelRaw) {
@@ -137,6 +154,8 @@ const fromOff = (row, idx) => {
     servingGrams,
     caloriesPer100g: calories,
     proteinPer100g: protein,
+    carbsPer100g: carbs,
+    fatPer100g: fat,
   };
 };
 
@@ -181,6 +200,148 @@ const qualityScore = (row, sourceTag = "unknown") => {
   if (Number.isFinite(Number(row?.proteinPer100g)) && Number(row.proteinPer100g) > 0) score += 6;
   if (Number.isFinite(Number(row?.caloriesPer100g)) && Number(row.caloriesPer100g) > 0) score += 6;
   return score;
+};
+
+const canonicalKeepConfig = fs.existsSync(canonicalKeepListPath)
+  ? JSON.parse(fs.readFileSync(canonicalKeepListPath, "utf8"))
+  : { requiredNames: [] };
+const requiredCanonicalNames = new Set(
+  (Array.isArray(canonicalKeepConfig.requiredNames) ? canonicalKeepConfig.requiredNames : [])
+    .map((x) => String(x).toLowerCase().trim())
+    .filter(Boolean)
+);
+
+const isRequiredCanonicalName = (name) =>
+  requiredCanonicalNames.has(String(name ?? "").toLowerCase().trim());
+
+const PRIORITY_KEEP_TOKENS = [
+  "cherry",
+  "melon",
+  "sweet potato",
+  "potato",
+  "bread",
+  "rice",
+  "chicken",
+  "beef",
+  "salmon",
+  "egg",
+  "milk",
+  "yogurt",
+  "broccoli",
+  "carrot",
+  "onion",
+  "pasta",
+  "tofu",
+  "banana",
+  "apple",
+  "oat",
+];
+
+const isPriorityKeepName = (name) => {
+  const n = String(name ?? "").toLowerCase().trim();
+  if (!n) return false;
+  return PRIORITY_KEEP_TOKENS.some((t) => n.includes(t));
+};
+
+const isUsdaPotatoBaseKeep = (row) => {
+  const id = String(row?.id ?? "");
+  if (!id.startsWith("usda-")) return false;
+  const n = String(row?.name ?? "").toLowerCase().trim();
+  const isPotatoFamily =
+    (/\bpotato(?:es)?\b/.test(n) && !/\bsweet\b/.test(n)) ||
+    (/\bsweet\b/.test(n) && /\bpotato(?:es)?\b/.test(n));
+  if (!isPotatoFamily) return false;
+  const baseForm = /\b(raw|cooked|boiled|baked|flesh|with skin|without skin)\b/.test(n);
+  if (!baseForm) return false;
+  if (
+    /\b(fries|french|hash brown|chips?|crisps?|snack|mix|bread|cookie|pie|salad|soup|dumpling|gnocchi|knish|flakes|bites|blintzes|crowns|crusted|munchers|pancakes|puffs|sausage|skins|starch|stix|ridges)\b/.test(
+      n
+    )
+  ) {
+    return false;
+  }
+  return true;
+};
+
+const MUST_KEEP_NAME_RULES = [
+  /^melon$/,
+  /^melons$/,
+  /^melon,\s*raw$/,
+  /^melons,\s*raw$/,
+  /^melon,\s*frozen$/,
+  /^melons,\s*frozen$/,
+  /^cantaloupe,\s*raw$/,
+  /^honeydew,\s*raw$/,
+];
+
+const isMustKeepGeneric = (name) => {
+  const n = String(name ?? "").toLowerCase().trim();
+  return MUST_KEEP_NAME_RULES.some((rule) => rule.test(n));
+};
+
+const normalizedNameKey = (name) =>
+  String(name ?? "")
+    .toLowerCase()
+    .replace(/[%]/g, " ")
+    .replace(/[()[\]{}]/g, " ")
+    .replace(/[,.;:/\\|+_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const FAMILY_PATTERNS = {
+  grains: /\b(rice|bread|wheat|rye|oat|oats|oatmeal|pasta|noodle|quinoa|barley|grain|flour)\b/,
+  starches: /\b(potato|potatoes|sweet potato|yam|cassava|taro)\b/,
+  produce: /\b(raw|fresh|fruit|vegetable|berries?|cherries?|banana|apple|melon|potato|tomato|onion|broccoli|carrot)\b/,
+  protein: /\b(chicken|beef|turkey|fish|salmon|egg|tofu|protein|pork)\b/,
+  dairy: /\b(milk|yogurt|cheese|dairy|whey)\b/,
+  legumes: /\b(bean|beans|lentil|lentils|chickpea|chickpeas|pea|peas)\b/,
+} ;
+
+const FORM_PATTERNS = {
+  raw: /\braw\b/,
+  cooked: /\bcooked\b/,
+  baked: /\bbaked\b/,
+  boiled: /\bboiled\b/,
+  roasted: /\broasted\b/,
+  fresh: /\bfresh\b/,
+  plain: /\bplain\b/,
+  frozen: /\bfrozen\b/,
+};
+
+const PREPARED_PATTERNS =
+  /\b(fried|fries|hash brown|breaded|battered|sandwich|wrap|bowl|dinner|meal|with|and|style|sauce|cocktail|mix|dessert|candy|cookie|chips?)\b/;
+const DERIVATIVE_PATTERNS = /\b(flour|powder|crumbs?|mix|seasoning|extract|concentrate)\b/;
+
+const deriveMetadata = (row) => {
+  const n = String(row?.name ?? "").toLowerCase();
+  const a = Array.isArray(row?.aliases) ? row.aliases.join(" ").toLowerCase() : "";
+  const t = `${n} ${a}`.trim();
+  const foodFamilies = Object.entries(FAMILY_PATTERNS)
+    .filter(([, rx]) => rx.test(t))
+    .map(([k]) => k);
+  const foodForms = Object.entries(FORM_PATTERNS)
+    .filter(([, rx]) => rx.test(t))
+    .map(([k]) => k);
+  const isPrepared = PREPARED_PATTERNS.test(t);
+  const isDerivative = DERIVATIVE_PATTERNS.test(t);
+  const isComboMeal = /\b(with|and)\b/.test(n) || /\b(dinner|meal|sandwich|wrap|bowl)\b/.test(n);
+  const isBranded = String(row?.id ?? "").startsWith("off-") || /\b(premium|authentic|style|brand|organic)\b/.test(t);
+  const isStaple = /\b(rice|bread|potato|sweet potato|oat|oats|oatmeal)\b/.test(t);
+  const isBaseFood =
+    !isPrepared &&
+    !isDerivative &&
+    !isComboMeal &&
+    (foodForms.includes("raw") || foodForms.includes("fresh") || foodForms.includes("plain") || n.split(/\s+/).length <= 3);
+  return {
+    foodFamilies,
+    foodForms,
+    isBaseFood,
+    isPrepared,
+    isComboMeal,
+    isBranded,
+    isDerivative,
+    isStaple,
+  };
 };
 
 const loadExistingFoodsFromTs = (filePath, exportName) => {
@@ -228,6 +389,40 @@ const isValidRow = (row) =>
   row.caloriesPer100g > 0 &&
   Number.isFinite(row.proteinPer100g) &&
   row.proteinPer100g >= 0;
+
+const BAD_NAME_CONTEXT = /\b(candy|candies|soda|cola|drink|mix|gelatin|jelly|cookie|bar|chips|syrup)\b/i;
+const GENERIC_FRUIT_NAME = /^(cherry|melon|banana|apple|orange|grape|peach|pear)$/i;
+
+const isSaneRow = (row) => {
+  const calories = Number(row.caloriesPer100g);
+  const protein = Number(row.proteinPer100g);
+  const carbs = Number(row.carbsPer100g ?? 0);
+  const fat = Number(row.fatPer100g ?? 0);
+  const servingGrams = Number(row.servingGrams);
+  const name = String(row.name ?? "").trim();
+  const aliasesText = Array.isArray(row.aliases) ? row.aliases.join(" ") : String(row.aliases ?? "");
+  const contextText = `${name} ${aliasesText}`.toLowerCase();
+  const isOffRow = String(row.id ?? "").startsWith("off-");
+
+  if (!Number.isFinite(calories) || calories <= 0 || calories > 900) return false;
+  if (!Number.isFinite(protein) || protein < 0 || protein > 100) return false;
+  if (Number.isFinite(carbs) && (carbs < 0 || carbs > 100)) return false;
+  if (Number.isFinite(fat) && (fat < 0 || fat > 100)) return false;
+  if (!Number.isFinite(servingGrams) || servingGrams <= 0 || servingGrams > 5000) return false;
+
+  const macroSum = (Number.isFinite(protein) ? protein : 0) + (Number.isFinite(carbs) ? carbs : 0) + (Number.isFinite(fat) ? fat : 0);
+  if (macroSum > 110) return false;
+
+  // Extremely low-calorie high-macro or impossible density artifacts.
+  if (calories < 10 && macroSum > 30) return false;
+
+  // Generic single-fruit names should not carry obvious processed-food context.
+  if (GENERIC_FRUIT_NAME.test(name) && BAD_NAME_CONTEXT.test(contextText)) return false;
+  // OFF often has ambiguous one-word branded names ("Cherry") that are not canonical produce.
+  if (isOffRow && GENERIC_FRUIT_NAME.test(name) && !/\b(raw|fresh)\b/.test(contextText)) return false;
+
+  return true;
+};
 
 const parseCsvLine = (line) => {
   const out = [];
@@ -316,10 +511,16 @@ const loadFromUsdaCsv = async (dirPath) => {
   }
   const kcalNutrientIds = new Set();
   const proteinNutrientIds = new Set();
+  const carbNutrientIds = new Set();
+  const fatNutrientIds = new Set();
   for (const [key, id] of nutrientIdByName.entries()) {
     const [name, unitName] = key.split("|");
     if (name.includes("energy") && unitName === "kcal") kcalNutrientIds.add(id);
     if (name === "protein") proteinNutrientIds.add(id);
+    if (name.includes("carbohydrate")) carbNutrientIds.add(id);
+    if (name.includes("total lipid") || (name.includes("fat") && !name.includes("fatty acids"))) {
+      fatNutrientIds.add(id);
+    }
   }
 
   const measures = fs.existsSync(measureUnitPath) ? readCsvRecords(measureUnitPath) : [];
@@ -338,6 +539,8 @@ const loadFromUsdaCsv = async (dirPath) => {
 
   const caloriesByFoodId = new Map();
   const proteinByFoodId = new Map();
+  const carbsByFoodId = new Map();
+  const fatByFoodId = new Map();
   await streamCsv(nutrientPath, (row) => {
     const foodId = String(row.fdc_id ?? row.food_id ?? "");
     const nutrientId = String(row.nutrient_id ?? "");
@@ -348,6 +551,12 @@ const loadFromUsdaCsv = async (dirPath) => {
     }
     if (proteinNutrientIds.has(nutrientId) && !proteinByFoodId.has(foodId)) {
       proteinByFoodId.set(foodId, amount);
+    }
+    if (carbNutrientIds.has(nutrientId) && !carbsByFoodId.has(foodId)) {
+      carbsByFoodId.set(foodId, amount);
+    }
+    if (fatNutrientIds.has(nutrientId) && !fatByFoodId.has(foodId)) {
+      fatByFoodId.set(foodId, amount);
     }
   });
 
@@ -370,6 +579,8 @@ const loadFromUsdaCsv = async (dirPath) => {
     if (!allowedTypes.has(dataType)) return;
     const calories = caloriesByFoodId.get(foodId) ?? null;
     const protein = proteinByFoodId.get(foodId) ?? null;
+    const carbs = carbsByFoodId.get(foodId) ?? null;
+    const fat = fatByFoodId.get(foodId) ?? null;
     const portion = firstPortionByFoodId.get(foodId);
     const servingGrams = toFinite(portion?.gram_weight) ?? 100;
     const unitName = (measureNameById.get(String(portion?.measure_unit_id ?? "")) ?? "g").trim();
@@ -404,6 +615,8 @@ const loadFromUsdaCsv = async (dirPath) => {
       servingGrams,
       caloriesPer100g: calories,
       proteinPer100g: protein,
+      carbsPer100g: carbs,
+      fatPer100g: fat,
     });
   });
   return out;
@@ -417,10 +630,10 @@ const existingRest = mergeWithExisting
   ? loadExistingFoodsFromTs(path.resolve(outputDir, "foods-rest-1.ts"), "FOODS_REST_1")
   : [];
 const existingRows = mergeWithExisting ? [...existingCore, ...existingRest] : [];
-const existingNameSet = new Set(existingRows.map((r) => String(r.name ?? "").toLowerCase().trim()));
+const existingNameSet = new Set(existingRows.map((r) => normalizedNameKey(r.name)));
 
 if (source === "usda-csv") {
-  normalized = (await loadFromUsdaCsv(resolvedInputPath)).filter(isValidRow);
+  normalized = (await loadFromUsdaCsv(resolvedInputPath)).filter((row) => isValidRow(row) && isSaneRow(row));
 } else if (source === "off-jsonl") {
   const nextRows = [];
   const uniqueNameSet = new Set(existingNameSet);
@@ -430,9 +643,9 @@ if (source === "usda-csv") {
   await streamJsonl(resolvedInputPath, (row) => {
     const mapped = fromOff(row, idx);
     idx += 1;
-    if (!isValidRow(mapped)) return true;
+    if (!isValidRow(mapped) || !isSaneRow(mapped)) return true;
     if (isLikelyNoisyProductName(mapped.name)) return true;
-    const key = mapped.name.toLowerCase().trim();
+    const key = normalizedNameKey(mapped.name);
     if (uniqueNameSet.has(key)) return true;
     uniqueNameSet.add(key);
     nextRows.push(mapped);
@@ -451,7 +664,7 @@ if (source === "usda-csv") {
   }
   const mapper =
     source === "usda" ? fromUsda : source === "off" ? fromOff : fromNormalized;
-  normalized = rows.map((row, idx) => mapper(row, idx)).filter(isValidRow);
+  normalized = rows.map((row, idx) => mapper(row, idx)).filter((r) => isValidRow(r) && isSaneRow(r));
 }
 
 normalized.sort((a, b) => a.name.localeCompare(b.name));
@@ -461,7 +674,7 @@ if (mergeWithExisting) {
 // Import-time dedupe by normalized name for cleaner search corpus.
 const dedupedByName = new Map();
 for (const row of normalized) {
-  const key = String(row.name).toLowerCase().trim();
+  const key = normalizedNameKey(row.name);
   const sourceTag = String(row.id ?? "").startsWith("usda-")
     ? "usda"
     : String(row.id ?? "").startsWith("off-")
@@ -485,8 +698,71 @@ for (const row of normalized) {
 }
 normalized = [...dedupedByName.values()];
 normalized.sort((a, b) => a.name.localeCompare(b.name));
+normalized = normalized.map((row) => ({ ...row, ...deriveMetadata(row) }));
 if (Number.isFinite(maxRows) && maxRows > 0 && normalized.length > maxRows) {
-  normalized = normalized.slice(0, maxRows);
+  const mustKeep = normalized.filter(
+    (row) =>
+      isMustKeepGeneric(row.name) ||
+      isRequiredCanonicalName(row.name) ||
+      isPriorityKeepName(row.name) ||
+      isUsdaPotatoBaseKeep(row)
+  );
+  const restRows = normalized.filter(
+    (row) =>
+      !(
+        isMustKeepGeneric(row.name) ||
+        isRequiredCanonicalName(row.name) ||
+        isPriorityKeepName(row.name) ||
+        isUsdaPotatoBaseKeep(row)
+      )
+  );
+  normalized = [...mustKeep, ...restRows].slice(0, maxRows);
+}
+
+// Final canonical guarantee pass: append required canonical rows from existing USDA load if missing.
+if (requiredCanonicalNames.size > 0) {
+  const existingNames = new Set(normalized.map((r) => String(r.name ?? "").toLowerCase().trim()));
+  const missingRequired = [...requiredCanonicalNames].filter((n) => !existingNames.has(n));
+  if (missingRequired.length > 0) {
+    let usdaRowsForBackfill = [];
+    if (source === "usda-csv") {
+      usdaRowsForBackfill = normalized.filter((r) => String(r.id ?? "").startsWith("usda-"));
+    } else if (fs.existsSync(path.resolve("./data/FoodData_Central_csv_2026-04-30/FoodData_Central_csv_2026-04-30"))) {
+      usdaRowsForBackfill = (await loadFromUsdaCsv(path.resolve("./data/FoodData_Central_csv_2026-04-30/FoodData_Central_csv_2026-04-30")))
+        .filter((row) => isValidRow(row) && isSaneRow(row));
+    }
+    const byName = new Map(usdaRowsForBackfill.map((r) => [String(r.name ?? "").toLowerCase().trim(), r]));
+    const additions = [];
+    for (const name of missingRequired) {
+      const row = byName.get(name);
+      if (row) additions.push(row);
+    }
+    if (additions.length > 0) {
+      const cur = new Map(normalized.map((r) => [String(r.name ?? "").toLowerCase().trim(), r]));
+      for (const row of additions) cur.set(String(row.name ?? "").toLowerCase().trim(), row);
+      normalized = [...cur.values()];
+      normalized.sort((a, b) => a.name.localeCompare(b.name));
+      if (Number.isFinite(maxRows) && maxRows > 0 && normalized.length > maxRows) {
+        const mustKeep = normalized.filter(
+          (row) =>
+            isMustKeepGeneric(row.name) ||
+            isRequiredCanonicalName(row.name) ||
+            isPriorityKeepName(row.name) ||
+            isUsdaPotatoBaseKeep(row)
+        );
+        const restRows = normalized.filter(
+          (row) =>
+            !(
+              isMustKeepGeneric(row.name) ||
+              isRequiredCanonicalName(row.name) ||
+              isPriorityKeepName(row.name) ||
+              isUsdaPotatoBaseKeep(row)
+            )
+        );
+        normalized = [...mustKeep, ...restRows].slice(0, maxRows);
+      }
+    }
+  }
 }
 
 fs.mkdirSync(path.resolve(outputDir), { recursive: true });
@@ -502,12 +778,147 @@ const writeTs = (filePath, exportName, dataRows) => {
   fs.writeFileSync(filePath, content, "utf8");
 };
 
+const STOP_TOKENS = new Set([
+  "and",
+  "with",
+  "for",
+  "the",
+  "from",
+  "into",
+  "fresh",
+  "style",
+  "food",
+  "foods",
+  "brand",
+  "original",
+  "natural",
+]);
+
+const normalizeToken = (text) =>
+  String(text ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+
+const tokenize = (text) =>
+  normalizeToken(text)
+    .split(/\s+/)
+    .filter((t) => t.length >= 2 && t.length <= 24 && !STOP_TOKENS.has(t));
+
+const buildSearchIndex = (rows, coreCount, restChunkSize) => {
+  const tokenIndex = new Map();
+  const prefixIndex = new Map();
+  const idToChunk = {};
+  const pushUnique = (map, key, id) => {
+    if (!key) return;
+    const arr = map.get(key);
+    if (!arr) {
+      map.set(key, [id]);
+      return;
+    }
+    if (arr[arr.length - 1] !== id && !arr.includes(id)) arr.push(id);
+  };
+
+  for (let idx = 0; idx < rows.length; idx += 1) {
+    const row = rows[idx];
+    const id = String(row.id ?? "");
+    if (!id) continue;
+    if (idx < coreCount) {
+      idToChunk[id] = 0;
+    } else {
+      idToChunk[id] = Math.floor((idx - coreCount) / restChunkSize) + 1;
+    }
+    const tokenSet = new Set([
+      ...tokenize(row.name),
+    ]);
+
+    let count = 0;
+    for (const token of tokenSet) {
+      pushUnique(tokenIndex, token, id);
+      pushUnique(prefixIndex, token.slice(0, 3), id);
+      count += 1;
+      if (count >= 18) break;
+    }
+  }
+
+  const scoreForToken = (name, token) => {
+    const n = normalizeToken(name);
+    let s = 0;
+    if (n === token) s += 1200;
+    if (n.startsWith(token)) s += 700;
+    if (n.endsWith(` ${token}`)) s += 680;
+    if (new RegExp(`\\b${token}\\b`).test(n)) s += 420;
+    if (n.includes(`${token}, raw`) || n.includes(`${token} raw`)) s += 600;
+    if (n.includes(token)) s += 180;
+    if (n.includes("cherries, raw")) s += 500;
+    if (
+      n.includes("premium") ||
+      n.includes("style") ||
+      n.includes("pie") ||
+      n.includes("cola") ||
+      n.includes("frosted") ||
+      n.includes("strudel")
+    ) s -= 180;
+    return s;
+  };
+
+  const nameById = new Map(rows.map((r) => [r.id, r.name]));
+
+  const compress = (map, cap) => {
+    const out = {};
+    for (const [k, arr] of map.entries()) {
+      const dedup = new Map();
+      for (const id of arr) {
+        const next = scoreForToken(
+          nameById.get(id) ?? "",
+          k
+        );
+        const prev = dedup.get(id);
+        if (prev == null || next > prev) dedup.set(id, next);
+      }
+      out[k] = [...dedup.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, cap)
+        .map(([id]) => id);
+    }
+    return out;
+  };
+
+  return {
+    FOOD_TOKEN_INDEX: compress(tokenIndex, 240),
+    FOOD_PREFIX_INDEX: compress(prefixIndex, 320),
+    FOOD_ID_TO_CHUNK: idToChunk,
+  };
+};
+
+const writeSearchIndexTs = (filePath, rows, coreCount, restChunkSize) => {
+  const built = buildSearchIndex(rows, coreCount, restChunkSize);
+  const content =
+    `export const FOOD_TOKEN_INDEX: Record<string, string[]> = ${JSON.stringify(
+      built.FOOD_TOKEN_INDEX,
+      null,
+      2
+    )};\n\n` +
+    `export const FOOD_PREFIX_INDEX: Record<string, string[]> = ${JSON.stringify(
+      built.FOOD_PREFIX_INDEX,
+      null,
+      2
+    )};\n\n` +
+    `export const FOOD_ID_TO_CHUNK: Record<string, number> = ${JSON.stringify(
+      built.FOOD_ID_TO_CHUNK,
+      null,
+      2
+    )};\n`;
+  fs.writeFileSync(filePath, content, "utf8");
+};
+
 writeTs(path.resolve(outputDir, "foods-core.ts"), "FOODS_CORE", core);
 for (let i = 0; i < rest.length; i += chunkSize) {
   const chunk = rest.slice(i, i + chunkSize);
   const chunkNumber = Math.floor(i / chunkSize) + 1;
   writeTs(path.resolve(outputDir, `foods-rest-${chunkNumber}.ts`), `FOODS_REST_${chunkNumber}`, chunk);
 }
+writeSearchIndexTs(path.resolve(outputDir, "foods-search-index.ts"), normalized, coreSize, chunkSize);
 
 console.log(
   `[${source}] Imported ${normalized.length} foods (after cap). Core=${core.length}, rest chunks=${Math.ceil(

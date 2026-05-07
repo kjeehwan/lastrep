@@ -2,2125 +2,4240 @@ import type { FoodItem } from "../foodDb";
 
 export const FOODS_CORE: FoodItem[] = [
   {
-    "id": "off-0011110193421",
-    "name": "1/2 Marble Grad Cake With Red Borders",
-    "aliases": [
-      "Kroger",
-      "The Kroger Co.",
-      "en:snacks",
-      "en:sweet-snacks",
-      "en:biscuits-and-cakes",
-      "en:cakes"
-    ],
-    "servingLabel": "0.031 CAKE (90 g)",
-    "servingGrams": 90,
+    "id": "usda-1043471",
+    "name": "- CHICKEN CHOW MEIN - RAMEN INSTANT DRY NOODLE, - CHICKEN CHOW MEIN -",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
     "caloriesPer100g": 400,
-    "proteinPer100g": 2.22
+    "proteinPer100g": 10,
+    "carbsPer100g": 69,
+    "fatPer100g": 10,
+    "foodFamilies": [
+      "grains",
+      "protein"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
   },
   {
-    "id": "off-0011150950152",
-    "name": "2\" Mini Neon Worms",
-    "aliases": [
-      "en:snacks",
-      "en:sweet-snacks",
-      "en:confectioneries"
+    "id": "usda-2552035",
+    "name": ":60 SECOND PASTA, FUSILLI",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 150,
+    "proteinPer100g": 6.5,
+    "carbsPer100g": 28,
+    "fatPer100g": 1.5,
+    "foodFamilies": [
+      "grains"
     ],
-    "servingLabel": "40 g (40 g)",
-    "servingGrams": 40,
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-2552034",
+    "name": ":60 SECOND PASTA, PENNE",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 160,
+    "proteinPer100g": 6.5,
+    "carbsPer100g": 31,
+    "fatPer100g": 1.25,
+    "foodFamilies": [
+      "grains"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-2722374",
+    "name": ":ratio Protein Banana Cream Dairy Snack",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 114.5592,
+    "proteinPer100g": 16.7043,
+    "carbsPer100g": 5.6572,
+    "fatPer100g": 2.4946,
+    "foodFamilies": [
+      "produce",
+      "protein",
+      "dairy"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-2694585",
+    "name": ":ratio Protein Black Cherry Dairy Snack",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 115,
+    "proteinPer100g": 16.7,
+    "carbsPer100g": 5.66,
+    "fatPer100g": 2.49,
+    "foodFamilies": [
+      "protein",
+      "dairy"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-2747179",
+    "name": ":ratio Trio Black Cherry Dairy Snack",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 100,
+    "proteinPer100g": 10,
+    "carbsPer100g": 2,
+    "fatPer100g": 6,
+    "foodFamilies": [
+      "dairy"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-412619",
+    "name": "!AJUA!, CAFFEINE FREE SODA, PINEAPPLE",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 50,
+    "proteinPer100g": 0,
+    "carbsPer100g": 12.5,
+    "fatPer100g": 0,
+    "foodFamilies": [],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-2332450",
+    "name": ".92 Ounce Jack Link's Beef Original Sticks 1/1 Count",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 462,
+    "proteinPer100g": 23.08,
+    "carbsPer100g": 3.85,
+    "fatPer100g": 34.62,
+    "foodFamilies": [
+      "protein"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-2364119",
+    "name": ".92 Ounce Jack Link's Teriyaki Beef Sticks 1/1 Count",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 423,
+    "proteinPer100g": 19.23,
+    "carbsPer100g": 11.54,
+    "fatPer100g": 34.62,
+    "foodFamilies": [
+      "protein"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-1828300",
+    "name": "'KITCHEN READY' PASTA SAUCE, 'KITCHEN READY'",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 28,
+    "proteinPer100g": 0.8,
+    "carbsPer100g": 4.8,
+    "fatPer100g": 0.8,
+    "foodFamilies": [
+      "grains"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": true,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-1836292",
+    "name": "'MEGA APPLE APPLESAUCE WITH BRAINPACK, 'MEGA APPLE",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 50,
+    "proteinPer100g": 0,
+    "carbsPer100g": 13.33,
+    "fatPer100g": 0.56,
+    "foodFamilies": [
+      "produce"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": true,
+    "isComboMeal": true,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-1059419",
+    "name": "'NANA POPS NUT BUTTER FILLED SUPERSNACKS, BANANA-RAMA",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 436,
+    "proteinPer100g": 7.69,
+    "carbsPer100g": 64.1,
+    "fatPer100g": 17.95,
+    "foodFamilies": [
+      "produce"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-723698",
+    "name": "'SOUR CREAM' & ONION ORGANIC DRIED VEGETABLE SUPERSNACKS, 'SOUR CREAM' & ONION",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 500,
+    "proteinPer100g": 25,
+    "carbsPer100g": 39.29,
+    "fatPer100g": 25,
+    "foodFamilies": [
+      "produce"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": true,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-2142737",
+    "name": "'SOUR CREAM' & ONION VEGGIE POPS SUPERSNACKS ORGANIC DRIED VEGETABLE SNACK, 'SOUR CREAM' & ONION",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 500,
+    "proteinPer100g": 25,
+    "carbsPer100g": 39.29,
+    "fatPer100g": 25,
+    "foodFamilies": [
+      "produce"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": true,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-961023",
+    "name": "'TALIANO SLICED ITALIAN BREAD, 'TALIANO",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 267,
+    "proteinPer100g": 10,
+    "carbsPer100g": 46.67,
+    "fatPer100g": 3.33,
+    "foodFamilies": [
+      "grains"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": true
+  },
+  {
+    "id": "usda-1041417",
+    "name": "'TALIANO WHEAT SLICED ITALIAN BREAD, 'TALIANO WHEAT",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 267,
+    "proteinPer100g": 10,
+    "carbsPer100g": 46.67,
+    "fatPer100g": 3.33,
+    "foodFamilies": [
+      "grains"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": true
+  },
+  {
+    "id": "usda-495381",
+    "name": "'TDE PINKY'TUDE RAW CRIPPS PINK APPLE JUICE",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 51,
+    "proteinPer100g": 0,
+    "carbsPer100g": 13.5,
+    "fatPer100g": 0,
+    "foodFamilies": [
+      "produce"
+    ],
+    "foodForms": [
+      "raw"
+    ],
+    "isBaseFood": true,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-1748656",
+    "name": "'THE CECILE' CUCUMBER & WATERMELON MARGARITA WITH CLOVER HONEY & THYME COCKTAIL MIXER INFUSED ICE CUBES, 'THE CECILE'",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 100,
+    "proteinPer100g": 0,
+    "carbsPer100g": 28,
+    "fatPer100g": 0,
+    "foodFamilies": [],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": true,
+    "isComboMeal": true,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-495384",
+    "name": "'TUDE FUJI'TUDE RAW FUJI APPLE JUICE",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 51,
+    "proteinPer100g": 0,
+    "carbsPer100g": 13.5,
+    "fatPer100g": 0,
+    "foodFamilies": [
+      "produce"
+    ],
+    "foodForms": [
+      "raw"
+    ],
+    "isBaseFood": true,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-495383",
+    "name": "'TUDE GALA'TUDE RAW GALA APPLE JUICE",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 51,
+    "proteinPer100g": 0,
+    "carbsPer100g": 13.5,
+    "fatPer100g": 0,
+    "foodFamilies": [
+      "produce"
+    ],
+    "foodForms": [
+      "raw"
+    ],
+    "isBaseFood": true,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-495382",
+    "name": "'TUDE GRANNY'TUDE RAW GRANNY SMITH APPLE JUICE",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 38,
+    "proteinPer100g": 0,
+    "carbsPer100g": 9.7,
+    "fatPer100g": 0,
+    "foodFamilies": [
+      "produce"
+    ],
+    "foodForms": [
+      "raw"
+    ],
+    "isBaseFood": true,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-495380",
+    "name": "'TUDE HONEY'TUDE RAW HONEY CRISP APPLE JUICE",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 55,
+    "proteinPer100g": 0,
+    "carbsPer100g": 13.5,
+    "fatPer100g": 0,
+    "foodFamilies": [
+      "produce"
+    ],
+    "foodForms": [
+      "raw"
+    ],
+    "isBaseFood": true,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-1386897",
+    "name": "\"\"ALLA NORMA\"\" WITH EGGPLANT & RICOTTA SALATA",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 59,
+    "proteinPer100g": 1.27,
+    "carbsPer100g": 6.33,
+    "fatPer100g": 3.8,
+    "foodFamilies": [],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": true,
+    "isComboMeal": true,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-2195617",
+    "name": "\"\"BEEF 'N BURGER\"\" SEASONING MIX, \"\"BEEF 'N BURGER\"\"",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 263,
+    "proteinPer100g": 0,
+    "carbsPer100g": 52.63,
+    "fatPer100g": 0,
+    "foodFamilies": [
+      "protein"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": true,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": true,
+    "isStaple": false
+  },
+  {
+    "id": "usda-1165898",
+    "name": "\"\"BEEF,GRND,CHUCK,PTY,20/8OZ,FBAB-GM,10#,Z\"\"",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
     "caloriesPer100g": 300,
-    "proteinPer100g": 5
-  },
-  {
-    "id": "off-0008346122202",
-    "name": "3-2-1 Plan Shakes",
-    "aliases": [
-      "Slim-Fast!"
+    "proteinPer100g": 17.18,
+    "carbsPer100g": 0,
+    "fatPer100g": 25.11,
+    "foodFamilies": [
+      "protein"
     ],
-    "servingLabel": "1 BOTTLE (295 ml)",
-    "servingGrams": 100,
-    "caloriesPer100g": 64,
-    "proteinPer100g": 3.39
+    "foodForms": [],
+    "isBaseFood": true,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
   },
   {
-    "id": "off-0011110910530",
-    "name": "50/50 Blend Mix of Baby Lettuces & Spinach",
-    "aliases": [
-      "Kroger",
-      "en:plant-based-foods-and-beverages",
-      "en:plant-based-foods",
-      "en:fruits-and-vegetables-based-foods"
-    ],
-    "servingLabel": "2 cup (85 g)",
-    "servingGrams": 85,
-    "caloriesPer100g": 24,
-    "proteinPer100g": 2.35
-  },
-  {
-    "id": "off-0012000002656",
-    "name": "7up",
-    "aliases": [
-      "SEVEN-UP",
-      "en:beverages-and-beverages-preparations",
-      "en:beverages",
-      "en:carbonated-drinks",
-      "en:sodas",
-      "en:sweetened-beverages"
-    ],
-    "servingLabel": "100 g",
-    "servingGrams": 100,
-    "caloriesPer100g": 4.541108984,
-    "proteinPer100g": 0
-  },
-  {
-    "id": "off-0011110084767",
-    "name": "8\" White Cake Decorated",
-    "aliases": [
-      "Bakery Fresh Fred Meyer",
-      "en:snacks",
-      "en:sweet-snacks",
-      "en:biscuits-and-cakes",
-      "en:cakes"
-    ],
-    "servingLabel": "1 fifth (82 g)",
-    "servingGrams": 82,
-    "caloriesPer100g": 341,
-    "proteinPer100g": 4.88
-  },
-  {
-    "id": "off-0011110086945",
-    "name": "8x8 White Confetti Cake W/White Icing",
-    "aliases": [
-      "King Soopers"
-    ],
-    "servingLabel": "78 g (0.125 CAKE)",
-    "servingGrams": 78,
-    "caloriesPer100g": 410,
-    "proteinPer100g": 3.85
-  },
-  {
-    "id": "usda-2706337",
-    "name": "Abalone",
-    "aliases": [],
-    "servingLabel": "135 g",
-    "servingGrams": 135,
-    "caloriesPer100g": 177,
-    "proteinPer100g": 21.24
-  },
-  {
-    "id": "usda-167782",
-    "name": "Abiyuch, raw",
-    "aliases": [],
-    "servingLabel": "114 g",
-    "servingGrams": 114,
-    "caloriesPer100g": 69,
-    "proteinPer100g": 1.5
-  },
-  {
-    "id": "off-0012729000698",
-    "name": "Abruzzo, Extra Virgin Olive Oil And Pure Soybean Oil",
-    "aliases": [
-      "Sirob Imports  Inc."
-    ],
-    "servingLabel": "14 g (1 Tbsp)",
-    "servingGrams": 14,
-    "caloriesPer100g": 857,
-    "proteinPer100g": 0
-  },
-  {
-    "id": "usda-171687",
-    "name": "Acerola juice, raw",
-    "aliases": [],
-    "servingLabel": "242 g",
-    "servingGrams": 242,
-    "caloriesPer100g": 23,
-    "proteinPer100g": 0.4
-  },
-  {
-    "id": "usda-171686",
-    "name": "Acerola, (west indian cherry), raw",
-    "aliases": [],
-    "servingLabel": "98 g",
-    "servingGrams": 98,
-    "caloriesPer100g": 32,
-    "proteinPer100g": 0.4
-  },
-  {
-    "id": "off-0015100001321",
-    "name": "Acini Di Pepe",
-    "aliases": [
-      "Creamette",
-      "New World Pasta Company",
-      "en:undefined"
-    ],
-    "servingLabel": "56.00000000000001g",
-    "servingGrams": 56.00000000000001,
-    "caloriesPer100g": 654,
-    "proteinPer100g": 22.3
-  },
-  {
-    "id": "usda-168061",
-    "name": "Acorn stew (Apache)",
+    "id": "usda-1167154",
+    "name": "\"\"BEEF,GRND,CHUCK,PTY,27/6OZ,FBAB-GM,10#,Z\"\"",
     "aliases": [],
     "servingLabel": "100 g",
     "servingGrams": 100,
-    "caloriesPer100g": 95,
-    "proteinPer100g": 6.81
-  },
-  {
-    "id": "off-0013271716990",
-    "name": "Adam Matthews, Yellow Caramel Cake",
-    "aliases": [
-      "Adam Matthews  Inc.",
-      "en:snacks",
-      "en:sweet-snacks",
-      "en:biscuits-and-cakes",
-      "en:cakes"
+    "caloriesPer100g": 300,
+    "proteinPer100g": 17.06,
+    "carbsPer100g": 0,
+    "fatPer100g": 25.29,
+    "foodFamilies": [
+      "protein"
     ],
-    "servingLabel": "1 SLICE (76 g)",
-    "servingGrams": 76,
-    "caloriesPer100g": 382,
-    "proteinPer100g": 3.95
+    "foodForms": [],
+    "isBaseFood": true,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
   },
   {
-    "id": "usda-2708809",
-    "name": "Adobo, with noodles",
-    "aliases": [],
-    "servingLabel": "224 g",
-    "servingGrams": 224,
-    "caloriesPer100g": 172,
-    "proteinPer100g": 16.89
-  },
-  {
-    "id": "usda-2708958",
-    "name": "Adobo, with rice",
-    "aliases": [],
-    "servingLabel": "244 g",
-    "servingGrams": 244,
-    "caloriesPer100g": 181,
-    "proteinPer100g": 17.69
-  },
-  {
-    "id": "off-0008346802012",
-    "name": "Advanced nutrition 100 calorie snacks baked chips",
-    "aliases": [
-      "Slimfast",
-      "en:snacks"
-    ],
-    "servingLabel": "1 ONZ (28 g)",
-    "servingGrams": 28,
-    "caloriesPer100g": 357,
-    "proteinPer100g": 7.14
-  },
-  {
-    "id": "off-0008346800049",
-    "name": "Advanced nutrition 100 calorie snacks drizzled crisps",
-    "aliases": [
-      "Slimfast",
-      "en:snacks"
-    ],
-    "servingLabel": "1 ONZ (28 g)",
-    "servingGrams": 28,
-    "caloriesPer100g": 357,
-    "proteinPer100g": 10.71
-  },
-  {
-    "id": "off-0008346740086",
-    "name": "Advanced Nutrition Creamy Chocolate Meal Replacement Shake",
-    "aliases": [
-      "Ksf Acquisition Corporation"
-    ],
-    "servingLabel": "11 OZA (325 ml)",
-    "servingGrams": 100,
-    "caloriesPer100g": 55.384615384615,
-    "proteinPer100g": 6.1538461538462
-  },
-  {
-    "id": "usda-2710282",
-    "name": "Agave liquid sweetener",
-    "aliases": [],
-    "servingLabel": "20 g",
-    "servingGrams": 20,
-    "caloriesPer100g": 310,
-    "proteinPer100g": 0.09
-  },
-  {
-    "id": "off-0011014211757",
-    "name": "Agave Nectar",
-    "aliases": [
-      "Madhava",
-      "en:null"
-    ],
-    "servingLabel": "21g",
-    "servingGrams": 21,
-    "caloriesPer100g": 1450,
-    "proteinPer100g": 0
-  },
-  {
-    "id": "usda-168992",
-    "name": "Agave, cooked (Southwest)",
+    "id": "usda-1165241",
+    "name": "\"\"BEEF,GRND,CHUCK,PTY,30/5.33OZ,FBAB-GM,10\"\"",
     "aliases": [],
     "servingLabel": "100 g",
     "servingGrams": 100,
-    "caloriesPer100g": 135,
-    "proteinPer100g": 0.99
-  },
-  {
-    "id": "usda-168993",
-    "name": "Agave, dried (Southwest)",
-    "aliases": [],
-    "servingLabel": "100 g",
-    "servingGrams": 100,
-    "caloriesPer100g": 341,
-    "proteinPer100g": 1.71
-  },
-  {
-    "id": "usda-169814",
-    "name": "Agave, raw (Southwest)",
-    "aliases": [],
-    "servingLabel": "100 g",
-    "servingGrams": 100,
-    "caloriesPer100g": 68,
-    "proteinPer100g": 0.52
-  },
-  {
-    "id": "off-0008295661098",
-    "name": "AGED BALSAMIC VINEGAR OF MODENA",
-    "aliases": [
-      "DE NIGRIS",
-      "en:condiments",
-      "en:sauces",
-      "en:groceries"
+    "caloriesPer100g": 270,
+    "proteinPer100g": 18,
+    "carbsPer100g": 0,
+    "fatPer100g": 22,
+    "foodFamilies": [
+      "protein"
     ],
-    "servingLabel": "1 Tbsp (15 ml)",
+    "foodForms": [],
+    "isBaseFood": true,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-1166290",
+    "name": "\"\"BEEF,GRND,CHUCK,PTY,40/4OZ,FBAB-GM,10#,Z\"\"",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 270,
+    "proteinPer100g": 18,
+    "carbsPer100g": 0,
+    "fatPer100g": 22,
+    "foodFamilies": [
+      "protein"
+    ],
+    "foodForms": [],
+    "isBaseFood": true,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-1167080",
+    "name": "\"\"BEEF,GRND,PTY,27/6OZ,FBAB-SM,10#,Z\"\"",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 300,
+    "proteinPer100g": 17.06,
+    "carbsPer100g": 0,
+    "fatPer100g": 25.29,
+    "foodFamilies": [
+      "protein"
+    ],
+    "foodForms": [],
+    "isBaseFood": true,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-1167792",
+    "name": "\"\"BEEF,GRND,PTY,30/5.33OZ,FBAB-SM,10#,Z\"\"",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 300,
+    "proteinPer100g": 17.06,
+    "carbsPer100g": 0,
+    "fatPer100g": 25.29,
+    "foodFamilies": [
+      "protein"
+    ],
+    "foodForms": [],
+    "isBaseFood": true,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-1167065",
+    "name": "\"\"BEEF,GRND,PTY,40/4OZ,FBAB-SM,10#,Z\"\"",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 300,
+    "proteinPer100g": 17.06,
+    "carbsPer100g": 0,
+    "fatPer100g": 25.29,
+    "foodFamilies": [
+      "protein"
+    ],
+    "foodForms": [],
+    "isBaseFood": true,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-1311344",
+    "name": "\"\"BEER\"\" CAN CHICKEN RUB",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 267,
+    "proteinPer100g": 5,
+    "carbsPer100g": 57,
+    "fatPer100g": 4,
+    "foodFamilies": [
+      "protein"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-1222475",
+    "name": "\"\"CRUNCH\"\" LEMON MERINGUE CRISP LEMON NON-FAT GREEK YOGURT WITH CITRUS WHITE CHOCOLATE AND LEMON COOKIES",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 84,
+    "proteinPer100g": 8.4,
+    "carbsPer100g": 12.61,
+    "fatPer100g": 1.68,
+    "foodFamilies": [
+      "dairy"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": true,
+    "isComboMeal": true,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-1872802",
+    "name": "\"\"CRUNCH\"\" LEMON MERINGUE CRISP LEMON NON-FAT GREEK YOGURT WITH CITRUS WHITE CHOCOLATE AND LEMON COOKIES, LEMON MERINGUE CRISP",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 84,
+    "proteinPer100g": 8.4,
+    "carbsPer100g": 12.61,
+    "fatPer100g": 1.68,
+    "foodFamilies": [
+      "dairy"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": true,
+    "isComboMeal": true,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-1222472",
+    "name": "\"\"CRUNCH\"\" MIXED BERRY CRUMBLE NON-FAT GREEK YOGURT WITH BROWN SUGAR CRUMBLE, ROASTED ALMONDS AND DRIED CRANBERRIES",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 84,
+    "proteinPer100g": 8.4,
+    "carbsPer100g": 12.61,
+    "fatPer100g": 1.68,
+    "foodFamilies": [
+      "dairy"
+    ],
+    "foodForms": [
+      "roasted"
+    ],
+    "isBaseFood": false,
+    "isPrepared": true,
+    "isComboMeal": true,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-1872799",
+    "name": "\"\"CRUNCH\"\" MIXED BERRY CRUMBLE NON-FAT GREEK YOGURT WITH BROWN SUGAR CRUMBLE, ROASTED ALMONDS AND DRIED CRANBERRIES, MIXED BERRY CRUMBLE",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 84,
+    "proteinPer100g": 8.4,
+    "carbsPer100g": 12.61,
+    "fatPer100g": 1.68,
+    "foodFamilies": [
+      "dairy"
+    ],
+    "foodForms": [
+      "roasted"
+    ],
+    "isBaseFood": false,
+    "isPrepared": true,
+    "isComboMeal": true,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-1161664",
+    "name": "\"\"EVERYTHING SNACKABLE EGGS & CRISPY DIP, \"\"EVERYTHING",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 198,
+    "proteinPer100g": 14.29,
+    "carbsPer100g": 5.49,
+    "fatPer100g": 13.19,
+    "foodFamilies": [],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-1811280",
+    "name": "\"\"FRIED RICE\"\" BOWL",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 73,
+    "proteinPer100g": 2.73,
+    "carbsPer100g": 11.82,
+    "fatPer100g": 0.91,
+    "foodFamilies": [
+      "grains"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": true,
+    "isComboMeal": true,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": true
+  },
+  {
+    "id": "usda-1406647",
+    "name": "\"\"FRIED RICE\"\" CAULIFLOWER CRUMBLES CHOPPED CAULIFLOWER, CARROTS, CELERY, ONION & BROCCOLI IN A SWEET TERIYAKI SAUCE WITH GARLIC-GINGER WONTON STRIPS VEGGIE BOWL, CAULIFLOWER CRUMBLES",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 73,
+    "proteinPer100g": 0.91,
+    "carbsPer100g": 14.55,
+    "fatPer100g": 1.82,
+    "foodFamilies": [
+      "grains",
+      "produce"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": true,
+    "isComboMeal": true,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": true
+  },
+  {
+    "id": "usda-1132989",
+    "name": "\"\"FRIED RICE\"\" PROTEIN PACK",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 168,
+    "proteinPer100g": 12.63,
+    "carbsPer100g": 6.32,
+    "fatPer100g": 10.53,
+    "foodFamilies": [
+      "grains",
+      "protein"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": true,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": true
+  },
+  {
+    "id": "usda-1998614",
+    "name": "\"\"LUMBER JACK\"\" CENTER-CUT SMOKED SAUSAGE, FRESH BUTTERMILK BISCUIT, EGG & CHEESE SUPER-SIZE SANDWICHES, \"\"LUMBER JACK\"\"",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 250,
+    "proteinPer100g": 10.26,
+    "carbsPer100g": 13.46,
+    "fatPer100g": 17.31,
+    "foodFamilies": [
+      "produce",
+      "protein",
+      "dairy"
+    ],
+    "foodForms": [
+      "fresh"
+    ],
+    "isBaseFood": true,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-1387632",
+    "name": "\"\"MEZZELUNE\"\" SEMI CIRCULAR STUFFED PASTA, RAVIOLI",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 293,
+    "proteinPer100g": 10,
+    "carbsPer100g": 36.43,
+    "fatPer100g": 12.14,
+    "foodFamilies": [
+      "grains"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-2192987",
+    "name": "\"\"MILD BEAN AND BEEF BEAN AND BEEF WITH CHEESE AND MILD ROASTED GREEN CHILE BURRITO, \"\"MILD BEAN AND BEEF",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 184,
+    "proteinPer100g": 10.59,
+    "carbsPer100g": 23.92,
+    "fatPer100g": 8.24,
+    "foodFamilies": [
+      "protein",
+      "dairy",
+      "legumes"
+    ],
+    "foodForms": [
+      "roasted"
+    ],
+    "isBaseFood": false,
+    "isPrepared": true,
+    "isComboMeal": true,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-1129570",
+    "name": "\"\"MILK\"\" & COOKIES VANILLA WITH CHOCOLATE CHIP COOKIES, CHOCOLATE SANDWICH COOKIES AND CHOCOLATE COOKIE SWIRLS NON-DAIRY FROZEN DESSERT, \"\"MILK\"\" & COOKIES",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 265,
+    "proteinPer100g": 2.27,
+    "carbsPer100g": 33.33,
+    "fatPer100g": 13.64,
+    "foodFamilies": [
+      "dairy"
+    ],
+    "foodForms": [
+      "frozen"
+    ],
+    "isBaseFood": false,
+    "isPrepared": true,
+    "isComboMeal": true,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-1269126",
+    "name": "\"\"MORTGAGE LIFTER\"\" PASTA SAUCE",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 86,
+    "proteinPer100g": 3.12,
+    "carbsPer100g": 13.28,
+    "fatPer100g": 1.95,
+    "foodFamilies": [
+      "grains"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": true,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-1781213",
+    "name": "\"\"MORTGAGE LIFTER\"\" PASTA SAUCE, FRESH MUSHROOM",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 86,
+    "proteinPer100g": 3.12,
+    "carbsPer100g": 13.28,
+    "fatPer100g": 1.95,
+    "foodFamilies": [
+      "grains",
+      "produce"
+    ],
+    "foodForms": [
+      "fresh"
+    ],
+    "isBaseFood": false,
+    "isPrepared": true,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-2272546",
+    "name": "\"\"MOTHER SAUCE\"\" A SLOW-ROASTED BEEF & VEGETABLE BASED SAUCE, \"\"MOTHER SAUCE\"\"",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 34,
+    "proteinPer100g": 1.69,
+    "carbsPer100g": 5.08,
+    "fatPer100g": 0.85,
+    "foodFamilies": [
+      "produce",
+      "protein"
+    ],
+    "foodForms": [
+      "roasted"
+    ],
+    "isBaseFood": false,
+    "isPrepared": true,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-1748888",
+    "name": "\"\"NORIMAKI\"\" RICE CRACKER, \"\"NORIMAKI\"\"",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 400,
+    "proteinPer100g": 10,
+    "carbsPer100g": 86.67,
+    "fatPer100g": 0,
+    "foodFamilies": [
+      "grains"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": true
+  },
+  {
+    "id": "usda-1834970",
+    "name": "\"\"ORIGINAL\"\" MOOSE TRACKS VANILLA FROZEN YOGURT WITH PEANUT BUTTER CUPS AND MOOSE TRACKS FUDGE, \"\"ORIGINAL\"\" MOOSE TRACKS",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 209,
+    "proteinPer100g": 4.4,
+    "carbsPer100g": 30.77,
+    "fatPer100g": 7.69,
+    "foodFamilies": [
+      "dairy"
+    ],
+    "foodForms": [
+      "frozen"
+    ],
+    "isBaseFood": false,
+    "isPrepared": true,
+    "isComboMeal": true,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-1161752",
+    "name": "\"\"RANCH\"\" SNACKABLE EGGS & CRUNCHY DIP, \"\"RANCH",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 209,
+    "proteinPer100g": 15.38,
+    "carbsPer100g": 3.3,
+    "fatPer100g": 15.38,
+    "foodFamilies": [],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-1878620",
+    "name": "\"\"SOUTHERN\"\" BUTTERMILK BISCUITS, \"\"SOUTHERN\"\" BUTTERMILK",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 329,
+    "proteinPer100g": 5.48,
+    "carbsPer100g": 42.47,
+    "fatPer100g": 15.07,
+    "foodFamilies": [],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-2305617",
+    "name": "\"\"SUPER\"\" BEEF BURGERS, BEEF",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 285,
+    "proteinPer100g": 19.21,
+    "carbsPer100g": 0,
+    "fatPer100g": 23.18,
+    "foodFamilies": [
+      "protein"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-1794700",
+    "name": "\"\"SWEET 'N SASSY\"\" HOT PEPPERS & ONIONS IN SAUCE, \"\"SWEET 'N SASSY\"\"",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 48,
+    "proteinPer100g": 0.8,
+    "carbsPer100g": 11.2,
+    "fatPer100g": 0,
+    "foodFamilies": [],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": true,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-2194412",
+    "name": "\"\"THE CATTLE CALL\"\" WINNING BEEF SEASONING",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 250,
+    "proteinPer100g": 0,
+    "carbsPer100g": 50,
+    "fatPer100g": 0,
+    "foodFamilies": [
+      "protein"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": true,
+    "isStaple": false
+  },
+  {
+    "id": "usda-1137121",
+    "name": "\"\"THE CRAB CHIP\"\" POTATO CHIPS WITH CHESAPEAKE BAY CRAB SEASONING, CHESAPEAKE BAY CRAB SEASONING",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 536,
+    "proteinPer100g": 7.14,
+    "carbsPer100g": 53.57,
+    "fatPer100g": 32.14,
+    "foodFamilies": [
+      "starches",
+      "produce"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": true,
+    "isComboMeal": true,
+    "isBranded": false,
+    "isDerivative": true,
+    "isStaple": true
+  },
+  {
+    "id": "usda-599844",
+    "name": "\"ALLA NORMA\" WITH EGGPLANT & RICOTTA SALATA",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 59,
+    "proteinPer100g": 1.27,
+    "carbsPer100g": 6.33,
+    "fatPer100g": 3.8,
+    "foodFamilies": [],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": true,
+    "isComboMeal": true,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-351201",
+    "name": "\"BEEF,GRND,CHUCK,PTY,20/8OZ,FBAB-GM,10#,Z\"",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 300,
+    "proteinPer100g": 17.18,
+    "carbsPer100g": 0,
+    "fatPer100g": 25.11,
+    "foodFamilies": [
+      "protein"
+    ],
+    "foodForms": [],
+    "isBaseFood": true,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-352497",
+    "name": "\"BEEF,GRND,CHUCK,PTY,27/6OZ,FBAB-GM,10#,Z\"",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 300,
+    "proteinPer100g": 17.06,
+    "carbsPer100g": 0,
+    "fatPer100g": 25.29,
+    "foodFamilies": [
+      "protein"
+    ],
+    "foodForms": [],
+    "isBaseFood": true,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-350522",
+    "name": "\"BEEF,GRND,CHUCK,PTY,30/5.33OZ,FBAB-GM,10\"",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 270,
+    "proteinPer100g": 18,
+    "carbsPer100g": 0,
+    "fatPer100g": 22,
+    "foodFamilies": [
+      "protein"
+    ],
+    "foodForms": [],
+    "isBaseFood": true,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-351607",
+    "name": "\"BEEF,GRND,CHUCK,PTY,40/4OZ,FBAB-GM,10#,Z\"",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 270,
+    "proteinPer100g": 18,
+    "carbsPer100g": 0,
+    "fatPer100g": 22,
+    "foodFamilies": [
+      "protein"
+    ],
+    "foodForms": [],
+    "isBaseFood": true,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-352423",
+    "name": "\"BEEF,GRND,PTY,27/6OZ,FBAB-SM,10#,Z\"",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 300,
+    "proteinPer100g": 17.06,
+    "carbsPer100g": 0,
+    "fatPer100g": 25.29,
+    "foodFamilies": [
+      "protein"
+    ],
+    "foodForms": [],
+    "isBaseFood": true,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-353165",
+    "name": "\"BEEF,GRND,PTY,30/5.33OZ,FBAB-SM,10#,Z\"",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 300,
+    "proteinPer100g": 17.06,
+    "carbsPer100g": 0,
+    "fatPer100g": 25.29,
+    "foodFamilies": [
+      "protein"
+    ],
+    "foodForms": [],
+    "isBaseFood": true,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-352408",
+    "name": "\"BEEF,GRND,PTY,40/4OZ,FBAB-SM,10#,Z\"",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 300,
+    "proteinPer100g": 17.06,
+    "carbsPer100g": 0,
+    "fatPer100g": 25.29,
+    "foodFamilies": [
+      "protein"
+    ],
+    "foodForms": [],
+    "isBaseFood": true,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-512841",
+    "name": "\"BEER\" CAN CHICKEN RUB",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 267,
+    "proteinPer100g": 5,
+    "carbsPer100g": 57,
+    "fatPer100g": 4,
+    "foodFamilies": [
+      "protein"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-2529698",
+    "name": "\"CRAB CHIP\" POTATO CHIPS",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 536,
+    "proteinPer100g": 7.14,
+    "carbsPer100g": 53.57,
+    "fatPer100g": 32.14,
+    "foodFamilies": [
+      "starches",
+      "produce"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": true,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": true
+  },
+  {
+    "id": "usda-414207",
+    "name": "\"CRUNCH\" LEMON MERINGUE CRISP LEMON NON-FAT GREEK YOGURT WITH CITRUS WHITE CHOCOLATE AND LEMON COOKIES",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 84,
+    "proteinPer100g": 8.4,
+    "carbsPer100g": 12.61,
+    "fatPer100g": 1.68,
+    "foodFamilies": [
+      "dairy"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": true,
+    "isComboMeal": true,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-414204",
+    "name": "\"CRUNCH\" MIXED BERRY CRUMBLE NON-FAT GREEK YOGURT WITH BROWN SUGAR CRUMBLE, ROASTED ALMONDS AND DRIED CRANBERRIES",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 84,
+    "proteinPer100g": 8.4,
+    "carbsPer100g": 12.61,
+    "fatPer100g": 1.68,
+    "foodFamilies": [
+      "dairy"
+    ],
+    "foodForms": [
+      "roasted"
+    ],
+    "isBaseFood": false,
+    "isPrepared": true,
+    "isComboMeal": true,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-2385953",
+    "name": "\"EVERYTHING SNACKABLE EGGS & CRISPY DIP, \"EVERYTHING",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 198,
+    "proteinPer100g": 14.29,
+    "carbsPer100g": 5.49,
+    "fatPer100g": 13.19,
+    "foodFamilies": [],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-391799",
+    "name": "\"FLIP\" LOW FAT GREEK YOGURT",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 127,
+    "proteinPer100g": 8,
+    "carbsPer100g": 14,
+    "fatPer100g": 4,
+    "foodFamilies": [
+      "dairy"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-582355",
+    "name": "\"FRIED RICE\" BOWL",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 73,
+    "proteinPer100g": 2.73,
+    "carbsPer100g": 11.82,
+    "fatPer100g": 0.91,
+    "foodFamilies": [
+      "grains"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": true,
+    "isComboMeal": true,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": true
+  },
+  {
+    "id": "usda-734202",
+    "name": "\"FRIED RICE\" CAULIFLOWER CRUMBLES CHOPPED CAULIFLOWER, CARROTS, CELERY, ONION & BROCCOLI IN A SWEET TERIYAKI SAUCE WITH GARLIC-GINGER WONTON STRIPS VEGGIE BOWL, CAULIFLOWER CRUMBLES",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 73,
+    "proteinPer100g": 0.91,
+    "carbsPer100g": 14.55,
+    "fatPer100g": 1.82,
+    "foodFamilies": [
+      "grains",
+      "produce"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": true,
+    "isComboMeal": true,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": true
+  },
+  {
+    "id": "usda-934904",
+    "name": "\"FRIED RICE\" PROTEIN PACK",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 168,
+    "proteinPer100g": 12.63,
+    "carbsPer100g": 6.32,
+    "fatPer100g": 10.53,
+    "foodFamilies": [
+      "grains",
+      "protein"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": true,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": true
+  },
+  {
+    "id": "usda-2426339",
+    "name": "\"LUMBER JACK\" CENTER-CUT SMOKED SAUSAGE, FRESH BUTTERMILK BISCUIT, EGG & CHEESE SUPER-SIZE SANDWICHES, \"LUMBER JACK\"",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 250,
+    "proteinPer100g": 10.26,
+    "carbsPer100g": 13.46,
+    "fatPer100g": 17.31,
+    "foodFamilies": [
+      "produce",
+      "protein",
+      "dairy"
+    ],
+    "foodForms": [
+      "fresh"
+    ],
+    "isBaseFood": true,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-600893",
+    "name": "\"MEZZELUNE\" SEMI CIRCULAR STUFFED PASTA, RAVIOLI",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 293,
+    "proteinPer100g": 10,
+    "carbsPer100g": 36.43,
+    "fatPer100g": 12.14,
+    "foodFamilies": [
+      "grains"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-2423079",
+    "name": "\"MILD BEAN AND BEEF BEAN AND BEEF WITH CHEESE AND MILD ROASTED GREEN CHILE BURRITO, \"MILD BEAN AND BEEF",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 184,
+    "proteinPer100g": 10.59,
+    "carbsPer100g": 23.92,
+    "fatPer100g": 8.24,
+    "foodFamilies": [
+      "protein",
+      "dairy",
+      "legumes"
+    ],
+    "foodForms": [
+      "roasted"
+    ],
+    "isBaseFood": false,
+    "isPrepared": true,
+    "isComboMeal": true,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-2532658",
+    "name": "\"MILK\" & COOKIES NON-DAIRY FROZEN DESSERT ICE CREAM",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 265,
+    "proteinPer100g": 2.27,
+    "carbsPer100g": 33.33,
+    "fatPer100g": 13.64,
+    "foodFamilies": [
+      "dairy"
+    ],
+    "foodForms": [
+      "frozen"
+    ],
+    "isBaseFood": false,
+    "isPrepared": true,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-2581216",
+    "name": "\"MILK\" & COOKIES VANILLA NON-DAIRY FROZEN DESSERT WITH CHOCOLATE CHIP COOKIES, CHOCOLATE SANDWICH COOKIES & CHOCOLATE COOKIE SWIRLS, \"MILK\" & COOKIES",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 265,
+    "proteinPer100g": 2.27,
+    "carbsPer100g": 32.58,
+    "fatPer100g": 13.64,
+    "foodFamilies": [
+      "dairy"
+    ],
+    "foodForms": [
+      "frozen"
+    ],
+    "isBaseFood": false,
+    "isPrepared": true,
+    "isComboMeal": true,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-926584",
+    "name": "\"MILK\" & COOKIES VANILLA WITH CHOCOLATE CHIP COOKIES, CHOCOLATE SANDWICH COOKIES AND CHOCOLATE COOKIE SWIRLS NON-DAIRY FROZEN DESSERT, \"MILK\" & COOKIES",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 265,
+    "proteinPer100g": 2.27,
+    "carbsPer100g": 33.33,
+    "fatPer100g": 13.64,
+    "foodFamilies": [
+      "dairy"
+    ],
+    "foodForms": [
+      "frozen"
+    ],
+    "isBaseFood": false,
+    "isPrepared": true,
+    "isComboMeal": true,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-2694563",
+    "name": "\"Minions\" Cheese, Cooked Sausage Crumbles (Made with Turkey) & Egg Breakfast Wrap",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 234,
+    "proteinPer100g": 12.58,
+    "carbsPer100g": 25.66,
+    "fatPer100g": 9.03,
+    "foodFamilies": [
+      "protein",
+      "dairy"
+    ],
+    "foodForms": [
+      "cooked"
+    ],
+    "isBaseFood": false,
+    "isPrepared": true,
+    "isComboMeal": true,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-466531",
+    "name": "\"MORTGAGE LIFTER\" PASTA SAUCE",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 86,
+    "proteinPer100g": 3.12,
+    "carbsPer100g": 13.28,
+    "fatPer100g": 1.95,
+    "foodFamilies": [
+      "grains"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": true,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-2463707",
+    "name": "\"ORIGINAL\" MOOSE TRACKS VANILLA FROZEN YOGURT WITH PEANUT BUTTER CUPS AND MOOSE TRACKS FUDGE, \"ORIGINAL\" MOOSE TRACKS",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 209,
+    "proteinPer100g": 4.4,
+    "carbsPer100g": 30.77,
+    "fatPer100g": 7.69,
+    "foodFamilies": [
+      "dairy"
+    ],
+    "foodForms": [
+      "frozen"
+    ],
+    "isBaseFood": false,
+    "isPrepared": true,
+    "isComboMeal": true,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-2538029",
+    "name": "\"OUR BEST\" BREADED VEAL & BEEF PATTIES, 4 OZ, 4 COUNT",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 292,
+    "proteinPer100g": 12.39,
+    "carbsPer100g": 17.7,
+    "fatPer100g": 17.7,
+    "foodFamilies": [
+      "protein"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": true,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-2385955",
+    "name": "\"RANCH\" SNACKABLE EGGS & CRUNCHY DIP, \"RANCH",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 209,
+    "proteinPer100g": 15.38,
+    "carbsPer100g": 3.3,
+    "fatPer100g": 15.38,
+    "foodFamilies": [],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-2421381",
+    "name": "\"THE CATTLE CALL\" WINNING BEEF SEASONING",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 250,
+    "proteinPer100g": 0,
+    "carbsPer100g": 50,
+    "fatPer100g": 0,
+    "foodFamilies": [
+      "protein"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": true,
+    "isStaple": false
+  },
+  {
+    "id": "usda-2390973",
+    "name": "\"THE CRAB CHIP\" POTATO CHIPS WITH CHESAPEAKE BAY CRAB SEASONING, CHESAPEAKE BAY CRAB SEASONING",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 536,
+    "proteinPer100g": 7.14,
+    "carbsPer100g": 53.57,
+    "fatPer100g": 32.14,
+    "foodFamilies": [
+      "starches",
+      "produce"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": true,
+    "isComboMeal": true,
+    "isBranded": false,
+    "isDerivative": true,
+    "isStaple": true
+  },
+  {
+    "id": "usda-1044533",
+    "name": "\"THE CRAB CHIP\" POTATO CHIPS, \"THE CRAB CHIP\"",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 536,
+    "proteinPer100g": 7.14,
+    "carbsPer100g": 53.57,
+    "fatPer100g": 32.14,
+    "foodFamilies": [
+      "starches",
+      "produce"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": true,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": true
+  },
+  {
+    "id": "usda-2529717",
+    "name": "\"THE CRAB CHIP\" WITH CHESAPEAKE BAY CRAB SEASONING POTATO CHIPS",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 536,
+    "proteinPer100g": 7.14,
+    "carbsPer100g": 53.57,
+    "fatPer100g": 32.14,
+    "foodFamilies": [
+      "starches",
+      "produce"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": true,
+    "isComboMeal": true,
+    "isBranded": false,
+    "isDerivative": true,
+    "isStaple": true
+  },
+  {
+    "id": "usda-2565587",
+    "name": "\"THE CRAB CHIP\" WITH CHESAPEAKE BAY CRAB SEASONING POTATO CHIPS, CRAB",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 536,
+    "proteinPer100g": 7.14,
+    "carbsPer100g": 53.57,
+    "fatPer100g": 32.14,
+    "foodFamilies": [
+      "starches",
+      "produce"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": true,
+    "isComboMeal": true,
+    "isBranded": false,
+    "isDerivative": true,
+    "isStaple": true
+  },
+  {
+    "id": "usda-1858967",
+    "name": "(SOFT) GRANOLA BITES, APPLE RAISIN",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 450,
+    "proteinPer100g": 5,
+    "carbsPer100g": 60,
+    "fatPer100g": 20,
+    "foodFamilies": [
+      "produce"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-1858965",
+    "name": "(SOFT) GRANOLA BITES, BLUEBERRY BANANA ACAI",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 425,
+    "proteinPer100g": 7.5,
+    "carbsPer100g": 60,
+    "fatPer100g": 20,
+    "foodFamilies": [
+      "produce"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-448328",
+    "name": "@EASE, BROCCOLI, CAULIFLOWER & CARROT WITH CHEESE SAUCE",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 48,
+    "proteinPer100g": 1.9,
+    "carbsPer100g": 6.67,
+    "fatPer100g": 1.43,
+    "foodFamilies": [
+      "produce",
+      "dairy"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": true,
+    "isComboMeal": true,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-1748785",
+    "name": "& SEA SALT CARAMEL CHOCOLATE SWIRL, DARK & MILK DARK CHOCOLATE, DARK CHOCOLATE SPRINGTIME MIX, DARK CHOCOLATE & SEA SALT CARAMEL, DARK & MILK CHOCOLATE SWIRL, DARK CHOCOLATE",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 516,
+    "proteinPer100g": 6.45,
+    "carbsPer100g": 58.06,
+    "fatPer100g": 32.26,
+    "foodFamilies": [
+      "dairy"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": true,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": true,
+    "isStaple": false
+  },
+  {
+    "id": "usda-1334979",
+    "name": "+ENERGY BEVERAGE BLEND, ORANGE PINEAPPLE",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 21,
+    "proteinPer100g": 0,
+    "carbsPer100g": 5.06,
+    "fatPer100g": 0,
+    "foodFamilies": [],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-1335011",
+    "name": "+ENERGY BEVERAGE, ORANGE PINEAPPLE",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 14,
+    "proteinPer100g": 0,
+    "carbsPer100g": 3.36,
+    "fatPer100g": 0,
+    "foodFamilies": [],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-687262",
+    "name": "+H2O TO GO!, LOW CALORIE DRINK MIX, CHERRY LIMEADE",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 455,
+    "proteinPer100g": 0,
+    "carbsPer100g": 0,
+    "fatPer100g": 0,
+    "foodFamilies": [],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": true,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": true,
+    "isStaple": false
+  },
+  {
+    "id": "usda-887994",
+    "name": "+H2O, CHERRY LIMEADE LOW CALORIE DRINK MIX, CHERRY LIMEADE",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 455,
+    "proteinPer100g": 0,
+    "carbsPer100g": null,
+    "fatPer100g": null,
+    "foodFamilies": [],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": true,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": true,
+    "isStaple": false
+  },
+  {
+    "id": "usda-2755698",
+    "name": "0 Sugar Oatmilk, 48 fl oz",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 100,
+    "proteinPer100g": 1,
+    "carbsPer100g": 12,
+    "fatPer100g": 4.5,
+    "foodFamilies": [],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-2233541",
+    "name": "0.34OZ LM UNPUFF APPLE CRISPS STRAWBERRY FLAVOR",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 400,
+    "proteinPer100g": 0,
+    "carbsPer100g": 100,
+    "fatPer100g": 0,
+    "foodFamilies": [
+      "produce"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-1085357",
+    "name": "0% FAT FREE LACTOSE FREE MILK",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 38,
+    "proteinPer100g": 3.75,
+    "carbsPer100g": 5.42,
+    "fatPer100g": 0,
+    "foodFamilies": [
+      "dairy"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-1111688",
+    "name": "0% FAT FREE MILK",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 33,
+    "proteinPer100g": 3.33,
+    "carbsPer100g": 5,
+    "fatPer100g": 0,
+    "foodFamilies": [
+      "dairy"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-2757269",
+    "name": "0% Fat Free Milk (1 / 2 Gl)",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 100,
+    "proteinPer100g": 10,
+    "carbsPer100g": 15,
+    "fatPer100g": null,
+    "foodFamilies": [
+      "dairy"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-2417833",
+    "name": "0% FAT FREE PROTEIN MILK",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 42,
+    "proteinPer100g": 4.17,
+    "carbsPer100g": 6.25,
+    "fatPer100g": 0,
+    "foodFamilies": [
+      "protein",
+      "dairy"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-2382686",
+    "name": "0% FAT FREE SMALL CURD COTTAGE CHEESE WITH PINEAPPLE, PINEAPPLE",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 97,
+    "proteinPer100g": 8.85,
+    "carbsPer100g": 15.04,
+    "fatPer100g": 0,
+    "foodFamilies": [
+      "dairy"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": true,
+    "isComboMeal": true,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-2266968",
+    "name": "0% FAT FREE SMALL CURD MILKFAT COTTAGE CHEESE",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 71,
+    "proteinPer100g": 10.62,
+    "carbsPer100g": 5.31,
+    "fatPer100g": 0,
+    "foodFamilies": [
+      "dairy"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-1031897",
+    "name": "0% FAT FREE ULTRA-FILTERED ORGANIC MILK",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 33,
+    "proteinPer100g": 5.42,
+    "carbsPer100g": 2.5,
+    "fatPer100g": 0,
+    "foodFamilies": [
+      "dairy"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": true,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-1152466",
+    "name": "0% FAT GREEK STRAINED YOGURT",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 59,
+    "proteinPer100g": 10,
+    "carbsPer100g": 3.53,
+    "fatPer100g": 0,
+    "foodFamilies": [
+      "dairy"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-563277",
+    "name": "0% FAT YOGURT",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 48,
+    "proteinPer100g": 4.85,
+    "carbsPer100g": 6.61,
+    "fatPer100g": 0.44,
+    "foodFamilies": [
+      "dairy"
+    ],
+    "foodForms": [],
+    "isBaseFood": true,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-1940121",
+    "name": "0% FAT YOGURT, INDIAN STYLE",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 48,
+    "proteinPer100g": 4.85,
+    "carbsPer100g": 6.61,
+    "fatPer100g": 0.44,
+    "foodFamilies": [
+      "dairy"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": true,
+    "isComboMeal": false,
+    "isBranded": true,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-2198995",
+    "name": "0% LACTOSE FREE MILK",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 38,
+    "proteinPer100g": 3.33,
+    "carbsPer100g": 5.83,
+    "fatPer100g": 0,
+    "foodFamilies": [
+      "dairy"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-2578879",
+    "name": "0% MILKFAT ALL NATURAL GREEK STRAINED YOGURT",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 53,
+    "proteinPer100g": 10.59,
+    "carbsPer100g": 2.94,
+    "fatPer100g": 0,
+    "foodFamilies": [
+      "dairy"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-2534963",
+    "name": "0% MILKFAT ALL NATURAL WITH STRAWBERRY NONFAT GREEK STRAINED YOGURT",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 67,
+    "proteinPer100g": 8.67,
+    "carbsPer100g": 8.67,
+    "fatPer100g": 0,
+    "foodFamilies": [
+      "dairy"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": true,
+    "isComboMeal": true,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-2578876",
+    "name": "0% MILKFAT ALL NATURAL WITH STRAWBERRY NONFAT GREEK STRAINED YOGURT, STRAWBERRY",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 67,
+    "proteinPer100g": 8.67,
+    "carbsPer100g": 8.67,
+    "fatPer100g": 0,
+    "foodFamilies": [
+      "dairy"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": true,
+    "isComboMeal": true,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-2534962",
+    "name": "0% MILKFAT BLENDED VANILLA NONFAT GREEK STRAINED YOGURT",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 67,
+    "proteinPer100g": 9.33,
+    "carbsPer100g": 8,
+    "fatPer100g": 0,
+    "foodFamilies": [
+      "dairy"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-2578875",
+    "name": "0% MILKFAT BLENDED VANILLA NONFAT GREEK STRAINED YOGURT, VANILLA",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 67,
+    "proteinPer100g": 9.33,
+    "carbsPer100g": 8,
+    "fatPer100g": 0,
+    "foodFamilies": [
+      "dairy"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-1067961",
+    "name": "0% MILKFAT FAT FREE COTTAGE CHEESE SMALL CURD WITH PINEAPPLE, PINEAPPLE",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 97,
+    "proteinPer100g": 8.85,
+    "carbsPer100g": 15.04,
+    "fatPer100g": 0,
+    "foodFamilies": [
+      "dairy"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": true,
+    "isComboMeal": true,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-500527",
+    "name": "0% MILKFAT FAT FREE MILK",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 38,
+    "proteinPer100g": 3.75,
+    "carbsPer100g": 5,
+    "fatPer100g": 0,
+    "foodFamilies": [
+      "dairy"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-373371",
+    "name": "0% MILKFAT FAT FREE SMALL CURD COTTAGE CHEESE",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 71,
+    "proteinPer100g": 11.5,
+    "carbsPer100g": 5.31,
+    "fatPer100g": 0,
+    "foodFamilies": [
+      "dairy"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-369393",
+    "name": "0% MILKFAT FAT FREE SMALL CURD COTTAGE CHEESE SMALL CURD WITH PINEAPPLE",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 97,
+    "proteinPer100g": 8.85,
+    "carbsPer100g": 15.93,
+    "fatPer100g": 0,
+    "foodFamilies": [
+      "dairy"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": true,
+    "isComboMeal": true,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-1107330",
+    "name": "0% MILKFAT NONFAT GREEK STRAINED YOGURT",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 53,
+    "proteinPer100g": 10.13,
+    "carbsPer100g": 3.08,
+    "fatPer100g": 0,
+    "foodFamilies": [
+      "dairy"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-2531440",
+    "name": "0% MILKFAT SMALL CURD COTTAGE CHEESE",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 71,
+    "proteinPer100g": 10.62,
+    "carbsPer100g": 5.31,
+    "fatPer100g": 0,
+    "foodFamilies": [
+      "dairy"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-2531439",
+    "name": "0% MILKFAT SMALL CURD WITH PINEAPPLE COTTAGE CHEESE",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 97,
+    "proteinPer100g": 8.85,
+    "carbsPer100g": 15.04,
+    "fatPer100g": 0,
+    "foodFamilies": [
+      "dairy"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": true,
+    "isComboMeal": true,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-2534964",
+    "name": "0% MILKFAT WITH PEACH ALL NATURAL NONFAT GREEK STRAINED YOGURT",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 67,
+    "proteinPer100g": 8.67,
+    "carbsPer100g": 8.67,
+    "fatPer100g": 0,
+    "foodFamilies": [
+      "dairy"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": true,
+    "isComboMeal": true,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-2578877",
+    "name": "0% MILKFAT WITH PEACH ALL NATURAL NONFAT GREEK STRAINED YOGURT, PEACH",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 67,
+    "proteinPer100g": 8.67,
+    "carbsPer100g": 8.67,
+    "fatPer100g": 0,
+    "foodFamilies": [
+      "dairy"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": true,
+    "isComboMeal": true,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-965945",
+    "name": "0% NONFAT GREEK STRAINED YOGURT WITH RASPBERRY, RASPBERRY",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 73,
+    "proteinPer100g": 8.67,
+    "carbsPer100g": 9.33,
+    "fatPer100g": 0,
+    "foodFamilies": [
+      "dairy"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": true,
+    "isComboMeal": true,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-468382",
+    "name": "0% NONFAT GREEK YOGURT WITH FRUIT",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 80,
+    "proteinPer100g": 8,
+    "carbsPer100g": 12.67,
+    "fatPer100g": 0,
+    "foodFamilies": [
+      "produce",
+      "dairy"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": true,
+    "isComboMeal": true,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-834694",
+    "name": "0% NONFAT MILK",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 33,
+    "proteinPer100g": 3.33,
+    "carbsPer100g": 5,
+    "fatPer100g": null,
+    "foodFamilies": [
+      "dairy"
+    ],
+    "foodForms": [],
+    "isBaseFood": true,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-563274",
+    "name": "0% NONFAT YOGURT",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 48,
+    "proteinPer100g": 4.85,
+    "carbsPer100g": 6.61,
+    "fatPer100g": 0.44,
+    "foodFamilies": [
+      "dairy"
+    ],
+    "foodForms": [],
+    "isBaseFood": true,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-1137263",
+    "name": "0% ORGANIC FAT FREE MILK",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 38,
+    "proteinPer100g": 3.33,
+    "carbsPer100g": 5,
+    "fatPer100g": 0,
+    "foodFamilies": [
+      "dairy"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": true,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-2757182",
+    "name": "0% Plain Skyr Yogurt, 5.3 oz",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 90,
+    "proteinPer100g": 16,
+    "carbsPer100g": 6,
+    "fatPer100g": null,
+    "foodFamilies": [
+      "dairy"
+    ],
+    "foodForms": [
+      "plain"
+    ],
+    "isBaseFood": true,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-2755862",
+    "name": "0% Vanilla Filmjolk Drinkable Yogurt, 32 fl oz",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 110,
+    "proteinPer100g": 8,
+    "carbsPer100g": 20,
+    "fatPer100g": 0,
+    "foodFamilies": [
+      "dairy"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-391371",
+    "name": "1 % LOWFAT YOGURT",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 94,
+    "proteinPer100g": 2.94,
+    "carbsPer100g": 17.65,
+    "fatPer100g": 0.88,
+    "foodFamilies": [
+      "dairy"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-1864158",
+    "name": "1 % LOWFAT YOGURT, RASPBERRY, ORIGINAL",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 94,
+    "proteinPer100g": 2.94,
+    "carbsPer100g": 17.65,
+    "fatPer100g": 0.88,
+    "foodFamilies": [
+      "dairy"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-391393",
+    "name": "1 % MILKFAT LOW FAT YOGURT",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 94,
+    "proteinPer100g": 2.94,
+    "carbsPer100g": 17.65,
+    "fatPer100g": 0.88,
+    "foodFamilies": [
+      "dairy"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-1864177",
+    "name": "1 % MILKFAT LOW FAT YOGURT, KEY LIME, ORIGINAL",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 94,
+    "proteinPer100g": 2.94,
+    "carbsPer100g": 17.65,
+    "fatPer100g": 0.88,
+    "foodFamilies": [
+      "dairy"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-2449284",
+    "name": "1 1/2% CULTURED REDUCED FAT BUTTERMILK",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 50,
+    "proteinPer100g": 3.33,
+    "carbsPer100g": 5.42,
+    "fatPer100g": 1.67,
+    "foodFamilies": [],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-2449282",
+    "name": "1 1/2% REDUCED FAT CULTURED BUTTERMILK",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 50,
+    "proteinPer100g": 3.33,
+    "carbsPer100g": 5.42,
+    "fatPer100g": 1.67,
+    "foodFamilies": [],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-527435",
+    "name": "1 1/2% REDUCED FAT MILK",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 50,
+    "proteinPer100g": 3.33,
+    "carbsPer100g": 5.42,
+    "fatPer100g": 1.46,
+    "foodFamilies": [
+      "dairy"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-2529539",
+    "name": "1 ANGEL HAIR PASTA",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 351,
+    "proteinPer100g": 12.28,
+    "carbsPer100g": 70.18,
+    "fatPer100g": 1.75,
+    "foodFamilies": [
+      "grains"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-1106232",
+    "name": "1 APPLE + 1 BANANA FRUIT BAR, APPLE + BANANA",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 286,
+    "proteinPer100g": 2.86,
+    "carbsPer100g": 80,
+    "fatPer100g": 0,
+    "foodFamilies": [
+      "produce"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-359754",
+    "name": "1 APPLE + 1 BANANA IN THIS FRUIT BAR",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 286,
+    "proteinPer100g": 2.86,
+    "carbsPer100g": 80,
+    "fatPer100g": 0,
+    "foodFamilies": [
+      "produce"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-538106",
+    "name": "1 APPLE + 1 MANGO & CHILI ZESTY",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 286,
+    "proteinPer100g": 0,
+    "carbsPer100g": 77.14,
+    "fatPer100g": 0,
+    "foodFamilies": [
+      "produce"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-1117157",
+    "name": "1 APPLE + 1 MANGO + CHILI FRUIT BAR, APPLE + MANGO + CHILI",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 286,
+    "proteinPer100g": 0,
+    "carbsPer100g": 77.14,
+    "fatPer100g": 0,
+    "foodFamilies": [
+      "produce"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-661598",
+    "name": "1 APPLE + 1 MANGO FRUIT BAR, APPLE + MANGO",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 286,
+    "proteinPer100g": 0,
+    "carbsPer100g": 77.14,
+    "fatPer100g": 0,
+    "foodFamilies": [
+      "produce"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-538091",
+    "name": "1 APPLE + 1 PEAR & GINGER ZESTY",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 286,
+    "proteinPer100g": 2.86,
+    "carbsPer100g": 77.14,
+    "fatPer100g": 0,
+    "foodFamilies": [
+      "produce"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-1117156",
+    "name": "1 APPLE + 1 PEAR + GINGER FRUIT BAR, APPLE + PEAR + GINGER",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 286,
+    "proteinPer100g": 2.86,
+    "carbsPer100g": 77.14,
+    "fatPer100g": 0,
+    "foodFamilies": [
+      "produce"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-1106619",
+    "name": "1 APPLE + 1 PEAR FRUIT BAR, APPLE + PEAR",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 286,
+    "proteinPer100g": 2.86,
+    "carbsPer100g": 77.14,
+    "fatPer100g": 0,
+    "foodFamilies": [
+      "produce"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-797043",
+    "name": "1 APPLE + 1/4 COCONUT FRUIT BAR",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 314,
+    "proteinPer100g": 2.86,
+    "carbsPer100g": 60,
+    "fatPer100g": 7.14,
+    "foodFamilies": [
+      "produce"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-1114289",
+    "name": "1 APPLE + 1/4 COCONUT FRUIT BAR, APPLE + COCONUT",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 314,
+    "proteinPer100g": 2.86,
+    "carbsPer100g": 60,
+    "fatPer100g": 7.14,
+    "foodFamilies": [
+      "produce"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-1117155",
+    "name": "1 APPLE + 1/4 PINEAPPLE FRUIT BAR, APPLE + PINEAPPLE",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 286,
+    "proteinPer100g": 0,
+    "carbsPer100g": 68.57,
+    "fatPer100g": 0,
+    "foodFamilies": [
+      "produce"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-538089",
+    "name": "1 APPLE + 1/4 PINEAPPLE IN THIS FRUIT BAR",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 286,
+    "proteinPer100g": 0,
+    "carbsPer100g": 68.57,
+    "fatPer100g": 0,
+    "foodFamilies": [
+      "produce"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-1109471",
+    "name": "1 APPLE + 10 CHERRIES FRUIT BAR, APPLE + CHERRIES",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 286,
+    "proteinPer100g": 2.86,
+    "carbsPer100g": 74.29,
+    "fatPer100g": 0,
+    "foodFamilies": [
+      "produce"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-401323",
+    "name": "1 APPLE + 10 CHERRIES IN THIS FRUIT BAR",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 286,
+    "proteinPer100g": 2.86,
+    "carbsPer100g": 74.29,
+    "fatPer100g": 0,
+    "foodFamilies": [
+      "produce"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-846576",
+    "name": "1 APPLE + 12 STRAWBERRIES FRUIT BAR, APPLE + STRAWBERRIES",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 286,
+    "proteinPer100g": 2.86,
+    "carbsPer100g": 62.86,
+    "fatPer100g": null,
+    "foodFamilies": [
+      "produce"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-928944",
+    "name": "1 APPLE + 2 FIGS FRUIT BAR, APPLE + FIGS",
+    "aliases": [],
+    "servingLabel": "100 g",
     "servingGrams": 100,
     "caloriesPer100g": 200,
-    "proteinPer100g": 0
-  },
-  {
-    "id": "off-0011110658418",
-    "name": "Aged Cheddar And Broccoli Soup",
-    "aliases": [
-      "Fresh Food Market",
-      "en:undefined"
+    "proteinPer100g": 2.86,
+    "carbsPer100g": 40,
+    "fatPer100g": null,
+    "foodFamilies": [
+      "produce"
     ],
-    "servingLabel": "245.00000000000003g",
-    "servingGrams": 245.00000000000003,
-    "caloriesPer100g": 41.8,
-    "proteinPer100g": 1.33
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
   },
   {
-    "id": "off-0015665601066",
-    "name": "Aged White Cheddar",
-    "aliases": [
-      "B&G Foods North America  Inc.",
-      "en:undefined"
-    ],
-    "servingLabel": "28.000000000000004g",
-    "servingGrams": 28.000000000000004,
-    "caloriesPer100g": 1710,
-    "proteinPer100g": 25.5
-  },
-  {
-    "id": "off-0015665602049",
-    "name": "Aged White Cheddar Puffs",
-    "aliases": [
-      "Pirate's Booty",
-      "en:snacks"
-    ],
-    "servingLabel": "1 ONZ (28 g)",
-    "servingGrams": 28,
-    "caloriesPer100g": 500,
-    "proteinPer100g": 7.14
-  },
-  {
-    "id": "off-0015665601127",
-    "name": "Aged White Cheddar Rice & Corn Puffs",
-    "aliases": [
-      "Pirate's Booty",
-      "en:dairies",
-      "en:fermented-foods",
-      "en:fermented-milk-products",
-      "en:snacks",
-      "en:cheeses",
-      "en:salty-snacks",
-      "en:appetizers",
-      "en:chips-and-fries",
-      "en:crisps",
-      "en:puffs"
-    ],
-    "servingLabel": "1 package (14 g)",
-    "servingGrams": 14,
-    "caloriesPer100g": 500,
-    "proteinPer100g": 7.14
-  },
-  {
-    "id": "usda-169823",
-    "name": "Agutuk, fish with shortening (Alaskan ice cream) (Alaska Native)",
+    "id": "usda-616424",
+    "name": "1 APPLE + 20 BLUEBERRIES FRUIT BAR, APPLE + BLUEBERRIES",
     "aliases": [],
     "servingLabel": "100 g",
     "servingGrams": 100,
-    "caloriesPer100g": 470,
-    "proteinPer100g": 9
+    "caloriesPer100g": 286,
+    "proteinPer100g": 2.86,
+    "carbsPer100g": 74.29,
+    "fatPer100g": 0,
+    "foodFamilies": [
+      "produce"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
   },
   {
-    "id": "usda-168976",
-    "name": "Agutuk, fish/berry with seal oil (Alaskan ice cream) (Alaska Native)",
+    "id": "usda-792835",
+    "name": "1 APPLE + 3 APRICOTS FRUIT BAR",
     "aliases": [],
     "servingLabel": "100 g",
     "servingGrams": 100,
-    "caloriesPer100g": 353,
-    "proteinPer100g": 3.4
+    "caloriesPer100g": 286,
+    "proteinPer100g": 2.86,
+    "carbsPer100g": 77.14,
+    "fatPer100g": 0,
+    "foodFamilies": [
+      "produce"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
   },
   {
-    "id": "usda-168977",
-    "name": "Agutuk, meat-caribou (Alaskan ice cream) (Alaska Native)",
+    "id": "usda-1106618",
+    "name": "1 APPLE + 3 APRICOTS FRUIT BAR, APPLE + APRICOTS",
     "aliases": [],
     "servingLabel": "100 g",
     "servingGrams": 100,
-    "caloriesPer100g": 258,
-    "proteinPer100g": 21.7
+    "caloriesPer100g": 286,
+    "proteinPer100g": 2.86,
+    "carbsPer100g": 77.14,
+    "fatPer100g": 0,
+    "foodFamilies": [
+      "produce"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
   },
   {
-    "id": "off-0011110868602",
-    "name": "Aioli",
-    "aliases": [
-      "Private Selection",
-      "en:condiments",
-      "en:sauces",
-      "en:groceries"
-    ],
-    "servingLabel": "1 Tbsp (15 g)",
-    "servingGrams": 15,
-    "caloriesPer100g": 400,
-    "proteinPer100g": 0
-  },
-  {
-    "id": "off-0011822584906",
-    "name": "Air Popped Popcorn",
-    "aliases": [
-      "Rite Aid Corporation",
-      "en:undefined"
-    ],
-    "servingLabel": "28.000000000000004g",
-    "servingGrams": 28.000000000000004,
-    "caloriesPer100g": 2040,
-    "proteinPer100g": 38.2
-  },
-  {
-    "id": "off-0011150224000",
-    "name": "Air Popped Potato Chips",
-    "aliases": [
-      "Simply Roundy's",
-      "en:undefined"
-    ],
-    "servingLabel": "28.3495g",
-    "servingGrams": 28.3495,
-    "caloriesPer100g": 1560,
-    "proteinPer100g": 25.2
-  },
-  {
-    "id": "off-0011152184111",
-    "name": "Ajishima foods co., ltd., rice seasoning",
-    "aliases": [
-      "Jfc International Inc.",
-      "en:plant-based-foods-and-beverages",
-      "en:plant-based-foods",
-      "en:condiments",
-      "en:groceries"
-    ],
-    "servingLabel": "1 Tbsp (7 g)",
-    "servingGrams": 7,
-    "caloriesPer100g": 429,
-    "proteinPer100g": 14.29
-  },
-  {
-    "id": "off-0011152202563",
-    "name": "Ajishima, Roasted Wasabi Seasame Rice Seasoning",
-    "aliases": [
-      "Ajishima Foods Co.  Ltd.",
-      "en:condiments",
-      "en:groceries"
-    ],
-    "servingLabel": "1 Tbsp (8 g)",
-    "servingGrams": 8,
-    "caloriesPer100g": 500,
-    "proteinPer100g": 12.5
-  },
-  {
-    "id": "off-0011600000734",
-    "name": "Alaga, Pancake Syrup",
-    "aliases": [
-      "Whitfield Foods  Inc.",
-      "en:sweeteners",
-      "en:syrups",
-      "en:simple-syrups"
-    ],
-    "servingLabel": "0.25 cup (60 ml)",
+    "id": "usda-928938",
+    "name": "1 APPLE + 4 DATES FRUIT BAR, APPLE + DATES",
+    "aliases": [],
+    "servingLabel": "100 g",
     "servingGrams": 100,
-    "caloriesPer100g": 367,
-    "proteinPer100g": 0
+    "caloriesPer100g": 229,
+    "proteinPer100g": 2.86,
+    "carbsPer100g": 40,
+    "fatPer100g": null,
+    "foodFamilies": [
+      "produce"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
   },
   {
-    "id": "off-0011600000017",
-    "name": "Alaga, The Original Cane Flavor Syrup, Cane",
-    "aliases": [
-      "Whitfield Foods  Inc.",
-      "en:sweeteners",
-      "en:syrups",
-      "en:simple-syrups"
-    ],
-    "servingLabel": "2 Tbsp (30 ml)",
+    "id": "usda-391364",
+    "name": "1 DOZEN FARM FRESH EGGS",
+    "aliases": [],
+    "servingLabel": "100 g",
     "servingGrams": 100,
-    "caloriesPer100g": 400,
-    "proteinPer100g": 0
-  },
-  {
-    "id": "off-0015400018203",
-    "name": "Alaska Pink Salmon",
-    "aliases": [
-      "Western Family",
-      "en:undefined"
+    "caloriesPer100g": 143,
+    "proteinPer100g": 12.7,
+    "carbsPer100g": 0,
+    "fatPer100g": 9.52,
+    "foodFamilies": [
+      "produce"
     ],
-    "servingLabel": "63g",
-    "servingGrams": 63,
-    "caloriesPer100g": 234,
-    "proteinPer100g": 30.2
-  },
-  {
-    "id": "off-0011110833013",
-    "name": "Alaskan Pink Salmon",
-    "aliases": [
-      "Kroger",
-      "en:undefined"
+    "foodForms": [
+      "fresh"
     ],
-    "servingLabel": "0.333 cup (85 g)",
-    "servingGrams": 85,
-    "caloriesPer100g": 118,
-    "proteinPer100g": 20
+    "isBaseFood": true,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
   },
   {
-    "id": "off-0013000028318",
-    "name": "Alba, instant non-fat dry milk",
-    "aliases": [
-      "Alba",
-      "en:plant-based-foods-and-beverages",
-      "en:dairy-substitutes",
-      "en:milk-substitutes",
-      "en:creamer"
-    ],
-    "servingLabel": "1 cup (22 g)",
-    "servingGrams": 22,
-    "caloriesPer100g": 364,
-    "proteinPer100g": 36.36
-  },
-  {
-    "id": "off-0015171020078",
-    "name": "Alberto, Corned Beef",
-    "aliases": [
-      "Trujillo & Sons Inc.",
-      "en:meats-and-their-products",
-      "en:meals",
-      "en:meals-with-meat",
-      "en:beef-dishes",
-      "en:corned-beef"
-    ],
-    "servingLabel": "56 g (0.25 cup)",
-    "servingGrams": 56,
-    "caloriesPer100g": 232,
-    "proteinPer100g": 25
-  },
-  {
-    "id": "usda-168749",
-    "name": "Alcoholic beverage, beer, light",
+    "id": "usda-2331093",
+    "name": "1 LITER BOTTLE BLACKCHERRY",
     "aliases": [],
-    "servingLabel": "29.5 g",
-    "servingGrams": 29.5,
-    "caloriesPer100g": 29,
-    "proteinPer100g": 0.24
-  },
-  {
-    "id": "usda-169572",
-    "name": "Alcoholic beverage, beer, light, BUD LIGHT",
-    "aliases": [],
-    "servingLabel": "29.5 g",
-    "servingGrams": 29.5,
-    "caloriesPer100g": 29,
-    "proteinPer100g": 0.25
-  },
-  {
-    "id": "usda-168748",
-    "name": "Alcoholic beverage, beer, light, BUDWEISER SELECT",
-    "aliases": [],
-    "servingLabel": "29.5 g",
-    "servingGrams": 29.5,
-    "caloriesPer100g": 28,
-    "proteinPer100g": 0.2
-  },
-  {
-    "id": "usda-174145",
-    "name": "Alcoholic beverage, beer, light, higher alcohol",
-    "aliases": [],
-    "servingLabel": "356 g",
-    "servingGrams": 356,
-    "caloriesPer100g": 46,
-    "proteinPer100g": 0.25
-  },
-  {
-    "id": "usda-169575",
-    "name": "Alcoholic beverage, beer, light, low carb",
-    "aliases": [],
-    "servingLabel": "29.5 g",
-    "servingGrams": 29.5,
-    "caloriesPer100g": 27,
-    "proteinPer100g": 0.17
-  },
-  {
-    "id": "usda-168746",
-    "name": "Alcoholic beverage, beer, regular, all",
-    "aliases": [],
-    "servingLabel": "29.7 g",
-    "servingGrams": 29.7,
-    "caloriesPer100g": 43,
-    "proteinPer100g": 0.46
-  },
-  {
-    "id": "usda-168747",
-    "name": "Alcoholic beverage, beer, regular, BUDWEISER",
-    "aliases": [],
-    "servingLabel": "29.8 g",
-    "servingGrams": 29.8,
-    "caloriesPer100g": 41,
-    "proteinPer100g": 0.36
-  },
-  {
-    "id": "usda-173168",
-    "name": "Alcoholic beverage, creme de menthe, 72 proof",
-    "aliases": [],
-    "servingLabel": "33.6 g",
-    "servingGrams": 33.6,
-    "caloriesPer100g": 371,
-    "proteinPer100g": 0
-  },
-  {
-    "id": "usda-169573",
-    "name": "Alcoholic beverage, daiquiri, canned",
-    "aliases": [],
-    "servingLabel": "30.5 g",
-    "servingGrams": 30.5,
-    "caloriesPer100g": 125,
-    "proteinPer100g": 0
-  },
-  {
-    "id": "usda-169574",
-    "name": "Alcoholic beverage, daiquiri, prepared-from-recipe",
-    "aliases": [],
-    "servingLabel": "30.2 g",
-    "servingGrams": 30.2,
-    "caloriesPer100g": 186,
-    "proteinPer100g": 0.06
-  },
-  {
-    "id": "usda-173664",
-    "name": "Alcoholic beverage, distilled, all (gin, rum, vodka, whiskey) 100 proof",
-    "aliases": [],
-    "servingLabel": "27.8 g",
-    "servingGrams": 27.8,
-    "caloriesPer100g": 295,
-    "proteinPer100g": 0
-  },
-  {
-    "id": "usda-174815",
-    "name": "Alcoholic beverage, distilled, all (gin, rum, vodka, whiskey) 80 proof",
-    "aliases": [],
-    "servingLabel": "27.8 g",
-    "servingGrams": 27.8,
-    "caloriesPer100g": 231,
-    "proteinPer100g": 0
-  },
-  {
-    "id": "usda-171919",
-    "name": "Alcoholic beverage, distilled, all (gin, rum, vodka, whiskey) 86 proof",
-    "aliases": [],
-    "servingLabel": "27.8 g",
-    "servingGrams": 27.8,
-    "caloriesPer100g": 250,
-    "proteinPer100g": 0
-  },
-  {
-    "id": "usda-171920",
-    "name": "Alcoholic beverage, distilled, all (gin, rum, vodka, whiskey) 90 proof",
-    "aliases": [],
-    "servingLabel": "27.8 g",
-    "servingGrams": 27.8,
-    "caloriesPer100g": 263,
-    "proteinPer100g": 0
-  },
-  {
-    "id": "usda-173663",
-    "name": "Alcoholic beverage, distilled, all (gin, rum, vodka, whiskey) 94 proof",
-    "aliases": [],
-    "servingLabel": "27.8 g",
-    "servingGrams": 27.8,
-    "caloriesPer100g": 275,
-    "proteinPer100g": 0
-  },
-  {
-    "id": "usda-174817",
-    "name": "Alcoholic beverage, distilled, rum, 80 proof",
-    "aliases": [],
-    "servingLabel": "27.8 g",
-    "servingGrams": 27.8,
-    "caloriesPer100g": 231,
-    "proteinPer100g": 0
-  },
-  {
-    "id": "usda-174818",
-    "name": "Alcoholic beverage, distilled, vodka, 80 proof",
-    "aliases": [],
-    "servingLabel": "27.8 g",
-    "servingGrams": 27.8,
-    "caloriesPer100g": 231,
-    "proteinPer100g": 0
-  },
-  {
-    "id": "usda-174819",
-    "name": "Alcoholic beverage, distilled, whiskey, 86 proof",
-    "aliases": [],
-    "servingLabel": "27.8 g",
-    "servingGrams": 27.8,
-    "caloriesPer100g": 250,
-    "proteinPer100g": 0
-  },
-  {
-    "id": "usda-175098",
-    "name": "Alcoholic beverage, liqueur, coffee with cream, 34 proof",
-    "aliases": [],
-    "servingLabel": "31.1 g",
-    "servingGrams": 31.1,
-    "caloriesPer100g": 327,
-    "proteinPer100g": 2.8
-  },
-  {
-    "id": "usda-175097",
-    "name": "Alcoholic beverage, liqueur, coffee, 53 proof",
-    "aliases": [],
-    "servingLabel": "34.8 g",
-    "servingGrams": 34.8,
-    "caloriesPer100g": 336,
-    "proteinPer100g": 0.1
-  },
-  {
-    "id": "usda-173665",
-    "name": "Alcoholic beverage, liqueur, coffee, 63 proof",
-    "aliases": [],
-    "servingLabel": "34.8 g",
-    "servingGrams": 34.8,
-    "caloriesPer100g": 308,
-    "proteinPer100g": 0.1
-  },
-  {
-    "id": "usda-174141",
-    "name": "Alcoholic beverage, malt beer, hard lemonade",
-    "aliases": [],
-    "servingLabel": "335 g",
-    "servingGrams": 335,
-    "caloriesPer100g": 68,
-    "proteinPer100g": 0
-  },
-  {
-    "id": "usda-168750",
-    "name": "Alcoholic beverage, pina colada, canned",
-    "aliases": [],
-    "servingLabel": "32.6 g",
-    "servingGrams": 32.6,
-    "caloriesPer100g": 237,
-    "proteinPer100g": 0.6
-  },
-  {
-    "id": "usda-168752",
-    "name": "Alcoholic beverage, pina colada, prepared-from-recipe",
-    "aliases": [],
-    "servingLabel": "31.4 g",
-    "servingGrams": 31.4,
-    "caloriesPer100g": 174,
-    "proteinPer100g": 0.42
-  },
-  {
-    "id": "usda-167723",
-    "name": "Alcoholic beverage, rice (sake)",
-    "aliases": [],
-    "servingLabel": "29.1 g",
-    "servingGrams": 29.1,
-    "caloriesPer100g": 134,
-    "proteinPer100g": 0.5
-  },
-  {
-    "id": "usda-168753",
-    "name": "Alcoholic beverage, tequila sunrise, canned",
-    "aliases": [],
-    "servingLabel": "31.1 g",
-    "servingGrams": 31.1,
-    "caloriesPer100g": 110,
-    "proteinPer100g": 0.3
-  },
-  {
-    "id": "usda-173662",
-    "name": "Alcoholic beverage, whiskey sour",
-    "aliases": [],
-    "servingLabel": "30.4 g",
-    "servingGrams": 30.4,
-    "caloriesPer100g": 149,
-    "proteinPer100g": 0
-  },
-  {
-    "id": "usda-174810",
-    "name": "Alcoholic beverage, whiskey sour, canned",
-    "aliases": [],
-    "servingLabel": "30.8 g",
-    "servingGrams": 30.8,
-    "caloriesPer100g": 119,
-    "proteinPer100g": 0
-  },
-  {
-    "id": "usda-174812",
-    "name": "Alcoholic beverage, whiskey sour, prepared from item 14028",
-    "aliases": [],
-    "servingLabel": "30.4 g",
-    "servingGrams": 30.4,
-    "caloriesPer100g": 153,
-    "proteinPer100g": 0.06
-  },
-  {
-    "id": "usda-173164",
-    "name": "Alcoholic beverage, whiskey sour, prepared with water, whiskey and powder mix",
-    "aliases": [],
-    "servingLabel": "29.4 g",
-    "servingGrams": 29.4,
-    "caloriesPer100g": 164,
-    "proteinPer100g": 0.1
-  },
-  {
-    "id": "usda-169070",
-    "name": "Alcoholic beverage, wine, cooking",
-    "aliases": [],
-    "servingLabel": "4.9 g",
-    "servingGrams": 4.9,
+    "servingLabel": "100 g",
+    "servingGrams": 100,
     "caloriesPer100g": 50,
-    "proteinPer100g": 0.5
+    "proteinPer100g": 0,
+    "carbsPer100g": 13.33,
+    "fatPer100g": 0,
+    "foodFamilies": [],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
   },
   {
-    "id": "usda-175112",
-    "name": "Alcoholic beverage, wine, dessert, dry",
+    "id": "usda-2331390",
+    "name": "1 LITER BOTTLE DIET BLACK CHERRY",
     "aliases": [],
-    "servingLabel": "29.5 g",
-    "servingGrams": 29.5,
-    "caloriesPer100g": 152,
-    "proteinPer100g": 0.2
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 1,
+    "proteinPer100g": 0,
+    "carbsPer100g": 0,
+    "fatPer100g": 0,
+    "foodFamilies": [],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
   },
   {
-    "id": "usda-173176",
-    "name": "Alcoholic beverage, wine, dessert, sweet",
+    "id": "usda-2443861",
+    "name": "1 Ounce Jack Link's Beef Peppered Steaks 1/1 Count",
     "aliases": [],
-    "servingLabel": "29.5 g",
-    "servingGrams": 29.5,
-    "caloriesPer100g": 160,
-    "proteinPer100g": 0.2
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 70,
+    "proteinPer100g": 11,
+    "carbsPer100g": 1,
+    "fatPer100g": 2,
+    "foodFamilies": [
+      "protein"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
   },
   {
-    "id": "usda-169071",
-    "name": "Alcoholic beverage, wine, light",
+    "id": "usda-2332406",
+    "name": "1 ounce JACK LINK'S ORIGINAL 100% BEEF STEAK 1/1 COUNT",
     "aliases": [],
-    "servingLabel": "29.5 g",
-    "servingGrams": 29.5,
-    "caloriesPer100g": 49,
-    "proteinPer100g": 0.07
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 250,
+    "proteinPer100g": 39.29,
+    "carbsPer100g": 3.57,
+    "fatPer100g": 7.14,
+    "foodFamilies": [
+      "protein"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
   },
   {
-    "id": "usda-173185",
-    "name": "Alcoholic beverage, wine, table, all",
+    "id": "usda-2491623",
+    "name": "1 Ounce Jack Links Beef Original Steaks  1/1 Count",
     "aliases": [],
-    "servingLabel": "148 g",
-    "servingGrams": 148,
-    "caloriesPer100g": 83,
-    "proteinPer100g": 0.07
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 250,
+    "proteinPer100g": 39.29,
+    "carbsPer100g": 3.57,
+    "fatPer100g": 7.14,
+    "foodFamilies": [
+      "protein"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
   },
   {
-    "id": "usda-173190",
-    "name": "Alcoholic beverage, wine, table, red",
+    "id": "usda-2257042",
+    "name": "1 OZ WG BREADED FORMED FISH NUGGETS, PAR FRIED, FROZEN, OVEN READY.",
     "aliases": [],
-    "servingLabel": "29.4 g",
-    "servingGrams": 29.4,
-    "caloriesPer100g": 85,
-    "proteinPer100g": 0.07
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 204,
+    "proteinPer100g": 15.04,
+    "carbsPer100g": 17.7,
+    "fatPer100g": 7.96,
+    "foodFamilies": [
+      "protein"
+    ],
+    "foodForms": [
+      "frozen"
+    ],
+    "isBaseFood": false,
+    "isPrepared": true,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
   },
   {
-    "id": "usda-173191",
-    "name": "Alcoholic Beverage, wine, table, red, Barbera",
+    "id": "usda-2257039",
+    "name": "1 OZ WHOLE GRAIN BREADED FORMED FISH NUGGETS, FROZEN, KNOWLEDGE UNIVERSE",
     "aliases": [],
-    "servingLabel": "29.4 g",
-    "servingGrams": 29.4,
-    "caloriesPer100g": 85,
-    "proteinPer100g": 0.07
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 204,
+    "proteinPer100g": 15.04,
+    "carbsPer100g": 17.7,
+    "fatPer100g": 7.96,
+    "foodFamilies": [
+      "grains",
+      "protein"
+    ],
+    "foodForms": [
+      "frozen"
+    ],
+    "isBaseFood": false,
+    "isPrepared": true,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
   },
   {
-    "id": "usda-173208",
-    "name": "Alcoholic Beverage, wine, table, red, Burgundy",
+    "id": "usda-2589619",
+    "name": "1 PERCENT LOWFAT MILK",
     "aliases": [],
-    "servingLabel": "29.5 g",
-    "servingGrams": 29.5,
-    "caloriesPer100g": 86,
-    "proteinPer100g": 0.07
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 42,
+    "proteinPer100g": 3.33,
+    "carbsPer100g": 5,
+    "fatPer100g": 1.04,
+    "foodFamilies": [
+      "dairy"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
   },
   {
-    "id": "usda-174834",
-    "name": "Alcoholic Beverage, wine, table, red, Cabernet Franc",
+    "id": "usda-614894",
+    "name": "1.25'' Frozen Veggie Cups Assortment",
     "aliases": [],
-    "servingLabel": "29.4 g",
-    "servingGrams": 29.4,
-    "caloriesPer100g": 83,
-    "proteinPer100g": 0.07
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 439,
+    "proteinPer100g": 8,
+    "carbsPer100g": null,
+    "fatPer100g": 16,
+    "foodFamilies": [],
+    "foodForms": [
+      "frozen"
+    ],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
   },
   {
-    "id": "usda-174833",
-    "name": "Alcoholic Beverage, wine, table, red, Cabernet Sauvignon",
+    "id": "usda-2572684",
+    "name": "1.5% CULTURED REDUCED FAT BUTTERMILK",
     "aliases": [],
-    "servingLabel": "29.4 g",
-    "servingGrams": 29.4,
-    "caloriesPer100g": 83,
-    "proteinPer100g": 0.07
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 50,
+    "proteinPer100g": 3.75,
+    "carbsPer100g": 5.83,
+    "fatPer100g": 1.46,
+    "foodFamilies": [],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
   },
   {
-    "id": "usda-174840",
-    "name": "Alcoholic Beverage, wine, table, red, Carignane",
+    "id": "usda-477673",
+    "name": "1.5% MILKFAT BUTTERMILK",
     "aliases": [],
-    "servingLabel": "29.4 g",
-    "servingGrams": 29.4,
-    "caloriesPer100g": 74,
-    "proteinPer100g": 0.07
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 50,
+    "proteinPer100g": 3.33,
+    "carbsPer100g": 5.42,
+    "fatPer100g": 1.46,
+    "foodFamilies": [],
+    "foodForms": [],
+    "isBaseFood": true,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
   },
   {
-    "id": "usda-173194",
-    "name": "Alcoholic Beverage, wine, table, red, Claret",
+    "id": "usda-455002",
+    "name": "1.5% MILKFAT CULTURED REDUCED FAT BUTTERMILK",
     "aliases": [],
-    "servingLabel": "29.4 g",
-    "servingGrams": 29.4,
-    "caloriesPer100g": 83,
-    "proteinPer100g": 0.07
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 50,
+    "proteinPer100g": 3.75,
+    "carbsPer100g": 5.83,
+    "fatPer100g": 1.46,
+    "foodFamilies": [],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
   },
   {
-    "id": "usda-171872",
-    "name": "Alcoholic Beverage, wine, table, red, Gamay",
+    "id": "usda-511704",
+    "name": "1.5% MILKFAT LOWFAT YOGURT",
     "aliases": [],
-    "servingLabel": "29.4 g",
-    "servingGrams": 29.4,
-    "caloriesPer100g": 78,
-    "proteinPer100g": 0.07
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 93,
+    "proteinPer100g": 4.67,
+    "carbsPer100g": 15.33,
+    "fatPer100g": 1.33,
+    "foodFamilies": [
+      "dairy"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
   },
   {
-    "id": "usda-174838",
-    "name": "Alcoholic Beverage, wine, table, red, Lemberger",
+    "id": "usda-535130",
+    "name": "1.5% MILKFAT LOWFAT YOGURT POUCHES",
     "aliases": [],
-    "servingLabel": "29.4 g",
-    "servingGrams": 29.4,
-    "caloriesPer100g": 80,
-    "proteinPer100g": 0.07
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 90,
+    "proteinPer100g": 5,
+    "carbsPer100g": 15,
+    "fatPer100g": 1.5,
+    "foodFamilies": [
+      "dairy"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
   },
   {
-    "id": "usda-171925",
-    "name": "Alcoholic Beverage, wine, table, red, Merlot",
+    "id": "usda-2503437",
+    "name": "1.5% PLAIN LOWFAT YOGURT, PLAIN",
     "aliases": [],
-    "servingLabel": "29.4 g",
-    "servingGrams": 29.4,
-    "caloriesPer100g": 83,
-    "proteinPer100g": 0.07
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 59,
+    "proteinPer100g": 4.12,
+    "carbsPer100g": 6.47,
+    "fatPer100g": 1.47,
+    "foodFamilies": [
+      "dairy"
+    ],
+    "foodForms": [
+      "plain"
+    ],
+    "isBaseFood": true,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
   },
   {
-    "id": "usda-174109",
-    "name": "Alcoholic Beverage, wine, table, red, Mouvedre",
+    "id": "usda-571223",
+    "name": "1.5% REDUCED FAT CULTURED BUTTERMILK",
     "aliases": [],
-    "servingLabel": "29.4 g",
-    "servingGrams": 29.4,
-    "caloriesPer100g": 88,
-    "proteinPer100g": 0.07
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 54,
+    "proteinPer100g": 3.75,
+    "carbsPer100g": 5.42,
+    "fatPer100g": 1.46,
+    "foodFamilies": [],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
   },
   {
-    "id": "usda-173193",
-    "name": "Alcoholic Beverage, wine, table, red, Petite Sirah",
+    "id": "usda-2199152",
+    "name": "1.5% SMALL CURD LOWFAT COTTAGE CHEESE & PINEAPPLE, PINEAPPLE",
     "aliases": [],
-    "servingLabel": "29.5 g",
-    "servingGrams": 29.5,
-    "caloriesPer100g": 85,
-    "proteinPer100g": 0.07
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 92,
+    "proteinPer100g": 6.67,
+    "carbsPer100g": 11.67,
+    "fatPer100g": 1.67,
+    "foodFamilies": [
+      "dairy"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
   },
   {
-    "id": "usda-174835",
-    "name": "Alcoholic Beverage, wine, table, red, Pinot Noir",
+    "id": "usda-765230",
+    "name": "1.55Z SUNCHIPS APPLE CINNAMON",
     "aliases": [],
-    "servingLabel": "29.4 g",
-    "servingGrams": 29.4,
-    "caloriesPer100g": 82,
-    "proteinPer100g": 0.07
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 456,
+    "proteinPer100g": 11.39,
+    "carbsPer100g": 72.89,
+    "fatPer100g": 13.67,
+    "foodFamilies": [
+      "produce"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
   },
   {
-    "id": "usda-174839",
-    "name": "Alcoholic Beverage, wine, table, red, Sangiovese",
+    "id": "usda-765240",
+    "name": "1.87OZ LAY'S SOUR CREAM AND ONION",
     "aliases": [],
-    "servingLabel": "29.4 g",
-    "servingGrams": 29.4,
-    "caloriesPer100g": 86,
-    "proteinPer100g": 0.07
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 565,
+    "proteinPer100g": 7.53,
+    "carbsPer100g": 54.61,
+    "fatPer100g": 35.78,
+    "foodFamilies": [
+      "produce"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": true,
+    "isComboMeal": true,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
   },
   {
-    "id": "usda-174836",
-    "name": "Alcoholic Beverage, wine, table, red, Syrah",
+    "id": "usda-508241",
+    "name": "1/2 BIG APPLE TURKEY",
     "aliases": [],
-    "servingLabel": "29.4 g",
-    "servingGrams": 29.4,
-    "caloriesPer100g": 83,
-    "proteinPer100g": 0.07
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 197,
+    "proteinPer100g": 8.16,
+    "carbsPer100g": 30.61,
+    "fatPer100g": 5.44,
+    "foodFamilies": [
+      "produce",
+      "protein"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
   },
   {
-    "id": "usda-173192",
-    "name": "Alcoholic Beverage, wine, table, red, Zinfandel",
+    "id": "usda-581550",
+    "name": "1/2 LOAF HEARTY RYE SPECIAL RECIPE BREAD",
     "aliases": [],
-    "servingLabel": "29.4 g",
-    "servingGrams": 29.4,
-    "caloriesPer100g": 88,
-    "proteinPer100g": 0.07
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 250,
+    "proteinPer100g": 7.14,
+    "carbsPer100g": 46.43,
+    "fatPer100g": 3.57,
+    "foodFamilies": [
+      "grains"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": true
   },
   {
-    "id": "usda-174837",
-    "name": "Alcoholic beverage, wine, table, white",
+    "id": "usda-1948906",
+    "name": "1/2 LOAF HEARTY RYE SPECIAL RECIPE BREAD, HEARTY RYE",
     "aliases": [],
-    "servingLabel": "29.4 g",
-    "servingGrams": 29.4,
-    "caloriesPer100g": 82,
-    "proteinPer100g": 0.07
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 250,
+    "proteinPer100g": 7.14,
+    "carbsPer100g": 46.43,
+    "fatPer100g": 3.57,
+    "foodFamilies": [
+      "grains"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": true
   },
   {
-    "id": "usda-174110",
-    "name": "Alcoholic beverage, wine, table, white, Chardonnay",
+    "id": "usda-627310",
+    "name": "1/2 LOAF SPECIAL RECIPE BREAD",
     "aliases": [],
-    "servingLabel": "29.3 g",
-    "servingGrams": 29.3,
-    "caloriesPer100g": 84,
-    "proteinPer100g": 0.07
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 250,
+    "proteinPer100g": 10.71,
+    "carbsPer100g": 46.43,
+    "fatPer100g": 5.36,
+    "foodFamilies": [
+      "grains"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": true
   },
   {
-    "id": "usda-173195",
-    "name": "Alcoholic beverage, wine, table, white, Chenin Blanc",
+    "id": "usda-2476372",
+    "name": "1/2 LOAF WHITE ENRICHED BREAD",
     "aliases": [],
-    "servingLabel": "29.5 g",
-    "servingGrams": 29.5,
-    "caloriesPer100g": 80,
-    "proteinPer100g": 0.07
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 245,
+    "proteinPer100g": 8.16,
+    "carbsPer100g": 46.94,
+    "fatPer100g": 3.06,
+    "foodFamilies": [
+      "grains"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": true
   },
   {
-    "id": "usda-173196",
-    "name": "Alcoholic beverage, wine, table, white, Fume Blanc",
+    "id": "usda-2537616",
+    "name": "1/2 OF AN ORGANIC PINEAPPLE WITH COCONUT FRUIT JERKY",
     "aliases": [],
-    "servingLabel": "29.3 g",
-    "servingGrams": 29.3,
-    "caloriesPer100g": 82,
-    "proteinPer100g": 0.07
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 348,
+    "proteinPer100g": 4.35,
+    "carbsPer100g": 69.57,
+    "fatPer100g": 4.35,
+    "foodFamilies": [
+      "produce"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": true,
+    "isComboMeal": true,
+    "isBranded": true,
+    "isDerivative": false,
+    "isStaple": false
   },
   {
-    "id": "usda-174843",
-    "name": "Alcoholic beverage, wine, table, white, Gewurztraminer",
+    "id": "usda-2416998",
+    "name": "1/2\" CRINKLE CUT FRENCH FRIES FROZEN POTATOES, CRINKLE CUT",
     "aliases": [],
-    "servingLabel": "29.5 g",
-    "servingGrams": 29.5,
-    "caloriesPer100g": 81,
-    "proteinPer100g": 0.07
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 118,
+    "proteinPer100g": 1.18,
+    "carbsPer100g": 21.18,
+    "fatPer100g": 3.53,
+    "foodFamilies": [
+      "starches"
+    ],
+    "foodForms": [
+      "frozen"
+    ],
+    "isBaseFood": false,
+    "isPrepared": true,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
   },
   {
-    "id": "usda-173202",
-    "name": "Alcoholic beverage, wine, table, white, late harvest",
+    "id": "usda-583392",
+    "name": "1/2\" STUB WHEAT PULLMAN BREAD",
     "aliases": [],
-    "servingLabel": "30.8 g",
-    "servingGrams": 30.8,
-    "caloriesPer100g": 112,
-    "proteinPer100g": 0.07
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 244,
+    "proteinPer100g": 8.89,
+    "carbsPer100g": 46.67,
+    "fatPer100g": 3.33,
+    "foodFamilies": [
+      "grains"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": true
   },
   {
-    "id": "usda-174844",
-    "name": "Alcoholic beverage, wine, table, white, late harvest, Gewurztraminer",
+    "id": "usda-1667680",
+    "name": "1/2\"\" STUB WHEAT PULLMAN BREAD",
     "aliases": [],
-    "servingLabel": "30.5 g",
-    "servingGrams": 30.5,
-    "caloriesPer100g": 108,
-    "proteinPer100g": 0.07
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 244,
+    "proteinPer100g": 8.89,
+    "carbsPer100g": 46.67,
+    "fatPer100g": 3.33,
+    "foodFamilies": [
+      "grains"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": true
   },
   {
-    "id": "usda-173198",
-    "name": "Alcoholic beverage, wine, table, white, Muller Thurgau",
+    "id": "usda-412756",
+    "name": "1/2% LOWFAT MILK",
     "aliases": [],
-    "servingLabel": "29.5 g",
-    "servingGrams": 29.5,
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 42,
+    "proteinPer100g": 3.75,
+    "carbsPer100g": 5.42,
+    "fatPer100g": 0.42,
+    "foodFamilies": [
+      "dairy"
+    ],
+    "foodForms": [],
+    "isBaseFood": true,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-745722",
+    "name": "1/2% LOWFAT MILK PASTEURIZED",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 38,
+    "proteinPer100g": 3.33,
+    "carbsPer100g": 5,
+    "fatPer100g": 0.42,
+    "foodFamilies": [
+      "dairy"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-2196238",
+    "name": "1# PUMPERNICKEL RYE BREAD, 1# PUMPERNICKEL RYE",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 228,
+    "proteinPer100g": 7.02,
+    "carbsPer100g": 49.12,
+    "fatPer100g": 0.88,
+    "foodFamilies": [
+      "grains"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": true
+  },
+  {
+    "id": "usda-528089",
+    "name": "1% CHOCOLATE LOWFAT MILK",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 67,
+    "proteinPer100g": 3.33,
+    "carbsPer100g": 10.83,
+    "fatPer100g": 1.04,
+    "foodFamilies": [
+      "dairy"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-675122",
+    "name": "1% CHOCOLATE LOWFAT MILK, CHOCOLATE",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
     "caloriesPer100g": 76,
-    "proteinPer100g": 0.07
-  },
-  {
-    "id": "usda-174849",
-    "name": "Alcoholic beverage, wine, table, white, Muscat",
-    "aliases": [],
-    "servingLabel": "30 g",
-    "servingGrams": 30,
-    "caloriesPer100g": 82,
-    "proteinPer100g": 0.07
-  },
-  {
-    "id": "usda-174848",
-    "name": "Alcoholic beverage, wine, table, white, Pinot Blanc",
-    "aliases": [],
-    "servingLabel": "29.3 g",
-    "servingGrams": 29.3,
-    "caloriesPer100g": 81,
-    "proteinPer100g": 0.07
-  },
-  {
-    "id": "usda-174841",
-    "name": "Alcoholic beverage, wine, table, white, Pinot Gris (Grigio)",
-    "aliases": [],
-    "servingLabel": "29.3 g",
-    "servingGrams": 29.3,
-    "caloriesPer100g": 83,
-    "proteinPer100g": 0.07
-  },
-  {
-    "id": "usda-173200",
-    "name": "Alcoholic beverage, wine, table, white, Riesling",
-    "aliases": [],
-    "servingLabel": "29.6 g",
-    "servingGrams": 29.6,
-    "caloriesPer100g": 80,
-    "proteinPer100g": 0.07
-  },
-  {
-    "id": "usda-173201",
-    "name": "Alcoholic beverage, wine, table, white, Sauvignon Blanc",
-    "aliases": [],
-    "servingLabel": "29.3 g",
-    "servingGrams": 29.3,
-    "caloriesPer100g": 81,
-    "proteinPer100g": 0.07
-  },
-  {
-    "id": "usda-174845",
-    "name": "Alcoholic beverage, wine, table, white, Semillon",
-    "aliases": [],
-    "servingLabel": "29.5 g",
-    "servingGrams": 29.5,
-    "caloriesPer100g": 82,
-    "proteinPer100g": 0.07
-  },
-  {
-    "id": "usda-171906",
-    "name": "Alcoholic beverages, beer, higher alcohol",
-    "aliases": [],
-    "servingLabel": "30.6 g",
-    "servingGrams": 30.6,
-    "caloriesPer100g": 58,
-    "proteinPer100g": 0.9
-  },
-  {
-    "id": "usda-171908",
-    "name": "Alcoholic beverages, wine, rose",
-    "aliases": [],
-    "servingLabel": "30.3 g",
-    "servingGrams": 30.3,
-    "caloriesPer100g": 83,
-    "proteinPer100g": 0.36
-  },
-  {
-    "id": "usda-2710681",
-    "name": "Alcoholic coffee drink",
-    "aliases": [],
-    "servingLabel": "30 g",
-    "servingGrams": 30,
-    "caloriesPer100g": 88,
-    "proteinPer100g": 0.21
-  },
-  {
-    "id": "usda-2710620",
-    "name": "Alcoholic malt beverage",
-    "aliases": [],
-    "servingLabel": "30 g",
-    "servingGrams": 30,
-    "caloriesPer100g": 58,
-    "proteinPer100g": 0.9
-  },
-  {
-    "id": "usda-2710619",
-    "name": "Alcoholic malt beverage, sweetened",
-    "aliases": [],
-    "servingLabel": "30 g",
-    "servingGrams": 30,
-    "caloriesPer100g": 68,
-    "proteinPer100g": 0
-  },
-  {
-    "id": "usda-168384",
-    "name": "Alfalfa seeds, sprouted, raw",
-    "aliases": [],
-    "servingLabel": "33 g",
-    "servingGrams": 33,
-    "caloriesPer100g": 23,
-    "proteinPer100g": 3.99
-  },
-  {
-    "id": "usda-2709765",
-    "name": "Alfalfa sprouts, raw",
-    "aliases": [],
-    "servingLabel": "33 g",
-    "servingGrams": 33,
-    "caloriesPer100g": 23,
-    "proteinPer100g": 3.99
-  },
-  {
-    "id": "off-0011213162201",
-    "name": "Alfredo Fettuccini Pasta & Sauce",
-    "aliases": [
-      "Spartan",
-      "en:undefined"
+    "proteinPer100g": 3.38,
+    "carbsPer100g": 13.52,
+    "fatPer100g": 1.13,
+    "foodFamilies": [
+      "dairy"
     ],
-    "servingLabel": "62g",
-    "servingGrams": 62,
-    "caloriesPer100g": 602,
-    "proteinPer100g": 20.8
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
   },
   {
-    "id": "off-0011110020048",
-    "name": "Alfredo Pasta & Sauce",
-    "aliases": [
-      "Kroger",
-      "en:null"
-    ],
-    "servingLabel": "62g",
-    "servingGrams": 62,
-    "caloriesPer100g": 468,
-    "proteinPer100g": 20.8
-  },
-  {
-    "id": "off-0011150086714",
-    "name": "Alfredo roasted garlic cream sauce",
-    "aliases": [
-      "Roundy's",
-      "en:condiments",
-      "en:sauces",
-      "en:groceries"
-    ],
-    "servingLabel": "0.25 cup (62 g)",
-    "servingGrams": 62,
-    "caloriesPer100g": 129,
-    "proteinPer100g": 1.6099999999999999
-  },
-  {
-    "id": "usda-2705809",
-    "name": "Alfredo sauce",
-    "aliases": [],
-    "servingLabel": "260 g",
-    "servingGrams": 260,
-    "caloriesPer100g": 150,
-    "proteinPer100g": 2.12
-  },
-  {
-    "id": "off-0011213085203",
-    "name": "Alfredo Sauce Creamy",
-    "aliases": [
-      "Spartan",
-      "en:undefined"
-    ],
-    "servingLabel": "60g",
-    "servingGrams": 60,
-    "caloriesPer100g": 206,
-    "proteinPer100g": 2.78
-  },
-  {
-    "id": "off-0015400011907",
-    "name": "Alfredo Sauce Mix",
-    "aliases": [
-      "Western Family",
-      "en:undefined"
-    ],
-    "servingLabel": "14.000000000000002g",
-    "servingGrams": 14.000000000000002,
-    "caloriesPer100g": 3240,
-    "proteinPer100g": 51
-  },
-  {
-    "id": "usda-2705810",
-    "name": "Alfredo sauce with added vegetables",
-    "aliases": [],
-    "servingLabel": "260 g",
-    "servingGrams": 260,
-    "caloriesPer100g": 122,
-    "proteinPer100g": 2.07
-  },
-  {
-    "id": "usda-2705811",
-    "name": "Alfredo sauce with meat",
-    "aliases": [],
-    "servingLabel": "260 g",
-    "servingGrams": 260,
-    "caloriesPer100g": 171,
-    "proteinPer100g": 6.52
-  },
-  {
-    "id": "usda-2705812",
-    "name": "Alfredo sauce with meat and added vegetables",
-    "aliases": [],
-    "servingLabel": "260 g",
-    "servingGrams": 260,
-    "caloriesPer100g": 148,
-    "proteinPer100g": 6.47
-  },
-  {
-    "id": "usda-2705813",
-    "name": "Alfredo sauce with poultry",
-    "aliases": [],
-    "servingLabel": "260 g",
-    "servingGrams": 260,
-    "caloriesPer100g": 156,
-    "proteinPer100g": 6.87
-  },
-  {
-    "id": "usda-2705814",
-    "name": "Alfredo sauce with poultry and added vegetables",
-    "aliases": [],
-    "servingLabel": "260 g",
-    "servingGrams": 260,
-    "caloriesPer100g": 133,
-    "proteinPer100g": 6.83
-  },
-  {
-    "id": "usda-2705815",
-    "name": "Alfredo sauce with seafood",
-    "aliases": [],
-    "servingLabel": "260 g",
-    "servingGrams": 260,
-    "caloriesPer100g": 145,
-    "proteinPer100g": 5.91
-  },
-  {
-    "id": "usda-2705816",
-    "name": "Alfredo sauce with seafood and added vegetables",
-    "aliases": [],
-    "servingLabel": "260 g",
-    "servingGrams": 260,
-    "caloriesPer100g": 122,
-    "proteinPer100g": 5.87
-  },
-  {
-    "id": "off-0011213085210",
-    "name": "Alfredo Sauce, Roasted Garlic",
-    "aliases": [
-      "Spartan",
-      "en:condiments",
-      "en:sauces",
-      "en:alfredo-sauces",
-      "en:groceries"
-    ],
-    "servingLabel": "60 g (0.25 cup)",
-    "servingGrams": 60,
-    "caloriesPer100g": 117,
-    "proteinPer100g": 1.67
-  },
-  {
-    "id": "off-0011110840981",
-    "name": "Alfredo, Rich Cream Sauce",
-    "aliases": [
-      "Private Selection",
-      "en:condiments",
-      "en:sauces",
-      "en:alfredo-sauces",
-      "en:groceries"
-    ],
-    "servingLabel": "64 g (0.25 cup)",
-    "servingGrams": 64,
-    "caloriesPer100g": 125,
-    "proteinPer100g": 3.12
-  },
-  {
-    "id": "off-0011110110961",
-    "name": "All American Half Sub",
-    "aliases": [
-      "Fresh Foods Market",
-      "en:null"
-    ],
-    "servingLabel": "266g",
-    "servingGrams": 266,
-    "caloriesPer100g": 30.5,
-    "proteinPer100g": 5.37
-  },
-  {
-    "id": "off-0011110928078",
-    "name": "All Butter Pound Cake",
-    "aliases": [
-      "Bakery Fresh Goodness",
-      "en:undefined"
-    ],
-    "servingLabel": "76g",
-    "servingGrams": 76,
-    "caloriesPer100g": 190,
-    "proteinPer100g": 8.66
-  },
-  {
-    "id": "off-0015473200420",
-    "name": "All Butter Shortbread Fingers",
-    "aliases": [
-      "Dean's",
-      "Boricua Empaque  Inc.",
-      "en:undefined"
-    ],
-    "servingLabel": "100g",
-    "servingGrams": 100,
-    "caloriesPer100g": 512,
-    "proteinPer100g": 5.1
-  },
-  {
-    "id": "off-0015473000006",
-    "name": "All Butter Shortbread Petticoat Tails & Fingers",
-    "aliases": [
-      "Dean's",
-      "Boricua Empaque  Inc.",
-      "en:undefined"
-    ],
-    "servingLabel": "100g",
-    "servingGrams": 100,
-    "caloriesPer100g": 512,
-    "proteinPer100g": 5.1
-  },
-  {
-    "id": "off-0011110852571",
-    "name": "All Purpose Baking Mix",
-    "aliases": [
-      "Kroger",
-      "en:undefined"
-    ],
-    "servingLabel": "1 serving (40 g)",
-    "servingGrams": 40,
-    "caloriesPer100g": 400,
-    "proteinPer100g": 7.5
-  },
-  {
-    "id": "off-0011225421563",
-    "name": "All Purpose Flour Bleached & Enriched",
-    "aliases": [
-      "Valu Time",
-      "Kingston Marketing Co",
-      "en:undefined"
-    ],
-    "servingLabel": "30g",
-    "servingGrams": 30,
-    "caloriesPer100g": 1110,
-    "proteinPer100g": 33.3
-  },
-  {
-    "id": "off-0015400015509",
-    "name": "All Purpose Soy Sauce",
-    "aliases": [
-      "Western Family",
-      "Western Family Foods  Inc.",
-      "en:undefined"
-    ],
-    "servingLabel": "15g",
-    "servingGrams": 15,
-    "caloriesPer100g": 533,
-    "proteinPer100g": 0
-  },
-  {
-    "id": "off-0011110847478",
-    "name": "All Vegetable Shortening",
-    "aliases": [
-      "Kroger",
-      "en:undefined"
-    ],
-    "servingLabel": "12g",
-    "servingGrams": 12,
-    "caloriesPer100g": 7500,
-    "proteinPer100g": 0
-  },
-  {
-    "id": "off-0011150278508",
-    "name": "All-Purpose Baking Mix",
-    "aliases": [
-      "Roundy's"
-    ],
-    "servingLabel": "43 g (0.333 cup)",
-    "servingGrams": 43,
-    "caloriesPer100g": 395,
-    "proteinPer100g": 9.3
-  },
-  {
-    "id": "off-0011150264808",
-    "name": "All-Purpose Flour",
-    "aliases": [
-      "Roundy's",
-      "en:plant-based-foods-and-beverages",
-      "en:plant-based-foods",
-      "en:cereals-and-potatoes",
-      "en:cereals-and-their-products"
-    ],
-    "servingLabel": "0.25 cup (30 g)",
-    "servingGrams": 30,
-    "caloriesPer100g": 333,
-    "proteinPer100g": 10
-  },
-  {
-    "id": "off-0011213173207",
-    "name": "All-Purpose Vegetable Shortening",
-    "aliases": [
-      "Spartan"
-    ],
-    "servingLabel": "13 g (1 Tbsp)",
-    "servingGrams": 13,
-    "caloriesPer100g": 923,
-    "proteinPer100g": 0
-  },
-  {
-    "id": "off-0011110846242",
-    "name": "All-Vegetables Shortening",
-    "aliases": [
-      "Kroger",
-      "The Kroger Co.",
-      "en:plant-based-foods-and-beverages",
-      "en:plant-based-foods",
-      "en:fats",
-      "en:vegetable-fats"
-    ],
-    "servingLabel": "12 g (1 Tbsp)",
-    "servingGrams": 12,
-    "caloriesPer100g": 917,
-    "proteinPer100g": 0
-  },
-  {
-    "id": "off-0014321174678",
-    "name": "Allegro Cacao, Drinking Chocolate",
-    "aliases": [
-      "Allegro Coffee Company",
-      "en:beverages",
-      "en:dried-products",
-      "en:dried-products-to-be-rehydrated",
-      "en:dehydrated-beverages"
-    ],
-    "servingLabel": "2 Tbsp (24 g)",
-    "servingGrams": 24,
-    "caloriesPer100g": 458,
-    "proteinPer100g": 4.17
-  },
-  {
-    "id": "off-0014321173824",
-    "name": "Allegro, 64% Cacao Dark Drinking Chocolate",
-    "aliases": [
-      "Allegro Coffee Company",
-      "en:beverages",
-      "en:dried-products",
-      "en:dried-products-to-be-rehydrated",
-      "en:dehydrated-beverages"
-    ],
-    "servingLabel": "2 Tbsp (24 g)",
-    "servingGrams": 24,
-    "caloriesPer100g": 458,
-    "proteinPer100g": 8.33
-  },
-  {
-    "id": "off-0014321174265",
-    "name": "Allegro, Drinking Chocolate, White Chocolate",
-    "aliases": [
-      "Allegro Coffee Company",
-      "en:snacks",
-      "en:sweet-snacks",
-      "en:cocoa-and-its-products",
-      "en:confectioneries",
-      "en:chocolate-candies"
-    ],
-    "servingLabel": "2 TABLESPOONS (24 g)",
-    "servingGrams": 24,
-    "caloriesPer100g": 500,
-    "proteinPer100g": 12.5
-  },
-  {
-    "id": "off-0014452001447",
-    "name": "Almond Bark Dark Chocolate",
-    "aliases": [
-      "Esther Price Candies Corp.",
-      "en:undefined"
-    ],
-    "servingLabel": "30g",
-    "servingGrams": 30,
-    "caloriesPer100g": 1970,
-    "proteinPer100g": 44.4
-  },
-  {
-    "id": "off-0017109342542",
-    "name": "Almond Brag Fingers",
-    "aliases": [
-      "Sweet Shop Candies  Inc.",
-      "en:undefined"
-    ],
-    "servingLabel": "43g",
-    "servingGrams": 43,
-    "caloriesPer100g": 1070,
-    "proteinPer100g": 10.8
-  },
-  {
-    "id": "usda-2707533",
-    "name": "Almond butter",
-    "aliases": [],
-    "servingLabel": "16 g",
-    "servingGrams": 16,
-    "caloriesPer100g": 641,
-    "proteinPer100g": 20.67
-  },
-  {
-    "id": "off-0010001210353",
-    "name": "Almond butter + puffed quinoa chocolate bar",
-    "aliases": [
-      "Hu",
-      "en:snacks",
-      "en:sweet-snacks",
-      "en:cocoa-and-its-products",
-      "en:confectioneries",
-      "en:chocolate-candies",
-      "en:chocolates"
-    ],
-    "servingLabel": "30 g (30 g)",
-    "servingGrams": 30,
-    "caloriesPer100g": 567,
-    "proteinPer100g": 6.67
-  },
-  {
-    "id": "usda-2707565",
-    "name": "Almond butter and jelly sandwich, on wheat bread",
-    "aliases": [],
-    "servingLabel": "112 g",
-    "servingGrams": 112,
-    "caloriesPer100g": 372,
-    "proteinPer100g": 12.04
-  },
-  {
-    "id": "usda-2707564",
-    "name": "Almond butter and jelly sandwich, on white bread",
-    "aliases": [],
-    "servingLabel": "112 g",
-    "servingGrams": 112,
-    "caloriesPer100g": 374,
-    "proteinPer100g": 10.98
-  },
-  {
-    "id": "usda-2707563",
-    "name": "Almond butter sandwich, on wheat bread",
-    "aliases": [],
-    "servingLabel": "92 g",
-    "servingGrams": 92,
-    "caloriesPer100g": 395,
-    "proteinPer100g": 14.62
-  },
-  {
-    "id": "usda-2707562",
-    "name": "Almond butter sandwich, on white bread",
-    "aliases": [],
-    "servingLabel": "92 g",
-    "servingGrams": 92,
-    "caloriesPer100g": 397,
-    "proteinPer100g": 13.34
-  },
-  {
-    "id": "usda-2262074",
-    "name": "Almond butter, creamy",
+    "id": "usda-1062835",
+    "name": "1% CULTURED LOWFAT BUTTERMILK",
     "aliases": [],
     "servingLabel": "100 g",
     "servingGrams": 100,
-    "caloriesPer100g": 602.510076,
-    "proteinPer100g": 20.78734
+    "caloriesPer100g": 46,
+    "proteinPer100g": 3.75,
+    "carbsPer100g": 5.42,
+    "fatPer100g": 1.04,
+    "foodFamilies": [],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
   },
   {
-    "id": "usda-2707534",
-    "name": "Almond butter, lower sodium",
-    "aliases": [],
-    "servingLabel": "16 g",
-    "servingGrams": 16,
-    "caloriesPer100g": 645,
-    "proteinPer100g": 20.79
-  },
-  {
-    "id": "usda-2706797",
-    "name": "Almond chicken",
-    "aliases": [],
-    "servingLabel": "242 g",
-    "servingGrams": 242,
-    "caloriesPer100g": 195,
-    "proteinPer100g": 15.66
-  },
-  {
-    "id": "off-0009800145010",
-    "name": "Almond coconut treat",
-    "aliases": [
-      "Confetteria",
-      "en:snacks"
-    ],
-    "servingLabel": "3 PIECES (30 g)",
-    "servingGrams": 30,
-    "caloriesPer100g": 633,
-    "proteinPer100g": 6.67
-  },
-  {
-    "id": "off-0013964142518",
-    "name": "Almond Cookies",
-    "aliases": [
-      "Caldo International Inc.",
-      "en:undefined"
-    ],
-    "servingLabel": "85g",
-    "servingGrams": 85,
-    "caloriesPer100g": 515,
-    "proteinPer100g": 8.31
-  },
-  {
-    "id": "off-0011150250085",
-    "name": "Almond Flour Meal",
-    "aliases": [
-      "Simply Roundy's",
-      "en:undefined"
-    ],
-    "servingLabel": "28.000000000000004g",
-    "servingGrams": 28.000000000000004,
-    "caloriesPer100g": 2220,
-    "proteinPer100g": 76.5
-  },
-  {
-    "id": "off-0011110869982",
-    "name": "Almond granola bars",
-    "aliases": [
-      "Kroger",
-      "en:snacks"
-    ],
-    "servingLabel": "1 BAR (35 g)",
-    "servingGrams": 35,
-    "caloriesPer100g": 457,
-    "proteinPer100g": 8.57
-  },
-  {
-    "id": "off-0011110845931",
-    "name": "Almond Milk",
-    "aliases": [
-      "The Kroger Co.",
-      "en:undefined"
-    ],
-    "servingLabel": "240g",
-    "servingGrams": 240,
-    "caloriesPer100g": 6.77,
-    "proteinPer100g": 0.175
-  },
-  {
-    "id": "usda-2705408",
-    "name": "Almond milk, chocolate",
-    "aliases": [],
-    "servingLabel": "244 g",
-    "servingGrams": 244,
-    "caloriesPer100g": 43,
-    "proteinPer100g": 0.57
-  },
-  {
-    "id": "usda-2705410",
-    "name": "Almond milk, NFS",
-    "aliases": [],
-    "servingLabel": "244 g",
-    "servingGrams": 244,
-    "caloriesPer100g": 20,
-    "proteinPer100g": 0.54
-  },
-  {
-    "id": "usda-2705407",
-    "name": "Almond milk, sweetened",
-    "aliases": [],
-    "servingLabel": "244 g",
-    "servingGrams": 244,
-    "caloriesPer100g": 30,
-    "proteinPer100g": 0.53
-  },
-  {
-    "id": "usda-2705409",
-    "name": "Almond milk, unsweetened",
-    "aliases": [],
-    "servingLabel": "244 g",
-    "servingGrams": 244,
-    "caloriesPer100g": 15,
-    "proteinPer100g": 0.55
-  },
-  {
-    "id": "usda-2257045",
-    "name": "Almond milk, unsweetened, plain, refrigerated",
+    "id": "usda-2368846",
+    "name": "1% FAT LIGHT MILK, LIGHT",
     "aliases": [],
     "servingLabel": "100 g",
     "servingGrams": 100,
-    "caloriesPer100g": 19.33,
-    "proteinPer100g": 0.65625
+    "caloriesPer100g": 42,
+    "proteinPer100g": 3.33,
+    "carbsPer100g": 5,
+    "fatPer100g": 1.04,
+    "foodFamilies": [
+      "dairy"
+    ],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
   },
   {
-    "id": "usda-1750338",
-    "name": "Almond milk, unsweetened, plain, shelf stable",
+    "id": "usda-774992",
+    "name": "1% FRESH LOWFAT MILK",
     "aliases": [],
     "servingLabel": "100 g",
     "servingGrams": 100,
-    "caloriesPer100g": 14.5562,
-    "proteinPer100g": 0.5546875
-  },
-  {
-    "id": "off-0011110261977",
-    "name": "Almond Muffins",
-    "aliases": [
-      "Kroger",
-      "en:null"
+    "caloriesPer100g": 42,
+    "proteinPer100g": 3.33,
+    "carbsPer100g": 4.58,
+    "fatPer100g": 1.04,
+    "foodFamilies": [
+      "produce",
+      "dairy"
     ],
-    "servingLabel": "106g",
-    "servingGrams": 106,
-    "caloriesPer100g": 196,
-    "proteinPer100g": 6.23
-  },
-  {
-    "id": "usda-2710181",
-    "name": "Almond oil",
-    "aliases": [],
-    "servingLabel": "224 g",
-    "servingGrams": 224,
-    "caloriesPer100g": 884,
-    "proteinPer100g": 0
-  },
-  {
-    "id": "usda-2707535",
-    "name": "Almond paste",
-    "aliases": [],
-    "servingLabel": "227 g",
-    "servingGrams": 227,
-    "caloriesPer100g": 458,
-    "proteinPer100g": 9
-  },
-  {
-    "id": "off-0011110268273",
-    "name": "Almond Poppy Mini Muffins",
-    "aliases": [
-      "Inter-American Products",
-      "en:null"
+    "foodForms": [
+      "fresh"
     ],
-    "servingLabel": "50g",
-    "servingGrams": 50,
-    "caloriesPer100g": 400,
-    "proteinPer100g": 12
+    "isBaseFood": true,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
   },
   {
-    "id": "off-0011110184238",
-    "name": "Almond Pudding Cake",
-    "aliases": [
-      "Bakery Fresh Goodness",
-      "The Kroger Co.",
-      "en:null"
-    ],
-    "servingLabel": "77g",
-    "servingGrams": 77,
-    "caloriesPer100g": 277,
-    "proteinPer100g": 6.74
-  },
-  {
-    "id": "off-0017109328706",
-    "name": "Almond Toffee Bar",
-    "aliases": [
-      "Sweet Shop Candies  Inc.",
-      "en:undefined"
-    ],
-    "servingLabel": "43g",
-    "servingGrams": 43,
-    "caloriesPer100g": 1300,
-    "proteinPer100g": 10.8
-  },
-  {
-    "id": "off-0011110785787",
-    "name": "Almondmilk",
-    "aliases": [
-      "The Kroger Co.",
-      "en:undefined"
-    ],
-    "servingLabel": "240g",
-    "servingGrams": 240,
-    "caloriesPer100g": 15.7,
-    "proteinPer100g": 0.175
-  },
-  {
-    "id": "off-0010300000259",
-    "name": "Almonds",
-    "aliases": [
-      "Diamond Foods  Inc.",
-      "en:null"
-    ],
-    "servingLabel": "30g",
-    "servingGrams": 30,
-    "caloriesPer100g": 267,
-    "proteinPer100g": 66.7
-  },
-  {
-    "id": "off-0010300550648",
-    "name": "Almonds & Cashews",
-    "aliases": [
-      "Emerald",
-      "Diamond Foods  Inc.",
-      "en:null"
-    ],
-    "servingLabel": "28.000000000000004g",
-    "servingGrams": 28.000000000000004,
-    "caloriesPer100g": 357,
-    "proteinPer100g": 76.5
-  },
-  {
-    "id": "off-0010300550846",
-    "name": "Almonds & Walnuts",
-    "aliases": [
-      "Emerald",
-      "en:null"
-    ],
-    "servingLabel": "28.3495g",
-    "servingGrams": 28.3495,
-    "caloriesPer100g": 252,
-    "proteinPer100g": 66.1
-  },
-  {
-    "id": "off-0011150950305",
-    "name": "Almonds Roasted & Salted",
-    "aliases": [
-      "Roundy's",
-      "en:undefined"
-    ],
-    "servingLabel": "35g",
-    "servingGrams": 35,
-    "caloriesPer100g": 1620,
-    "proteinPer100g": 57.1
-  },
-  {
-    "id": "off-0014113210409",
-    "name": "Almonds Roasted No Salt",
-    "aliases": [
-      "Wonderful",
-      "en:undefined"
-    ],
-    "servingLabel": "30g",
-    "servingGrams": 30,
-    "caloriesPer100g": 2180,
-    "proteinPer100g": 77.8
-  },
-  {
-    "id": "off-0011150193016",
-    "name": "Almonds Slivered",
-    "aliases": [
-      "Roundy's",
-      "en:undefined"
-    ],
-    "servingLabel": "28.3495g",
-    "servingGrams": 28.3495,
-    "caloriesPer100g": 2190,
-    "proteinPer100g": 75.6
-  },
-  {
-    "id": "usda-2710326",
-    "name": "Almonds, chocolate covered candy",
+    "id": "usda-496675",
+    "name": "1% LIGHT LOW FAT MILK",
     "aliases": [],
-    "servingLabel": "4 g",
-    "servingGrams": 4,
-    "caloriesPer100g": 560,
-    "proteinPer100g": 12.97
-  },
-  {
-    "id": "usda-2707490",
-    "name": "Almonds, flavored",
-    "aliases": [],
-    "servingLabel": "1.2 g",
-    "servingGrams": 1.2,
-    "caloriesPer100g": 599,
-    "proteinPer100g": 20.07
-  },
-  {
-    "id": "usda-2707491",
-    "name": "Almonds, honey roasted",
-    "aliases": [],
-    "servingLabel": "1.2 g",
-    "servingGrams": 1.2,
-    "caloriesPer100g": 579,
-    "proteinPer100g": 14.11
-  },
-  {
-    "id": "usda-2707488",
-    "name": "Almonds, lightly salted",
-    "aliases": [],
-    "servingLabel": "1.2 g",
-    "servingGrams": 1.2,
-    "caloriesPer100g": 604,
-    "proteinPer100g": 20.23
-  },
-  {
-    "id": "usda-2707485",
-    "name": "Almonds, NFS",
-    "aliases": [],
-    "servingLabel": "1.2 g",
-    "servingGrams": 1.2,
-    "caloriesPer100g": 598,
-    "proteinPer100g": 20.96
-  },
-  {
-    "id": "off-0011213146690",
-    "name": "Almonds, roasted & salted",
-    "aliases": [
-      "Spartan",
-      "en:plant-based-foods-and-beverages",
-      "en:plant-based-foods",
-      "en:snacks",
-      "en:nuts-and-their-products",
-      "en:nuts",
-      "en:almonds",
-      "en:salted-almonds",
-      "en:roasted-salted-almonds"
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 42,
+    "proteinPer100g": 3.33,
+    "carbsPer100g": 5,
+    "fatPer100g": 1.04,
+    "foodFamilies": [
+      "dairy"
     ],
-    "servingLabel": "1 ONZ (28 g)",
-    "servingGrams": 28,
-    "caloriesPer100g": 607,
-    "proteinPer100g": 21.43
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
   },
   {
-    "id": "usda-2707487",
-    "name": "Almonds, salted",
+    "id": "usda-558926",
+    "name": "1% LIGHT LOWFAT MILK",
     "aliases": [],
-    "servingLabel": "1.2 g",
-    "servingGrams": 1.2,
-    "caloriesPer100g": 601,
-    "proteinPer100g": 20.13
-  },
-  {
-    "id": "usda-2707486",
-    "name": "Almonds, unroasted",
-    "aliases": [],
-    "servingLabel": "1.2 g",
-    "servingGrams": 1.2,
-    "caloriesPer100g": 626,
-    "proteinPer100g": 21.45
-  },
-  {
-    "id": "usda-2707489",
-    "name": "Almonds, unsalted",
-    "aliases": [],
-    "servingLabel": "1.2 g",
-    "servingGrams": 1.2,
-    "caloriesPer100g": 607,
-    "proteinPer100g": 20.33
-  },
-  {
-    "id": "off-0016229903879",
-    "name": "Aloe Vera Dessert",
-    "aliases": [
-      "Foco",
-      "Thai Agri Foods Public Company Lemited",
-      "en:undefined"
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 42,
+    "proteinPer100g": 3.33,
+    "carbsPer100g": 5,
+    "fatPer100g": 1.04,
+    "foodFamilies": [
+      "dairy"
     ],
-    "servingLabel": "277.8251g",
-    "servingGrams": 277.8251,
-    "caloriesPer100g": 22.1,
-    "proteinPer100g": 0
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
   },
   {
-    "id": "off-0011152296098",
-    "name": "Aloe Vera Drink",
-    "aliases": [
-      "Jfc International Inc.",
-      "en:beverages-and-beverages-preparations",
-      "en:beverages"
+    "id": "usda-558927",
+    "name": "1% LIGHT MILK",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 42,
+    "proteinPer100g": 3.33,
+    "carbsPer100g": 5,
+    "fatPer100g": 1.04,
+    "foodFamilies": [
+      "dairy"
     ],
-    "servingLabel": "236.58799999999997g",
-    "servingGrams": 236.58799999999997,
-    "caloriesPer100g": 5.63,
-    "proteinPer100g": 0
+    "foodForms": [],
+    "isBaseFood": true,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
   },
   {
-    "id": "off-0016229006747",
-    "name": "Aloe vera drink with honey",
-    "aliases": [
-      "Foco",
-      "Thai Agri Foods Co.  Ltd.",
-      "en:plant-based-foods-and-beverages",
-      "en:beverages",
-      "en:plant-based-beverages",
-      "en:carbonated-drinks",
-      "en:sodas",
-      "en:sweetened-beverages",
-      "Boisson aux fruits"
+    "id": "usda-1114002",
+    "name": "1% LOW FAT BUTTERMILK",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 46,
+    "proteinPer100g": 3.75,
+    "carbsPer100g": 5.42,
+    "fatPer100g": 1.04,
+    "foodFamilies": [],
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
+  },
+  {
+    "id": "usda-456252",
+    "name": "1% LOW FAT CHOCOLATE MILK",
+    "aliases": [],
+    "servingLabel": "100 g",
+    "servingGrams": 100,
+    "caloriesPer100g": 75,
+    "proteinPer100g": 3.33,
+    "carbsPer100g": 13.33,
+    "fatPer100g": 1.04,
+    "foodFamilies": [
+      "dairy"
     ],
-    "servingLabel": "1g",
-    "servingGrams": 1,
-    "caloriesPer100g": 44,
-    "proteinPer100g": 0
-  },
-  {
-    "id": "usda-2709833",
-    "name": "Aloe vera juice drink",
-    "aliases": [],
-    "servingLabel": "128 g",
-    "servingGrams": 128,
-    "caloriesPer100g": 15,
-    "proteinPer100g": 0
-  },
-  {
-    "id": "usda-170683",
-    "name": "Amaranth grain, cooked",
-    "aliases": [],
-    "servingLabel": "246 g",
-    "servingGrams": 246,
-    "caloriesPer100g": 102,
-    "proteinPer100g": 3.8
-  },
-  {
-    "id": "usda-170682",
-    "name": "Amaranth grain, uncooked",
-    "aliases": [],
-    "servingLabel": "193 g",
-    "servingGrams": 193,
-    "caloriesPer100g": 371,
-    "proteinPer100g": 13.56
-  },
-  {
-    "id": "usda-168492",
-    "name": "Amaranth leaves, cooked, boiled, drained, with salt",
-    "aliases": [],
-    "servingLabel": "132 g",
-    "servingGrams": 132,
-    "caloriesPer100g": 21,
-    "proteinPer100g": 2.11
-  },
-  {
-    "id": "usda-169202",
-    "name": "Amaranth leaves, cooked, boiled, drained, without salt",
-    "aliases": [],
-    "servingLabel": "132 g",
-    "servingGrams": 132,
-    "caloriesPer100g": 21,
-    "proteinPer100g": 2.11
-  },
-  {
-    "id": "usda-168385",
-    "name": "Amaranth leaves, raw",
-    "aliases": [],
-    "servingLabel": "28 g",
-    "servingGrams": 28,
-    "caloriesPer100g": 23,
-    "proteinPer100g": 2.46
-  },
-  {
-    "id": "off-0011110004642",
-    "name": "Amaretto cherry cordial ice cream",
-    "aliases": [
-      "Private Selection",
-      "en:desserts",
-      "en:frozen-foods",
-      "en:frozen-desserts"
-    ],
-    "servingLabel": "0.5 cup (84 g)",
-    "servingGrams": 84,
-    "caloriesPer100g": 241.07142857143,
-    "proteinPer100g": 2.6785714285714
+    "foodForms": [],
+    "isBaseFood": false,
+    "isPrepared": false,
+    "isComboMeal": false,
+    "isBranded": false,
+    "isDerivative": false,
+    "isStaple": false
   }
 ];
