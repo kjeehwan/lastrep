@@ -60,3 +60,6 @@ GoogleService-Info.plist
 *.aab
 *.apk
 *.apks
+
+# local/raw nutrition source datasets (repo root only)
+/data/
