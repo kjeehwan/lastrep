@@ -15,6 +15,8 @@ import type {
 export type NutritionTotals = {
   calories: number;
   proteinGrams: number;
+  carbGrams: number;
+  fatGrams: number;
 };
 
 export type DailyCalorieProgress = {
@@ -68,8 +70,10 @@ export function computeNutritionTotals(meals: NutritionMeal[]): NutritionTotals 
     (totals, meal) => ({
       calories: totals.calories + meal.calories,
       proteinGrams: totals.proteinGrams + (meal.proteinGrams ?? 0),
+      carbGrams: totals.carbGrams + (meal.carbGrams ?? 0),
+      fatGrams: totals.fatGrams + (meal.fatGrams ?? 0),
     }),
-    { calories: 0, proteinGrams: 0 }
+    { calories: 0, proteinGrams: 0, carbGrams: 0, fatGrams: 0 }
   );
 }
 
@@ -146,11 +150,13 @@ export function normalizeCalorieTargets(
 export function buildNutritionProfile(
   calorieTargetsByDietPhase: NutritionCalorieTargetsByDietPhase,
   proteinTargetGrams: number | null = null,
+  mealSections: string[] | null = null,
   updatedAt: Timestamp | null = Timestamp.now()
 ): NutritionProfile {
   return {
     calorieTargetsByDietPhase,
     proteinTargetGrams,
+    mealSections,
     updatedAt,
   };
 }
