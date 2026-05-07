@@ -64,8 +64,22 @@ module.exports = function withWorkoutNativeOverrides(config) {
       );
       fs.writeFileSync(mainApplicationPath, mainApp, "utf8");
 
+      const buildGradlePath = path.join(projectRoot, "android", "app", "build.gradle");
+      if (!fs.existsSync(buildGradlePath)) {
+        throw new Error(`build.gradle not found at ${buildGradlePath}`);
+      }
+      let buildGradle = fs.readFileSync(buildGradlePath, "utf8");
+      const recyclerDep = '    implementation("androidx.recyclerview:recyclerview:1.3.2")';
+      if (!buildGradle.includes("androidx.recyclerview:recyclerview")) {
+        buildGradle = injectOnce(
+          buildGradle,
+          '    implementation("com.facebook.react:react-android")',
+          recyclerDep
+        );
+      }
+      fs.writeFileSync(buildGradlePath, buildGradle, "utf8");
+
       return cfg;
     },
   ]);
 };
-
