@@ -94,7 +94,7 @@ const mappedPlugins = (baseConfig.plugins ?? []).map((plugin) => {
   return plugin;
 });
 
-const requiredPlugins = ["expo-audio"] as const;
+const requiredPlugins = ["expo-audio", "./plugins/with-workout-native-overrides"] as const;
 let plugins = [...mappedPlugins];
 for (const requiredPlugin of requiredPlugins) {
   const exists = plugins.some(

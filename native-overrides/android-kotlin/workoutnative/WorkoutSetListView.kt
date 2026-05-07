@@ -1,4 +1,4 @@
-package com.kjeehwan.lastrep.workoutnative
+package __PACKAGE__.workoutnative
 
 import android.content.Context
 import android.graphics.Canvas

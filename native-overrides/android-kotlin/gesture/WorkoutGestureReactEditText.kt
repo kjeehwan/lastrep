@@ -1,4 +1,4 @@
-package com.kjeehwan.lastrep.gesture
+package __PACKAGE__.gesture
 
 import android.content.Context
 import android.view.MotionEvent

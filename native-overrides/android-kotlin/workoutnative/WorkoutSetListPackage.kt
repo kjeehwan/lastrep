@@ -1,4 +1,4 @@
-package com.kjeehwan.lastrep.workoutnative
+package __PACKAGE__.workoutnative
 
 import com.facebook.react.ReactPackage
 import com.facebook.react.bridge.NativeModule

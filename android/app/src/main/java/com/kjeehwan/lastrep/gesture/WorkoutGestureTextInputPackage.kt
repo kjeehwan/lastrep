@@ -1,1 +1,15 @@
-package com.kjeehwan.lastrep.gestureimport com.facebook.react.ReactPackageimport com.facebook.react.bridge.NativeModuleimport com.facebook.react.bridge.ReactApplicationContextimport com.facebook.react.uimanager.ViewManagerclass WorkoutGestureTextInputPackage : ReactPackage {  override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> =    emptyList()  override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> =    listOf(WorkoutGestureTextInputManager())}
+package com.kjeehwan.lastrep.gesture
+
+import com.facebook.react.ReactPackage
+import com.facebook.react.bridge.NativeModule
+import com.facebook.react.bridge.ReactApplicationContext
+import com.facebook.react.uimanager.ViewManager
+
+class WorkoutGestureTextInputPackage : ReactPackage {
+  override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> =
+    emptyList()
+
+  override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> =
+    listOf(WorkoutGestureTextInputManager())
+}
+

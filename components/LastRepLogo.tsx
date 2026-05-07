@@ -10,7 +10,6 @@ const LastRepLogo = () => {
   const scheme = String(Constants.expoConfig?.scheme ?? "").toLowerCase();
   const linkingUri = String(Constants.linkingUri ?? "").toLowerCase();
   const isDevVariant =
-    __DEV__ ||
     appVariant === "dev" ||
     appName.includes("dev") ||
     androidPackage.endsWith(".dev") ||
