@@ -411,7 +411,7 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
           setColor(if (done) Color.parseColor("#7B61FF") else Color.TRANSPARENT)
         }
         binding.check.background = bg
-        binding.check.text = if (done) "?" else ""
+        binding.check.text = if (done) "\u2713" else ""
         binding.check.setTextColor(if (done) Color.parseColor("#0D0D1A") else Color.TRANSPARENT)
       }
 
