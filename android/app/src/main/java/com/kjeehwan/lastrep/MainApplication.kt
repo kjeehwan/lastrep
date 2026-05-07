@@ -1,4 +1,4 @@
-package com.kjeehwan.lastrep.dev
+package com.kjeehwan.lastrep
 
 import android.app.Application
 import android.content.res.Configuration
@@ -12,8 +12,8 @@ import com.facebook.react.ReactHost
 import com.facebook.react.common.ReleaseLevel
 import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint
 import com.facebook.react.defaults.DefaultReactNativeHost
-import com.kjeehwan.lastrep.dev.gesture.WorkoutGestureTextInputPackage
-import com.kjeehwan.lastrep.dev.workoutnative.WorkoutSetListPackage
+import com.kjeehwan.lastrep.gesture.WorkoutGestureTextInputPackage
+import com.kjeehwan.lastrep.workoutnative.WorkoutSetListPackage
 
 import expo.modules.ApplicationLifecycleDispatcher
 import expo.modules.ReactNativeHostWrapper

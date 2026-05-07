@@ -1,4 +1,4 @@
-package com.kjeehwan.lastrep.dev
+package com.kjeehwan.lastrep
 import expo.modules.splashscreen.SplashScreenManager
 
 import android.os.Build
