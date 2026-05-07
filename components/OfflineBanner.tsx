@@ -21,7 +21,7 @@ export default function OfflineBanner() {
     <View style={styles.overlay}>
       <SafeAreaView edges={["bottom"]} style={styles.safeArea}>
         <Pressable onPress={() => setDismissed(true)} style={styles.banner}>
-          <Text style={styles.title}>You're offline</Text>
+          <Text style={styles.title}>You are offline</Text>
           <Text style={styles.subtitle}>Some features may be limited until you reconnect.</Text>
         </Pressable>
       </SafeAreaView>

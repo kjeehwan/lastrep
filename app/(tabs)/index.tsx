@@ -1,12 +1,15 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Redirect, type Href } from "expo-router";
+import { type Href, useRouter } from "expo-router";
+import * as SplashScreen from "expo-splash-screen";
 import { onAuthStateChanged } from "firebase/auth";
-import React, { useEffect, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import React, { useEffect } from "react";
+import { StyleSheet, View } from "react-native";
+import LastRepLogo from "@/components/LastRepLogo";
 import { auth } from "../../src/config/firebaseConfig";
 import { getUserData } from "../../src/userData";
 
 const ONBOARDING_COMPLETE_KEY = "onboardingComplete";
+const MIN_SPLASH_MS = 900;
 
 const hasCompletedLegacyOnboarding = (userData: any): boolean =>
   typeof userData?.nickname === "string" &&
@@ -17,17 +20,23 @@ const hasCompletedLegacyOnboarding = (userData: any): boolean =>
   userData.availability.trim().length > 0;
 
 export default function HomeScreen() {
-  const [loading, setLoading] = useState(true);
-  const [redirectTo, setRedirectTo] = useState<Href | null>(null);
+  const router = useRouter();
 
   useEffect(() => {
     let cancelled = false;
+    const startedAt = Date.now();
 
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (!user) {
         if (!cancelled) {
-          setRedirectTo("/auth/sign-up");
-          setLoading(false);
+          const elapsed = Date.now() - startedAt;
+          if (elapsed < MIN_SPLASH_MS) {
+            await new Promise((resolve) => setTimeout(resolve, MIN_SPLASH_MS - elapsed));
+          }
+          router.replace("/auth/sign-up");
+          setTimeout(() => {
+            void SplashScreen.hideAsync().catch(() => {});
+          }, 0);
         }
         return;
       }
@@ -43,31 +52,35 @@ export default function HomeScreen() {
 
       if (cancelled) return;
 
-      setRedirectTo(onboardingComplete === "true" ? "/(tabs)/home" : "/onboarding/goal");
-      setLoading(false);
+      const elapsed = Date.now() - startedAt;
+      if (elapsed < MIN_SPLASH_MS) {
+        await new Promise((resolve) => setTimeout(resolve, MIN_SPLASH_MS - elapsed));
+      }
+      const target: Href = onboardingComplete === "true" ? "/(tabs)/home" : "/onboarding/goal";
+      router.replace(target);
+      setTimeout(() => {
+        void SplashScreen.hideAsync().catch(() => {});
+      }, 0);
     });
 
     return () => {
       cancelled = true;
       unsubscribe();
     };
-  }, []);
+  }, [router]);
 
-  if (redirectTo) {
-    return <Redirect href={redirectTo} />;
-  }
-
-  if (loading) {
-    return (
-      <View style={styles.container}>
-        <Text>Loading...</Text>
-      </View>
-    );
-  }
-
-  return null;
+  return (
+    <View style={styles.container}>
+      <LastRepLogo />
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: "center", alignItems: "center" },
+  container: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#0d0d1a",
+  },
 });

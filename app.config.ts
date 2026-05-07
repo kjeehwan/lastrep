@@ -47,8 +47,8 @@ const adaptiveForeground = isDevVariant
   ? "./assets/images/logo-splash-512-foreground-padded-dev.png"
   : "./assets/images/logo-splash-512-foreground-padded-v3.png";
 const splashImage = isDevVariant
-  ? "./assets/images/logo-splash-dev.png"
-  : "./assets/images/logo-splash-v2.png";
+  ? "./assets/images/logo-splash-512-foreground-padded-dev.png"
+  : "./assets/images/logo-splash-512-foreground-padded-v3.png";
 
 const mappedPlugins = (baseConfig.plugins ?? []).map((plugin) => {
   if (Array.isArray(plugin) && plugin[0] === "expo-splash-screen") {
@@ -57,6 +57,8 @@ const mappedPlugins = (baseConfig.plugins ?? []).map((plugin) => {
       {
         ...(plugin[1] as Record<string, unknown>),
         image: splashImage,
+        backgroundColor: "#0d0d1a",
+        dark: { backgroundColor: "#0d0d1a" },
       },
     ] as ExpoConfig["plugins"][number];
   }
@@ -79,6 +81,10 @@ const config: ExpoConfig = {
   name: appName,
   scheme: appScheme,
   icon: appIcon,
+  extra: {
+    ...(baseConfig.extra ?? {}),
+    appVariant: variant,
+  },
   plugins,
   newArchEnabled: true,
   android: {

@@ -29,6 +29,13 @@
         <category android:name="android.intent.category.BROWSABLE"/>
         <data android:scheme="lastrep-dev"/>
         <data android:scheme="exp+lastrep"/>
+        <data android:scheme="lastrep"/>
+      </intent-filter>
+      <intent-filter>
+        <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE"/>
+      </intent-filter>
+      <intent-filter>
+        <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE"/>
       </intent-filter>
       <intent-filter>
         <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE"/>
