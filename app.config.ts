@@ -11,6 +11,7 @@ const baseConfig = appJson.expo;
 const projectRoot = __dirname;
 const variant: AppVariant = process.env.APP_VARIANT === "dev" ? "dev" : "prod";
 const isDevVariant = variant === "dev";
+const isEasBuild = process.env.EAS_BUILD === "true";
 
 const resolveGoogleServicesFile = () => {
   const envFileForVariant =
@@ -19,10 +20,38 @@ const resolveGoogleServicesFile = () => {
   const fallbackRelativePath = variant === "dev" ? "./google-services.dev.json" : "./google-services.json";
   const fallbackAbsolutePath = path.join(projectRoot, fallbackRelativePath.replace("./", ""));
 
-  const resolved =
-    (envFileForVariant && envFileForVariant.trim().length > 0 && envFileForVariant) ||
-    (legacyEnvFile && legacyEnvFile.trim().length > 0 && legacyEnvFile) ||
-    fallbackRelativePath;
+  const hasVariantEnv = !!(envFileForVariant && envFileForVariant.trim().length > 0);
+  const hasLegacyEnv = !!(legacyEnvFile && legacyEnvFile.trim().length > 0);
+  const resolved = (hasVariantEnv && envFileForVariant) || (hasLegacyEnv && legacyEnvFile) || fallbackRelativePath;
+
+  if (isEasBuild) {
+    if (!hasVariantEnv) {
+      throw new Error(
+        variant === "dev"
+          ? "EAS build requires GOOGLE_SERVICES_JSON_DEV as a File variable for APP_VARIANT=dev."
+          : "EAS build requires GOOGLE_SERVICES_JSON_PROD as a File variable for APP_VARIANT=prod."
+      );
+    }
+    if (!envFileForVariant) {
+      throw new Error("Google services file variable is empty.");
+    }
+    const trimmed = envFileForVariant.trim();
+    if (trimmed.startsWith("{") || trimmed === "google-services.json" || trimmed === "google-services.dev.json") {
+      throw new Error(
+        variant === "dev"
+          ? "GOOGLE_SERVICES_JSON_DEV must be a File variable path, not plain text content or filename string."
+          : "GOOGLE_SERVICES_JSON_PROD must be a File variable path, not plain text content or filename string."
+      );
+    }
+    if (!fs.existsSync(trimmed)) {
+      throw new Error(
+        variant === "dev"
+          ? "GOOGLE_SERVICES_JSON_DEV does not point to an existing file in EAS build environment."
+          : "GOOGLE_SERVICES_JSON_PROD does not point to an existing file in EAS build environment."
+      );
+    }
+    return trimmed;
+  }
 
   if (resolved === fallbackRelativePath && !fs.existsSync(fallbackAbsolutePath)) {
     throw new Error(
