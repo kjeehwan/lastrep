@@ -2894,7 +2894,7 @@ export default function WorkoutLog() {
                 <WorkoutSetList
                   key={`native-set-list-${ex.id}-${ex.sets
                     .map((set, idx) => `${idx}:${getSetTypeMarker(set, idx)}`)
-                    .join("|")}`}
+                    .join("|")}-${String(unit).toLowerCase()}-${weightLabel}-${repsLabel}-${rpeLabel}`}
                   style={{ height: Math.max(ex.sets.length, 1) * 52 }}
                   weightLabel={weightLabel}
                   repsLabel={repsLabel}
