@@ -43,17 +43,18 @@ const OPENAI_API_KEY = defineSecret("OPENAI_API_KEY");
 const REVENUECAT_WEBHOOK_AUTH = defineSecret("REVENUECAT_WEBHOOK_AUTH");
 const DEV_UID_ALLOWLIST_SECRET = defineSecret("DEV_UID_ALLOWLIST");
 const DECISION_PROMPT_VERSION = "v6";
-const OPENAI_TIMEOUT_MS = 20000;
-const OPENAI_FIRST_ATTEMPT_MS = 14000;
-const OPENAI_RETRY_MS = 6000;
+const OPENAI_DECISION_MODEL = "gpt-5-nano";
+const OPENAI_TIMEOUT_MS = 12000;
+const OPENAI_FIRST_ATTEMPT_MS = 8000;
+const OPENAI_RETRY_MS = 7000;
+const OPENAI_RETRY_ENABLED = true;
+const OPENAI_MAX_OUTPUT_TOKENS_FIRST = 900;
+const OPENAI_MAX_OUTPUT_TOKENS_RETRY = 1200;
 const FALLBACK_REASON_MAX_LEN = 80;
 const INPUT_HASH_PREFIX_LEN = 8;
 const SERVER_RATE_LIMIT_MAX_COUNT = 12;
 const SERVER_RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
-const FREE_MAX_PER_DAY = 1;
 const FREE_MAX_PER_30_DAYS = 3;
-const PAID_MAX_PER_DAY = 3;
-const PAID_COOLDOWN_MS = 30 * 60 * 1000;
 const ROLLING_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 const PREMIUM_ENTITLEMENT_ID = "premium";
 const DEV_OVERRIDE_ENABLED = process.env.FUNCTIONS_EMULATOR === "true";
@@ -82,7 +83,12 @@ const decisionOutputJsonSchema = {
     additionalProperties: false,
     properties: {
       decision: { type: "string", enum: ["PUSH", "MAINTAIN", "PULL_BACK"] },
-      explanation: { type: "array", items: { type: "string" } },
+      explanation: {
+        type: "array",
+        minItems: 2,
+        maxItems: 3,
+        items: { type: "string", minLength: 12, maxLength: 140 },
+      },
       adjustments: {
         anyOf: [
           { type: "null" },
@@ -101,21 +107,46 @@ const decisionOutputJsonSchema = {
   },
 };
 
-const callOpenAIWithTimeout = async (input: string, timeoutMs: number) => {
+const callOpenAIWithTimeout = async (
+  input: string,
+  timeoutMs: number,
+  maxOutputTokens: number
+) => {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     return await getOpenAIClient().responses.create(
       {
-        model: "gpt-5-nano",
+        model: OPENAI_DECISION_MODEL,
         input,
         store: false,
+        max_output_tokens: maxOutputTokens,
+        reasoning: { effort: "low" },
         text: {
           format: {
             type: "json_schema",
             ...decisionOutputJsonSchema,
           },
         },
+      },
+      { signal: controller.signal }
+    );
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
+const callOpenAIPingWithTimeout = async (timeoutMs: number) => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await getOpenAIClient().responses.create(
+      {
+        model: OPENAI_DECISION_MODEL,
+        input: "Reply with exactly: OK",
+        store: false,
+        max_output_tokens: 8,
+        reasoning: { effort: "low" },
       },
       { signal: controller.signal }
     );
@@ -151,10 +182,13 @@ const summarizeOpenAiError = (err: unknown) => {
   const name = (err as { name?: string })?.name ?? "UnknownError";
   const code = (err as { code?: string })?.code ?? "";
   const status = (err as { status?: number })?.status;
+  const message = ((err as { message?: string })?.message ?? "").replace(/\s+/g, " ").trim();
   if (typeof status === "number") {
-    return `${name}:${status}${code ? `:${code}` : ""}`;
+    const base = `${name}:${status}${code ? `:${code}` : ""}`;
+    return message ? `${base}:${message.slice(0, 40)}` : base;
   }
-  return `${name}${code ? `:${code}` : ""}`;
+  const base = `${name}${code ? `:${code}` : ""}`;
+  return message ? `${base}:${message.slice(0, 40)}` : base;
 };
 
 const extractOutputText = (response: OpenAI.Responses.Response) => {
@@ -162,15 +196,128 @@ const extractOutputText = (response: OpenAI.Responses.Response) => {
   if (direct) return direct;
   const outputs = response.output ?? [];
   for (const item of outputs) {
-    const content = (item as { content?: Array<{ text?: string; json?: unknown }> }).content;
+    const content = (item as { content?: Array<{ text?: string; json?: unknown; parsed?: unknown }> })
+      .content;
     if (!Array.isArray(content)) continue;
     for (const part of content) {
       if (typeof part?.text === "string" && part.text.trim()) return part.text;
       if (typeof part?.json === "string" && part.json.trim()) return part.json;
       if (part?.json && typeof part.json === "object") return JSON.stringify(part.json);
+      if (part?.parsed && typeof part.parsed === "object") return JSON.stringify(part.parsed);
     }
   }
   return "";
+};
+
+const extractRefusalText = (response: OpenAI.Responses.Response) => {
+  const outputs = response.output ?? [];
+  for (const item of outputs) {
+    const content = (
+      item as { content?: Array<{ type?: string; refusal?: string; text?: string }> }
+    ).content;
+    if (!Array.isArray(content)) continue;
+    for (const part of content) {
+      if (part?.type === "refusal" && typeof part.refusal === "string" && part.refusal.trim()) {
+        return part.refusal.trim();
+      }
+      if (part?.type === "refusal" && typeof part.text === "string" && part.text.trim()) {
+        return part.text.trim();
+      }
+    }
+  }
+  return "";
+};
+
+const extractOutputObject = (response: OpenAI.Responses.Response): unknown | null => {
+  const parsedTopLevel = (response as { output_parsed?: unknown }).output_parsed;
+  if (parsedTopLevel && typeof parsedTopLevel === "object") return parsedTopLevel;
+
+  const outputs = response.output ?? [];
+  for (const item of outputs) {
+    const content = (item as { content?: Array<{ json?: unknown; parsed?: unknown }> }).content;
+    if (!Array.isArray(content)) continue;
+    for (const part of content) {
+      if (part?.parsed && typeof part.parsed === "object") return part.parsed;
+      if (part?.json && typeof part.json === "object") return part.json;
+    }
+  }
+  return null;
+};
+
+type OpenAiResponseDebug = {
+  responseId?: string;
+  status?: string;
+  incompleteReason?: string;
+  outputItemTypes: string[];
+  outputContentTypes: string[];
+  outputTextLength: number;
+  hasRefusal: boolean;
+  refusalPreview?: string;
+};
+
+const buildOpenAiResponseDebug = (response: OpenAI.Responses.Response): OpenAiResponseDebug => {
+  const outputItemTypes: string[] = [];
+  const outputContentTypes: string[] = [];
+  const outputs = response.output ?? [];
+  for (const item of outputs) {
+    const itemType = (item as { type?: string })?.type;
+    if (typeof itemType === "string") outputItemTypes.push(itemType);
+    const content = (item as { content?: Array<{ type?: string }> })?.content;
+    if (!Array.isArray(content)) continue;
+    for (const part of content) {
+      if (typeof part?.type === "string") outputContentTypes.push(part.type);
+    }
+  }
+
+  const refusalText = extractRefusalText(response);
+  const incompleteReason = (
+    response as { incomplete_details?: { reason?: string } | null }
+  )?.incomplete_details?.reason;
+  const status = (response as { status?: string })?.status;
+  const outputText = extractOutputText(response);
+
+  return {
+    responseId: response.id,
+    status,
+    incompleteReason: typeof incompleteReason === "string" ? incompleteReason : undefined,
+    outputItemTypes,
+    outputContentTypes,
+    outputTextLength: outputText.length,
+    hasRefusal: refusalText.length > 0 || outputContentTypes.includes("refusal"),
+    refusalPreview: refusalText ? refusalText.slice(0, 80) : undefined,
+  };
+};
+
+const summarizeOpenAiResponseFailure = (
+  response: OpenAI.Responses.Response,
+  parseReason?: string
+) => {
+  const debug = buildOpenAiResponseDebug(response);
+  if (debug.hasRefusal) {
+    return `refusal${debug.refusalPreview ? `:${debug.refusalPreview}` : ""}`;
+  }
+  if (debug.incompleteReason) {
+    return `incomplete:${debug.incompleteReason}`;
+  }
+  if (debug.status && debug.status !== "completed") {
+    return `status:${debug.status}`;
+  }
+  if (parseReason) {
+    return parseReason;
+  }
+  return "empty_response";
+};
+
+const logOpenAiFailureDebug = (stage: string, response: OpenAI.Responses.Response, parseReason?: string) => {
+  const debug = buildOpenAiResponseDebug(response);
+  console.log(
+    JSON.stringify({
+      openAiDebug: true,
+      stage,
+      parseReason: parseReason ?? null,
+      ...debug,
+    })
+  );
 };
 
 const getDateStringFromOffset = (date: Date, tzOffsetMinutes: number) => {
@@ -357,22 +504,8 @@ const checkAndConsumeServerDecisionGate = async (uid: string, now: Date): Promis
     const isSubscribed = hasPermanentGrant ? true : (override ?? Boolean(entitlement.isSubscribed));
 
     if (!isSubscribed) {
-      if (dailyCount >= FREE_MAX_PER_DAY) {
-        return { allowed: false, reasonCode: "DAILY_LIMIT" };
-      }
       if (decisionTimestamps.length >= FREE_MAX_PER_30_DAYS) {
         return { allowed: false, reasonCode: "FREE_WINDOW_EXHAUSTED" };
-      }
-    } else {
-      if (dailyCount >= PAID_MAX_PER_DAY) {
-        return { allowed: false, reasonCode: "DAILY_LIMIT" };
-      }
-      if (cooldownUntil && cooldownUntil.getTime() > nowMs) {
-        const retryAfterSeconds = Math.max(
-          1,
-          Math.ceil((cooldownUntil.getTime() - nowMs) / 1000)
-        );
-        return { allowed: false, reasonCode: "COOLDOWN_ACTIVE", retryAfterSeconds };
       }
     }
 
@@ -387,9 +520,7 @@ const checkAndConsumeServerDecisionGate = async (uid: string, now: Date): Promis
         usage: {
           decisions: {
             decisionTimestamps: updatedTimestamps,
-            cooldownUntil: isSubscribed
-              ? admin.firestore.Timestamp.fromDate(new Date(nowMs + PAID_COOLDOWN_MS))
-              : null,
+            cooldownUntil: null,
           },
         },
       },
@@ -492,6 +623,21 @@ const getBoundedHeuristicDecision = (inputs: DecisionInputs): DecisionOutput => 
   const heuristic = heuristicDecision(inputs);
   const sanitized = sanitizeDecisionOutput(heuristic);
   return sanitized.ok ? sanitized.data : heuristic;
+};
+
+const clampScore = (value: number) => Math.max(0, Math.min(100, value));
+
+const computeRecoveryReadinessScore = (inputs: DecisionInputs): number => {
+  const sleepScore = clampScore((inputs.sleepHours / 8) * 100);
+  const sorenessScore = clampScore((10 - inputs.soreness) * 10);
+  const fatigueScore = clampScore((10 - inputs.fatigue) * 10);
+  const motivationScore = clampScore(inputs.motivation * 10);
+  const weighted =
+    sleepScore * 0.3 +
+    sorenessScore * 0.3 +
+    fatigueScore * 0.3 +
+    motivationScore * 0.1;
+  return Math.round(clampScore(weighted));
 };
 
 export const getDailyDecision = functions
@@ -611,31 +757,38 @@ export const getDailyDecision = functions
       return fallback;
     }
 
-      const prompt = [
-        "You are a strength training decision engine.",
-        "Return ONLY a JSON object that matches the schema.",
-        "Use the provided inputs to choose the best decision: PUSH, MAINTAIN, or PULL_BACK.",
-        "Prefer MAINTAIN when signals are mixed or unclear.",
-        "Treat nutrition as supporting context, not the only factor.",
-        "Do not over-penalize zero calories logged so far today; prioritize completed-day adherence fields for nutrition impact.",
-        "Output rules:",
-      "- Always include decision and explanation.",
-      "- Explanation should have 2-4 short bullets.",
-      "- Keep each bullet concise (prefer <=100 characters) with one clear point per bullet.",
-      "- Explanation must be holistic: include recovery context (sleep/fatigue/soreness) and readiness context (motivation plus phase context).",
-      "- Mention nutrition in at most one bullet, and only when it materially changes the recommendation.",
-      "- Avoid technical wording like 'age ~3.5h'; write user-facing phrasing like 'recorded about 3.5h ago' or omit sample timing.",
-      "- If decision is MAINTAIN, set adjustments to null.",
-      "- If decision is PUSH, include adjustments.intensityPct = 10 or 20.",
-      "- If decision is PULL_BACK, include adjustments.intensityPct = -10 or -20.",
-      "- Never include volumePct.",
+    const prompt = [
+      "Return ONLY valid JSON matching the schema.",
+      "Task: choose one decision: PUSH, MAINTAIN, PULL_BACK.",
+      "Base the decision on concrete factors: sleep, soreness, fatigue, motivation, and nutrition.",
+      "Use weighted recovery emphasis aligned with app logic: sleep 30%, soreness 30%, fatigue 30%, motivation 10%.",
+      "Recovery rule: very high soreness/fatigue should generally favor PULL_BACK unless other evidence is exceptionally strong.",
+      "Readiness rule: strong recovery (good sleep, low soreness/fatigue, solid motivation) can justify PUSH.",
+      "When signals are mixed without a clear edge, prefer MAINTAIN.",
+      "If readiness is clearly strong (sleepHours >= 6, soreness <= 2, fatigue <= 2, motivation >= 7), prefer PUSH unless another risk is strong.",
+      "Use sleep/fatigue/soreness/motivation as primary signals; nutrition is secondary.",
+      "Nutrition rule: do not over-penalize calories logged so far today.",
+      "Use yesterday/recent adherence for nutrition signal.",
+      "Use nutrition, trainingPhase, and dietPhase as tie-break/modifier context, not as sole drivers.",
+      "Explanation rules: 2-3 concise user-facing bullets, one point per bullet.",
+      "Each bullet must be a complete sentence with plain language.",
+      "Do not use shorthand like slashes or clipped endings.",
+      "Do not mention readiness score or scoring bands.",
+      "Cite at least two concrete factors among sleep, soreness, fatigue, motivation.",
+      "Mention nutrition in at most one bullet and only if material.",
+      "If phase context materially affects the call, mention trainingPhase or dietPhase in one bullet.",
+      "Adjustments rule: MAINTAIN->null, PUSH->{10 or 20}, PULL_BACK->{-10 or -20}.",
       `Inputs: ${JSON.stringify(inputs)}`,
     ].join("\n");
 
-    const attemptOpenAI = async (timeoutMs: number) => {
+    const attemptOpenAI = async (timeoutMs: number, maxOutputTokens: number) => {
       const attemptStart = Date.now();
       try {
-      const response = await callOpenAIWithTimeout(prompt, Math.min(timeoutMs, OPENAI_TIMEOUT_MS));
+      const response = await callOpenAIWithTimeout(
+        prompt,
+        Math.min(timeoutMs, OPENAI_TIMEOUT_MS),
+        maxOutputTokens
+      );
         latencyMsOpenAI += Date.now() - attemptStart;
         return { ok: true as const, response };
       } catch (err) {
@@ -645,8 +798,31 @@ export const getDailyDecision = functions
     };
 
     openAiAttempted = true;
-    const firstAttempt = await attemptOpenAI(OPENAI_FIRST_ATTEMPT_MS);
+    const firstAttempt = await attemptOpenAI(
+      OPENAI_FIRST_ATTEMPT_MS,
+      OPENAI_MAX_OUTPUT_TOKENS_FIRST
+    );
     if (firstAttempt.ok) {
+      let parseFailureReason = "";
+      const outputObject = extractOutputObject(firstAttempt.response);
+      if (outputObject) {
+        const parsed = sanitizeDecisionOutput(outputObject);
+        if (parsed.ok) {
+          logDecisionEvent({
+            uid,
+            pathUsed: "OPENAI",
+            ...sleepLogContext,
+            openAiAttempted,
+            openAiRetried,
+            latencyMsTotal: Date.now() - startMs,
+            latencyMsOpenAI,
+            inputHashPrefix,
+          });
+          return parsed.data;
+        }
+        parseFailureReason = parsed.reason;
+      }
+
       const outputText = extractOutputText(firstAttempt.response);
       if (outputText) {
         const parsed = parseAndSanitizeDecisionOutputText(outputText);
@@ -663,14 +839,97 @@ export const getDailyDecision = functions
           });
           return parsed.data;
         }
-        fallbackReason = parsed.reason;
-      } else {
-        fallbackReason = "empty_response";
+        parseFailureReason = parsed.reason;
       }
-    } else if (isTransientOpenAiError(firstAttempt.error)) {
+      logOpenAiFailureDebug("first_attempt_parse_failed", firstAttempt.response, parseFailureReason || undefined);
+      fallbackReason = summarizeOpenAiResponseFailure(
+        firstAttempt.response,
+        parseFailureReason || undefined
+      );
+      if (OPENAI_RETRY_ENABLED && fallbackReason === "incomplete:max_output_tokens") {
+        openAiRetried = true;
+        const retryAttempt = await attemptOpenAI(
+          OPENAI_RETRY_MS,
+          OPENAI_MAX_OUTPUT_TOKENS_RETRY
+        );
+        if (retryAttempt.ok) {
+          let retryParseFailureReason = "";
+          const retryOutputObject = extractOutputObject(retryAttempt.response);
+          if (retryOutputObject) {
+            const parsed = sanitizeDecisionOutput(retryOutputObject);
+            if (parsed.ok) {
+              logDecisionEvent({
+                uid,
+                pathUsed: "OPENAI",
+                ...sleepLogContext,
+                openAiAttempted,
+                openAiRetried,
+                latencyMsTotal: Date.now() - startMs,
+                latencyMsOpenAI,
+                inputHashPrefix,
+              });
+              return parsed.data;
+            }
+            retryParseFailureReason = parsed.reason;
+          }
+          const retryOutputText = extractOutputText(retryAttempt.response);
+          if (retryOutputText) {
+            const parsed = parseAndSanitizeDecisionOutputText(retryOutputText);
+            if (parsed.ok) {
+              logDecisionEvent({
+                uid,
+                pathUsed: "OPENAI",
+                ...sleepLogContext,
+                openAiAttempted,
+                openAiRetried,
+                latencyMsTotal: Date.now() - startMs,
+                latencyMsOpenAI,
+                inputHashPrefix,
+              });
+              return parsed.data;
+            }
+            retryParseFailureReason = parsed.reason;
+          }
+          logOpenAiFailureDebug(
+            "retry_after_incomplete",
+            retryAttempt.response,
+            retryParseFailureReason || undefined
+          );
+          fallbackReason = summarizeOpenAiResponseFailure(
+            retryAttempt.response,
+            retryParseFailureReason || undefined
+          );
+        } else {
+          fallbackReason = summarizeOpenAiError(retryAttempt.error);
+        }
+      }
+    } else if (OPENAI_RETRY_ENABLED && isTransientOpenAiError(firstAttempt.error)) {
       openAiRetried = true;
-      const retryAttempt = await attemptOpenAI(OPENAI_RETRY_MS);
+      const retryAttempt = await attemptOpenAI(
+        OPENAI_RETRY_MS,
+        OPENAI_MAX_OUTPUT_TOKENS_RETRY
+      );
       if (retryAttempt.ok) {
+        let parseFailureReason = "";
+        const outputObject = extractOutputObject(retryAttempt.response);
+        if (outputObject) {
+          const parsed = sanitizeDecisionOutput(outputObject);
+          if (parsed.ok) {
+            logDecisionEvent({
+              uid,
+              pathUsed: "OPENAI",
+              ...sleepLogContext,
+              openAiAttempted,
+              openAiRetried,
+              latencyMsTotal: Date.now() - startMs,
+              latencyMsOpenAI,
+              inputHashPrefix,
+            });
+            return parsed.data;
+          }
+          parseFailureReason = parsed.reason;
+        }
+
         const outputText = extractOutputText(retryAttempt.response);
         if (outputText) {
           const parsed = parseAndSanitizeDecisionOutputText(outputText);
@@ -687,10 +946,13 @@ export const getDailyDecision = functions
             });
             return parsed.data;
           }
-          fallbackReason = parsed.reason;
-        } else {
-          fallbackReason = "empty_response";
+          parseFailureReason = parsed.reason;
         }
+        logOpenAiFailureDebug("retry_attempt_parse_failed", retryAttempt.response, parseFailureReason || undefined);
+        fallbackReason = summarizeOpenAiResponseFailure(
+          retryAttempt.response,
+          parseFailureReason || undefined
+        );
       } else {
         fallbackReason = summarizeOpenAiError(retryAttempt.error);
       }
@@ -752,6 +1014,81 @@ export const setDevEntitlementOverride = functions
       );
 
     return { ok: true };
+  });
+
+export const debugOpenAiPing = functions
+  .region("asia-northeast3")
+  .runWith({ secrets: [OPENAI_API_KEY, DEV_UID_ALLOWLIST_SECRET] })
+  .https.onCall(async (_data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "Authentication required.");
+    }
+    assertDevUidAllowed(context.auth.uid);
+
+    const startedAt = Date.now();
+    try {
+      const response = await callOpenAIPingWithTimeout(3000);
+      const outputText = extractOutputText(response);
+      return {
+        ok: true,
+        latencyMs: Date.now() - startedAt,
+        outputPreview: outputText.slice(0, 20),
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        latencyMs: Date.now() - startedAt,
+        error: summarizeOpenAiError(error),
+      };
+    }
+  });
+
+export const debugOpenAiDecision = functions
+  .region("asia-northeast3")
+  .runWith({ secrets: [OPENAI_API_KEY, DEV_UID_ALLOWLIST_SECRET] })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "Authentication required.");
+    }
+    assertDevUidAllowed(context.auth.uid);
+
+    const schema = z
+      .object({
+        prompt: z.string().min(1).max(8000).optional(),
+        timeoutMs: z.number().int().min(1000).max(20000).optional(),
+        maxOutputTokens: z.number().int().min(32).max(1200).optional(),
+      })
+      .strict();
+    const parsed = schema.safeParse(data ?? {});
+    if (!parsed.success) {
+      throw new functions.https.HttpsError(
+        "invalid-argument",
+        `Invalid debug payload: ${formatZodError(parsed.error)}`
+      );
+    }
+
+    const prompt =
+      parsed.data.prompt ??
+      "Return a JSON object with keys decision, explanation, adjustments using allowed values.";
+    const timeoutMs = parsed.data.timeoutMs ?? 5000;
+    const maxOutputTokens = parsed.data.maxOutputTokens ?? 260;
+    const startedAt = Date.now();
+    try {
+      const response = await callOpenAIWithTimeout(prompt, timeoutMs, maxOutputTokens);
+      const debug = buildOpenAiResponseDebug(response);
+      return {
+        ok: true,
+        latencyMs: Date.now() - startedAt,
+        debug,
+        outputPreview: extractOutputText(response).slice(0, 300),
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        latencyMs: Date.now() - startedAt,
+        error: summarizeOpenAiError(error),
+      };
+    }
   });
 
 export const resetDailyLimit = functions
@@ -1045,4 +1382,3 @@ export const revenuecatWebhook = functions
 
     res.status(200).json({ ok: true, skipped: result.skipped, reason: result.reason });
   });
-
