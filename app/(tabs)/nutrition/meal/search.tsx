@@ -10,7 +10,14 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { auth } from "@/src/config/firebaseConfig";
 import type { NutritionMeal } from "@/src/contracts";
 import type { FoodEntryMode, FoodItem } from "@/src/nutrition/foodDb";
-import { createMeal, getMealsForDate, getRecentMeals, updateMeal } from "@/src/nutrition/meals";
+import {
+  createMeal,
+  formatDateKey,
+  getMealsForDate,
+  getRecentMeals,
+  parseDateKey,
+  updateMeal,
+} from "@/src/nutrition/meals";
 
 type SelectionDraft = {
   key: string;
@@ -85,11 +92,13 @@ function normalizeServingInfo(label: string | null | undefined, servingGrams: nu
 
 export default function MealSearchScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ section?: string }>();
+  const params = useLocalSearchParams<{ section?: string; date?: string }>();
   const section = decodeURIComponent(params.section ?? "Breakfast");
+  const selectedDateKey = typeof params.date === "string" ? params.date : formatDateKey(new Date());
+  const selectedDate = parseDateKey(selectedDateKey) ?? new Date();
   const goToSection = useCallback(
-    () => router.replace({ pathname: "/nutrition/meal/[section]", params: { section } }),
-    [router, section]
+    () => router.replace({ pathname: "/nutrition/meal/[section]", params: { section, date: selectedDateKey } }),
+    [router, section, selectedDateKey]
   );
 
   const [uid, setUid] = useState<string | null>(null);
@@ -509,12 +518,23 @@ export default function MealSearchScreen() {
     setSubmitting(true);
     try {
       const foodDb = await getFoodDb();
-      const todayMeals = await getMealsForDate(uid, new Date());
+      const targetMeals = await getMealsForDate(uid, selectedDate);
       for (const entry of entries) {
         const converted = foodDb.computeFromFood(entry.food, entry.mode, entry.value);
         if (!converted) continue;
         const now = Timestamp.now();
-        const existing = todayMeals.find((meal) => {
+        const loggedAt = Timestamp.fromDate(
+          new Date(
+            selectedDate.getFullYear(),
+            selectedDate.getMonth(),
+            selectedDate.getDate(),
+            new Date().getHours(),
+            new Date().getMinutes(),
+            0,
+            0
+          )
+        );
+        const existing = targetMeals.find((meal) => {
           const sameSection = (meal.mealSection?.trim() || "Breakfast") === section;
           if (!sameSection) return false;
           if (meal.source?.foodId && meal.source.foodId === entry.food.id) return true;
@@ -553,11 +573,11 @@ export default function MealSearchScreen() {
                 ? Math.round(converted.fatGrams)
                 : null,
             mealSection: section,
-            loggedAt: now,
+            loggedAt,
             updatedAt: now,
             source: baseSource,
           } as any);
-          todayMeals.unshift({
+          targetMeals.unshift({
             id: `local-${entry.food.id}-${now.seconds}`,
             name: entry.food.name,
             calories: Math.round(converted.calories),
@@ -571,7 +591,7 @@ export default function MealSearchScreen() {
                 ? Math.round(converted.fatGrams)
                 : null,
             mealSection: section,
-            loggedAt: now,
+            loggedAt,
             updatedAt: now,
             source: baseSource as any,
           });
@@ -643,7 +663,10 @@ export default function MealSearchScreen() {
         <TouchableOpacity style={styles.iconBtn} onPress={goToSection}>
           <Ionicons name="chevron-back" size={22} color="#fff" />
         </TouchableOpacity>
-        <Text style={styles.title}>Add to {section}</Text>
+        <View>
+          <Text style={styles.title}>Add to {section}</Text>
+          <Text style={styles.subText}>{selectedDateKey}</Text>
+        </View>
         <TouchableOpacity style={styles.nextBtn} onPress={commitStaged} disabled={submitting}>
           <Text style={styles.nextText}>{submitting ? "Saving..." : "Next"}</Text>
         </TouchableOpacity>

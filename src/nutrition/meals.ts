@@ -61,6 +61,24 @@ function startOfLocalDayOffset(date = new Date(), offsetDays = 0): Date {
   return next;
 }
 
+export function formatDateKey(date = new Date()): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
+    date.getDate()
+  ).padStart(2, "0")}`;
+}
+
+export function parseDateKey(dateKey: string): Date | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateKey.trim());
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return null;
+  const parsed = new Date(year, month - 1, day);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed;
+}
+
 function buildTodayMealsQuery(uid: string, now = new Date()) {
   const start = Timestamp.fromDate(startOfLocalDay(now));
   const end = Timestamp.fromDate(endOfLocalDay(now));
@@ -107,6 +125,22 @@ export function subscribeToTodayMeals(
 ): Unsubscribe {
   return onSnapshot(
     buildTodayMealsQuery(uid, now),
+    (snapshot) => {
+      const meals = snapshot.docs.map(mapMealDoc);
+      onNext(meals);
+    },
+    onError
+  );
+}
+
+export function subscribeToMealsForDate(
+  uid: string,
+  date: Date,
+  onNext: (meals: NutritionMeal[]) => void,
+  onError: (error: unknown) => void
+): Unsubscribe {
+  return onSnapshot(
+    buildTodayMealsQuery(uid, date),
     (snapshot) => {
       const meals = snapshot.docs.map(mapMealDoc);
       onNext(meals);

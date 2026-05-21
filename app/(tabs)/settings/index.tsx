@@ -72,10 +72,6 @@ export default function SettingsIndex() {
   };
 
   const handleGoBack = () => {
-    if (router.canGoBack()) {
-      router.back();
-      return;
-    }
     router.replace("/home");
   };
 

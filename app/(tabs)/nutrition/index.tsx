@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Href, Redirect, useFocusEffect, useRouter } from "expo-router";
+import { Href, Redirect, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { onAuthStateChanged } from "firebase/auth";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
@@ -9,13 +9,22 @@ import type { NutritionMeal } from "@/src/contracts";
 import {
   computeNutritionTotals,
   DEFAULT_CALORIE_TARGETS_BY_DIET_PHASE,
+  formatDateKey,
   getCalorieTargetForDietPhase,
   getNutritionProfile,
   getNutritionTrendReport,
+  getRecentMeals,
+  groupMealsByLocalDay,
+  parseDateKey,
   saveNutritionProfile,
-  subscribeToTodayMeals,
+  subscribeToMealsForDate,
 } from "@/src/nutrition/meals";
 import type { NutritionTrendReport } from "@/src/nutrition/mealHelpers";
+import {
+  BarChart,
+  ChartEmptyState,
+  type ChartPoint,
+} from "@/src/components/charts/TrendCharts";
 import type { DietPhase } from "@/src/types/decision";
 import { isExpectedOfflineError } from "@/src/utils/networkErrors";
 import { getUserData } from "@/src/userData";
@@ -27,6 +36,11 @@ const MUTED = "#a5acc1";
 const SUCCESS = "#4ade80";
 const WARNING = "#fbbf24";
 const DANGER = "#f87171";
+type EnergyUnit = "kcal" | "kJ";
+const KCAL_TO_KJ = 4.184;
+const isEnergyUnit = (value: unknown): value is EnergyUnit => value === "kcal" || value === "kJ";
+const toEnergyUnit = (valueKcal: number, unit: EnergyUnit): number =>
+  unit === "kJ" ? valueKcal * KCAL_TO_KJ : valueKcal;
 
 function isDietPhase(value: string): value is DietPhase {
   return DIET_PHASES.includes(value as DietPhase);
@@ -34,6 +48,7 @@ function isDietPhase(value: string): value is DietPhase {
 
 export default function NutritionIndex() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ date?: string }>();
   const [uid, setUid] = useState<string | null>(null);
   const [redirectTo, setRedirectTo] = useState<Href | null>(null);
   const [meals, setMeals] = useState<NutritionMeal[]>([]);
@@ -46,6 +61,20 @@ export default function NutritionIndex() {
   const [newMealName, setNewMealName] = useState("");
   const [trendReport, setTrendReport] = useState<NutritionTrendReport | null>(null);
   const [loadingTrends, setLoadingTrends] = useState(false);
+  const [selectedDateKey, setSelectedDateKey] = useState(() => {
+    const fromParams = typeof params.date === "string" ? params.date : "";
+    return parseDateKey(fromParams) ? fromParams : formatDateKey(new Date());
+  });
+  const [timelinePoints, setTimelinePoints] = useState<ChartPoint[]>([]);
+  const [energyUnit, setEnergyUnit] = useState<EnergyUnit>("kcal");
+  const timelineScrollRef = React.useRef<ScrollView | null>(null);
+  const [timelineShouldSnapToLatest, setTimelineShouldSnapToLatest] = useState(true);
+
+  useEffect(() => {
+    const fromParams = typeof params.date === "string" ? params.date : "";
+    if (!parseDateKey(fromParams)) return;
+    setSelectedDateKey(fromParams);
+  }, [params.date]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -107,8 +136,10 @@ export default function NutritionIndex() {
       return;
     }
     setLoadingMeals(true);
-    const unsubscribe = subscribeToTodayMeals(
+    const targetDate = parseDateKey(selectedDateKey) ?? new Date();
+    const unsubscribe = subscribeToMealsForDate(
       uid,
+      targetDate,
       (nextMeals) => {
         setMeals(nextMeals);
         setLoadingMeals(false);
@@ -122,10 +153,41 @@ export default function NutritionIndex() {
       }
     );
     return unsubscribe;
-  }, [uid, fetchHistoryData]);
+  }, [uid, selectedDateKey, fetchHistoryData]);
+
+  const fetchTimelineData = useCallback(async () => {
+    if (!uid) return;
+    try {
+      const recentMeals = await getRecentMeals(uid, 60);
+      const grouped = groupMealsByLocalDay(recentMeals);
+      const byDate = new Map(grouped.map((entry) => [entry.dateKey, entry]));
+      const points: ChartPoint[] = [];
+      for (let offset = 59; offset >= 0; offset -= 1) {
+        const d = new Date();
+        d.setDate(d.getDate() - offset);
+        const key = formatDateKey(d);
+        const calories = byDate.get(key)?.calories ?? 0;
+        points.push({
+          key,
+          label: key.slice(5).replace("-", "/"),
+          value: Math.round(toEnergyUnit(calories, energyUnit)),
+        });
+      }
+      setTimelinePoints(points);
+    } catch (error) {
+      if (!isExpectedOfflineError(error)) {
+        console.log("Failed to load timeline", error);
+      }
+    }
+  }, [uid, energyUnit]);
+
+  useEffect(() => {
+    void fetchTimelineData();
+  }, [fetchTimelineData, meals]);
 
   useFocusEffect(
     useCallback(() => {
+      setTimelineShouldSnapToLatest(true);
       if (!uid) return undefined;
       let cancelled = false;
       const loadProfile = async () => {
@@ -136,6 +198,8 @@ export default function NutritionIndex() {
           setProteinTargetGrams(profile.proteinTargetGrams ?? null);
           if (profile.mealSections?.length) setMealSectionsOrder(profile.mealSections);
           const nextDietPhase = userData?.dietPhase;
+          const nextEnergyUnit = userData?.energyUnit;
+          setEnergyUnit(isEnergyUnit(nextEnergyUnit) ? nextEnergyUnit : "kcal");
           setCurrentDietPhase(
             typeof nextDietPhase === "string" && isDietPhase(nextDietPhase) ? nextDietPhase : "Maintain"
           );
@@ -292,7 +356,7 @@ export default function NutritionIndex() {
   };
 
   const handleOpenSection = (section: string) => {
-    router.push({ pathname: "/nutrition/meal/[section]", params: { section } });
+    router.push({ pathname: "/nutrition/meal/[section]", params: { section, date: selectedDateKey } });
   };
 
   const handleGoBack = () => {
@@ -306,9 +370,10 @@ export default function NutritionIndex() {
   if (redirectTo) return <Redirect href={redirectTo} />;
 
   const calorieConsumed = totals.calories;
-  const calorieTargetSafe = calorieTarget ?? 0;
-  const calorieConsumedRatio = calorieTargetSafe > 0 ? Math.min(1, calorieConsumed / calorieTargetSafe) : 0;
-  const calorieRemaining = calorieTargetSafe > 0 ? Math.max(0, calorieTargetSafe - calorieConsumed) : 0;
+  const calorieTargetRaw = calorieTarget ?? 0;
+  const calorieTargetSafe = Math.round(toEnergyUnit(calorieTargetRaw, energyUnit));
+  const calorieConsumedRatio = calorieTargetRaw > 0 ? Math.min(1, calorieConsumed / calorieTargetRaw) : 0;
+  const calorieRemaining = calorieTargetRaw > 0 ? Math.max(0, calorieTargetRaw - calorieConsumed) : 0;
   const proteinConsumed = totals.proteinGrams;
   const proteinRatio =
     proteinTargetGrams && proteinTargetGrams > 0 ? Math.min(1, proteinConsumed / proteinTargetGrams) : 0;
@@ -325,6 +390,28 @@ export default function NutritionIndex() {
     fats: consumedMacroTotal > 0 ? consumedMacroKcal.fats / consumedMacroTotal : 0,
   };
 
+  const selectedDateIsToday = selectedDateKey === formatDateKey(new Date());
+  const selectedDateLabel = selectedDateKey === formatDateKey(new Date()) ? "Today" : selectedDateKey;
+  const timelineMax = useMemo(() => Math.max(1, ...timelinePoints.map((item) => item.value, 0)), [timelinePoints]);
+  const timelineScaleMax = Math.max(1, timelineMax, calorieTargetSafe || 0);
+  const timelinePlotHeight = 120;
+  const timelineLabelSpace = 18;
+  const timelineTargetLaneWidth = 30;
+  const targetLineBottom =
+    timelineLabelSpace +
+    Math.max(0, Math.min(timelinePlotHeight, (calorieTargetSafe / timelineScaleMax) * timelinePlotHeight));
+  const targetLabelHalfHeight = 5;
+  const targetLabelVisualAlignOffset = 1;
+
+  useEffect(() => {
+    if (!timelineShouldSnapToLatest || timelinePoints.length === 0) return;
+    const timer = setTimeout(() => {
+      timelineScrollRef.current?.scrollToEnd({ animated: false });
+      setTimelineShouldSnapToLatest(false);
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [timelineShouldSnapToLatest, timelinePoints.length]);
+
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <ScrollView contentContainerStyle={styles.content} style={styles.container}>
@@ -337,13 +424,98 @@ export default function NutritionIndex() {
         </View>
 
         <View style={styles.card}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>Daily calories</Text>
+          </View>
+          <View style={styles.metricHeaderRow}>
+            <Text style={styles.subText}>Selected day: {selectedDateLabel}</Text>
+            {!selectedDateIsToday ? (
+              <TouchableOpacity style={styles.todayResetBtn} onPress={() => setSelectedDateKey(formatDateKey(new Date()))}>
+                <Text style={styles.todayResetBtnText}>Today</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+          {timelinePoints.length ? (
+            <>
+              <View style={styles.timelineStage}>
+                {calorieTargetSafe > 0 ? (
+                  <View
+                    style={[
+                      styles.timelineTargetLine,
+                      {
+                        bottom: targetLineBottom,
+                        right: timelineTargetLaneWidth,
+                      },
+                    ]}
+                  />
+                ) : null}
+                <View style={styles.timelineBarsPane}>
+                  <ScrollView
+                    ref={timelineScrollRef}
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.timelineScrollContent}
+                    style={styles.timelineScrollViewport}
+                  >
+                    <View style={styles.timelineChartWrap}>
+                      <View style={styles.timelineChartRow}>
+                        {timelinePoints.map((point) => {
+                          const selected = point.key === selectedDateKey;
+                          const height = Math.max(
+                            8,
+                            Math.min(timelinePlotHeight, (point.value / timelineScaleMax) * timelinePlotHeight)
+                          );
+                          return (
+                            <TouchableOpacity key={point.key} style={styles.timelineBarCell} onPress={() => setSelectedDateKey(point.key)}>
+                              <Text style={styles.timelineValue}>{Math.round(point.value)}</Text>
+                              <View
+                                style={[
+                                  styles.timelineBar,
+                                  {
+                                    height,
+                                    backgroundColor: selected ? "#60a5fa" : "rgba(123,97,255,0.45)",
+                                  },
+                                ]}
+                              />
+                              <Text style={[styles.timelineLabel, selected && styles.timelineLabelSelected]}>{point.label}</Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    </View>
+                  </ScrollView>
+                </View>
+                <View style={[styles.timelineTargetPane, { width: timelineTargetLaneWidth }]}>
+                  {calorieTargetSafe > 0 ? (
+                    <View
+                      pointerEvents="none"
+                      style={[
+                        styles.timelineTargetStickyWrap,
+                          {
+                          bottom: targetLineBottom - targetLabelHalfHeight + targetLabelVisualAlignOffset,
+                          },
+                        ]}
+                      >
+                      <Text style={styles.timelineTargetText}>{calorieTargetSafe}</Text>
+                    </View>
+                  ) : null}
+                </View>
+              </View>
+            </>
+          ) : (
+            <ChartEmptyState loading={loadingTrends} text="No timeline data yet." />
+          )}
+        </View>
+
+        <View style={styles.card}>
           <Text style={styles.sectionTitle}>Daily intake</Text>
+          <Text style={styles.subText}>{selectedDateLabel}</Text>
           <View style={styles.metricBlock}>
             <View style={styles.metricHeaderRow}>
               <Text style={[styles.totalLabel, styles.totalLabelNoUpper]}>Calories</Text>
               <Text style={styles.subText}>
-                {calorieConsumed} consumed / {calorieTarget == null ? "Set target" : `${calorieTarget} target`} /{" "}
-                {calorieTarget == null ? "-" : `${calorieRemaining} remaining`}
+                {Math.round(toEnergyUnit(calorieConsumed, energyUnit))} consumed / {calorieTarget == null ? "Set target" : `${Math.round(toEnergyUnit(calorieTarget, energyUnit))} target`} /{" "}
+                {calorieTarget == null ? "-" : `${Math.round(toEnergyUnit(calorieRemaining, energyUnit))} remaining`}
               </Text>
             </View>
             <View style={styles.progressTrack}>
@@ -410,7 +582,7 @@ export default function NutritionIndex() {
                   <Text style={styles.subText}>{stats.count} entries</Text>
                 </View>
                 <View style={styles.sectionRowRight}>
-                  <Text style={styles.sectionRowMacro}>{Math.round(stats.calories)} kcal</Text>
+                  <Text style={styles.sectionRowMacro}>{Math.round(toEnergyUnit(stats.calories, energyUnit))} {energyUnit}</Text>
                   <Text style={styles.subText}>
                     P {Math.round(stats.protein)}g / C{" "}
                     {stats.carbsKnownCount > 0 ? `${Math.round(stats.carbs)}g` : "0g"} / F{" "}
@@ -436,8 +608,8 @@ export default function NutritionIndex() {
           <View style={styles.totalRow}>
             <View style={styles.totalChip}>
               <Text style={styles.totalLabel}>Avg. Daily</Text>
-              <Text style={styles.totalValue}>{trendReport?.averageCalories ?? "-"}</Text>
-              <Text style={styles.muted}>kcal</Text>
+              <Text style={styles.totalValue}>{trendReport?.averageCalories == null ? "-" : Math.round(toEnergyUnit(trendReport.averageCalories, energyUnit))}</Text>
+              <Text style={styles.muted}>{energyUnit}</Text>
             </View>
             <View style={styles.totalChip}>
               <Text style={styles.totalLabel}>Consistency</Text>
@@ -447,6 +619,21 @@ export default function NutritionIndex() {
               <Text style={styles.muted}>on target</Text>
             </View>
           </View>
+          {trendReport?.dailyHistory?.length ? (
+            <BarChart
+              points={[...trendReport.dailyHistory].reverse().map((day) => ({
+                key: day.dateKey,
+                label: day.dateKey.slice(5).replace("-", "/"),
+                value: Math.round(toEnergyUnit(day.calories, energyUnit)),
+              }))}
+              unit={energyUnit}
+              average={
+                trendReport.averageCalories == null
+                  ? undefined
+                  : Math.round(toEnergyUnit(trendReport.averageCalories, energyUnit))
+              }
+            />
+          ) : null}
         </View>
 
         <View style={styles.card}>
@@ -459,7 +646,7 @@ export default function NutritionIndex() {
                 <View style={[styles.adherenceDot, { backgroundColor: getAdherenceColor(day.adherence, day.dateKey) }]} />
               </View>
               <View style={styles.historyStatsCol}>
-                <Text style={styles.historyValue}>{day.calories} kcal</Text>
+                <Text style={styles.historyValue}>{Math.round(toEnergyUnit(day.calories, energyUnit))} {energyUnit}</Text>
                 <Text style={styles.subText}>{getAdherenceLabel(day.adherence, day.dateKey)}</Text>
               </View>
               <View style={styles.historyProteinCol}>
@@ -523,11 +710,57 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
   },
   addMealBtnText: { color: "#fff", fontSize: 12, fontWeight: "700" },
+  todayResetBtn: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.2)",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    backgroundColor: "rgba(255,255,255,0.04)",
+  },
+  todayResetBtnText: { color: "#fff", fontSize: 11, fontWeight: "700" },
   metricBlock: { gap: 6 },
   metricHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
   progressTrack: { height: 10, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.12)", overflow: "hidden" },
   progressFill: { height: "100%", backgroundColor: "#7b61ff" },
   progressFillProtein: { height: "100%", backgroundColor: "#4ade80" },
+  timelineStage: { position: "relative", flexDirection: "row", alignItems: "stretch", minHeight: 168 },
+  timelineBarsPane: { flex: 1, overflow: "hidden" },
+  timelineTargetPane: { position: "relative", alignSelf: "stretch" },
+  timelineScrollViewport: { marginRight: 0 },
+  timelineScrollContent: { paddingVertical: 4, paddingRight: 8 },
+  timelineChartWrap: { position: "relative", minHeight: 160, justifyContent: "flex-end" },
+  timelineChartRow: { flexDirection: "row", alignItems: "flex-end", gap: 8, minHeight: 160 },
+  timelineBarCell: { width: 36, alignItems: "center", justifyContent: "flex-end", gap: 4 },
+  timelineValue: { color: MUTED, fontSize: 9, fontWeight: "700" },
+  timelineBar: { width: 28, borderRadius: 8, minHeight: 8 },
+  timelineLabel: { color: MUTED, fontSize: 10, fontWeight: "600" },
+  timelineLabelSelected: { color: "#fff" },
+  timelineTargetLine: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    borderTopWidth: 1.5,
+    borderTopColor: "#fbbf24",
+    borderStyle: "dashed",
+    zIndex: 2,
+  },
+  timelineTargetStickyWrap: {
+    position: "absolute",
+    right: 0,
+    height: 10,
+    justifyContent: "center",
+    alignItems: "flex-start",
+    zIndex: 3,
+  },
+  timelineTargetText: {
+    color: "#fbbf24",
+    fontSize: 10,
+    lineHeight: 10,
+    fontWeight: "700",
+    includeFontPadding: false,
+    paddingHorizontal: 2,
+  },
   compositionRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   totalRow: { flexDirection: "row", gap: 10 },
   totalChip: { flex: 1, backgroundColor: "rgba(255,255,255,0.05)", borderRadius: 12, paddingVertical: 12, paddingHorizontal: 12, gap: 4 },

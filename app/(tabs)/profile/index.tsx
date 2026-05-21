@@ -62,6 +62,17 @@ type DietPhaseHistoryEntry = {
   phase: DietPhase;
   startedAt: Timestamp;
 };
+type WeightUnit = "kg" | "lbs";
+type HeightUnit = "cm" | "ft/in";
+type EnergyUnit = "kcal" | "kJ";
+const KCAL_TO_KJ = 4.184;
+const isWeightUnit = (value: unknown): value is WeightUnit => value === "kg" || value === "lbs";
+const isHeightUnit = (value: unknown): value is HeightUnit => value === "cm" || value === "ft/in";
+const isEnergyUnit = (value: unknown): value is EnergyUnit => value === "kcal" || value === "kJ";
+const convertEnergyValue = (value: number, from: EnergyUnit, to: EnergyUnit): number => {
+  if (from === to) return value;
+  return from === "kcal" ? value * KCAL_TO_KJ : value / KCAL_TO_KJ;
+};
 
 // Phase 2A: keep only nickname + goal for prompts; remove body metrics
 export default function ProfileIndex() {
@@ -97,6 +108,9 @@ export default function ProfileIndex() {
   const [redirectTo, setRedirectTo] = useState<Href | null>(null);
   const [connectedAccountLabel, setConnectedAccountLabel] = useState<string | null>(null);
   const [lastSleepSyncLabel, setLastSleepSyncLabel] = useState<string>("Not synced yet");
+  const [weightUnit, setWeightUnit] = useState<WeightUnit>("kg");
+  const [heightUnit, setHeightUnit] = useState<HeightUnit>("cm");
+  const [energyUnit, setEnergyUnit] = useState<EnergyUnit>("kcal");
 
   const handleGoBack = () => {
     if (router.canGoBack()) {
@@ -224,6 +238,9 @@ export default function ProfileIndex() {
             setAvailabilityDays(mappedDays);
           }
         }
+        if (isWeightUnit(data?.weightUnit)) setWeightUnit(data.weightUnit);
+        if (isHeightUnit(data?.heightUnit)) setHeightUnit(data.heightUnit);
+        if (isEnergyUnit(data?.energyUnit)) setEnergyUnit(data.energyUnit);
       } catch (e) {
         console.log("Error fetching user data", e);
       } finally {
@@ -298,6 +315,21 @@ export default function ProfileIndex() {
     await refreshHealthConnectStatus();
   };
 
+  const applyEnergyUnit = (nextUnit: EnergyUnit) => {
+    if (nextUnit === energyUnit) return;
+    const convertText = (raw: string) => {
+      const trimmed = raw.trim();
+      if (!trimmed) return raw;
+      const parsed = Number(trimmed);
+      if (!Number.isFinite(parsed)) return raw;
+      return String(Math.round(convertEnergyValue(parsed, energyUnit, nextUnit)));
+    };
+    setCutCalories((previous) => convertText(previous));
+    setMaintainCalories((previous) => convertText(previous));
+    setBulkCalories((previous) => convertText(previous));
+    setEnergyUnit(nextUnit);
+  };
+
   const save = async () => {
     if (!uid) return;
     setSaveFeedback(null);
@@ -321,7 +353,8 @@ export default function ProfileIndex() {
         return;
       }
 
-      parsedTargets[field.label] = Math.round(parsed);
+      const kcalValue = energyUnit === "kJ" ? parsed / KCAL_TO_KJ : parsed;
+      parsedTargets[field.label] = Math.round(kcalValue);
     }
 
     const parsedSleepTarget = Number(sleepTargetHours.trim());
@@ -346,6 +379,9 @@ export default function ProfileIndex() {
         nickname,
         trainingPhase,
         dietPhase,
+        weightUnit,
+        heightUnit,
+        energyUnit,
         availabilityDays,
         availability: `${availabilityDays}`,
       };
@@ -533,7 +569,61 @@ export default function ProfileIndex() {
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Nutrition targets</Text>
+          <Text style={styles.cardTitle}>Units</Text>
+          <Text style={styles.targetLabel}>Weight</Text>
+          <View style={styles.row}>
+            {(["kg", "lbs"] as WeightUnit[]).map((unit) => (
+              <TouchableOpacity
+                key={unit}
+                onPress={() => setWeightUnit(unit)}
+                style={[styles.chip, weightUnit === unit && styles.chipActive]}
+              >
+                <Text style={[styles.chipText, weightUnit === unit && styles.chipTextActive]}>
+                  {unit}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <Text style={styles.targetLabel}>Height</Text>
+          <View style={styles.row}>
+            {(["cm", "ft/in"] as HeightUnit[]).map((unit) => (
+              <TouchableOpacity
+                key={unit}
+                onPress={() => setHeightUnit(unit)}
+                style={[styles.chip, heightUnit === unit && styles.chipActive]}
+              >
+                <Text style={[styles.chipText, heightUnit === unit && styles.chipTextActive]}>
+                  {unit}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <Text style={styles.targetLabel}>Food energy</Text>
+          <View style={styles.row}>
+            {(["kcal", "kJ"] as EnergyUnit[]).map((unit) => (
+              <TouchableOpacity
+                key={unit}
+                onPress={() => applyEnergyUnit(unit)}
+                style={[styles.chip, energyUnit === unit && styles.chipActive]}
+              >
+                <Text style={[styles.chipText, energyUnit === unit && styles.chipTextActive]}>
+                  {unit}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        <View style={styles.card}>
+          <View style={styles.nutritionTargetsHeaderRow}>
+            <Text style={styles.cardTitleNoMargin}>Nutrition targets</Text>
+            <TouchableOpacity
+              style={styles.energyUnitToggle}
+              onPress={() => applyEnergyUnit(energyUnit === "kcal" ? "kJ" : "kcal")}
+            >
+              <Text style={styles.energyUnitToggleText}>{energyUnit}</Text>
+            </TouchableOpacity>
+          </View>
           <Text style={styles.helperText}>
             Set daily targets by diet phase. Nutrition decisions will use completed days, not partial
             same-day intake.
@@ -672,7 +762,19 @@ const styles = StyleSheet.create({
   title: { color: "#fff", fontSize: 22, fontWeight: "800" },
   sectionTitle: { color: "#fff", fontSize: 15, fontWeight: "700", marginTop: 18, marginBottom: 8 },
   cardTitle: { color: "#fff", fontSize: 15, fontWeight: "700", marginBottom: 8 },
+  cardTitleNoMargin: { color: "#fff", fontSize: 15, fontWeight: "700" },
   helperText: { color: "#a5acc1", fontSize: 13, lineHeight: 18 },
+  nutritionTargetsHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  sectionHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
+  energyUnitToggle: {
+    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth * 2,
+    borderColor: "rgba(255,255,255,0.28)",
+    backgroundColor: "rgba(255,255,255,0.08)",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  energyUnitToggleText: { color: "#fff", fontWeight: "700", fontSize: 12 },
   availabilityValue: { color: "#fff", fontSize: 18, fontWeight: "700", marginBottom: 2 },
   availabilityTicksRow: {
     flexDirection: "row",

@@ -31,6 +31,12 @@ import {
   getNutritionTrendReport,
   getTodayDecisionNutritionSummary,
 } from "../../src/nutrition/meals";
+import {
+  BarChart,
+  ChartRangeSelector,
+  type ChartPoint,
+  type ChartRange,
+} from "../../src/components/charts/TrendCharts";
 import { showAppAlert, showAppDialog } from "../../src/ui/appDialog";
 import { getUserData } from "../../src/userData";
 import {
@@ -60,6 +66,7 @@ import {
 } from "../../src/workouts/program";
 
 const HOME_INPUTS_KEY_PREFIX = "home-inputs-v1";
+const HOME_READINESS_HISTORY_KEY_PREFIX = "home-readiness-history-v1";
 const HOME_FIRST_TIME_BANNER_KEY_PREFIX = "home-first-time-banner-dismissed-v1";
 const TRAINING_PHASES: TrainingPhase[] = ["Hypertrophy", "Strength", "Power"];
 const DIET_PHASES: DietPhase[] = ["Cut", "Maintain", "Bulk"];
@@ -120,6 +127,8 @@ type SleepSnapshot = {
   averageSleepHours: number | null;
   nightsCaptured: number;
 };
+type WeightUnit = "kg" | "lbs";
+type EnergyUnit = "kcal" | "kJ";
 
 type DashboardMetricKey =
   | "workouts"
@@ -127,12 +136,11 @@ type DashboardMetricKey =
   | "adherence"
   | "calories"
   | "sleep"
-  | "improving";
-
-type GraphPoint = {
-  label: string;
-  value: number;
-};
+  | "recovery"
+  | "recovery_sleep"
+  | "recovery_soreness"
+  | "recovery_fatigue"
+  | "recovery_motivation";
 
 type TrainingPhaseHistoryEntry = {
   phase: TrainingPhase;
@@ -142,6 +150,11 @@ type TrainingPhaseHistoryEntry = {
 type DietPhaseHistoryEntry = {
   phase: DietPhase;
   startedAt: Timestamp;
+};
+type ReadinessHistoryRecord = {
+  soreness: number;
+  fatigue: number;
+  motivation: number;
 };
 
 const TRAINING_PHASE_COLORS: Record<TrainingPhase, string> = {
@@ -155,9 +168,36 @@ const DIET_PHASE_COLORS: Record<DietPhase, string> = {
   Maintain: "#34d399",
   Bulk: "#f97316",
 };
+const KG_TO_LBS = 2.20462;
+const KCAL_TO_KJ = 4.184;
+const isWeightUnit = (value: unknown): value is WeightUnit => value === "kg" || value === "lbs";
+const isEnergyUnit = (value: unknown): value is EnergyUnit => value === "kcal" || value === "kJ";
+const resolveEnergyUnit = (data: any): EnergyUnit => {
+  const direct = data?.energyUnit;
+  if (isEnergyUnit(direct)) return direct;
+  const nested = data?.preferences?.energyUnit ?? data?.nutritionPreferences?.energyUnit;
+  if (isEnergyUnit(nested)) return nested;
+  return "kcal";
+};
+const resolveWeightUnit = (data: any): WeightUnit => {
+  const direct = data?.weightUnit;
+  if (isWeightUnit(direct)) return direct;
+  const directAlt = data?.preferredWeightUnit ?? data?.unit;
+  if (isWeightUnit(directAlt)) return directAlt;
+  const nested = data?.preferences?.weightUnit;
+  if (isWeightUnit(nested)) return nested;
+  const nestedAlt = data?.profile?.weightUnit ?? data?.workoutPreferences?.weightUnit;
+  if (isWeightUnit(nestedAlt)) return nestedAlt;
+  return "kg";
+};
+const convertKgToUnit = (valueKg: number, unit: WeightUnit): number =>
+  unit === "lbs" ? valueKg * KG_TO_LBS : valueKg;
+const convertKcalToUnit = (valueKcal: number, unit: EnergyUnit): number =>
+  unit === "kJ" ? valueKcal * KCAL_TO_KJ : valueKcal;
 
 export default function Home() {
   const router = useRouter();
+  const workoutsHeatmapScrollRef = React.useRef<ScrollView | null>(null);
   const [redirectTo, setRedirectTo] = useState<Href | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [uid, setUid] = useState<string | null>(null);
@@ -182,6 +222,10 @@ export default function Home() {
   const [activeDashboardMetric, setActiveDashboardMetric] = useState<DashboardMetricKey | null>(
     null
   );
+  const [hideRestDaysInVolume, setHideRestDaysInVolume] = useState(false);
+  const [truncateZeroDaysInCalories, setTruncateZeroDaysInCalories] = useState(false);
+  const [hideZeroDaysInSleep, setHideZeroDaysInSleep] = useState(false);
+  const [dashboardRange, setDashboardRange] = useState<ChartRange>(7);
   const [lastTapAt, setLastTapAt] = useState(0);
   const [calendarMonth, setCalendarMonth] = useState(() => {
     const now = new Date();
@@ -197,17 +241,22 @@ export default function Home() {
     averageCalories: null,
     consistencyScore: null,
   });
-  const [nutritionCalorieHistory, setNutritionCalorieHistory] = useState<GraphPoint[]>([]);
-  const [nutritionAdherenceHistory, setNutritionAdherenceHistory] = useState<GraphPoint[]>([]);
+  const [nutritionCalorieHistory, setNutritionCalorieHistory] = useState<ChartPoint[]>([]);
+  const [nutritionAdherenceHistory, setNutritionAdherenceHistory] = useState<ChartPoint[]>([]);
   const [sleepSnapshot, setSleepSnapshot] = useState<SleepSnapshot>({
     averageSleepHours: null,
     nightsCaptured: 0,
   });
-  const [sleepHistory, setSleepHistory] = useState<GraphPoint[]>([]);
+  const [sleepHistory, setSleepHistory] = useState<ChartPoint[]>([]);
   const [trainingPhaseStartedAt, setTrainingPhaseStartedAt] = useState<Timestamp | null>(null);
   const [dietPhaseStartedAt, setDietPhaseStartedAt] = useState<Timestamp | null>(null);
   const [trainingPhaseHistory, setTrainingPhaseHistory] = useState<TrainingPhaseHistoryEntry[]>([]);
   const [dietPhaseHistory, setDietPhaseHistory] = useState<DietPhaseHistoryEntry[]>([]);
+  const [weightUnit, setWeightUnit] = useState<WeightUnit>("kg");
+  const [energyUnit, setEnergyUnit] = useState<EnergyUnit>("kcal");
+  const [sorenessHistory, setSorenessHistory] = useState<ChartPoint[]>([]);
+  const [fatigueHistory, setFatigueHistory] = useState<ChartPoint[]>([]);
+  const [motivationHistory, setMotivationHistory] = useState<ChartPoint[]>([]);
 
   const entitlement = useEntitlement(authReady, uid);
   const { isOffline } = useOfflineStatus();
@@ -267,6 +316,8 @@ export default function Home() {
         if (isDietPhase(data?.dietPhase)) {
           setDietPhase(data.dietPhase);
         }
+        setWeightUnit(resolveWeightUnit(data));
+        setEnergyUnit(resolveEnergyUnit(data));
         setWorkoutProgram(normalizeProgram(data?.workoutProgram));
         setTrainingPhaseStartedAt(
           data?.trainingPhaseStartedAt instanceof Timestamp ? data.trainingPhaseStartedAt : null
@@ -380,6 +431,93 @@ export default function Home() {
   }, [uid, soreness, fatigue, motivation]);
 
   useEffect(() => {
+    const loadReadinessHistory = async () => {
+      if (!uid) return;
+      const key = `${HOME_READINESS_HISTORY_KEY_PREFIX}:${uid}`;
+      let parsedHistory: Record<string, ReadinessHistoryRecord> = {};
+      try {
+        const raw = await AsyncStorage.getItem(key);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed && typeof parsed === "object") {
+            parsedHistory = parsed as Record<string, ReadinessHistoryRecord>;
+          }
+        }
+      } catch (error) {
+        console.log("Failed to load readiness history", error);
+      }
+
+      const pointsSoreness: ChartPoint[] = [];
+      const pointsFatigue: ChartPoint[] = [];
+      const pointsMotivation: ChartPoint[] = [];
+      const start = new Date();
+      start.setDate(start.getDate() - 29);
+      start.setHours(12, 0, 0, 0);
+      const end = new Date();
+      end.setHours(12, 0, 0, 0);
+      const cursor = new Date(start);
+      while (cursor.getTime() <= end.getTime()) {
+        const dateKey = toDateKey(cursor);
+        const record = parsedHistory[dateKey];
+        pointsSoreness.push({
+          key: dateKey,
+          label: `${cursor.getMonth() + 1}/${cursor.getDate()}`,
+          value: typeof record?.soreness === "number" ? record.soreness : 0,
+        });
+        pointsFatigue.push({
+          key: dateKey,
+          label: `${cursor.getMonth() + 1}/${cursor.getDate()}`,
+          value: typeof record?.fatigue === "number" ? record.fatigue : 0,
+        });
+        pointsMotivation.push({
+          key: dateKey,
+          label: `${cursor.getMonth() + 1}/${cursor.getDate()}`,
+          value: typeof record?.motivation === "number" ? record.motivation : 0,
+        });
+        cursor.setDate(cursor.getDate() + 1);
+      }
+      setSorenessHistory(pointsSoreness);
+      setFatigueHistory(pointsFatigue);
+      setMotivationHistory(pointsMotivation);
+    };
+    void loadReadinessHistory();
+  }, [uid]);
+
+  useEffect(() => {
+    const saveReadinessHistory = async () => {
+      if (!uid) return;
+      const key = `${HOME_READINESS_HISTORY_KEY_PREFIX}:${uid}`;
+      let parsedHistory: Record<string, ReadinessHistoryRecord> = {};
+      try {
+        const raw = await AsyncStorage.getItem(key);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed && typeof parsed === "object") {
+            parsedHistory = parsed as Record<string, ReadinessHistoryRecord>;
+          }
+        }
+      } catch {
+        // no-op
+      }
+      const todayKey = toDateKey(new Date());
+      parsedHistory[todayKey] = { soreness, fatigue, motivation };
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - 29);
+      cutoff.setHours(0, 0, 0, 0);
+      for (const dateKey of Object.keys(parsedHistory)) {
+        const d = new Date(`${dateKey}T00:00:00`);
+        if (d.getTime() < cutoff.getTime()) delete parsedHistory[dateKey];
+      }
+      try {
+        await AsyncStorage.setItem(key, JSON.stringify(parsedHistory));
+      } catch (error) {
+        console.log("Failed to save readiness history", error);
+      }
+    };
+    void saveReadinessHistory();
+  }, [uid, soreness, fatigue, motivation]);
+
+  useEffect(() => {
     if (cooldownSeconds == null || cooldownSeconds <= 0) return;
     const timer = setInterval(() => {
       setCooldownSeconds((previous) => {
@@ -444,37 +582,69 @@ export default function Home() {
           typeof userData?.dietPhase === "string" && isDietPhase(userData.dietPhase)
             ? userData.dietPhase
             : dietPhase;
+        setWeightUnit(resolveWeightUnit(userData));
+        setEnergyUnit(resolveEnergyUnit(userData));
         const target = getCalorieTargetForDietPhase(profile.calorieTargetsByDietPhase, userDietPhase);
-        const nutritionTrends = await getNutritionTrendReport(uid, target, 7);
+        const nutritionTrends = await getNutritionTrendReport(uid, target, 30);
+        const last7Days = nutritionTrends.dailyHistory.slice(0, 7);
+        const averageCalories7d =
+          last7Days.length > 0
+            ? Math.round(last7Days.reduce((sum, day) => sum + day.calories, 0) / last7Days.length)
+            : null;
         setNutritionSnapshot({
-          averageCalories: nutritionTrends.averageCalories ?? null,
+          averageCalories: averageCalories7d,
           consistencyScore: nutritionTrends.consistencyScore ?? null,
         });
-        const calorieHistory = [...nutritionTrends.dailyHistory]
-          .reverse()
-          .map((entry) => ({
-            label: entry.dateKey.slice(5),
-            value: entry.calories,
-          }));
+        const byDate = new Map(
+          nutritionTrends.dailyHistory.map((entry) => [entry.dateKey, entry.calories])
+        );
+        const calorieHistory: ChartPoint[] = [];
+        const start = new Date();
+        start.setDate(start.getDate() - 29);
+        start.setHours(12, 0, 0, 0);
+        const end = new Date();
+        end.setHours(12, 0, 0, 0);
+        const cursor = new Date(start);
+        while (cursor.getTime() <= end.getTime()) {
+          const key = toDateKey(cursor);
+          calorieHistory.push({
+            key,
+            label: `${cursor.getMonth() + 1}/${cursor.getDate()}`,
+            value: Math.round(convertKcalToUnit(byDate.get(key) ?? 0, energyUnit)),
+          });
+          cursor.setDate(cursor.getDate() + 1);
+        }
         const adherenceHistory = [...nutritionTrends.dailyHistory]
           .reverse()
           .map((entry) => ({
+            key: entry.dateKey,
             label: entry.dateKey.slice(5),
             value: entry.adherence === "on_target" ? 100 : entry.adherence ? 0 : 50,
           }));
         setNutritionCalorieHistory(calorieHistory);
         setNutritionAdherenceHistory(adherenceHistory);
         const recentSleep = sleepProfile.recentNightlyHours ?? [];
-        const sleepValues = recentSleep
+        const last7Sleep = recentSleep.slice(0, 7);
+        const sleepValues = last7Sleep
           .map((entry) => entry.sleepHours)
           .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
-        const nextSleepHistory = [...recentSleep]
-          .reverse()
-          .map((entry) => ({
-            label: entry.dateKey.slice(5),
-            value: entry.sleepHours,
-          }))
-          .filter((entry) => Number.isFinite(entry.value));
+        const sleepByDate = new Map(recentSleep.map((entry) => [entry.dateKey, entry.sleepHours]));
+        const nextSleepHistory: ChartPoint[] = [];
+        const sleepStart = new Date();
+        sleepStart.setDate(sleepStart.getDate() - 29);
+        sleepStart.setHours(12, 0, 0, 0);
+        const sleepEnd = new Date();
+        sleepEnd.setHours(12, 0, 0, 0);
+        const sleepCursor = new Date(sleepStart);
+        while (sleepCursor.getTime() <= sleepEnd.getTime()) {
+          const key = toDateKey(sleepCursor);
+          nextSleepHistory.push({
+            key,
+            label: `${sleepCursor.getMonth() + 1}/${sleepCursor.getDate()}`,
+            value: sleepByDate.get(key) ?? 0,
+          });
+          sleepCursor.setDate(sleepCursor.getDate() + 1);
+        }
         setSleepHistory(nextSleepHistory);
         const avgSleep =
           sleepValues.length > 0
@@ -503,7 +673,7 @@ export default function Home() {
     } finally {
       setWorkoutsLoading(false);
     }
-  }, [uid, dietPhase]);
+  }, [uid, dietPhase, energyUnit]);
 
   useFocusEffect(
     useCallback(() => {
@@ -572,60 +742,239 @@ export default function Home() {
   const dashboardGraphTitle = useMemo(() => {
     switch (activeDashboardMetric) {
       case "workouts":
-        return "Workouts Completed";
+        return "Workouts";
       case "volume":
-        return "Volume Trend";
+        return `Volume (${weightUnit})`;
       case "adherence":
         return "Adherence Trend";
       case "calories":
-        return "Calories Trend";
+        return `Calories (${energyUnit})`;
       case "sleep":
-        return "Sleep Trend";
-      case "improving":
-        return "Improvement Signal";
+        return "Sleep (hours)";
+      case "recovery":
+        return "Recovery Readiness";
+      case "recovery_sleep":
+        return "Recovery - Sleep";
+      case "recovery_soreness":
+        return "Recovery - Soreness";
+      case "recovery_fatigue":
+        return "Recovery - Fatigue";
+      case "recovery_motivation":
+        return "Recovery - Motivation";
       default:
         return "";
     }
-  }, [activeDashboardMetric]);
+  }, [activeDashboardMetric, weightUnit, energyUnit]);
 
   const dashboardGraphUnit = useMemo(() => {
     switch (activeDashboardMetric) {
       case "volume":
-        return "kg";
+        return weightUnit;
       case "calories":
-        return "kcal";
+        return energyUnit;
       case "sleep":
+      case "recovery_sleep":
         return "h";
       case "adherence":
-      case "improving":
+      case "recovery":
         return "%";
+      case "recovery_soreness":
+      case "recovery_fatigue":
+      case "recovery_motivation":
+        return "/10";
       default:
         return "";
     }
-  }, [activeDashboardMetric]);
+  }, [activeDashboardMetric, weightUnit, energyUnit]);
 
-  const dashboardGraphData = useMemo<GraphPoint[]>(() => {
+  const recoveryReadiness = useMemo(() => {
+    const sleepRatio =
+      sleepSnapshot.averageSleepHours != null && sleepTargetHours > 0
+        ? Math.max(0, Math.min(1, sleepSnapshot.averageSleepHours / sleepTargetHours))
+        : 0.5;
+    const sorenessScore = Math.max(0, Math.min(1, 1 - soreness / 10));
+    const fatigueScore = Math.max(0, Math.min(1, 1 - fatigue / 10));
+    const motivationScore = Math.max(0, Math.min(1, motivation / 10));
+    const score = Math.round(
+      (sleepRatio * 0.3 + sorenessScore * 0.3 + fatigueScore * 0.3 + motivationScore * 0.1) * 100
+    );
+    const label = score >= 75 ? "Ready" : score >= 50 ? "Neutral" : "Recover";
+    return { score, label, sleepRatio, sorenessScore, fatigueScore, motivationScore };
+  }, [sleepSnapshot.averageSleepHours, sleepTargetHours, soreness, fatigue, motivation]);
+
+  const workoutsWeeklyHistory = useMemo<ChartPoint[]>(() => {
+    const weekStartKey = (date: Date) => {
+      const d = new Date(date);
+      const day = d.getDay();
+      const mondayOffset = day === 0 ? -6 : 1 - day;
+      d.setDate(d.getDate() + mondayOffset);
+      d.setHours(0, 0, 0, 0);
+      return d;
+    };
+    const toWeekKey = (d: Date) => {
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
+    };
+
+    const counts = new Map<string, number>();
+    let earliestWeek: Date | null = null;
+    for (const workout of workouts) {
+      const ws = weekStartKey(workout.date);
+      const key = toWeekKey(ws);
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+      if (!earliestWeek || ws.getTime() < earliestWeek.getTime()) earliestWeek = ws;
+    }
+
+    const currentWeek = weekStartKey(new Date());
+    const startWeek = earliestWeek ?? currentWeek;
+    const points: ChartPoint[] = [];
+    const cursor = new Date(startWeek);
+    while (cursor.getTime() <= currentWeek.getTime()) {
+      const key = toWeekKey(cursor);
+      points.push({
+        key,
+        label: `${cursor.getMonth() + 1}/${cursor.getDate()}`,
+        value: counts.get(key) ?? 0,
+      });
+      cursor.setDate(cursor.getDate() + 7);
+    }
+    return points;
+  }, [workouts]);
+
+  const volumeDailyHistoryAll = useMemo<ChartPoint[]>(() => {
+    const byDay = new Map<string, number>();
+    for (const workout of workouts) {
+      const key = toDateKey(workout.date);
+      byDay.set(key, (byDay.get(key) ?? 0) + getWorkoutVolumeKg(workout));
+    }
+
+    if (byDay.size === 0) return [];
+    const sortedKeys = [...byDay.keys()].sort();
+    const start = new Date(`${sortedKeys[0]}T12:00:00`);
+    const end = new Date();
+    end.setHours(12, 0, 0, 0);
+
+    const points: ChartPoint[] = [];
+    const cursor = new Date(start);
+    while (cursor.getTime() <= end.getTime()) {
+      const key = toDateKey(cursor);
+      points.push({
+        key,
+        label: `${cursor.getMonth() + 1}/${cursor.getDate()}`,
+        value: Math.round(convertKgToUnit(byDay.get(key) ?? 0, weightUnit)),
+      });
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    return points;
+  }, [workouts, weightUnit]);
+
+  const volumeDailyHistory = useMemo(
+    () => (hideRestDaysInVolume ? volumeDailyHistoryAll.filter((point) => point.value > 0) : volumeDailyHistoryAll),
+    [hideRestDaysInVolume, volumeDailyHistoryAll]
+  );
+
+  const workoutsHeatmap = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const rangeStart = new Date(today.getFullYear() - 1, today.getMonth(), 1);
+    rangeStart.setHours(0, 0, 0, 0);
+
+    const dailyVolumeKg = new Map<string, number>();
+    for (const workout of workouts) {
+      const d = new Date(workout.date);
+      d.setHours(0, 0, 0, 0);
+      const key = toDateKey(d);
+      dailyVolumeKg.set(key, (dailyVolumeKg.get(key) ?? 0) + getWorkoutVolumeKg(workout));
+    }
+
+    const gridStart = new Date(rangeStart);
+    const startDay = gridStart.getDay();
+    const daysFromMonday = startDay === 0 ? 6 : startDay - 1;
+    gridStart.setDate(gridStart.getDate() - daysFromMonday); // Monday-start columns
+    const gridEnd = new Date(today);
+    const endDay = gridEnd.getDay();
+    const daysToSunday = endDay === 0 ? 0 : 7 - endDay;
+    gridEnd.setDate(gridEnd.getDate() + daysToSunday);
+
+    const weeks: Array<Array<{ key: string; date: Date; volumeKg: number; inRange: boolean }>> = [];
+    const monthLabels: Array<{ weekIndex: number; label: string }> = [];
+    const nonZeroVolumes: number[] = [];
+    const cursor = new Date(gridStart);
+    let weekIndex = 0;
+    while (cursor.getTime() <= gridEnd.getTime()) {
+      const weekStart = new Date(cursor);
+      const week: Array<{ key: string; date: Date; volumeKg: number; inRange: boolean }> = [];
+      for (let i = 0; i < 7; i += 1) {
+        const key = toDateKey(cursor);
+        const inRange = cursor.getTime() >= rangeStart.getTime() && cursor.getTime() <= today.getTime();
+        const volumeKg = inRange ? dailyVolumeKg.get(key) ?? 0 : 0;
+        if (inRange && volumeKg > 0) nonZeroVolumes.push(volumeKg);
+        week.push({
+          key,
+          date: new Date(cursor),
+          volumeKg,
+          inRange,
+        });
+        cursor.setDate(cursor.getDate() + 1);
+      }
+      if (weekStart.getDate() <= 7) {
+        monthLabels.push({
+          weekIndex,
+          label: weekStart.toLocaleDateString(undefined, { month: "short" }),
+        });
+      }
+      weeks.push(week);
+      weekIndex += 1;
+    }
+    const sortedVolumes = [...nonZeroVolumes].sort((a, b) => a - b);
+    const pickPercentile = (p: number) => {
+      if (!sortedVolumes.length) return 0;
+      const idx = Math.min(sortedVolumes.length - 1, Math.max(0, Math.floor((sortedVolumes.length - 1) * p)));
+      return sortedVolumes[idx];
+    };
+    const lowCut = pickPercentile(0.33);
+    const highCut = pickPercentile(0.66);
+    return { weeks, monthLabels, lowCut, highCut };
+  }, [workouts]);
+
+  useEffect(() => {
+    if (activeDashboardMetric !== "workouts") return;
+    const timer = setTimeout(() => {
+      workoutsHeatmapScrollRef.current?.scrollToEnd({ animated: false });
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [activeDashboardMetric, workoutsHeatmap.weeks.length]);
+
+  const dashboardGraphData = useMemo<ChartPoint[]>(() => {
     switch (activeDashboardMetric) {
       case "workouts":
-        return [
-          { label: "Last wk", value: weeklyMetrics.workoutsLastWeek },
-          { label: "This wk", value: weeklyMetrics.workoutsThisWeek },
-        ];
+        return workoutsWeeklyHistory;
       case "volume":
-        return [
-          { label: "Last wk", value: Math.round(weeklyMetrics.avgVolumeLastWeek) },
-          { label: "This wk", value: Math.round(weeklyMetrics.avgVolumeThisWeek) },
-        ];
+        return volumeDailyHistory;
       case "adherence":
         return nutritionAdherenceHistory;
       case "calories":
-        return nutritionCalorieHistory;
+        return truncateZeroDaysInCalories
+          ? nutritionCalorieHistory.filter((point) => point.value > 0)
+          : nutritionCalorieHistory;
       case "sleep":
+        return hideZeroDaysInSleep ? sleepHistory.filter((point) => point.value > 0) : sleepHistory;
+      case "recovery_sleep":
         return sleepHistory;
-      case "improving":
+      case "recovery_soreness":
+        return hideZeroDaysInSleep ? sorenessHistory.filter((point) => point.value > 0) : sorenessHistory;
+      case "recovery_fatigue":
+        return hideZeroDaysInSleep ? fatigueHistory.filter((point) => point.value > 0) : fatigueHistory;
+      case "recovery_motivation":
+        return hideZeroDaysInSleep ? motivationHistory.filter((point) => point.value > 0) : motivationHistory;
+      case "recovery":
         return [
-          { label: "Volume", value: weeklyMetrics.improvingByVolume ? 100 : 0 },
-          { label: "Sets", value: weeklyMetrics.improvingBySets ? 100 : 0 },
+          { key: "sleep", label: "Sleep", value: Math.round(recoveryReadiness.sleepRatio * 100) },
+          { key: "soreness", label: "Soreness", value: Math.round(recoveryReadiness.sorenessScore * 100) },
+          { key: "fatigue", label: "Fatigue", value: Math.round(recoveryReadiness.fatigueScore * 100) },
+          { key: "motivation", label: "Motivation", value: Math.round(recoveryReadiness.motivationScore * 100) },
         ];
       default:
         return [];
@@ -635,13 +984,106 @@ export default function Home() {
     nutritionAdherenceHistory,
     nutritionCalorieHistory,
     sleepHistory,
+    recoveryReadiness.fatigueScore,
+    recoveryReadiness.motivationScore,
+    recoveryReadiness.sleepRatio,
+    recoveryReadiness.sorenessScore,
+    soreness,
+    fatigue,
+    motivation,
+    truncateZeroDaysInCalories,
+    hideZeroDaysInSleep,
+    volumeDailyHistory,
+    workoutsWeeklyHistory,
+    sorenessHistory,
+    fatigueHistory,
+    motivationHistory,
     weeklyMetrics.avgVolumeLastWeek,
     weeklyMetrics.avgVolumeThisWeek,
-    weeklyMetrics.improvingBySets,
-    weeklyMetrics.improvingByVolume,
-    weeklyMetrics.workoutsLastWeek,
-    weeklyMetrics.workoutsThisWeek,
   ]);
+
+  const dashboardGraphDataScoped = useMemo(() => {
+    if (
+      activeDashboardMetric === "adherence"
+    ) {
+      return dashboardGraphData.slice(-dashboardRange);
+    }
+    return dashboardGraphData;
+  }, [activeDashboardMetric, dashboardGraphData, dashboardRange]);
+
+  const renderMiniTrendStrip = useCallback((points: ChartPoint[], color: string) => {
+    if (!points.length) {
+      return <View style={styles.miniTrendRow} />;
+    }
+    const scoped = points.slice(-7);
+    const max = Math.max(1, ...scoped.map((p) => p.value));
+    return (
+      <View style={styles.miniTrendRow}>
+        {scoped.map((point) => {
+          const h = Math.max(3, Math.round((point.value / max) * 18));
+          return (
+            <View key={point.key} style={styles.miniTrendCell}>
+              <View style={[styles.miniTrendBar, { height: h, backgroundColor: color }]} />
+            </View>
+          );
+        })}
+      </View>
+    );
+  }, []);
+
+  const formatWorkoutsDelta = useCallback((current: number, previous: number) => {
+    if (!Number.isFinite(current) || !Number.isFinite(previous)) return { text: "-", tone: "neutral" as const };
+    const delta = Math.round(current - previous);
+    if (delta > 0) return { text: `+${delta}`, tone: "up" as const };
+    if (delta < 0) return { text: `${delta}`, tone: "down" as const };
+    return { text: "-", tone: "neutral" as const };
+  }, []);
+
+  const formatAbsolutePercentDelta = useCallback((current: number, previous: number) => {
+    if (!Number.isFinite(current) || !Number.isFinite(previous)) {
+      return { text: "0 (0%)", tone: "neutral" as const };
+    }
+    const delta = current - previous;
+    const roundedDelta = Math.round(delta);
+    const signedDelta = roundedDelta > 0 ? `+${roundedDelta}` : `${roundedDelta}`;
+    if (previous === 0) {
+      if (current === 0) return { text: "0 (0%)", tone: "neutral" as const };
+      return { text: `${signedDelta} (n/a)`, tone: roundedDelta > 0 ? ("up" as const) : ("down" as const) };
+    }
+    const pct = Math.round((delta / previous) * 100);
+    const signedPct = pct > 0 ? `+${pct}` : `${pct}`;
+    if (roundedDelta > 0) return { text: `${signedDelta} (${signedPct}%)`, tone: "up" as const };
+    if (roundedDelta < 0) return { text: `${signedDelta} (${signedPct}%)`, tone: "down" as const };
+    return { text: "0 (0%)", tone: "neutral" as const };
+  }, []);
+
+  const weeklyDeltas = useMemo(() => {
+    const averageFromTailWindow = (values: number[], startFromEnd: number, length: number) => {
+      const start = Math.max(0, values.length - startFromEnd - length);
+      const end = Math.max(0, values.length - startFromEnd);
+      const window = values.slice(start, end);
+      if (window.length === 0) return 0;
+      return window.reduce((sum, v) => sum + v, 0) / window.length;
+    };
+
+    const calorieValues = nutritionCalorieHistory.map((p) => p.value);
+    const caloriesCurrent = averageFromTailWindow(calorieValues, 0, 7);
+    const caloriesPrev = averageFromTailWindow(calorieValues, 7, 7);
+
+    const sleepValues = sleepHistory.map((p) => p.value);
+    const sleepCurrent = averageFromTailWindow(sleepValues, 0, 7);
+    const sleepPrev = averageFromTailWindow(sleepValues, 7, 7);
+
+    return {
+      workouts: formatWorkoutsDelta(weeklyMetrics.workoutsThisWeek, weeklyMetrics.workoutsLastWeek),
+      volume: formatAbsolutePercentDelta(
+        convertKgToUnit(weeklyMetrics.avgVolumeThisWeek, weightUnit),
+        convertKgToUnit(weeklyMetrics.avgVolumeLastWeek, weightUnit)
+      ),
+      calories: formatAbsolutePercentDelta(caloriesCurrent, caloriesPrev),
+      sleep: formatAbsolutePercentDelta(sleepCurrent, sleepPrev),
+    };
+  }, [nutritionCalorieHistory, sleepHistory, weeklyMetrics, formatAbsolutePercentDelta, weightUnit, formatWorkoutsDelta]);
 
   const seedSampleMonth = async () => {
     if (!uid || seedLoading) return;
@@ -971,134 +1413,7 @@ export default function Home() {
         ) : null}
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Dashboard</Text>
-          <View style={styles.card}>
-            <View style={styles.metricRow}>
-              <TouchableOpacity
-                style={styles.metricChip}
-                onPress={() => setActiveDashboardMetric("workouts")}
-              >
-                <Text style={styles.metricLabel}>Workouts</Text>
-                <Text style={styles.metricValue}>{weeklyMetrics.workoutsThisWeek}</Text>
-                <Text style={styles.metricSub}>Last week: {weeklyMetrics.workoutsLastWeek}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.metricChip}
-                onPress={() => setActiveDashboardMetric("volume")}
-              >
-                <Text style={styles.metricLabel}>Volume trend</Text>
-                <Text style={styles.metricValue}>
-                  {Math.round(weeklyMetrics.avgVolumeThisWeek)} kg
-                </Text>
-                <Text style={styles.metricSub}>
-                  {weeklyMetrics.improvingByVolume ? "Improving" : "Flat/Down"} vs last week
-                </Text>
-              </TouchableOpacity>
-            </View>
-            <View style={styles.metricRow}>
-              <TouchableOpacity
-                style={styles.metricChip}
-                onPress={() => setActiveDashboardMetric("adherence")}
-              >
-                <Text style={styles.metricLabel}>Adherence</Text>
-                <Text style={styles.metricValue}>
-                  {nutritionSnapshot.consistencyScore == null
-                    ? "-"
-                    : `${nutritionSnapshot.consistencyScore}%`}
-                </Text>
-                <Text style={styles.metricSub}>Calories on-target consistency</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.metricChip}
-                onPress={() => setActiveDashboardMetric("calories")}
-              >
-                <Text style={styles.metricLabel}>Calories</Text>
-                <Text style={styles.metricValue}>
-                  {nutritionSnapshot.averageCalories == null
-                    ? "-"
-                    : `${Math.round(nutritionSnapshot.averageCalories)}`}
-                </Text>
-                <Text style={styles.metricSub}>Avg daily (last 7 full days)</Text>
-              </TouchableOpacity>
-            </View>
-            <View style={styles.metricRow}>
-              <TouchableOpacity
-                style={styles.metricChip}
-                onPress={() => setActiveDashboardMetric("sleep")}
-              >
-                <Text style={styles.metricLabel}>Sleep trend</Text>
-                <Text style={styles.metricValue}>
-                  {sleepSnapshot.averageSleepHours == null
-                    ? "-"
-                    : `${sleepSnapshot.averageSleepHours}h`}
-                </Text>
-                <Text style={styles.metricSub}>{sleepSnapshot.nightsCaptured} nights captured</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.metricChip}
-                onPress={() => setActiveDashboardMetric("improving")}
-              >
-                <Text style={styles.metricLabel}>Are you improving?</Text>
-                <Text style={styles.metricValue}>
-                  {weeklyMetrics.improvingByVolume || weeklyMetrics.improvingBySets
-                    ? "Yes"
-                    : "Not yet"}
-                </Text>
-                <Text style={styles.metricSub}>Based on weekly sets/volume</Text>
-              </TouchableOpacity>
-            </View>
-            {workoutsLoading ? <Text style={styles.cardText}>Refreshing dashboard...</Text> : null}
-            {insightsError ? <Text style={styles.noticeSub}>{insightsError}</Text> : null}
-          </View>
-        </View>
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Inputs</Text>
-          <View style={styles.card}>
-            <Text style={styles.cardText}>
-              Soreness {soreness} - Fatigue {fatigue} - Motivation {motivation}
-            </Text>
-            <View style={styles.inputActionsRow}>
-              <TouchableOpacity
-                style={[styles.secondaryButtonWide, styles.inputActionButton]}
-                onPress={() => setShowAdjustInputsModal(true)}
-              >
-                <Text style={styles.secondaryButtonText}>Adjust inputs</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.primaryButtonWide, styles.inputActionButton, loading && styles.disabled]}
-                onPress={handleDecision}
-                disabled={loading}
-              >
-                <Text style={styles.primaryText}>{loading ? "Working..." : "Get today's decision"}</Text>
-              </TouchableOpacity>
-            </View>
-
-            {gateError ? (
-              <View style={styles.notice}>
-                <Text style={styles.noticeText}>
-                  {gateError.bucket === "business_gate"
-                    ? getReasonMessage(gateError.reasonCode)
-                    : gateError.message ?? "Unable to get a decision right now."}
-                </Text>
-                {gateError.bucket === "business_gate" && gateError.reasonCode === "COOLDOWN_ACTIVE" ? (
-                  <Text style={styles.noticeSub}>{formatCooldownMessage(cooldownSeconds)}</Text>
-                ) : null}
-                {gateError.bucket === "seatbelt" ? (
-                  <Text style={styles.noticeSub}>Too many requests. Try again shortly.</Text>
-                ) : null}
-                {shouldShowUpgradeCta ? (
-                  <TouchableOpacity style={styles.paywallButton} onPress={handleOpenPaywallFromGate}>
-                    <Text style={styles.paywallText}>Upgrade to Premium</Text>
-                  </TouchableOpacity>
-                ) : null}
-              </View>
-            ) : null}
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Decision</Text>
+          <Text style={styles.sectionTitle}>Today's Plan</Text>
           <View style={styles.card}>
             {latestDecision ? (
               <>
@@ -1129,6 +1444,147 @@ export default function Home() {
             ) : (
               <Text style={styles.cardText}>No decision yet.</Text>
             )}
+            <Text style={styles.cardText}>
+              Soreness {soreness} - Fatigue {fatigue} - Motivation {motivation}
+            </Text>
+            <View style={styles.inputActionsRow}>
+              <TouchableOpacity
+                style={[styles.secondaryButtonWide, styles.inputActionButton]}
+                onPress={() => setShowAdjustInputsModal(true)}
+              >
+                <Text style={styles.secondaryButtonText}>Adjust inputs</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.primaryButtonWide, styles.inputActionButton, loading && styles.disabled]}
+                onPress={handleDecision}
+                disabled={loading}
+              >
+                <Text style={styles.primaryText}>{loading ? "Working..." : "Get today's decision"}</Text>
+              </TouchableOpacity>
+            </View>
+            {gateError ? (
+              <View style={styles.notice}>
+                <Text style={styles.noticeText}>
+                  {gateError.bucket === "business_gate"
+                    ? getReasonMessage(gateError.reasonCode)
+                    : gateError.message ?? "Unable to get a decision right now."}
+                </Text>
+                {gateError.bucket === "business_gate" && gateError.reasonCode === "COOLDOWN_ACTIVE" ? (
+                  <Text style={styles.noticeSub}>{formatCooldownMessage(cooldownSeconds)}</Text>
+                ) : null}
+                {gateError.bucket === "seatbelt" ? (
+                  <Text style={styles.noticeSub}>Too many requests. Try again shortly.</Text>
+                ) : null}
+                {shouldShowUpgradeCta ? (
+                  <TouchableOpacity style={styles.paywallButton} onPress={handleOpenPaywallFromGate}>
+                    <Text style={styles.paywallText}>Upgrade to Premium</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+            ) : null}
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>Readiness</Text>
+            <TouchableOpacity
+              style={styles.snapshotInfoBtn}
+              onPress={() =>
+                showAppAlert(
+                  "Recovery readiness",
+                  "Score weights:\n- Sleep: 30%\n- Soreness: 30%\n- Fatigue: 30%\n- Motivation: 10%\n\nNotes:\n- Soreness/Fatigue are inverted (lower is better).\n\nLabels:\n- Ready: >= 75\n- Neutral: 50-74\n- Recover: < 50"
+                )
+              }
+            >
+              <Ionicons name="information-circle-outline" size={16} color="#cdd1ea" />
+            </TouchableOpacity>
+          </View>
+          <View style={styles.card}>
+            <Text style={styles.metricValue}>{recoveryReadiness.score}%</Text>
+            <Text style={styles.metricSub}>{recoveryReadiness.label} based on sleep, soreness, fatigue, motivation</Text>
+            <View style={[styles.metricRow, styles.metricRowWrap]}>
+              <TouchableOpacity
+                style={[styles.metricChip, styles.metricChipCompact, styles.metricChipQuarter]}
+                onPress={() => setActiveDashboardMetric("recovery_sleep")}
+              >
+                <Text style={styles.metricLabel}>Sleep</Text>
+                <Text style={styles.metricValueSmall}>
+                  {sleepSnapshot.averageSleepHours == null ? "-" : `${sleepSnapshot.averageSleepHours}h`}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.metricChip, styles.metricChipCompact, styles.metricChipQuarter]}
+                onPress={() => setActiveDashboardMetric("recovery_soreness")}
+              >
+                <Text style={styles.metricLabel}>Soreness</Text>
+                <Text style={styles.metricValueSmall}>{soreness}/10</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.metricChip, styles.metricChipCompact, styles.metricChipQuarter]}
+                onPress={() => setActiveDashboardMetric("recovery_fatigue")}
+              >
+                <Text style={styles.metricLabel}>Fatigue</Text>
+                <Text style={styles.metricValueSmall}>{fatigue}/10</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.metricChip, styles.metricChipCompact, styles.metricChipQuarter]}
+                onPress={() => setActiveDashboardMetric("recovery_motivation")}
+              >
+                <Text style={styles.metricLabel}>Motivation</Text>
+                <Text style={styles.metricValueSmall}>{motivation}/10</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>Weekly Trends</Text>
+            <TouchableOpacity
+              style={styles.snapshotInfoBtn}
+              onPress={() => showAppAlert("Snapshot change", "Each change is compared against the previous week.")}
+            >
+              <Ionicons name="information-circle-outline" size={16} color="#cdd1ea" />
+            </TouchableOpacity>
+          </View>
+          <View style={styles.card}>
+            <View style={styles.metricRow}>
+              <TouchableOpacity style={styles.metricChip} onPress={() => setActiveDashboardMetric("workouts")}>
+                <Text style={styles.metricLabelTitle}>Workouts</Text>
+                <Text style={styles.metricValue}>{weeklyMetrics.workoutsThisWeek}</Text>
+                <Text style={[styles.metricDeltaInline, weeklyDeltas.workouts.tone === "up" ? styles.metricDeltaUp : weeklyDeltas.workouts.tone === "down" ? styles.metricDeltaDown : styles.metricDeltaNeutral]}>{weeklyDeltas.workouts.text}</Text>
+                {renderMiniTrendStrip(workoutsWeeklyHistory, "#60a5fa")}
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.metricChip} onPress={() => setActiveDashboardMetric("volume")}>
+                <Text style={styles.metricLabelTitle}>{`Volume (${weightUnit})`}</Text>
+                <Text style={styles.metricValue}>
+                  {Math.round(convertKgToUnit(weeklyMetrics.avgVolumeThisWeek, weightUnit))}
+                </Text>
+                <Text style={[styles.metricDeltaInline, weeklyDeltas.volume.tone === "up" ? styles.metricDeltaUp : weeklyDeltas.volume.tone === "down" ? styles.metricDeltaDown : styles.metricDeltaNeutral]}>{weeklyDeltas.volume.text}</Text>
+                {renderMiniTrendStrip(volumeDailyHistory, "#a78bfa")}
+              </TouchableOpacity>
+            </View>
+            <View style={styles.metricRow}>
+              <TouchableOpacity style={styles.metricChip} onPress={() => setActiveDashboardMetric("calories")}>
+                <Text style={styles.metricLabelTitle}>{`Calories (${energyUnit})`}</Text>
+                <Text style={styles.metricValue}>
+                  {nutritionSnapshot.averageCalories == null ? "-" : `${Math.round(convertKcalToUnit(nutritionSnapshot.averageCalories, energyUnit))}`}
+                </Text>
+                <Text style={[styles.metricDeltaInline, weeklyDeltas.calories.tone === "up" ? styles.metricDeltaUp : weeklyDeltas.calories.tone === "down" ? styles.metricDeltaDown : styles.metricDeltaNeutral]}>{weeklyDeltas.calories.text}</Text>
+                {renderMiniTrendStrip(nutritionCalorieHistory, "#fbbf24")}
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.metricChip} onPress={() => setActiveDashboardMetric("sleep")}>
+                <Text style={styles.metricLabelTitle}>Sleep (hours)</Text>
+                <Text style={styles.metricValue}>
+                  {sleepSnapshot.averageSleepHours == null ? "-" : `${sleepSnapshot.averageSleepHours}`}
+                </Text>
+                <Text style={[styles.metricDeltaInline, weeklyDeltas.sleep.tone === "up" ? styles.metricDeltaUp : weeklyDeltas.sleep.tone === "down" ? styles.metricDeltaDown : styles.metricDeltaNeutral]}>{weeklyDeltas.sleep.text}</Text>
+                {renderMiniTrendStrip(sleepHistory, "#4ade80")}
+              </TouchableOpacity>
+            </View>
+            {workoutsLoading ? <Text style={styles.cardText}>Refreshing snapshot...</Text> : null}
+            {insightsError ? <Text style={styles.noticeSub}>{insightsError}</Text> : null}
           </View>
         </View>
 
@@ -1285,7 +1741,7 @@ export default function Home() {
 
             <Text style={styles.cardText}>
               {selectedDaySummary
-                ? `${selectedDateKey}: ${selectedDaySummary.workoutCount} workout(s), ${selectedDaySummary.totalSets} sets, ${Math.round(selectedDaySummary.totalVolumeKg)} kg volume`
+                ? `${selectedDateKey}: ${selectedDaySummary.workoutCount} workout(s), ${selectedDaySummary.totalSets} sets, ${Math.round(convertKgToUnit(selectedDaySummary.totalVolumeKg, weightUnit))} ${weightUnit} volume`
                 : `${selectedDateKey}: no workouts logged`}
             </Text>
             {selectedProgramEntry ? (
@@ -1338,26 +1794,134 @@ export default function Home() {
                 <Ionicons name="close" size={18} color="#fff" />
               </TouchableOpacity>
             </View>
-            {dashboardGraphData.length === 0 ? (
+            {activeDashboardMetric === "adherence" ? (
+              <ChartRangeSelector value={dashboardRange} onChange={setDashboardRange} />
+            ) : activeDashboardMetric === "volume" ? (
+              <TouchableOpacity
+                style={styles.chartToggleButton}
+                onPress={() => setHideRestDaysInVolume((prev) => !prev)}
+              >
+                <Text style={styles.chartToggleButtonText}>
+                  {hideRestDaysInVolume ? "Show zero days" : "Hide zero days"}
+                </Text>
+              </TouchableOpacity>
+            ) : activeDashboardMetric === "calories" ? (
+              <TouchableOpacity
+                style={styles.chartToggleButton}
+                onPress={() => setTruncateZeroDaysInCalories((prev) => !prev)}
+              >
+                <Text style={styles.chartToggleButtonText}>
+                  {truncateZeroDaysInCalories ? "Show zero days" : "Hide zero days"}
+                </Text>
+              </TouchableOpacity>
+            ) : activeDashboardMetric === "sleep" || activeDashboardMetric === "recovery_sleep" || activeDashboardMetric === "recovery_soreness" || activeDashboardMetric === "recovery_fatigue" || activeDashboardMetric === "recovery_motivation" ? (
+              <TouchableOpacity
+                style={styles.chartToggleButton}
+                onPress={() => setHideZeroDaysInSleep((prev) => !prev)}
+              >
+                <Text style={styles.chartToggleButtonText}>
+                  {hideZeroDaysInSleep ? "Show zero days" : "Hide zero days"}
+                </Text>
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.chartRangeSpacer} />
+            )}
+            {activeDashboardMetric === "workouts" ? (
+              workoutsHeatmap.weeks.length === 0 ? (
+                <Text style={styles.cardText}>No data yet.</Text>
+              ) : (
+                <View style={styles.heatmapWrap}>
+                  <View style={styles.heatmapLegendRow}>
+                    <Text style={styles.noticeSub}>Rest</Text>
+                    <View style={[styles.heatmapLegendBox, styles.heatmapLevel0]} />
+                    <View style={[styles.heatmapLegendBox, styles.heatmapLevel1]} />
+                    <View style={[styles.heatmapLegendBox, styles.heatmapLevel2]} />
+                    <View style={[styles.heatmapLegendBox, styles.heatmapLevel3]} />
+                    <Text style={styles.noticeSub}>High volume</Text>
+                  </View>
+                  <View style={styles.heatmapBodyRow}>
+                    <View style={styles.heatmapYAxis}>
+                      {["M", "", "W", "", "F", "", "S"].map((label, index) => (
+                        <View key={`heatmap-y-${index}`} style={styles.heatmapYAxisSlot}>
+                          <Text style={styles.heatmapYAxisLabel}>{label}</Text>
+                        </View>
+                      ))}
+                    </View>
+                    <ScrollView
+                      ref={workoutsHeatmapScrollRef}
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={styles.heatmapScrollContent}
+                    >
+                      <View>
+                        <View style={styles.heatmapMonthHeader}>
+                          <View
+                            style={[
+                              styles.heatmapMonthLabelsTrack,
+                              { width: Math.max(16, workoutsHeatmap.weeks.length * 16) },
+                            ]}
+                          >
+                            {workoutsHeatmap.monthLabels.map((m) => (
+                              <Text
+                                key={`${m.weekIndex}-${m.label}`}
+                                style={[styles.heatmapMonthLabel, { left: m.weekIndex * 16 - 10 }]}
+                              >
+                                {m.label}
+                              </Text>
+                            ))}
+                          </View>
+                        </View>
+                        <View style={styles.heatmapGrid}>
+                          {workoutsHeatmap.weeks.map((week, weekIndex) => (
+                            <View key={`wk-${weekIndex}`} style={styles.heatmapWeekCol}>
+                              {week.map((cell) => {
+                                const level =
+                                  !cell.inRange
+                                    ? -1
+                                    : cell.volumeKg <= 0
+                                    ? 0
+                                    : cell.volumeKg <= workoutsHeatmap.lowCut
+                                    ? 1
+                                    : cell.volumeKg <= workoutsHeatmap.highCut
+                                    ? 2
+                                    : 3;
+                                return (
+                                  <TouchableOpacity
+                                    key={cell.key}
+                                    style={[
+                                      styles.heatmapCell,
+                                      level < 0
+                                        ? styles.heatmapFuture
+                                        : level === 0
+                                        ? styles.heatmapLevel0
+                                        : level === 1
+                                        ? styles.heatmapLevel1
+                                        : level === 2
+                                        ? styles.heatmapLevel2
+                                        : styles.heatmapLevel3,
+                                    ]}
+                                    onPress={() => {
+                                      setSelectedDateKey(cell.key);
+                                      setShowDayModal(true);
+                                    }}
+                                  />
+                                );
+                              })}
+                            </View>
+                          ))}
+                        </View>
+                      </View>
+                    </ScrollView>
+                  </View>
+                </View>
+              )
+            ) : dashboardGraphDataScoped.length === 0 ? (
               <Text style={styles.cardText}>No data yet.</Text>
             ) : (
-              <View style={styles.graphContainer}>
-                {dashboardGraphData.map((point) => {
-                  const maxValue =
-                    Math.max(...dashboardGraphData.map((item) => item.value), 1);
-                  const barHeight = Math.max(8, (point.value / maxValue) * 120);
-                  return (
-                    <View key={`${point.label}-${point.value}`} style={styles.graphBarWrap}>
-                      <Text style={styles.graphValueText}>
-                        {Math.round(point.value)}
-                        {dashboardGraphUnit ? ` ${dashboardGraphUnit}` : ""}
-                      </Text>
-                      <View style={[styles.graphBar, { height: barHeight }]} />
-                      <Text style={styles.graphLabelText}>{point.label}</Text>
-                    </View>
-                  );
-                })}
-              </View>
+              <BarChart
+                points={dashboardGraphDataScoped}
+                unit={dashboardGraphUnit}
+              />
             )}
           </View>
         </View>
@@ -1381,7 +1945,7 @@ export default function Home() {
                       {workout.date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                     </Text>
                     <Text style={styles.noticeSub}>
-                      {getWorkoutSetCount(workout)} sets - {Math.round(getWorkoutVolumeKg(workout))} kg
+                      {getWorkoutSetCount(workout)} sets - {Math.round(convertKgToUnit(getWorkoutVolumeKg(workout), weightUnit))} {weightUnit}
                       volume
                     </Text>
                     {workout.exercises.map((exercise, exerciseIndex) => (
@@ -1410,7 +1974,7 @@ export default function Home() {
                                     ? `${Math.floor(set.durationSec / 60)}:${String(set.durationSec % 60).padStart(2, "0")}`
                                     : "-"
                                 }${set.zone ? ` · Zone ${set.zone}` : ""}`
-                              : `${typeof set.weightKg === "number" ? `${Math.round(set.weightKg * 10) / 10} kg` : "-"} x ${
+                              : `${typeof set.weightKg === "number" ? `${Math.round(convertKgToUnit(set.weightKg, weightUnit) * 10) / 10} ${weightUnit}` : "-"} x ${
                                   set.reps || "-"
                                 }${typeof set.rpe === "number" ? ` - RPE ${set.rpe}` : ""}`}
                           </Text>
@@ -1558,6 +2122,19 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     marginBottom: 10,
   },
+  sectionHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  snapshotInfoBtn: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 10,
+  },
   card: {
     backgroundColor: "rgba(255,255,255,0.05)",
     borderRadius: 16,
@@ -1699,13 +2276,25 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 10,
   },
+  metricRowWrap: {
+    flexWrap: "wrap",
+  },
   metricChip: {
     flex: 1,
+    minHeight: 116,
     backgroundColor: "rgba(255,255,255,0.06)",
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 12,
-    gap: 3,
+    gap: 2,
+  },
+  metricChipCompact: {
+    minHeight: 0,
+    paddingVertical: 10,
+  },
+  metricChipQuarter: {
+    flexBasis: "48%",
+    flexGrow: 0,
   },
   metricLabel: {
     color: "#9aa1c3",
@@ -1714,7 +2303,33 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   metricValue: { color: "#fff", fontSize: 20, fontWeight: "800" },
-  metricSub: { color: "#aeb3ce", fontSize: 11, lineHeight: 15 },
+  metricValueRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
+  metricLabelTitle: { color: "#9aa1c3", fontSize: 11, fontWeight: "700" },
+  metricValueSmall: { color: "#fff", fontSize: 16, fontWeight: "800" },
+  metricSub: { color: "#aeb3ce", fontSize: 11, lineHeight: 15, minHeight: 30 },
+  metricDelta: { fontSize: 11, fontWeight: "700", minHeight: 16 },
+  metricDeltaInline: { fontSize: 11, fontWeight: "700", marginTop: -1 },
+  metricDeltaUp: { color: "#4ade80" },
+  metricDeltaDown: { color: "#f87171" },
+  metricDeltaNeutral: { color: "#9aa1c3" },
+  miniTrendRow: {
+    marginTop: "auto",
+    paddingTop: 8,
+    height: 20,
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: 3,
+  },
+  miniTrendCell: {
+    flex: 1,
+    height: 20,
+    justifyContent: "flex-end",
+  },
+  miniTrendBar: {
+    width: "100%",
+    borderRadius: 3,
+    opacity: 0.9,
+  },
   devActionsRow: {
     flexDirection: "row",
     gap: 8,
@@ -1846,6 +2461,40 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     textAlign: "center",
   },
+  heatmapWrap: { gap: 10, marginTop: 6 },
+  heatmapLegendRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  heatmapLegendBox: { width: 12, height: 12, borderRadius: 3 },
+  heatmapMonthHeader: { flexDirection: "row", alignItems: "center" },
+  heatmapAxisSpacer: { width: 16 },
+  heatmapMonthLabelsTrack: { position: "relative", height: 16, minWidth: 16 },
+  heatmapMonthLabel: {
+    position: "absolute",
+    top: 0,
+    width: 32,
+    color: "#9aa1c3",
+    fontSize: 10,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  heatmapScrollContent: { paddingVertical: 2, paddingRight: 10 },
+  heatmapBodyRow: { flexDirection: "row", alignItems: "flex-start", gap: 6 },
+  heatmapYAxis: { width: 12, paddingTop: 18, gap: 4 },
+  heatmapYAxisSlot: { height: 12, justifyContent: "center", alignItems: "center" },
+  heatmapYAxisLabel: { color: "#9aa1c3", fontSize: 9, fontWeight: "700", lineHeight: 10, textAlign: "center" },
+  heatmapGrid: { flexDirection: "row", gap: 4 },
+  heatmapWeekCol: { gap: 4 },
+  heatmapCell: {
+    width: 12,
+    height: 12,
+    borderRadius: 3,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+  heatmapFuture: { backgroundColor: "rgba(255,255,255,0.02)" },
+  heatmapLevel0: { backgroundColor: "rgba(255,255,255,0.08)" },
+  heatmapLevel1: { backgroundColor: "rgba(96,165,250,0.45)" },
+  heatmapLevel2: { backgroundColor: "rgba(96,165,250,0.7)" },
+  heatmapLevel3: { backgroundColor: "#60a5fa" },
   dayModalScroll: {
     maxHeight: 320,
     marginTop: 6,
@@ -1862,4 +2511,14 @@ const styles = StyleSheet.create({
   dayExerciseBlock: { marginTop: 8, gap: 2 },
   dayExerciseName: { color: "#d8daec", fontSize: 13, fontWeight: "700" },
   modalTitle: { color: "#fff", fontSize: 18, fontWeight: "800", marginBottom: 4 },
+  chartRangeSpacer: { height: 34 },
+  chartToggleButton: {
+    alignSelf: "flex-start",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.28)",
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  chartToggleButtonText: { color: "#d8daec", fontSize: 12, fontWeight: "700" },
 });

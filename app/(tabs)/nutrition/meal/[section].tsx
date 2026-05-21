@@ -15,7 +15,13 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { auth } from "@/src/config/firebaseConfig";
 import type { NutritionMeal } from "@/src/contracts";
-import { deleteMeal, subscribeToTodayMeals, updateMeal } from "@/src/nutrition/meals";
+import {
+  deleteMeal,
+  formatDateKey,
+  parseDateKey,
+  subscribeToMealsForDate,
+  updateMeal,
+} from "@/src/nutrition/meals";
 import type { FoodEntryMode, FoodItem } from "@/src/nutrition/foodDb";
 import { showAppDialog } from "@/src/ui/appDialog";
 import { isExpectedOfflineError } from "@/src/utils/networkErrors";
@@ -112,10 +118,12 @@ function normalizeServingInfo(label: string | null | undefined, servingGrams: nu
 
 export default function MealSectionScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ section?: string }>();
+  const params = useLocalSearchParams<{ section?: string; date?: string }>();
   const section = decodeURIComponent(params.section ?? "Breakfast");
+  const selectedDateKey = typeof params.date === "string" ? params.date : formatDateKey(new Date());
+  const selectedDate = parseDateKey(selectedDateKey) ?? new Date();
   const [uid, setUid] = useState<string | null>(null);
-  const [todayMeals, setTodayMeals] = useState<NutritionMeal[]>([]);
+  const [dayMeals, setDayMeals] = useState<NutritionMeal[]>([]);
   const [editingMeal, setEditingMeal] = useState<NutritionMeal | null>(null);
   const [editorVisible, setEditorVisible] = useState(false);
   const [editorMode, setEditorMode] = useState<FoodEntryMode>("grams");
@@ -139,9 +147,10 @@ export default function MealSectionScreen() {
 
   useEffect(() => {
     if (!uid) return undefined;
-    const unsub = subscribeToTodayMeals(
+    const unsub = subscribeToMealsForDate(
       uid,
-      (meals) => setTodayMeals(meals),
+      selectedDate,
+      (meals) => setDayMeals(meals),
       (error) => {
         if (!isExpectedOfflineError(error)) {
           console.log("Failed to load section meals", error);
@@ -149,11 +158,11 @@ export default function MealSectionScreen() {
       }
     );
     return unsub;
-  }, [uid]);
+  }, [uid, selectedDateKey]);
 
   const sectionMeals = useMemo(
-    () => todayMeals.filter((meal) => (meal.mealSection?.trim() || "Breakfast") === section),
-    [todayMeals, section]
+    () => dayMeals.filter((meal) => (meal.mealSection?.trim() || "Breakfast") === section),
+    [dayMeals, section]
   );
 
   const sectionTotals = useMemo(() => {
@@ -370,10 +379,16 @@ export default function MealSectionScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.iconBtn} onPress={() => router.replace("/nutrition")}>
+        <TouchableOpacity
+          style={styles.iconBtn}
+          onPress={() => router.replace({ pathname: "/nutrition", params: { date: selectedDateKey } })}
+        >
           <Ionicons name="chevron-back" size={22} color="#fff" />
         </TouchableOpacity>
-        <Text style={styles.title}>{section}</Text>
+        <View>
+          <Text style={styles.title}>{section}</Text>
+          <Text style={styles.subText}>{selectedDateKey}</Text>
+        </View>
         <View style={{ width: 32 }} />
       </View>
 
@@ -422,7 +437,7 @@ export default function MealSectionScreen() {
           ))}
           <TouchableOpacity
             style={styles.inlineAddBtn}
-            onPress={() => router.push({ pathname: "/nutrition/meal/search", params: { section } })}
+            onPress={() => router.push({ pathname: "/nutrition/meal/search", params: { section, date: selectedDateKey } })}
           >
             <Ionicons name="add" size={14} color="#fff" />
             <Text style={styles.inlineAddBtnText}>Add items</Text>

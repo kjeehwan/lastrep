@@ -22,6 +22,7 @@ import {
 import { showAppDialog } from "@/src/ui/appDialog";
 import { getUserData } from "@/src/userData";
 import { isExpectedOfflineError } from "@/src/utils/networkErrors";
+import { ChartEmptyState, LineChart, type ChartPoint } from "@/src/components/charts/TrendCharts";
 
 const ACCENT = "#7b61ff";
 const MUTED = "#a5acc1";
@@ -169,6 +170,13 @@ export default function SleepIndex() {
     const onTargetDays = recentNightlyHours.filter((item) => item.sleepHours >= 7).length;
     return Math.round((onTargetDays / recentNightlyHours.length) * 100);
   }, [recentNightlyHours]);
+  const sleepChartPoints = useMemo<ChartPoint[]>(
+    () =>
+      [...recentNightlyHours]
+        .reverse()
+        .map((item) => ({ key: item.dateKey, label: item.dateKey.slice(5).replace("-", "/"), value: item.sleepHours })),
+    [recentNightlyHours]
+  );
   const sampleAgeHours = useMemo(() => {
     if (!sampleRecordedAt) return null;
     const diffMs = Date.now() - sampleRecordedAt.getTime();
@@ -347,6 +355,11 @@ export default function SleepIndex() {
             {"Consistency (>=7h): "}
             {trendConsistencyPct == null ? "—" : `${trendConsistencyPct}%`}
           </Text>
+          {sleepChartPoints.length ? (
+            <LineChart points={sleepChartPoints} average={trendAverage} unit="h" />
+          ) : (
+            <ChartEmptyState text="No recent sleep records yet." />
+          )}
           <View style={styles.trendList}>
             {recentNightlyHours.length ? (
               recentNightlyHours.map((item) => (
