@@ -186,7 +186,7 @@ export default function SettingsIndex() {
               <Text style={styles.itemText}>{nickname}</Text>
               {email ? <Text style={styles.subText}>{email}</Text> : null}
             </View>
-            <Pressable onPress={() => router.push("/profile" as Href)}>
+            <Pressable onPress={() => router.push({ pathname: "/profile", params: { from: "/settings/index" } })}>
               <Text style={styles.linkText}>Edit</Text>
             </Pressable>
           </View>

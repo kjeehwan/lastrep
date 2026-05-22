@@ -1,10 +1,11 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Href, Redirect, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { onAuthStateChanged } from "firebase/auth";
+import { doc, onSnapshot } from "firebase/firestore";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { FlatList, LayoutChangeEvent, Modal, NativeScrollEvent, NativeSyntheticEvent, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { auth } from "@/src/config/firebaseConfig";
+import { auth, db } from "@/src/config/firebaseConfig";
 import type { NutritionMeal } from "@/src/contracts";
 import {
   computeNutritionTotals,
@@ -21,7 +22,6 @@ import {
 } from "@/src/nutrition/meals";
 import type { NutritionTrendReport } from "@/src/nutrition/mealHelpers";
 import {
-  BarChart,
   ChartEmptyState,
   type ChartPoint,
 } from "@/src/components/charts/TrendCharts";
@@ -46,6 +46,49 @@ function isDietPhase(value: string): value is DietPhase {
   return DIET_PHASES.includes(value as DietPhase);
 }
 
+type TimelineBarItemProps = {
+  point: ChartPoint;
+  selected: boolean;
+  timelineBarCellWidth: number;
+  timelinePlotHeight: number;
+  timelineScaleMax: number;
+  onPressDate: (dateKey: string) => void;
+};
+
+const TimelineBarItem = React.memo(function TimelineBarItem({
+  point,
+  selected,
+  timelineBarCellWidth,
+  timelinePlotHeight,
+  timelineScaleMax,
+  onPressDate,
+}: TimelineBarItemProps) {
+  const height = Math.max(
+    8,
+    Math.min(timelinePlotHeight, (point.value / timelineScaleMax) * timelinePlotHeight)
+  );
+
+  return (
+    <TouchableOpacity
+      style={[styles.timelineBarCell, { width: timelineBarCellWidth }]}
+      onPress={() => onPressDate(point.key)}
+    >
+      <Text style={styles.timelineValue}>{Math.round(point.value)}</Text>
+      <View
+        style={[
+          styles.timelineBar,
+          {
+            height,
+            width: Math.max(20, Math.min(28, timelineBarCellWidth - 12)),
+            backgroundColor: selected ? "#60a5fa" : "rgba(123,97,255,0.45)",
+          },
+        ]}
+      />
+      <Text style={[styles.timelineLabel, selected && styles.timelineLabelSelected]}>{point.label}</Text>
+    </TouchableOpacity>
+  );
+});
+
 export default function NutritionIndex() {
   const router = useRouter();
   const params = useLocalSearchParams<{ date?: string }>();
@@ -67,8 +110,10 @@ export default function NutritionIndex() {
   });
   const [timelinePoints, setTimelinePoints] = useState<ChartPoint[]>([]);
   const [energyUnit, setEnergyUnit] = useState<EnergyUnit>("kcal");
-  const timelineScrollRef = React.useRef<ScrollView | null>(null);
+  const timelineScrollRef = React.useRef<FlatList<ChartPoint> | null>(null);
   const [timelineShouldSnapToLatest, setTimelineShouldSnapToLatest] = useState(true);
+  const [timelineWindowStart, setTimelineWindowStart] = useState(0);
+  const [timelineViewportWidthMeasured, setTimelineViewportWidthMeasured] = useState<number>(0);
 
   useEffect(() => {
     const fromParams = typeof params.date === "string" ? params.date : "";
@@ -185,36 +230,42 @@ export default function NutritionIndex() {
     void fetchTimelineData();
   }, [fetchTimelineData, meals]);
 
+  const refreshProfileContext = useCallback(async () => {
+    if (!uid) return;
+    try {
+      const [profile, userData] = await Promise.all([getNutritionProfile(uid), getUserData(uid)]);
+      setCalorieTargets(profile.calorieTargetsByDietPhase);
+      setProteinTargetGrams(profile.proteinTargetGrams ?? null);
+      if (profile.mealSections?.length) setMealSectionsOrder(profile.mealSections);
+      const nextDietPhase = userData?.dietPhase;
+      const nextEnergyUnit = userData?.energyUnit;
+      setEnergyUnit(isEnergyUnit(nextEnergyUnit) ? nextEnergyUnit : "kcal");
+      setCurrentDietPhase(
+        typeof nextDietPhase === "string" && isDietPhase(nextDietPhase) ? nextDietPhase : "Maintain"
+      );
+    } catch (error) {
+      if (!isExpectedOfflineError(error)) {
+        console.log("Failed to load profile context", error);
+      }
+    }
+  }, [uid]);
+
   useFocusEffect(
     useCallback(() => {
       setTimelineShouldSnapToLatest(true);
       if (!uid) return undefined;
-      let cancelled = false;
-      const loadProfile = async () => {
-        try {
-          const [profile, userData] = await Promise.all([getNutritionProfile(uid), getUserData(uid)]);
-          if (cancelled) return;
-          setCalorieTargets(profile.calorieTargetsByDietPhase);
-          setProteinTargetGrams(profile.proteinTargetGrams ?? null);
-          if (profile.mealSections?.length) setMealSectionsOrder(profile.mealSections);
-          const nextDietPhase = userData?.dietPhase;
-          const nextEnergyUnit = userData?.energyUnit;
-          setEnergyUnit(isEnergyUnit(nextEnergyUnit) ? nextEnergyUnit : "kcal");
-          setCurrentDietPhase(
-            typeof nextDietPhase === "string" && isDietPhase(nextDietPhase) ? nextDietPhase : "Maintain"
-          );
-        } catch (error) {
-          if (!isExpectedOfflineError(error)) {
-            console.log("Failed to load profile context", error);
-          }
-        }
-      };
-      void loadProfile();
-      return () => {
-        cancelled = true;
-      };
-    }, [uid])
+      void refreshProfileContext();
+      return undefined;
+    }, [uid, refreshProfileContext])
   );
+
+  useEffect(() => {
+    if (!uid) return undefined;
+    const unsub = onSnapshot(doc(db, "users", uid), () => {
+      void refreshProfileContext();
+    });
+    return unsub;
+  }, [uid, refreshProfileContext]);
 
   const totals = useMemo(() => computeNutritionTotals(meals), [meals]);
   const sections = useMemo(() => {
@@ -367,8 +418,6 @@ export default function NutritionIndex() {
     router.replace("/home");
   };
 
-  if (redirectTo) return <Redirect href={redirectTo} />;
-
   const calorieConsumed = totals.calories;
   const calorieTargetRaw = calorieTarget ?? 0;
   const calorieTargetSafe = Math.round(toEnergyUnit(calorieTargetRaw, energyUnit));
@@ -393,6 +442,11 @@ export default function NutritionIndex() {
   const selectedDateIsToday = selectedDateKey === formatDateKey(new Date());
   const selectedDateLabel = selectedDateKey === formatDateKey(new Date()) ? "Today" : selectedDateKey;
   const timelineMax = useMemo(() => Math.max(1, ...timelinePoints.map((item) => item.value, 0)), [timelinePoints]);
+  const timelineVisibleBars = 7;
+  const timelineMeasuredWidth = timelineViewportWidthMeasured > 0 ? timelineViewportWidthMeasured : 308;
+  const timelineBarCellWidth = Math.max(1, Math.floor(timelineMeasuredWidth / timelineVisibleBars));
+  const timelineViewportWidth = timelineBarCellWidth * timelineVisibleBars;
+  const timelineMaxWindowStart = Math.max(0, timelinePoints.length - timelineVisibleBars);
   const timelineScaleMax = Math.max(1, timelineMax, calorieTargetSafe || 0);
   const timelinePlotHeight = 120;
   const timelineLabelSpace = 18;
@@ -406,11 +460,100 @@ export default function NutritionIndex() {
   useEffect(() => {
     if (!timelineShouldSnapToLatest || timelinePoints.length === 0) return;
     const timer = setTimeout(() => {
-      timelineScrollRef.current?.scrollToEnd({ animated: false });
+      const nextStart = timelineMaxWindowStart;
+      timelineScrollRef.current?.scrollToOffset({
+        offset: nextStart * timelineBarCellWidth,
+        animated: false,
+      });
+      setTimelineWindowStart(nextStart);
       setTimelineShouldSnapToLatest(false);
     }, 0);
     return () => clearTimeout(timer);
-  }, [timelineShouldSnapToLatest, timelinePoints.length]);
+  }, [timelineShouldSnapToLatest, timelinePoints.length, timelineMaxWindowStart, timelineBarCellWidth]);
+
+  useEffect(() => {
+    setTimelineWindowStart((previous) => Math.min(previous, timelineMaxWindowStart));
+  }, [timelineMaxWindowStart]);
+
+  const timelineFocusedPoints = useMemo(
+    () => timelinePoints.slice(timelineWindowStart, timelineWindowStart + timelineVisibleBars),
+    [timelinePoints, timelineWindowStart]
+  );
+  const sevenDayAverage = useMemo(() => {
+    if (timelineFocusedPoints.length === 0) return null;
+    const sum = timelineFocusedPoints.reduce((acc, point) => acc + point.value, 0);
+    return Math.round(sum / timelineFocusedPoints.length);
+  }, [timelineFocusedPoints]);
+
+  const snapTimelineToNearestWindow = useCallback(
+    (offsetX: number) => {
+      const nearestStart = Math.max(
+        0,
+        Math.min(timelineMaxWindowStart, Math.round(offsetX / timelineBarCellWidth))
+      );
+      setTimelineWindowStart(nearestStart);
+    },
+    [timelineMaxWindowStart, timelineBarCellWidth]
+  );
+
+  const handleTimelineViewportLayout = useCallback((event: LayoutChangeEvent) => {
+    const width = event.nativeEvent.layout.width;
+    if (width > 0 && Math.abs(width - timelineViewportWidthMeasured) > 0.5) {
+      setTimelineViewportWidthMeasured(width);
+    }
+  }, [timelineViewportWidthMeasured]);
+
+  const handleTimelineMomentumEnd = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      snapTimelineToNearestWindow(event.nativeEvent.contentOffset.x);
+    },
+    [snapTimelineToNearestWindow]
+  );
+
+  const handleTimelineDragEnd = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      if (event.nativeEvent.velocity?.x) return;
+      snapTimelineToNearestWindow(event.nativeEvent.contentOffset.x);
+    },
+    [snapTimelineToNearestWindow]
+  );
+
+  const handleResetToToday = useCallback(() => {
+    const today = formatDateKey(new Date());
+    setSelectedDateKey(today);
+    const nextStart = timelineMaxWindowStart;
+    setTimelineWindowStart(nextStart);
+    timelineScrollRef.current?.scrollToOffset({
+      offset: nextStart * timelineBarCellWidth,
+      animated: true,
+    });
+  }, [timelineBarCellWidth, timelineMaxWindowStart]);
+
+  const handlePressTimelineDate = useCallback((dateKey: string) => {
+    setSelectedDateKey(dateKey);
+  }, []);
+
+  const renderTimelineItem = useCallback(
+    ({ item: point }: { item: ChartPoint }) => (
+      <TimelineBarItem
+        point={point}
+        selected={point.key === selectedDateKey}
+        timelineBarCellWidth={timelineBarCellWidth}
+        timelinePlotHeight={timelinePlotHeight}
+        timelineScaleMax={timelineScaleMax}
+        onPressDate={handlePressTimelineDate}
+      />
+    ),
+    [
+      selectedDateKey,
+      timelineBarCellWidth,
+      timelinePlotHeight,
+      timelineScaleMax,
+      handlePressTimelineDate,
+    ]
+  );
+
+  if (redirectTo) return <Redirect href={redirectTo} />;
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
@@ -428,13 +571,16 @@ export default function NutritionIndex() {
             <Text style={styles.sectionTitle}>Daily calories</Text>
           </View>
           <View style={styles.metricHeaderRow}>
-            <Text style={styles.subText}>Selected day: {selectedDateLabel}</Text>
+            <Text style={styles.subText}>{selectedDateLabel}</Text>
             {!selectedDateIsToday ? (
-              <TouchableOpacity style={styles.todayResetBtn} onPress={() => setSelectedDateKey(formatDateKey(new Date()))}>
+              <TouchableOpacity style={styles.todayResetBtn} onPress={handleResetToToday}>
                 <Text style={styles.todayResetBtnText}>Today</Text>
               </TouchableOpacity>
             ) : null}
           </View>
+          <Text style={styles.subText}>
+            7-day avg: {sevenDayAverage == null ? "-" : `${sevenDayAverage} ${energyUnit}`}
+          </Text>
           {timelinePoints.length ? (
             <>
               <View style={styles.timelineStage}>
@@ -449,41 +595,37 @@ export default function NutritionIndex() {
                     ]}
                   />
                 ) : null}
-                <View style={styles.timelineBarsPane}>
-                  <ScrollView
+                <View
+                  style={[styles.timelineBarsPane, { width: timelineViewportWidth }]}
+                  onLayout={handleTimelineViewportLayout}
+                >
+                  <FlatList
                     ref={timelineScrollRef}
                     horizontal
+                    data={timelinePoints}
+                    keyExtractor={(item) => item.key}
+                    renderItem={renderTimelineItem}
+                    extraData={selectedDateKey}
+                    getItemLayout={(_, index) => ({
+                      length: timelineBarCellWidth,
+                      offset: timelineBarCellWidth * index,
+                      index,
+                    })}
+                    automaticallyAdjustContentInsets={false}
+                    contentInsetAdjustmentBehavior="never"
+                    automaticallyAdjustsScrollIndicatorInsets={false}
+                    bounces={false}
+                    overScrollMode="never"
+                    decelerationRate="fast"
+                    snapToInterval={timelineBarCellWidth}
+                    snapToAlignment="start"
+                    disableIntervalMomentum
+                    onMomentumScrollEnd={handleTimelineMomentumEnd}
+                    onScrollEndDrag={handleTimelineDragEnd}
                     showsHorizontalScrollIndicator={false}
                     contentContainerStyle={styles.timelineScrollContent}
                     style={styles.timelineScrollViewport}
-                  >
-                    <View style={styles.timelineChartWrap}>
-                      <View style={styles.timelineChartRow}>
-                        {timelinePoints.map((point) => {
-                          const selected = point.key === selectedDateKey;
-                          const height = Math.max(
-                            8,
-                            Math.min(timelinePlotHeight, (point.value / timelineScaleMax) * timelinePlotHeight)
-                          );
-                          return (
-                            <TouchableOpacity key={point.key} style={styles.timelineBarCell} onPress={() => setSelectedDateKey(point.key)}>
-                              <Text style={styles.timelineValue}>{Math.round(point.value)}</Text>
-                              <View
-                                style={[
-                                  styles.timelineBar,
-                                  {
-                                    height,
-                                    backgroundColor: selected ? "#60a5fa" : "rgba(123,97,255,0.45)",
-                                  },
-                                ]}
-                              />
-                              <Text style={[styles.timelineLabel, selected && styles.timelineLabelSelected]}>{point.label}</Text>
-                            </TouchableOpacity>
-                          );
-                        })}
-                      </View>
-                    </View>
-                  </ScrollView>
+                  />
                 </View>
                 <View style={[styles.timelineTargetPane, { width: timelineTargetLaneWidth }]}>
                   {calorieTargetSafe > 0 ? (
@@ -603,40 +745,6 @@ export default function NutritionIndex() {
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>7-day trends</Text>
-          {loadingTrends && !trendReport ? <Text style={styles.subText}>Recalculating...</Text> : null}
-          <View style={styles.totalRow}>
-            <View style={styles.totalChip}>
-              <Text style={styles.totalLabel}>Avg. Daily</Text>
-              <Text style={styles.totalValue}>{trendReport?.averageCalories == null ? "-" : Math.round(toEnergyUnit(trendReport.averageCalories, energyUnit))}</Text>
-              <Text style={styles.muted}>{energyUnit}</Text>
-            </View>
-            <View style={styles.totalChip}>
-              <Text style={styles.totalLabel}>Consistency</Text>
-              <Text style={[styles.totalValue, { color: (trendReport?.consistencyScore ?? 0) >= 70 ? SUCCESS : "#fff" }]}>
-                {trendReport?.consistencyScore != null ? `${trendReport.consistencyScore}%` : "-"}
-              </Text>
-              <Text style={styles.muted}>on target</Text>
-            </View>
-          </View>
-          {trendReport?.dailyHistory?.length ? (
-            <BarChart
-              points={[...trendReport.dailyHistory].reverse().map((day) => ({
-                key: day.dateKey,
-                label: day.dateKey.slice(5).replace("-", "/"),
-                value: Math.round(toEnergyUnit(day.calories, energyUnit)),
-              }))}
-              unit={energyUnit}
-              average={
-                trendReport.averageCalories == null
-                  ? undefined
-                  : Math.round(toEnergyUnit(trendReport.averageCalories, energyUnit))
-              }
-            />
-          ) : null}
-        </View>
-
-        <View style={styles.card}>
           <Text style={styles.sectionTitle}>History</Text>
           {trendReport?.dailyHistory.length === 0 ? <Text style={styles.subText}>No history yet.</Text> : null}
           {trendReport?.dailyHistory.map((day) => (
@@ -728,10 +836,10 @@ const styles = StyleSheet.create({
   timelineBarsPane: { flex: 1, overflow: "hidden" },
   timelineTargetPane: { position: "relative", alignSelf: "stretch" },
   timelineScrollViewport: { marginRight: 0 },
-  timelineScrollContent: { paddingVertical: 4, paddingRight: 8 },
+  timelineScrollContent: { paddingVertical: 4 },
   timelineChartWrap: { position: "relative", minHeight: 160, justifyContent: "flex-end" },
-  timelineChartRow: { flexDirection: "row", alignItems: "flex-end", gap: 8, minHeight: 160 },
-  timelineBarCell: { width: 36, alignItems: "center", justifyContent: "flex-end", gap: 4 },
+  timelineChartRow: { flexDirection: "row", alignItems: "flex-end", minHeight: 160 },
+  timelineBarCell: { width: 44, alignItems: "center", justifyContent: "flex-end", gap: 4 },
   timelineValue: { color: MUTED, fontSize: 9, fontWeight: "700" },
   timelineBar: { width: 28, borderRadius: 8, minHeight: 8 },
   timelineLabel: { color: MUTED, fontSize: 10, fontWeight: "600" },

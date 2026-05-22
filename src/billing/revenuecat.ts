@@ -1,4 +1,5 @@
 import { Platform } from "react-native";
+import Constants from "expo-constants";
 import Purchases, {
   type CustomerInfo,
   LOG_LEVEL,
@@ -64,12 +65,8 @@ function logBillingEvent(event: BillingLogEvent) {
 }
 
 function getAndroidPackageName(): string | undefined {
-  try {
-    const constantsModule = require("expo-constants") as ExpoConstantsModule;
-    return constantsModule.default?.expoConfig?.android?.package;
-  } catch {
-    return undefined;
-  }
+  const constantsModule = Constants as unknown as ExpoConstantsModule;
+  return constantsModule.default?.expoConfig?.android?.package;
 }
 
 function isDevAndroidPackage(): boolean {

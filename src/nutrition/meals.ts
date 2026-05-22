@@ -12,9 +12,9 @@ import {
   type QueryDocumentSnapshot,
   setDoc,
   Timestamp,
+  type Unsubscribe,
   where,
 } from "firebase/firestore";
-import type { Unsubscribe } from "firebase/firestore";
 import { db } from "../config/firebaseConfig";
 import {
   NUTRITION_PROFILE_FIELDS,

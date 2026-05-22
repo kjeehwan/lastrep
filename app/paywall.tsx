@@ -251,7 +251,7 @@ export default function PaywallScreen() {
     return () => {
       canceled = true;
     };
-  }, [authReady, devBillingBuild, entitlement.state, uid]);
+  }, [authReady, devBillingBuild, entitlement.state, reasonCode, sourceScreen, uid]);
 
   useEffect(() => {
     if (entitlement.state !== "active") return;

@@ -1,14 +1,14 @@
 import { Ionicons } from "@expo/vector-icons";
 import Slider from "@react-native-community/slider";
-import { Href, Redirect, useFocusEffect, useRouter } from "expo-router";
+import { Href, Redirect, useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { onAuthStateChanged } from "firebase/auth";
 import { Timestamp } from "firebase/firestore";
-import React, { useCallback, useEffect, useState } from "react";
-import { Linking, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { BackHandler, Linking, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { auth } from "../../../src/config/firebaseConfig";
 import { useOfflineStatus } from "../../../src/hooks/useOfflineStatus";
-import { showAppAlert } from "../../../src/ui/appDialog";
+import { showAppAlert, showAppDialog } from "../../../src/ui/appDialog";
 import {
   DEFAULT_CALORIE_TARGETS_BY_DIET_PHASE,
   normalizeCalorieTargets,
@@ -65,6 +65,21 @@ type DietPhaseHistoryEntry = {
 type WeightUnit = "kg" | "lbs";
 type HeightUnit = "cm" | "ft/in";
 type EnergyUnit = "kcal" | "kJ";
+type ProfileSnapshot = {
+  goal: string;
+  nickname: string;
+  trainingPhase: TrainingPhase;
+  dietPhase: DietPhase;
+  cutCalories: string;
+  maintainCalories: string;
+  bulkCalories: string;
+  proteinTargetGrams: string;
+  availabilityDays: number;
+  sleepTargetHours: string;
+  weightUnit: WeightUnit;
+  heightUnit: HeightUnit;
+  energyUnit: EnergyUnit;
+};
 const KCAL_TO_KJ = 4.184;
 const isWeightUnit = (value: unknown): value is WeightUnit => value === "kg" || value === "lbs";
 const isHeightUnit = (value: unknown): value is HeightUnit => value === "cm" || value === "ft/in";
@@ -77,6 +92,9 @@ const convertEnergyValue = (value: number, from: EnergyUnit, to: EnergyUnit): nu
 // Phase 2A: keep only nickname + goal for prompts; remove body metrics
 export default function ProfileIndex() {
   const router = useRouter();
+  const navigation = useNavigation();
+  const params = useLocalSearchParams<{ from?: string }>();
+  const returnTo = typeof params.from === "string" && params.from.startsWith("/") ? params.from : null;
   const { isOffline } = useOfflineStatus();
   const [uid, setUid] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -111,14 +129,66 @@ export default function ProfileIndex() {
   const [weightUnit, setWeightUnit] = useState<WeightUnit>("kg");
   const [heightUnit, setHeightUnit] = useState<HeightUnit>("cm");
   const [energyUnit, setEnergyUnit] = useState<EnergyUnit>("kcal");
+  const [initialSnapshot, setInitialSnapshot] = useState<string | null>(null);
+  const skipNextBlurPromptRef = useRef(false);
+  const blurPromptOpenRef = useRef(false);
+  const buildSnapshot = useCallback(
+    () =>
+      JSON.stringify({
+        goal,
+        nickname: nickname.trim(),
+        trainingPhase,
+        dietPhase,
+        cutCalories: cutCalories.trim(),
+        maintainCalories: maintainCalories.trim(),
+        bulkCalories: bulkCalories.trim(),
+        proteinTargetGrams: proteinTargetGrams.trim(),
+        availabilityDays,
+        sleepTargetHours: sleepTargetHours.trim(),
+        weightUnit,
+        heightUnit,
+        energyUnit,
+      } satisfies ProfileSnapshot),
+    [
+      goal,
+      nickname,
+      trainingPhase,
+      dietPhase,
+      cutCalories,
+      maintainCalories,
+      bulkCalories,
+      proteinTargetGrams,
+      availabilityDays,
+      sleepTargetHours,
+      weightUnit,
+      heightUnit,
+      energyUnit,
+    ]
+  );
 
-  const handleGoBack = () => {
-    if (router.canGoBack()) {
-      router.back();
-      return;
+  const hasUnsavedChanges = initialSnapshot != null && buildSnapshot() !== initialSnapshot;
+
+  const restoreFromSnapshot = useCallback((snapshotText: string) => {
+    try {
+      const parsed = JSON.parse(snapshotText) as Partial<ProfileSnapshot>;
+      if (typeof parsed.goal === "string") setGoal(parsed.goal);
+      if (typeof parsed.nickname === "string") setNickname(parsed.nickname);
+      if (isTrainingPhase(parsed.trainingPhase)) setTrainingPhase(parsed.trainingPhase);
+      if (isDietPhase(parsed.dietPhase)) setDietPhase(parsed.dietPhase);
+      if (typeof parsed.cutCalories === "string") setCutCalories(parsed.cutCalories);
+      if (typeof parsed.maintainCalories === "string") setMaintainCalories(parsed.maintainCalories);
+      if (typeof parsed.bulkCalories === "string") setBulkCalories(parsed.bulkCalories);
+      if (typeof parsed.proteinTargetGrams === "string") setProteinTargetGrams(parsed.proteinTargetGrams);
+      if (isAvailabilityDays(parsed.availabilityDays)) setAvailabilityDays(parsed.availabilityDays);
+      if (typeof parsed.sleepTargetHours === "string") setSleepTargetHours(parsed.sleepTargetHours);
+      if (isWeightUnit(parsed.weightUnit)) setWeightUnit(parsed.weightUnit);
+      if (isHeightUnit(parsed.heightUnit)) setHeightUnit(parsed.heightUnit);
+      if (isEnergyUnit(parsed.energyUnit)) setEnergyUnit(parsed.energyUnit);
+      setSaveFeedback(null);
+    } catch (error) {
+      console.log("Failed to restore profile snapshot", error);
     }
-    router.replace("/home");
-  };
+  }, []);
 
   const refreshHealthConnectStatus = useCallback(async () => {
     setHealthLoading(true);
@@ -267,6 +337,12 @@ export default function ProfileIndex() {
     }, [refreshHealthConnectStatus, uid])
   );
 
+  useEffect(() => {
+    if (!loading && initialSnapshot == null) {
+      setInitialSnapshot(buildSnapshot());
+    }
+  }, [loading, initialSnapshot, buildSnapshot]);
+
   const healthConnectMessage = () => {
     if (healthAvailability === "provider_update_required") {
       return "Download or update Health Connect from the Play Store.";
@@ -330,8 +406,8 @@ export default function ProfileIndex() {
     setEnergyUnit(nextUnit);
   };
 
-  const save = async () => {
-    if (!uid) return;
+  const save = useCallback(async (): Promise<boolean> => {
+    if (!uid) return false;
     setSaveFeedback(null);
     const fields = [
       { label: "Cut", value: cutCalories },
@@ -350,7 +426,7 @@ export default function ProfileIndex() {
           "Invalid calorie target",
           `${field.label} calories must be a positive number or left blank.`
         );
-        return;
+        return false;
       }
 
       const kcalValue = energyUnit === "kJ" ? parsed / KCAL_TO_KJ : parsed;
@@ -360,7 +436,7 @@ export default function ProfileIndex() {
     const parsedSleepTarget = Number(sleepTargetHours.trim());
     if (!Number.isFinite(parsedSleepTarget) || parsedSleepTarget <= 0 || parsedSleepTarget > 24) {
       showAppAlert("Invalid sleep target", "Sleep target must be a number between 0 and 24.");
-      return;
+      return false;
     }
     const parsedProteinTarget = proteinTargetGrams.trim()
       ? Number(proteinTargetGrams.trim())
@@ -370,7 +446,7 @@ export default function ProfileIndex() {
       (!Number.isFinite(parsedProteinTarget) || parsedProteinTarget <= 0)
     ) {
       showAppAlert("Invalid protein target", "Protein target must be a positive number or blank.");
-      return;
+      return false;
     }
 
     try {
@@ -439,11 +515,145 @@ export default function ProfileIndex() {
         dietPhase !== initialDietPhase ? (profilePayload.dietPhaseStartedAt as Timestamp) : currentDietPhaseStartedAt
       );
       setSaveFeedback("Changes saved.");
+      setInitialSnapshot(buildSnapshot());
+      return true;
     } catch (error) {
       console.log("Failed to save profile", error);
       showAppAlert("Save failed", "Couldn't save your changes. Please try again.");
+      return false;
     }
+  }, [
+    uid,
+    cutCalories,
+    maintainCalories,
+    bulkCalories,
+    energyUnit,
+    sleepTargetHours,
+    proteinTargetGrams,
+    goal,
+    nickname,
+    trainingPhase,
+    dietPhase,
+    weightUnit,
+    heightUnit,
+    availabilityDays,
+    trainingPhaseHistory,
+    dietPhaseHistory,
+    initialTrainingPhase,
+    initialDietPhase,
+    currentTrainingPhaseStartedAt,
+    currentDietPhaseStartedAt,
+    buildSnapshot,
+  ]);
+
+  const navigateBack = useCallback(() => {
+    skipNextBlurPromptRef.current = true;
+    if (returnTo) {
+      router.replace(returnTo as Href);
+      return;
+    }
+    router.replace("/home");
+  }, [router, returnTo]);
+
+  const attemptLeave = useCallback(() => {
+    if (!hasUnsavedChanges) {
+      navigateBack();
+      return;
+    }
+    showAppDialog({
+      title: "Unsaved changes",
+      message: "You have unsaved changes. Save before leaving?",
+      buttons: [
+        {
+          text: "Save",
+          role: "default",
+          onPress: () => {
+            void (async () => {
+              const ok = await save();
+              if (ok) navigateBack();
+            })();
+          },
+        },
+        {
+          text: "Discard",
+          role: "destructive",
+          onPress: () => {
+            if (initialSnapshot) {
+              restoreFromSnapshot(initialSnapshot);
+            }
+            navigateBack();
+          },
+        },
+        { text: "Cancel", role: "cancel" },
+      ],
+    });
+  }, [hasUnsavedChanges, initialSnapshot, navigateBack, restoreFromSnapshot, save]);
+
+  const handleGoBack = () => {
+    attemptLeave();
   };
+
+  useFocusEffect(
+    useCallback(() => {
+      const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+        attemptLeave();
+        return true;
+      });
+      return () => sub.remove();
+    }, [attemptLeave])
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      const unsubBlur = navigation.addListener("blur", () => {
+        if (!hasUnsavedChanges) return;
+        if (skipNextBlurPromptRef.current) {
+          skipNextBlurPromptRef.current = false;
+          return;
+        }
+        if (blurPromptOpenRef.current) return;
+        blurPromptOpenRef.current = true;
+        showAppDialog({
+          title: "Unsaved changes",
+          message: "You have unsaved changes. Save before leaving?",
+          buttons: [
+            {
+              text: "Save",
+              role: "default",
+              onPress: () => {
+                blurPromptOpenRef.current = false;
+                void save();
+              },
+            },
+            {
+              text: "Discard",
+              role: "destructive",
+              onPress: () => {
+                blurPromptOpenRef.current = false;
+                if (initialSnapshot) {
+                  restoreFromSnapshot(initialSnapshot);
+                }
+              },
+            },
+            {
+              text: "Cancel",
+              role: "cancel",
+              onPress: () => {
+                blurPromptOpenRef.current = false;
+                skipNextBlurPromptRef.current = true;
+                router.replace(
+                  returnTo
+                    ? ({ pathname: "/profile", params: { from: returnTo } } as Href)
+                    : ("/profile" as Href)
+                );
+              },
+            },
+          ],
+        });
+      });
+      return () => unsubBlur();
+    }, [navigation, hasUnsavedChanges, save, initialSnapshot, restoreFromSnapshot, router, returnTo])
+  );
 
   const isHealthConnected = healthPermissionState === "granted";
 

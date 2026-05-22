@@ -63,6 +63,8 @@ type BarChartProps = {
   selectedKey?: string | null;
   onSelect?: (key: string) => void;
   average?: number | null;
+  averageInRightLane?: boolean;
+  averageLabelText?: string;
 };
 
 export const BarChart = memo(function BarChart({
@@ -71,6 +73,8 @@ export const BarChart = memo(function BarChart({
   selectedKey,
   onSelect,
   average = null,
+  averageInRightLane = false,
+  averageLabelText,
 }: BarChartProps) {
   const scrollRef = useRef<ScrollView | null>(null);
   const [scrollX, setScrollX] = useState(0);
@@ -101,6 +105,9 @@ export const BarChart = memo(function BarChart({
   const topLabelReserve = 22;
   const bottomLabelReserve = 20;
   const chartHeight = barTrackHeight + topLabelReserve + bottomLabelReserve;
+  const avgLaneWidth = averageInRightLane ? 42 : 0;
+  const avgLabel =
+    averageLabelText ?? `Avg ${Math.round(average ?? 0)}${unit ? ` ${unit}` : ""}`;
 
   useEffect(() => {
     if (!shouldScroll) return;
@@ -122,79 +129,104 @@ export const BarChart = memo(function BarChart({
     <View style={styles.barChartWrap}>
       <View style={styles.plotArea}>
         {avgPct != null ? (
-          <View style={[styles.avgLine, { bottom: bottomLabelReserve + avgPct * barTrackHeight }]}>
-            <Text style={styles.avgLabel}>Avg {Math.round(average ?? 0)}{unit ? ` ${unit}` : ""}</Text>
-          </View>
+          <View
+            style={[
+              styles.avgLine,
+              {
+                bottom: bottomLabelReserve + avgPct * barTrackHeight,
+                right: avgLaneWidth,
+              },
+            ]}
+          />
         ) : null}
-        {shouldScroll ? (
-          <ScrollView
-            ref={scrollRef}
-            horizontal
-            onLayout={handleViewportLayout}
-            onScroll={handleScroll}
-            scrollEventThrottle={16}
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.barScrollContent}
-          >
-            <View style={[styles.barRowScroll, { height: chartHeight }]}>
-              {points.map((point) => {
-                const selected = selectedKey != null && selectedKey === point.key;
-                const rawHeight = (point.value / scaledMax) * barTrackHeight;
-                const barHeight = Math.max(8, Math.min(barTrackHeight, Number.isFinite(rawHeight) ? rawHeight : 8));
-                return (
-                  <Pressable key={point.key} style={styles.barCellScroll} onPress={() => onSelect?.(point.key)}>
-                    <Text style={styles.valueText}>
-                      {Math.round(point.value)}
-                    </Text>
-                    <View
-                      style={[
-                        styles.bar,
-                        {
-                          height: barHeight,
-                          backgroundColor: selected
-                            ? CHART_COLORS.selected
-                            : onSelect
-                            ? CHART_COLORS.bar
-                            : CHART_COLORS.barMuted,
-                        },
-                      ]}
-                    />
-                    <Text style={[styles.xLabel, selected && styles.xLabelSelected]}>{point.label}</Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </ScrollView>
-        ) : (
-          <View style={[styles.barRow, { height: chartHeight }]}>
-            {points.map((point) => {
-              const selected = selectedKey != null && selectedKey === point.key;
-              const rawHeight = (point.value / scaledMax) * barTrackHeight;
-              const barHeight = Math.max(8, Math.min(barTrackHeight, Number.isFinite(rawHeight) ? rawHeight : 8));
-              return (
-                <Pressable key={point.key} style={styles.barCell} onPress={() => onSelect?.(point.key)}>
-                  <Text style={styles.valueText}>
-                    {Math.round(point.value)}
-                  </Text>
-                  <View
-                    style={[
-                      styles.bar,
-                      {
-                        height: barHeight,
-                        backgroundColor: selected
-                          ? CHART_COLORS.selected
-                          : onSelect
-                          ? CHART_COLORS.bar
-                          : CHART_COLORS.barMuted,
-                      },
-                    ]}
-                  />
-                  <Text style={[styles.xLabel, selected && styles.xLabelSelected]}>{point.label}</Text>
-                </Pressable>
-              );
-            })}
+        <View style={styles.barStageRow}>
+          <View style={styles.barStageBars}>
+            {shouldScroll ? (
+              <ScrollView
+                ref={scrollRef}
+                horizontal
+                onLayout={handleViewportLayout}
+                onScroll={handleScroll}
+                scrollEventThrottle={16}
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.barScrollContent}
+              >
+                <View style={[styles.barRowScroll, { height: chartHeight }]}>
+                  {points.map((point) => {
+                    const selected = selectedKey != null && selectedKey === point.key;
+                    const rawHeight = (point.value / scaledMax) * barTrackHeight;
+                    const barHeight = Math.max(8, Math.min(barTrackHeight, Number.isFinite(rawHeight) ? rawHeight : 8));
+                    return (
+                      <Pressable key={point.key} style={styles.barCellScroll} onPress={() => onSelect?.(point.key)}>
+                        <Text style={styles.valueText}>
+                          {Math.round(point.value)}
+                        </Text>
+                        <View
+                          style={[
+                            styles.bar,
+                            {
+                              height: barHeight,
+                              backgroundColor: selected
+                                ? CHART_COLORS.selected
+                                : onSelect
+                                ? CHART_COLORS.bar
+                                : CHART_COLORS.barMuted,
+                            },
+                          ]}
+                        />
+                        <Text style={[styles.xLabel, selected && styles.xLabelSelected]}>{point.label}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </ScrollView>
+            ) : (
+              <View style={[styles.barRow, { height: chartHeight }]}>
+                {points.map((point) => {
+                  const selected = selectedKey != null && selectedKey === point.key;
+                  const rawHeight = (point.value / scaledMax) * barTrackHeight;
+                  const barHeight = Math.max(8, Math.min(barTrackHeight, Number.isFinite(rawHeight) ? rawHeight : 8));
+                  return (
+                    <Pressable key={point.key} style={styles.barCell} onPress={() => onSelect?.(point.key)}>
+                      <Text style={styles.valueText}>
+                        {Math.round(point.value)}
+                      </Text>
+                      <View
+                        style={[
+                          styles.bar,
+                          {
+                            height: barHeight,
+                            backgroundColor: selected
+                              ? CHART_COLORS.selected
+                              : onSelect
+                              ? CHART_COLORS.bar
+                              : CHART_COLORS.barMuted,
+                          },
+                        ]}
+                      />
+                      <Text style={[styles.xLabel, selected && styles.xLabelSelected]}>{point.label}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
           </View>
-        )}
+          {avgPct != null && averageInRightLane ? (
+            <View style={[styles.avgLane, { width: avgLaneWidth }]}>
+              <View
+                style={[
+                  styles.avgLaneLabelWrap,
+                  { bottom: bottomLabelReserve + avgPct * barTrackHeight - 6 },
+                ]}
+              >
+                <Text style={styles.avgLabel}>{avgLabel}</Text>
+              </View>
+            </View>
+          ) : null}
+        </View>
+        {avgPct != null && !averageInRightLane ? (
+          <Text style={styles.avgLabel}>{avgLabel}</Text>
+        ) : null}
       </View>
     </View>
   );
@@ -290,6 +322,10 @@ const styles = StyleSheet.create({
   emptyText: { color: CHART_COLORS.muted, fontSize: 12, lineHeight: 16 },
   barChartWrap: { minHeight: 180, justifyContent: "flex-end", marginTop: 8 },
   plotArea: { position: "relative", height: 160, justifyContent: "flex-end" },
+  barStageRow: { flexDirection: "row", alignItems: "stretch" },
+  barStageBars: { flex: 1, overflow: "hidden" },
+  avgLane: { position: "relative", alignSelf: "stretch" },
+  avgLaneLabelWrap: { position: "absolute", right: 0, height: 12, justifyContent: "center" },
   avgLine: {
     position: "absolute",
     left: 0,

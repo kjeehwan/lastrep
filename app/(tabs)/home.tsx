@@ -20,7 +20,17 @@ import {
   where,
 } from "firebase/firestore";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { BackHandler, Modal, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import {
+  BackHandler,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  TouchableWithoutFeedback,
+  View,
+} from "react-native";
 import type { NormalizedDecisionError, ReasonCode } from "../../src/contracts";
 import { auth, db } from "../../src/config/firebaseConfig";
 import { useEntitlement } from "../../src/hooks/useEntitlement";
@@ -898,14 +908,14 @@ export default function Home() {
     const daysToSunday = endDay === 0 ? 0 : 7 - endDay;
     gridEnd.setDate(gridEnd.getDate() + daysToSunday);
 
-    const weeks: Array<Array<{ key: string; date: Date; volumeKg: number; inRange: boolean }>> = [];
-    const monthLabels: Array<{ weekIndex: number; label: string }> = [];
+    const weeks: { key: string; date: Date; volumeKg: number; inRange: boolean }[][] = [];
+    const monthLabels: { weekIndex: number; label: string }[] = [];
     const nonZeroVolumes: number[] = [];
     const cursor = new Date(gridStart);
     let weekIndex = 0;
     while (cursor.getTime() <= gridEnd.getTime()) {
       const weekStart = new Date(cursor);
-      const week: Array<{ key: string; date: Date; volumeKg: number; inRange: boolean }> = [];
+      const week: { key: string; date: Date; volumeKg: number; inRange: boolean }[] = [];
       for (let i = 0; i < 7; i += 1) {
         const key = toDateKey(cursor);
         const inRange = cursor.getTime() >= rangeStart.getTime() && cursor.getTime() <= today.getTime();
@@ -988,9 +998,6 @@ export default function Home() {
     recoveryReadiness.motivationScore,
     recoveryReadiness.sleepRatio,
     recoveryReadiness.sorenessScore,
-    soreness,
-    fatigue,
-    motivation,
     truncateZeroDaysInCalories,
     hideZeroDaysInSleep,
     volumeDailyHistory,
@@ -998,8 +1005,6 @@ export default function Home() {
     sorenessHistory,
     fatigueHistory,
     motivationHistory,
-    weeklyMetrics.avgVolumeLastWeek,
-    weeklyMetrics.avgVolumeThisWeek,
   ]);
 
   const dashboardGraphDataScoped = useMemo(() => {
@@ -1413,7 +1418,7 @@ export default function Home() {
         ) : null}
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Today's Plan</Text>
+          <Text style={styles.sectionTitle}>Today&apos;s Plan</Text>
           <View style={styles.card}>
             {latestDecision ? (
               <>
@@ -1786,8 +1791,10 @@ export default function Home() {
       </Modal>
 
       <Modal visible={activeDashboardMetric != null} transparent animationType="fade">
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
+        <TouchableWithoutFeedback onPress={() => setActiveDashboardMetric(null)}>
+          <View style={styles.modalBackdrop}>
+            <TouchableWithoutFeedback onPress={() => {}}>
+              <View style={styles.modalCard}>
             <View style={styles.calendarModalHeaderRow}>
               <Text style={styles.modalTitle}>{dashboardGraphTitle}</Text>
               <TouchableOpacity onPress={() => setActiveDashboardMetric(null)} style={styles.calendarCloseButton}>
@@ -1923,8 +1930,10 @@ export default function Home() {
                 unit={dashboardGraphUnit}
               />
             )}
+              </View>
+            </TouchableWithoutFeedback>
           </View>
-        </View>
+        </TouchableWithoutFeedback>
       </Modal>
 
       <Modal visible={showDayModal} transparent animationType="fade">

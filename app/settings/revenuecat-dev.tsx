@@ -33,10 +33,10 @@ function buildPackageRows(offerings: PurchasesOfferings | null): string[] {
   for (const offering of allOfferings) {
     const typedOffering = offering as {
       identifier?: string;
-      availablePackages?: Array<{
+      availablePackages?: {
         identifier?: string;
         product?: { identifier?: string };
-      }>;
+      }[];
     };
     const offeringId = typedOffering.identifier ?? "unknown_offering";
     const availablePackages = typedOffering.availablePackages ?? [];

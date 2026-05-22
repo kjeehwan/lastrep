@@ -1,11 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'; // Import AsyncStorage
 import { getApp, getApps, initializeApp } from 'firebase/app';
-import { getAuth, initializeAuth } from 'firebase/auth'; // Firebase Authentication
+import { getAuth, getReactNativePersistence, initializeAuth } from 'firebase/auth'; // Firebase Authentication
 import { getFirestore, initializeFirestore, setLogLevel as setFirestoreLogLevel } from 'firebase/firestore';
 import { Platform } from 'react-native';
-
-// @ts-ignore - ignore the TypeScript error for missing typings in Firebase SDK
-import { getReactNativePersistence } from 'firebase/auth'; // Import getReactNativePersistence
 
 // Firebase configuration (populate these values from your .env file)
 const firebaseConfig = {

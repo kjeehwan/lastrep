@@ -2603,7 +2603,10 @@ export default function WorkoutLog() {
         </View>
         <View style={styles.phaseRow}>
           <Text style={styles.muted}>Training phase: {sessionPhase}</Text>
-          <TouchableOpacity onPress={() => router.push("/profile")} style={styles.phaseLink}>
+          <TouchableOpacity
+            onPress={() => router.push({ pathname: "/profile", params: { from: "/(tabs)/workout/log" } })}
+            style={styles.phaseLink}
+          >
             <Text style={styles.phaseLinkText}>Change</Text>
           </TouchableOpacity>
         </View>

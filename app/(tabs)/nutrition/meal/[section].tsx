@@ -121,7 +121,10 @@ export default function MealSectionScreen() {
   const params = useLocalSearchParams<{ section?: string; date?: string }>();
   const section = decodeURIComponent(params.section ?? "Breakfast");
   const selectedDateKey = typeof params.date === "string" ? params.date : formatDateKey(new Date());
-  const selectedDate = parseDateKey(selectedDateKey) ?? new Date();
+  const selectedDate = useMemo(
+    () => parseDateKey(selectedDateKey) ?? new Date(),
+    [selectedDateKey]
+  );
   const [uid, setUid] = useState<string | null>(null);
   const [dayMeals, setDayMeals] = useState<NutritionMeal[]>([]);
   const [editingMeal, setEditingMeal] = useState<NutritionMeal | null>(null);
@@ -158,7 +161,7 @@ export default function MealSectionScreen() {
       }
     );
     return unsub;
-  }, [uid, selectedDateKey]);
+  }, [uid, selectedDate]);
 
   const sectionMeals = useMemo(
     () => dayMeals.filter((meal) => (meal.mealSection?.trim() || "Breakfast") === section),

@@ -97,7 +97,13 @@ export default function MealSearchScreen() {
   const selectedDateKey = typeof params.date === "string" ? params.date : formatDateKey(new Date());
   const selectedDate = parseDateKey(selectedDateKey) ?? new Date();
   const goToSection = useCallback(
-    () => router.replace({ pathname: "/nutrition/meal/[section]", params: { section, date: selectedDateKey } }),
+    () => {
+      if (router.canGoBack()) {
+        router.back();
+        return;
+      }
+      router.replace({ pathname: "/nutrition/meal/[section]", params: { section, date: selectedDateKey } });
+    },
     [router, section, selectedDateKey]
   );
 
