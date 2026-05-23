@@ -73,7 +73,6 @@ const TimelineBarItem = React.memo(function TimelineBarItem({
       style={[styles.timelineBarCell, { width: timelineBarCellWidth }]}
       onPress={() => onPressDate(point.key)}
     >
-      <Text style={styles.timelineValue}>{Math.round(point.value)}</Text>
       <View
         style={[
           styles.timelineBar,
@@ -438,9 +437,8 @@ export default function NutritionIndex() {
     carbs: consumedMacroTotal > 0 ? consumedMacroKcal.carbs / consumedMacroTotal : 0,
     fats: consumedMacroTotal > 0 ? consumedMacroKcal.fats / consumedMacroTotal : 0,
   };
-
-  const selectedDateIsToday = selectedDateKey === formatDateKey(new Date());
   const selectedDateLabel = selectedDateKey === formatDateKey(new Date()) ? "Today" : selectedDateKey;
+
   const timelineMax = useMemo(() => Math.max(1, ...timelinePoints.map((item) => item.value, 0)), [timelinePoints]);
   const timelineVisibleBars = 7;
   const timelineMeasuredWidth = timelineViewportWidthMeasured > 0 ? timelineViewportWidthMeasured : 308;
@@ -450,7 +448,7 @@ export default function NutritionIndex() {
   const timelineScaleMax = Math.max(1, timelineMax, calorieTargetSafe || 0);
   const timelinePlotHeight = 120;
   const timelineLabelSpace = 18;
-  const timelineTargetLaneWidth = 30;
+  const timelineTargetLaneWidth = 34;
   const targetLineBottom =
     timelineLabelSpace +
     Math.max(0, Math.min(timelinePlotHeight, (calorieTargetSafe / timelineScaleMax) * timelinePlotHeight));
@@ -479,11 +477,34 @@ export default function NutritionIndex() {
     () => timelinePoints.slice(timelineWindowStart, timelineWindowStart + timelineVisibleBars),
     [timelinePoints, timelineWindowStart]
   );
+  const timelineSnapOffsets = useMemo(
+    () => Array.from({ length: timelineMaxWindowStart + 1 }, (_, index) => index * timelineBarCellWidth),
+    [timelineMaxWindowStart, timelineBarCellWidth]
+  );
   const sevenDayAverage = useMemo(() => {
     if (timelineFocusedPoints.length === 0) return null;
     const sum = timelineFocusedPoints.reduce((acc, point) => acc + point.value, 0);
     return Math.round(sum / timelineFocusedPoints.length);
   }, [timelineFocusedPoints]);
+  const selectedTimelinePoint = useMemo(() => {
+    if (!timelinePoints.length) return null;
+    return (
+      timelinePoints.find((point) => point.key === selectedDateKey) ??
+      timelinePoints[timelinePoints.length - 1] ??
+      null
+    );
+  }, [timelinePoints, selectedDateKey]);
+  const selectedCaloriesDisplay = useMemo(() => {
+    if (selectedTimelinePoint) return Math.round(selectedTimelinePoint.value);
+    return Math.round(toEnergyUnit(calorieConsumed, energyUnit));
+  }, [selectedTimelinePoint, calorieConsumed, energyUnit]);
+  const selectedCaloriesDeltaText = useMemo(() => {
+    if (!selectedTimelinePoint || calorieTargetSafe <= 0) return "-";
+    const diff = Math.round(selectedTimelinePoint.value - calorieTargetSafe);
+    if (diff === 0) return "On target";
+    const prefix = diff > 0 ? "+" : "";
+    return `${prefix}${diff} ${energyUnit} vs target`;
+  }, [selectedTimelinePoint, calorieTargetSafe, energyUnit]);
 
   const snapTimelineToNearestWindow = useCallback(
     (offsetX: number) => {
@@ -517,17 +538,6 @@ export default function NutritionIndex() {
     },
     [snapTimelineToNearestWindow]
   );
-
-  const handleResetToToday = useCallback(() => {
-    const today = formatDateKey(new Date());
-    setSelectedDateKey(today);
-    const nextStart = timelineMaxWindowStart;
-    setTimelineWindowStart(nextStart);
-    timelineScrollRef.current?.scrollToOffset({
-      offset: nextStart * timelineBarCellWidth,
-      animated: true,
-    });
-  }, [timelineBarCellWidth, timelineMaxWindowStart]);
 
   const handlePressTimelineDate = useCallback((dateKey: string) => {
     setSelectedDateKey(dateKey);
@@ -570,14 +580,12 @@ export default function NutritionIndex() {
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionTitle}>Daily calories</Text>
           </View>
-          <View style={styles.metricHeaderRow}>
-            <Text style={styles.subText}>{selectedDateLabel}</Text>
-            {!selectedDateIsToday ? (
-              <TouchableOpacity style={styles.todayResetBtn} onPress={handleResetToToday}>
-                <Text style={styles.todayResetBtnText}>Today</Text>
-              </TouchableOpacity>
-            ) : null}
-          </View>
+          <Text style={styles.totalValue}>
+            {`${selectedCaloriesDisplay} ${energyUnit}`}
+          </Text>
+          <Text style={styles.subText}>
+            {selectedCaloriesDeltaText}
+          </Text>
           <Text style={styles.subText}>
             7-day avg: {sevenDayAverage == null ? "-" : `${sevenDayAverage} ${energyUnit}`}
           </Text>
@@ -617,14 +625,14 @@ export default function NutritionIndex() {
                     bounces={false}
                     overScrollMode="never"
                     decelerationRate="fast"
-                    snapToInterval={timelineBarCellWidth}
+                    snapToOffsets={timelineSnapOffsets}
                     snapToAlignment="start"
                     disableIntervalMomentum
                     onMomentumScrollEnd={handleTimelineMomentumEnd}
                     onScrollEndDrag={handleTimelineDragEnd}
                     showsHorizontalScrollIndicator={false}
                     contentContainerStyle={styles.timelineScrollContent}
-                    style={styles.timelineScrollViewport}
+                    style={[styles.timelineScrollViewport, styles.timelineScrollOverlay]}
                   />
                 </View>
                 <View style={[styles.timelineTargetPane, { width: timelineTargetLaneWidth }]}>
@@ -836,11 +844,11 @@ const styles = StyleSheet.create({
   timelineBarsPane: { flex: 1, overflow: "hidden" },
   timelineTargetPane: { position: "relative", alignSelf: "stretch" },
   timelineScrollViewport: { marginRight: 0 },
+  timelineScrollOverlay: { position: "absolute", left: 0, right: 0, top: 0, bottom: 0, zIndex: 4 },
   timelineScrollContent: { paddingVertical: 4 },
   timelineChartWrap: { position: "relative", minHeight: 160, justifyContent: "flex-end" },
   timelineChartRow: { flexDirection: "row", alignItems: "flex-end", minHeight: 160 },
   timelineBarCell: { width: 44, alignItems: "center", justifyContent: "flex-end", gap: 4 },
-  timelineValue: { color: MUTED, fontSize: 9, fontWeight: "700" },
   timelineBar: { width: 28, borderRadius: 8, minHeight: 8 },
   timelineLabel: { color: MUTED, fontSize: 10, fontWeight: "600" },
   timelineLabelSelected: { color: "#fff" },
@@ -849,7 +857,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     borderTopWidth: 1.5,
-    borderTopColor: "#fbbf24",
+    borderTopColor: "#8ea2ff",
     borderStyle: "dashed",
     zIndex: 2,
   },
@@ -858,16 +866,15 @@ const styles = StyleSheet.create({
     right: 0,
     height: 10,
     justifyContent: "center",
-    alignItems: "flex-start",
     zIndex: 3,
   },
   timelineTargetText: {
-    color: "#fbbf24",
+    color: "#8ea2ff",
     fontSize: 10,
     lineHeight: 10,
     fontWeight: "700",
     includeFontPadding: false,
-    paddingHorizontal: 2,
+    textAlign: "right",
   },
   compositionRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   totalRow: { flexDirection: "row", gap: 10 },
