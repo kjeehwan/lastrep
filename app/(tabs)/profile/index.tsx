@@ -14,6 +14,7 @@ import {
   normalizeCalorieTargets,
   saveNutritionProfile,
 } from "../../../src/nutrition/meals";
+import { clearProfileLeaveGuard, setProfileLeaveGuard } from "../../../src/profile/leaveGuard";
 import type { DietPhase, TrainingPhase } from "../../../src/types/decision";
 import {
   getHealthConnectAvailability,
@@ -546,8 +547,12 @@ export default function ProfileIndex() {
     buildSnapshot,
   ]);
 
-  const navigateBack = useCallback(() => {
+  const navigateBack = useCallback((destination?: Href | null) => {
     skipNextBlurPromptRef.current = true;
+    if (destination) {
+      router.replace(destination);
+      return;
+    }
     if (returnTo) {
       router.replace(returnTo as Href);
       return;
@@ -555,9 +560,9 @@ export default function ProfileIndex() {
     router.replace("/home");
   }, [router, returnTo]);
 
-  const attemptLeave = useCallback(() => {
+  const attemptLeave = useCallback((destination?: Href | null) => {
     if (!hasUnsavedChanges) {
-      navigateBack();
+      navigateBack(destination);
       return;
     }
     showAppDialog({
@@ -570,7 +575,7 @@ export default function ProfileIndex() {
           onPress: () => {
             void (async () => {
               const ok = await save();
-              if (ok) navigateBack();
+              if (ok) navigateBack(destination);
             })();
           },
         },
@@ -581,7 +586,7 @@ export default function ProfileIndex() {
             if (initialSnapshot) {
               restoreFromSnapshot(initialSnapshot);
             }
-            navigateBack();
+            navigateBack(destination);
           },
         },
         { text: "Cancel", role: "cancel" },
@@ -592,6 +597,21 @@ export default function ProfileIndex() {
   const handleGoBack = () => {
     attemptLeave();
   };
+
+  useEffect(() => {
+    setProfileLeaveGuard({
+      hasUnsavedChanges,
+      save,
+      discard: () => {
+        if (initialSnapshot) {
+          restoreFromSnapshot(initialSnapshot);
+        }
+      },
+    });
+    return () => {
+      clearProfileLeaveGuard();
+    };
+  }, [hasUnsavedChanges, initialSnapshot, restoreFromSnapshot, save]);
 
   useFocusEffect(
     useCallback(() => {
@@ -605,14 +625,19 @@ export default function ProfileIndex() {
 
   useFocusEffect(
     useCallback(() => {
-      const unsubBlur = navigation.addListener("blur", () => {
+      const unsubBeforeRemove = navigation.addListener("beforeRemove", (event) => {
         if (!hasUnsavedChanges) return;
         if (skipNextBlurPromptRef.current) {
           skipNextBlurPromptRef.current = false;
           return;
         }
-        if (blurPromptOpenRef.current) return;
+        if (blurPromptOpenRef.current) {
+          event.preventDefault();
+          return;
+        }
+        event.preventDefault();
         blurPromptOpenRef.current = true;
+        const continueAction = event.data.action;
         showAppDialog({
           title: "Unsaved changes",
           message: "You have unsaved changes. Save before leaving?",
@@ -622,7 +647,12 @@ export default function ProfileIndex() {
               role: "default",
               onPress: () => {
                 blurPromptOpenRef.current = false;
-                void save();
+                void (async () => {
+                  const ok = await save();
+                  if (!ok) return;
+                  skipNextBlurPromptRef.current = true;
+                  navigation.dispatch(continueAction);
+                })();
               },
             },
             {
@@ -633,6 +663,8 @@ export default function ProfileIndex() {
                 if (initialSnapshot) {
                   restoreFromSnapshot(initialSnapshot);
                 }
+                skipNextBlurPromptRef.current = true;
+                navigation.dispatch(continueAction);
               },
             },
             {
@@ -640,19 +672,15 @@ export default function ProfileIndex() {
               role: "cancel",
               onPress: () => {
                 blurPromptOpenRef.current = false;
-                skipNextBlurPromptRef.current = true;
-                router.replace(
-                  returnTo
-                    ? ({ pathname: "/profile", params: { from: returnTo } } as Href)
-                    : ("/profile" as Href)
-                );
               },
             },
           ],
         });
       });
-      return () => unsubBlur();
-    }, [navigation, hasUnsavedChanges, save, initialSnapshot, restoreFromSnapshot, router, returnTo])
+      return () => {
+        unsubBeforeRemove();
+      };
+    }, [navigation, hasUnsavedChanges, save, initialSnapshot, restoreFromSnapshot])
   );
 
   const isHealthConnected = healthPermissionState === "granted";

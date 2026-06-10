@@ -1,11 +1,53 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Href, Tabs } from "expo-router";
+import { Tabs } from "expo-router";
 import { onAuthStateChanged } from "firebase/auth";
 import React, { useEffect, useRef } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { auth } from "../../src/config/firebaseConfig";
 import { useOfflineStatus } from "../../src/hooks/useOfflineStatus";
+import { getProfileLeaveGuard } from "../../src/profile/leaveGuard";
 import { autoSyncSleepFromHealthConnectIfEligible } from "../../src/sleep/sleep";
+import { showAppDialog } from "../../src/ui/appDialog";
+
+function createProfileTabLeaveListener(targetName: string) {
+  return ({ navigation }: { navigation: { getState: () => { index: number; routes: { name: string }[] }; navigate: (name: string) => void } }) => ({
+    tabPress: (event: { preventDefault: () => void }) => {
+      const state = navigation.getState();
+      const activeRoute = state.routes[state.index];
+      if (activeRoute?.name !== "profile/index") return;
+      const guard = getProfileLeaveGuard();
+      if (!guard.hasUnsavedChanges) return;
+      event.preventDefault();
+      showAppDialog({
+        title: "Unsaved changes",
+        message: "You have unsaved changes. Save before leaving?",
+        buttons: [
+          {
+            text: "Save",
+            role: "default",
+            onPress: () => {
+              void (async () => {
+                const ok = await (guard.save?.() ?? Promise.resolve(false));
+                if (ok) {
+                  navigation.navigate(targetName);
+                }
+              })();
+            },
+          },
+          {
+            text: "Discard",
+            role: "destructive",
+            onPress: () => {
+              guard.discard?.();
+              navigation.navigate(targetName);
+            },
+          },
+          { text: "Cancel", role: "cancel" },
+        ],
+      });
+    },
+  });
+}
 
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
@@ -59,13 +101,14 @@ export default function TabsLayout() {
       })}
     >
       <Tabs.Screen name="index" options={{ href: null }} />
-      <Tabs.Screen name="home" options={{ title: "Home" }} />
+      <Tabs.Screen name="home" options={{ title: "Home" }} listeners={createProfileTabLeaveListener("home")} />
       <Tabs.Screen
         name="workout"
-        options={{ title: "Workout", href: "/(tabs)/workout/log" as Href }}
+        options={{ title: "Workout" }}
+        listeners={createProfileTabLeaveListener("workout")}
       />
-      <Tabs.Screen name="nutrition" options={{ title: "Nutrition" }} />
-      <Tabs.Screen name="sleep/index" options={{ title: "Sleep" }} />
+      <Tabs.Screen name="nutrition" options={{ title: "Nutrition" }} listeners={createProfileTabLeaveListener("nutrition")} />
+      <Tabs.Screen name="sleep/index" options={{ title: "Sleep" }} listeners={createProfileTabLeaveListener("sleep/index")} />
       <Tabs.Screen name="settings/index" options={{ href: null }} />
       <Tabs.Screen name="community/index" options={{ href: null }} />
       <Tabs.Screen name="profile/index" options={{ title: "Profile" }} />

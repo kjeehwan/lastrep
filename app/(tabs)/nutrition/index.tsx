@@ -3,7 +3,7 @@ import { Href, Redirect, useFocusEffect, useLocalSearchParams, useRouter } from 
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, onSnapshot } from "firebase/firestore";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { FlatList, LayoutChangeEvent, Modal, NativeScrollEvent, NativeSyntheticEvent, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { BackHandler, FlatList, LayoutChangeEvent, Modal, NativeScrollEvent, NativeSyntheticEvent, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { auth, db } from "@/src/config/firebaseConfig";
 import type { NutritionMeal } from "@/src/contracts";
@@ -252,10 +252,15 @@ export default function NutritionIndex() {
   useFocusEffect(
     useCallback(() => {
       setTimelineShouldSnapToLatest(true);
-      if (!uid) return undefined;
-      void refreshProfileContext();
-      return undefined;
-    }, [uid, refreshProfileContext])
+      if (uid) {
+        void refreshProfileContext();
+      }
+      const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+        router.replace("/home");
+        return true;
+      });
+      return () => subscription.remove();
+    }, [uid, refreshProfileContext, router])
   );
 
   useEffect(() => {
@@ -410,10 +415,6 @@ export default function NutritionIndex() {
   };
 
   const handleGoBack = () => {
-    if (router.canGoBack()) {
-      router.back();
-      return;
-    }
     router.replace("/home");
   };
 

@@ -4,6 +4,7 @@ import { Href, Redirect, useFocusEffect, useRouter } from "expo-router";
 import { onAuthStateChanged } from "firebase/auth";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  BackHandler,
   FlatList,
   LayoutChangeEvent,
   NativeScrollEvent,
@@ -70,10 +71,6 @@ export default function SleepIndex() {
   }, []);
 
   const handleGoBack = () => {
-    if (router.canGoBack()) {
-      router.back();
-      return;
-    }
     router.replace("/home");
   };
 
@@ -151,8 +148,12 @@ export default function SleepIndex() {
   useFocusEffect(
     useCallback(() => {
       void refreshSleep({ autoSync: true });
-      return undefined;
-    }, [refreshSleep])
+      const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+        router.replace("/home");
+        return true;
+      });
+      return () => subscription.remove();
+    }, [refreshSleep, router])
   );
 
   const fallbackLastNightDateKey = useMemo(() => {

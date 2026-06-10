@@ -18,6 +18,7 @@ import {
 } from "firebase/firestore";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  BackHandler,
   Keyboard,
   Modal,
   KeyboardAvoidingView,
@@ -330,6 +331,9 @@ export default function WorkoutLog() {
   const gongPlayerRef = useRef<ReturnType<typeof createAudioPlayer> | null>(null);
   const restTimerSnapshotRef = useRef<Record<string, { remainingSec: number; running: boolean }>>({});
   const getDraftKey = useCallback((uid: string) => `${DRAFT_KEY_PREFIX}:${uid}`, []);
+  const handleGoBack = useCallback(() => {
+    router.replace("/home");
+  }, [router]);
 
   const playGong = useCallback(async () => {
     try {
@@ -1042,6 +1046,10 @@ export default function WorkoutLog() {
   useFocusEffect(
     useCallback(() => {
       let active = true;
+      const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+        handleGoBack();
+        return true;
+      });
       void loadLatestDecision();
       void loadFavoriteExercises();
       void (async () => {
@@ -1052,8 +1060,9 @@ export default function WorkoutLog() {
       })();
       return () => {
         active = false;
+        subscription.remove();
       };
-    }, [loadLatestDecision, loadFavoriteExercises, addExercise, activeUid])
+    }, [loadLatestDecision, loadFavoriteExercises, addExercise, activeUid, handleGoBack])
   );
 
   // Persist draft
@@ -2555,7 +2564,7 @@ export default function WorkoutLog() {
             scrollEventThrottle={16}
           >
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity onPress={handleGoBack} style={styles.backButton}>
             <Ionicons name="chevron-back" size={22} color="#fff" />
           </TouchableOpacity>
           <Text style={styles.title}>{routineBuilderMode ? "Create Routine" : "Workout"}</Text>
