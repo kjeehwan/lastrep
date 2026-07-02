@@ -3,6 +3,26 @@ apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
 
 def projectRoot = rootDir.getAbsoluteFile().getParentFile().getAbsolutePath()
+def prodGoogleServicesFile = new File(projectRoot, "google-services.json")
+def devGoogleServicesFile = new File(projectRoot, "google-services.dev.json")
+
+tasks.register("prepareProdGoogleServices", Copy) {
+    if (!prodGoogleServicesFile.exists()) {
+        throw new GradleException("Missing prod google-services.json: ${prodGoogleServicesFile}")
+    }
+    from(prodGoogleServicesFile)
+    into(new File(projectDir, "src/prod"))
+    rename { "google-services.json" }
+}
+
+tasks.register("prepareDevGoogleServices", Copy) {
+    if (!devGoogleServicesFile.exists()) {
+        throw new GradleException("Missing dev google-services.dev.json: ${devGoogleServicesFile}")
+    }
+    from(devGoogleServicesFile)
+    into(new File(projectDir, "src/dev"))
+    rename { "google-services.json" }
+}
 
 /**
  * This is the configuration block to customize your React Native Android app.
@@ -29,10 +49,7 @@ react {
     // codegenDir = file("../../node_modules/@react-native/codegen")
 
     /* Variants */
-    //   The list of variants to that are debuggable. For those we're going to
-    //   skip the bundling of the JS bundle and the assets. By default is just 'debug'.
-    //   If you add flavors like lite, prod, etc. you'll have to list your debuggableVariants.
-    // debuggableVariants = ["liteDebug", "prodDebug"]
+    debuggableVariants = ["devDebug", "prodDebug"]
 
     /* Bundling */
     //   A list containing the node command and its flags. Default is just 'node'.
@@ -94,8 +111,37 @@ android {
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
         versionName "1.0.1"
+        manifestPlaceholders = [
+            appAuthScheme: "lastrep",
+            expoAppAuthScheme: "exp+lastrep",
+        ]
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
+        buildConfigField "String", "APP_VARIANT", "\"prod\""
+    }
+    flavorDimensions "environment"
+    productFlavors {
+        dev {
+            dimension "environment"
+            applicationId "com.kjeehwan.lastrep.dev"
+            versionNameSuffix "-dev"
+            resValue "string", "app_name", "Lastrep Dev"
+            manifestPlaceholders = [
+                appAuthScheme: "lastrep-dev",
+                expoAppAuthScheme: "exp+lastrep-dev",
+            ]
+            buildConfigField "String", "APP_VARIANT", "\"dev\""
+        }
+        prod {
+            dimension "environment"
+            applicationId "com.kjeehwan.lastrep"
+            resValue "string", "app_name", "Lastrep"
+            manifestPlaceholders = [
+                appAuthScheme: "lastrep",
+                expoAppAuthScheme: "exp+lastrep",
+            ]
+            buildConfigField "String", "APP_VARIANT", "\"prod\""
+        }
     }
     signingConfigs {
         debug {
@@ -132,6 +178,26 @@ android {
     }
 }
 
+preBuild.dependsOn("prepareProdGoogleServices", "prepareDevGoogleServices")
+
+afterEvaluate {
+    tasks.matching { task ->
+        task.name in [
+            "processDevDebugGoogleServices",
+            "processDevReleaseGoogleServices",
+            "processProdDebugGoogleServices",
+            "processProdReleaseGoogleServices",
+        ]
+    }.configureEach { task ->
+        if (task.name.startsWith("processDev")) {
+            task.dependsOn("prepareDevGoogleServices")
+        }
+        if (task.name.startsWith("processProd")) {
+            task.dependsOn("prepareProdGoogleServices")
+        }
+    }
+}
+
 // Apply static values from `gradle.properties` to the `android.packagingOptions`
 // Accepts values in comma delimited lists, example:
 // android.packagingOptions.pickFirsts=/LICENSE,**/picasa.ini
@@ -156,6 +222,7 @@ dependencies {
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
     implementation("androidx.recyclerview:recyclerview:1.3.2")
+    implementation(files("libs/samsung-health-data-api-1.1.0.aar"))
 
     def isGifEnabled = (findProperty('expo.gif.enabled') ?: "") == "true";
     def isWebpEnabled = (findProperty('expo.webp.enabled') ?: "") == "true";

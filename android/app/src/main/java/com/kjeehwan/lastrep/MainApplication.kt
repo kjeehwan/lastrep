@@ -13,6 +13,7 @@ import com.facebook.react.common.ReleaseLevel
 import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint
 import com.facebook.react.defaults.DefaultReactNativeHost
 import com.kjeehwan.lastrep.gesture.WorkoutGestureTextInputPackage
+import com.kjeehwan.lastrep.samsunghealth.SamsungHealthBodyCompositionPackage
 import com.kjeehwan.lastrep.workoutnative.WorkoutSetListPackage
 
 import expo.modules.ApplicationLifecycleDispatcher
@@ -29,6 +30,7 @@ class MainApplication : Application(), ReactApplication {
               // add(MyReactNativePackage())
               add(WorkoutGestureTextInputPackage())
               add(WorkoutSetListPackage())
+              add(SamsungHealthBodyCompositionPackage())
             }
 
           override fun getJSMainModuleName(): String = ".expo/.virtual-metro-entry"

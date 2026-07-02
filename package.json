@@ -11,6 +11,7 @@
     "build:android:dev-standalone": "eas build -p android --profile preview",
     "build:android:prod": "eas build -p android --profile production",
     "verify:android-native": "node scripts/verify-android-native.js",
+    "start:dev-client:android": "node scripts/start-dev-client-android.js",
     "web": "expo start --web",
     "lint": "expo lint",
     "test": "vitest run",
@@ -19,7 +20,7 @@
     "eas-build-pre-install": "node scripts/write-google-services.js",
     "import:food-db": "node scripts/import-food-db.mjs"
   },
-  "postinstall": "node scripts/patch-tslib.js",
+  "postinstall": "node scripts/patch-tslib.js && node scripts/patch-health-connect.js",
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
     "@react-native-async-storage/async-storage": "2.2.0",

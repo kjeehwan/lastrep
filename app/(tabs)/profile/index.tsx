@@ -1,14 +1,45 @@
 import { Ionicons } from "@expo/vector-icons";
 import Slider from "@react-native-community/slider";
+import { Image } from "expo-image";
+import * as ImagePicker from "expo-image-picker";
 import { Href, Redirect, useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { onAuthStateChanged } from "firebase/auth";
 import { Timestamp } from "firebase/firestore";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { BackHandler, Linking, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import {
+  BackHandler,
+  Linking,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { auth } from "../../../src/config/firebaseConfig";
 import { useOfflineStatus } from "../../../src/hooks/useOfflineStatus";
 import { showAppAlert, showAppDialog } from "../../../src/ui/appDialog";
+import {
+  autoSyncBodyCompositionFromHealthConnectIfEligible,
+  autoSyncBodyCompositionFromSamsungHealthIfEligible,
+  getSamsungHealthAccessIssueMessage,
+  getBodyCompositionProfile,
+  getEffectiveBodyCompositionSnapshot,
+  hasHealthBodyCompositionPermission,
+  hasSamsungHealthBodyCompositionPermission,
+  requestSamsungHealthBodyCompositionPermission,
+  saveManualBodyCompositionEntry,
+  syncBodyCompositionFromHealthConnect,
+  syncBodyCompositionFromSamsungHealth,
+} from "../../../src/bodyComposition/bodyComposition";
+import type {
+  BodyCompositionHistoryEntry,
+  BodyCompositionMetricSnapshot,
+  BodyCompositionProfile,
+} from "../../../src/contracts";
 import {
   DEFAULT_CALORIE_TARGETS_BY_DIET_PHASE,
   normalizeCalorieTargets,
@@ -22,6 +53,7 @@ import {
   hasHealthSleepPermission,
   openHealthConnectAppPermissionsScreen,
   openHealthConnectDataManagementScreen,
+  syncSleepFromHealthConnect,
   type HealthConnectAvailability,
 } from "../../../src/sleep/sleep";
 import { getUserData, saveUserData } from "../../../src/userData";
@@ -69,6 +101,8 @@ type EnergyUnit = "kcal" | "kJ";
 type ProfileSnapshot = {
   goal: string;
   nickname: string;
+  description: string;
+  profilePhotoUri: string;
   trainingPhase: TrainingPhase;
   dietPhase: DietPhase;
   cutCalories: string;
@@ -80,14 +114,39 @@ type ProfileSnapshot = {
   weightUnit: WeightUnit;
   heightUnit: HeightUnit;
   energyUnit: EnergyUnit;
+  bodyWeight: string;
+  bodyFatPercent: string;
+  muscleMass: string;
 };
 const KCAL_TO_KJ = 4.184;
+const LBS_TO_KG = 0.453592;
 const isWeightUnit = (value: unknown): value is WeightUnit => value === "kg" || value === "lbs";
 const isHeightUnit = (value: unknown): value is HeightUnit => value === "cm" || value === "ft/in";
 const isEnergyUnit = (value: unknown): value is EnergyUnit => value === "kcal" || value === "kJ";
 const convertEnergyValue = (value: number, from: EnergyUnit, to: EnergyUnit): number => {
   if (from === to) return value;
   return from === "kcal" ? value * KCAL_TO_KJ : value / KCAL_TO_KJ;
+};
+const convertKgToWeightUnit = (valueKg: number, unit: WeightUnit): number =>
+  unit === "lbs" ? valueKg * 2.20462 : valueKg;
+const convertWeightUnitToKg = (value: number, unit: WeightUnit): number =>
+  unit === "lbs" ? value * LBS_TO_KG : value;
+const formatWeightForUnit = (valueKg: number | null, unit: WeightUnit): string =>
+  typeof valueKg === "number" && Number.isFinite(valueKg)
+    ? `${Math.round(convertKgToWeightUnit(valueKg, unit) * 10) / 10}`
+    : "";
+const formatPercent = (value: number | null): string =>
+  typeof value === "number" && Number.isFinite(value) ? `${Math.round(value * 10) / 10}` : "";
+const formatBodyCompositionTimestamp = (value: Timestamp | null): string =>
+  value ? value.toDate().toLocaleString() : "Not recorded";
+const formatBodyCompositionSource = (
+  source: BodyCompositionHistoryEntry["source"] | null,
+  originLabel: string | null
+): string => {
+  if (source === "manual") return "Manual";
+  if (originLabel) return originLabel;
+  if (source === "health") return "Health Connect";
+  return "Unknown";
 };
 
 // Phase 2A: keep only nickname + goal for prompts; remove body metrics
@@ -101,6 +160,8 @@ export default function ProfileIndex() {
   const [loading, setLoading] = useState(true);
   const [goal, setGoal] = useState("");
   const [nickname, setNickname] = useState("");
+  const [profileDescription, setProfileDescription] = useState("");
+  const [profilePhotoUri, setProfilePhotoUri] = useState("");
   const [trainingPhase, setTrainingPhase] = useState<TrainingPhase>("Hypertrophy");
   const [dietPhase, setDietPhase] = useState<DietPhase>("Maintain");
   const [initialTrainingPhase, setInitialTrainingPhase] = useState<TrainingPhase>("Hypertrophy");
@@ -123,13 +184,46 @@ export default function ProfileIndex() {
   const [healthPermissionState, setHealthPermissionState] = useState<
     "granted" | "denied" | "revoked" | "unavailable" | "unsupported" | "unknown"
   >("unknown");
+  const [bodyHealthPermissionGranted, setBodyHealthPermissionGranted] = useState(false);
+  const [healthConnectBodyPermissionGranted, setHealthConnectBodyPermissionGranted] = useState(false);
+  const [samsungHealthIssue, setSamsungHealthIssue] = useState<string | null>(null);
   const [saveFeedback, setSaveFeedback] = useState<string | null>(null);
   const [redirectTo, setRedirectTo] = useState<Href | null>(null);
   const [connectedAccountLabel, setConnectedAccountLabel] = useState<string | null>(null);
   const [lastSleepSyncLabel, setLastSleepSyncLabel] = useState<string>("Not synced yet");
+  const [photoActionMenuVisible, setPhotoActionMenuVisible] = useState(false);
+  const [bodyHistoryExpanded, setBodyHistoryExpanded] = useState(false);
   const [weightUnit, setWeightUnit] = useState<WeightUnit>("kg");
   const [heightUnit, setHeightUnit] = useState<HeightUnit>("cm");
   const [energyUnit, setEnergyUnit] = useState<EnergyUnit>("kcal");
+  const [bodyWeight, setBodyWeight] = useState("");
+  const [bodyFatPercent, setBodyFatPercent] = useState("");
+  const [muscleMass, setMuscleMass] = useState("");
+  const [bodyCompositionProfile, setBodyCompositionProfile] = useState<BodyCompositionProfile | null>(null);
+  const [bodyCompositionEffective, setBodyCompositionEffective] = useState<BodyCompositionMetricSnapshot>(
+    getEffectiveBodyCompositionSnapshot({
+      manual: {
+        weightKg: null,
+        bodyFatPercent: null,
+        muscleMassKg: null,
+        recordedAt: null,
+        source: null,
+        originLabel: null,
+      },
+      synced: {
+        weightKg: null,
+        bodyFatPercent: null,
+        muscleMassKg: null,
+        recordedAt: null,
+        source: null,
+        originLabel: null,
+      },
+      history: [],
+      lastSyncedAt: null,
+      originAppPackage: null,
+      originLabel: null,
+    })
+  );
   const [initialSnapshot, setInitialSnapshot] = useState<string | null>(null);
   const skipNextBlurPromptRef = useRef(false);
   const blurPromptOpenRef = useRef(false);
@@ -138,6 +232,8 @@ export default function ProfileIndex() {
       JSON.stringify({
         goal,
         nickname: nickname.trim(),
+        description: profileDescription.trim(),
+        profilePhotoUri: profilePhotoUri.trim(),
         trainingPhase,
         dietPhase,
         cutCalories: cutCalories.trim(),
@@ -149,10 +245,15 @@ export default function ProfileIndex() {
         weightUnit,
         heightUnit,
         energyUnit,
+        bodyWeight: bodyWeight.trim(),
+        bodyFatPercent: bodyFatPercent.trim(),
+        muscleMass: muscleMass.trim(),
       } satisfies ProfileSnapshot),
     [
       goal,
       nickname,
+      profileDescription,
+      profilePhotoUri,
       trainingPhase,
       dietPhase,
       cutCalories,
@@ -164,16 +265,33 @@ export default function ProfileIndex() {
       weightUnit,
       heightUnit,
       energyUnit,
+      bodyWeight,
+      bodyFatPercent,
+      muscleMass,
     ]
   );
 
   const hasUnsavedChanges = initialSnapshot != null && buildSnapshot() !== initialSnapshot;
+
+  const applyBodyCompositionState = useCallback(
+    (profile: BodyCompositionProfile, unit: WeightUnit) => {
+      const effective = getEffectiveBodyCompositionSnapshot(profile);
+      setBodyCompositionProfile(profile);
+      setBodyCompositionEffective(effective);
+      setBodyWeight(formatWeightForUnit(effective.weightKg, unit));
+      setBodyFatPercent(formatPercent(effective.bodyFatPercent));
+      setMuscleMass(formatWeightForUnit(effective.muscleMassKg, unit));
+    },
+    []
+  );
 
   const restoreFromSnapshot = useCallback((snapshotText: string) => {
     try {
       const parsed = JSON.parse(snapshotText) as Partial<ProfileSnapshot>;
       if (typeof parsed.goal === "string") setGoal(parsed.goal);
       if (typeof parsed.nickname === "string") setNickname(parsed.nickname);
+      if (typeof parsed.description === "string") setProfileDescription(parsed.description);
+      if (typeof parsed.profilePhotoUri === "string") setProfilePhotoUri(parsed.profilePhotoUri);
       if (isTrainingPhase(parsed.trainingPhase)) setTrainingPhase(parsed.trainingPhase);
       if (isDietPhase(parsed.dietPhase)) setDietPhase(parsed.dietPhase);
       if (typeof parsed.cutCalories === "string") setCutCalories(parsed.cutCalories);
@@ -185,6 +303,9 @@ export default function ProfileIndex() {
       if (isWeightUnit(parsed.weightUnit)) setWeightUnit(parsed.weightUnit);
       if (isHeightUnit(parsed.heightUnit)) setHeightUnit(parsed.heightUnit);
       if (isEnergyUnit(parsed.energyUnit)) setEnergyUnit(parsed.energyUnit);
+      if (typeof parsed.bodyWeight === "string") setBodyWeight(parsed.bodyWeight);
+      if (typeof parsed.bodyFatPercent === "string") setBodyFatPercent(parsed.bodyFatPercent);
+      if (typeof parsed.muscleMass === "string") setMuscleMass(parsed.muscleMass);
       setSaveFeedback(null);
     } catch (error) {
       console.log("Failed to restore profile snapshot", error);
@@ -195,21 +316,47 @@ export default function ProfileIndex() {
     setHealthLoading(true);
     try {
       const availability = await getHealthConnectAvailability();
+      let samsungBodyGranted = false;
+      let samsungIssue: string | null = null;
+      try {
+        samsungBodyGranted = await hasSamsungHealthBodyCompositionPermission();
+      } catch (error) {
+        samsungIssue = getSamsungHealthAccessIssueMessage(error);
+      }
       setHealthAvailability(availability);
+      setBodyHealthPermissionGranted(samsungBodyGranted);
+      setSamsungHealthIssue(samsungIssue);
       if (availability === "unsupported") {
         setHealthPermissionState("unsupported");
+        setHealthConnectBodyPermissionGranted(false);
       } else if (availability !== "available") {
         setHealthPermissionState("unavailable");
+        setHealthConnectBodyPermissionGranted(false);
       } else {
-        const granted = await hasHealthSleepPermission();
-        setHealthPermissionState(granted ? "granted" : "denied");
+        const [sleepGranted, bodyGranted] = await Promise.all([
+          hasHealthSleepPermission(),
+          hasHealthBodyCompositionPermission(),
+        ]);
+        setHealthPermissionState(sleepGranted ? "granted" : "denied");
+        setHealthConnectBodyPermissionGranted(bodyGranted);
       }
     } catch {
       setHealthPermissionState("unknown");
+      setBodyHealthPermissionGranted(false);
+      setHealthConnectBodyPermissionGranted(false);
+      setSamsungHealthIssue(null);
     } finally {
       setHealthLoading(false);
     }
   }, []);
+
+  const refreshBodyComposition = useCallback(
+    async (userId: string, unit: WeightUnit) => {
+      const profile = await getBodyCompositionProfile(userId);
+      applyBodyCompositionState(profile, unit);
+    },
+    [applyBodyCompositionState]
+  );
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
@@ -220,7 +367,11 @@ export default function ProfileIndex() {
       setConnectedAccountLabel(user.email?.trim() || user.uid);
       setUid(user.uid);
       try {
-        const [data, sleepProfile] = await Promise.all([getUserData(user.uid), getSleepProfile(user.uid)]);
+        const [data, sleepProfile, compositionProfile] = await Promise.all([
+          getUserData(user.uid),
+          getSleepProfile(user.uid),
+          getBodyCompositionProfile(user.uid),
+        ]);
         setLastSleepSyncLabel(
           sleepProfile.lastSyncedAt
             ? sleepProfile.lastSyncedAt.toDate().toLocaleString()
@@ -228,6 +379,8 @@ export default function ProfileIndex() {
         );
         if (data?.goal) setGoal(data.goal);
         if (data?.nickname) setNickname(data.nickname);
+        if (typeof data?.description === "string") setProfileDescription(data.description);
+        if (typeof data?.profilePhotoUri === "string") setProfilePhotoUri(data.profilePhotoUri);
         if (isTrainingPhase(data?.trainingPhase)) {
           setTrainingPhase(data.trainingPhase);
           setInitialTrainingPhase(data.trainingPhase);
@@ -309,9 +462,11 @@ export default function ProfileIndex() {
             setAvailabilityDays(mappedDays);
           }
         }
+        const resolvedWeightUnit = isWeightUnit(data?.weightUnit) ? data.weightUnit : "kg";
         if (isWeightUnit(data?.weightUnit)) setWeightUnit(data.weightUnit);
         if (isHeightUnit(data?.heightUnit)) setHeightUnit(data.heightUnit);
         if (isEnergyUnit(data?.energyUnit)) setEnergyUnit(data.energyUnit);
+        applyBodyCompositionState(compositionProfile, resolvedWeightUnit);
       } catch (e) {
         console.log("Error fetching user data", e);
       } finally {
@@ -320,22 +475,35 @@ export default function ProfileIndex() {
       }
     });
     return unsub;
-  }, [refreshHealthConnectStatus]);
+  }, [applyBodyCompositionState, refreshHealthConnectStatus]);
 
   useFocusEffect(
     useCallback(() => {
       void refreshHealthConnectStatus();
       if (uid) {
-        void getSleepProfile(uid).then((sleepProfile) => {
+        void (async () => {
+          const samsungAutoSyncResult = await autoSyncBodyCompositionFromSamsungHealthIfEligible(uid, {
+            minIntervalMinutes: 60,
+          });
+          const bodyAutoSyncResult =
+            samsungAutoSyncResult === "synced"
+              ? "synced"
+              : await autoSyncBodyCompositionFromHealthConnectIfEligible(uid, {
+                  minIntervalMinutes: 60,
+                });
+          if (bodyAutoSyncResult === "synced") {
+            await refreshBodyComposition(uid, weightUnit);
+          }
+          const sleepProfile = await getSleepProfile(uid);
           setLastSleepSyncLabel(
             sleepProfile.lastSyncedAt
               ? sleepProfile.lastSyncedAt.toDate().toLocaleString()
               : "Not synced yet"
           );
-        });
+        })();
       }
       return undefined;
-    }, [refreshHealthConnectStatus, uid])
+    }, [refreshBodyComposition, refreshHealthConnectStatus, uid, weightUnit])
   );
 
   useEffect(() => {
@@ -345,25 +513,34 @@ export default function ProfileIndex() {
   }, [loading, initialSnapshot, buildSnapshot]);
 
   const healthConnectMessage = () => {
+    if (isOffline) {
+      return "You're offline. Reconnect before checking permissions or syncing.";
+    }
     if (healthAvailability === "provider_update_required") {
-      return "Download or update Health Connect from the Play Store.";
+      return "Update Health Connect to enable sleep sync.";
     }
     if (healthAvailability === "unavailable") {
-      return "Health Connect is unavailable on this device.";
+      return "Health Connect is unavailable on this device, so sleep sync is unavailable.";
     }
     if (healthAvailability === "unsupported") {
-      return "Health Connect is only supported on Android.";
+      return "Health sync is only supported on Android.";
+    }
+    if (healthPermissionState === "granted" && bodyHealthPermissionGranted) {
+      return "Ready. Sleep uses Health Connect. Body composition uses Samsung Health.";
+    }
+    if (samsungHealthIssue) {
+      return "Sleep can still use Health Connect. Samsung Health direct body composition is blocked for this build.";
     }
     if (healthPermissionState === "granted") {
-      return "Connected. Sleep data can now sync from Health Connect.";
+      return "Sleep is ready. Samsung Health body composition permission is still needed.";
+    }
+    if (bodyHealthPermissionGranted) {
+      return "Body composition is ready. Health Connect sleep permission is still needed.";
     }
     if (healthPermissionState === "denied" || healthPermissionState === "revoked") {
-      return "Sleep permission is required. Grant Health Connect permission to sync sleep data.";
+      return "Connect to allow sleep in Health Connect and body composition in Samsung Health.";
     }
-    if (isOffline) {
-      return "You're offline. Reconnect to refresh Health Connect status.";
-    }
-    return "Checking Health Connect status...";
+    return "Connect to set permissions, then use Sync now to import your latest records.";
   };
 
   const handleOpenPlayStore = async () => {
@@ -381,15 +558,80 @@ export default function ProfileIndex() {
       setHealthFeedback("You're offline. Reconnect to continue.");
       return;
     }
+    setHealthLoading(true);
     setHealthFeedback(null);
-    const opened =
-      (await openHealthConnectAppPermissionsScreen()) ||
-      (await openHealthConnectDataManagementScreen());
-    if (!opened) {
-      setHealthFeedback("Unable to open Health Connect settings on this device.");
-      return;
+    try {
+      let sleepGranted = false;
+      let samsungBodyGranted = false;
+      let healthConnectBodyGranted = false;
+      let samsungIssue: string | null = null;
+
+      if (healthAvailability === "provider_update_required") {
+        const opened = await openHealthConnectDataManagementScreen();
+        if (!opened) {
+          setHealthFeedback("Unable to open Health Connect settings on this device.");
+        }
+      } else if (healthAvailability !== "available") {
+        setHealthFeedback("Health Connect is unavailable on this device.");
+      } else {
+        const healthConnect = await import("react-native-health-connect");
+        await healthConnect.initialize();
+        await healthConnect.requestPermission([
+          { accessType: "read", recordType: "SleepSession" },
+          { accessType: "read", recordType: "Weight" },
+          { accessType: "read", recordType: "BodyFat" },
+          { accessType: "read", recordType: "LeanBodyMass" },
+        ]);
+        sleepGranted = await hasHealthSleepPermission();
+        healthConnectBodyGranted = await hasHealthBodyCompositionPermission();
+      }
+
+      try {
+        samsungBodyGranted = await requestSamsungHealthBodyCompositionPermission();
+      } catch (error) {
+        console.log("Failed to request Samsung Health body composition permissions", error);
+        samsungIssue = getSamsungHealthAccessIssueMessage(error);
+      }
+
+      await refreshHealthConnectStatus();
+
+      if (sleepGranted && (samsungBodyGranted || healthConnectBodyGranted)) {
+        setHealthFeedback(
+          samsungBodyGranted
+            ? "Health Connect sleep permission and Samsung Health body composition permission granted."
+            : "Health Connect sleep and fallback body composition permissions granted."
+        );
+        return;
+      }
+
+      if (samsungIssue) {
+        setHealthFeedback(
+          `${samsungIssue} Sleep permission can still be managed through Health Connect.`
+        );
+        return;
+      }
+
+      const opened =
+        (await openHealthConnectAppPermissionsScreen()) ||
+        (await openHealthConnectDataManagementScreen());
+      setHealthFeedback(
+        opened
+          ? "Some permissions are still missing. Enable sleep in Health Connect and body composition in Samsung Health."
+          : "Unable to open Health Connect settings on this device."
+      );
+    } catch (error) {
+      console.log("Failed to request Health Connect permissions", error);
+      const opened =
+        (await openHealthConnectAppPermissionsScreen()) ||
+        (await openHealthConnectDataManagementScreen());
+      setHealthFeedback(
+        opened
+          ? "Couldn't request permissions in-app. Enable sleep in Health Connect and body composition in Samsung Health."
+          : "Unable to open Health Connect settings on this device."
+      );
+    } finally {
+      setHealthLoading(false);
     }
-    await refreshHealthConnectStatus();
   };
 
   const applyEnergyUnit = (nextUnit: EnergyUnit) => {
@@ -406,6 +648,129 @@ export default function ProfileIndex() {
     setBulkCalories((previous) => convertText(previous));
     setEnergyUnit(nextUnit);
   };
+
+  const applyWeightUnit = (nextUnit: WeightUnit) => {
+    if (nextUnit === weightUnit) return;
+    const convertText = (raw: string) => {
+      const trimmed = raw.trim();
+      if (!trimmed) return raw;
+      const parsed = Number(trimmed);
+      if (!Number.isFinite(parsed)) return raw;
+      const kgValue = convertWeightUnitToKg(parsed, weightUnit);
+      return `${Math.round(convertKgToWeightUnit(kgValue, nextUnit) * 10) / 10}`;
+    };
+    setBodyWeight((previous) => convertText(previous));
+    setMuscleMass((previous) => convertText(previous));
+    setWeightUnit(nextUnit);
+  };
+
+  const handlePickProfilePhoto = useCallback(async () => {
+    setPhotoActionMenuVisible(false);
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      showAppAlert("Permission required", "Allow photo library access to choose a profile photo.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.7,
+    });
+    if (result.canceled || !result.assets[0]?.uri) return;
+    setProfilePhotoUri(result.assets[0].uri);
+  }, []);
+
+  const handleRemoveProfilePhoto = useCallback(() => {
+    setPhotoActionMenuVisible(false);
+    setProfilePhotoUri("");
+  }, []);
+
+  const handleSyncHealthConnectData = useCallback(async () => {
+    if (!uid) return;
+    if (isOffline) {
+      setHealthFeedback("You're offline. Reconnect to sync health data.");
+      return;
+    }
+    setHealthLoading(true);
+    setHealthFeedback(null);
+    try {
+      const [sleepGranted, healthConnectBodyGrantedNext] = await Promise.all([
+        hasHealthSleepPermission(),
+        hasHealthBodyCompositionPermission(),
+      ]);
+      let samsungBodyGranted = false;
+      let samsungIssue: string | null = null;
+      try {
+        samsungBodyGranted = await hasSamsungHealthBodyCompositionPermission();
+      } catch (error) {
+        samsungIssue = getSamsungHealthAccessIssueMessage(error);
+        setSamsungHealthIssue(samsungIssue);
+      }
+
+      if (!sleepGranted && !samsungBodyGranted && !healthConnectBodyGrantedNext) {
+        setHealthFeedback(samsungIssue ?? "Grant sleep and body composition permissions first.");
+        return;
+      }
+
+      const [sleepResult, bodyResult] = await Promise.all([
+        sleepGranted ? syncSleepFromHealthConnect(uid) : Promise.resolve({ status: "permission_denied" as const }),
+        samsungBodyGranted
+          ? syncBodyCompositionFromSamsungHealth(uid)
+          : healthConnectBodyGrantedNext
+            ? syncBodyCompositionFromHealthConnect(uid)
+            : Promise.resolve({ status: "permission_denied" as const }),
+      ]);
+
+      if (sleepResult.status === "success") {
+        const sleepProfile = await getSleepProfile(uid);
+        setLastSleepSyncLabel(
+          sleepProfile.lastSyncedAt
+            ? sleepProfile.lastSyncedAt.toDate().toLocaleString()
+            : "Not synced yet"
+        );
+      }
+      if (bodyResult.status === "success") {
+        await refreshBodyComposition(uid, weightUnit);
+      }
+
+      const messages: string[] = [];
+      if (sleepResult.status === "success") {
+        messages.push("Sleep synced.");
+      } else if (sleepResult.status === "no_data") {
+        messages.push("No sleep data found.");
+      } else if (sleepResult.status === "permission_denied") {
+        messages.push("Sleep permission missing.");
+      } else if (sleepResult.status === "error") {
+        messages.push(`Sleep sync failed: ${sleepResult.message}`);
+      }
+
+      if (bodyResult.status === "success") {
+        messages.push(
+          samsungBodyGranted
+            ? "Body composition synced from Samsung Health."
+            : "Body composition synced from Health Connect."
+        );
+      } else if (bodyResult.status === "no_data") {
+        messages.push("No body composition data found.");
+      } else if (bodyResult.status === "permission_denied") {
+        messages.push("Body composition permission missing.");
+      } else if (bodyResult.status === "error") {
+        messages.push(`Body composition sync failed: ${bodyResult.message}`);
+      }
+      if (samsungIssue && !samsungBodyGranted) {
+        messages.push(samsungIssue);
+      }
+
+      if (messages.length === 0) {
+        messages.push("Nothing was synced.");
+      }
+      setHealthFeedback(messages.join(" "));
+      await refreshHealthConnectStatus();
+    } finally {
+      setHealthLoading(false);
+    }
+  }, [isOffline, refreshBodyComposition, refreshHealthConnectStatus, uid, weightUnit]);
 
   const save = useCallback(async (): Promise<boolean> => {
     if (!uid) return false;
@@ -449,11 +814,35 @@ export default function ProfileIndex() {
       showAppAlert("Invalid protein target", "Protein target must be a positive number or blank.");
       return false;
     }
+    const parseOptionalBodyMetric = (raw: string, label: string) => {
+      const trimmed = raw.trim();
+      if (!trimmed) return null;
+      const parsed = Number(trimmed);
+      if (!Number.isFinite(parsed) || parsed < 0) {
+        showAppAlert("Invalid body composition", `${label} must be a positive number or blank.`);
+        return Number.NaN;
+      }
+      return Math.round(parsed * 10) / 10;
+    };
+    const parsedWeight = parseOptionalBodyMetric(bodyWeight, "Body weight");
+    if (Number.isNaN(parsedWeight)) return false;
+    const parsedBodyFat = parseOptionalBodyMetric(bodyFatPercent, "Body fat %");
+    if (Number.isNaN(parsedBodyFat)) return false;
+    const parsedMuscleMass = parseOptionalBodyMetric(muscleMass, "Muscle mass");
+    if (Number.isNaN(parsedMuscleMass)) return false;
+    const nextWeightKg =
+      typeof parsedWeight === "number" ? convertWeightUnitToKg(parsedWeight, weightUnit) : null;
+    const nextMuscleMassKg =
+      typeof parsedMuscleMass === "number"
+        ? convertWeightUnitToKg(parsedMuscleMass, weightUnit)
+        : null;
 
     try {
       const profilePayload: Record<string, unknown> = {
         goal,
-        nickname,
+        nickname: nickname.trim(),
+        description: profileDescription.trim(),
+        profilePhotoUri: profilePhotoUri.trim(),
         trainingPhase,
         dietPhase,
         weightUnit,
@@ -505,6 +894,29 @@ export default function ProfileIndex() {
         parsedTargets,
         parsedProteinTarget == null ? null : Math.round(parsedProteinTarget)
       );
+      const bodyCompositionUpdates: {
+        weightKg?: number | null;
+        bodyFatPercent?: number | null;
+        muscleMassKg?: number | null;
+      } = {};
+      const hasMetricChanged = (nextValue: number | null, currentValue: number | null) =>
+        typeof nextValue === "number" &&
+        (typeof currentValue !== "number" || Math.abs(nextValue - currentValue) > 0.05);
+      if (
+        hasMetricChanged(nextWeightKg, bodyCompositionEffective.weightKg)
+      ) {
+        bodyCompositionUpdates.weightKg = nextWeightKg;
+      }
+      if (hasMetricChanged(parsedBodyFat, bodyCompositionEffective.bodyFatPercent)) {
+        bodyCompositionUpdates.bodyFatPercent = parsedBodyFat;
+      }
+      if (hasMetricChanged(nextMuscleMassKg, bodyCompositionEffective.muscleMassKg)) {
+        bodyCompositionUpdates.muscleMassKg = nextMuscleMassKg;
+      }
+      if (Object.keys(bodyCompositionUpdates).length > 0) {
+        await saveManualBodyCompositionEntry(uid, bodyCompositionUpdates);
+        await refreshBodyComposition(uid, weightUnit);
+      }
       setInitialTrainingPhase(trainingPhase);
       setInitialDietPhase(dietPhase);
       setTrainingPhaseHistory(nextTrainingHistory);
@@ -533,6 +945,8 @@ export default function ProfileIndex() {
     proteinTargetGrams,
     goal,
     nickname,
+    profileDescription,
+    profilePhotoUri,
     trainingPhase,
     dietPhase,
     weightUnit,
@@ -544,7 +958,14 @@ export default function ProfileIndex() {
     initialDietPhase,
     currentTrainingPhaseStartedAt,
     currentDietPhaseStartedAt,
+    bodyWeight,
+    bodyFatPercent,
+    muscleMass,
+    bodyCompositionEffective.weightKg,
+    bodyCompositionEffective.bodyFatPercent,
+    bodyCompositionEffective.muscleMassKg,
     buildSnapshot,
+    refreshBodyComposition,
   ]);
 
   const navigateBack = useCallback((destination?: Href | null) => {
@@ -683,7 +1104,22 @@ export default function ProfileIndex() {
     }, [navigation, hasUnsavedChanges, save, initialSnapshot, restoreFromSnapshot])
   );
 
-  const isHealthConnected = healthPermissionState === "granted";
+  const isHealthConnected =
+    healthPermissionState === "granted" && (bodyHealthPermissionGranted || healthConnectBodyPermissionGranted);
+  const latestBodyCompositionLabel = formatBodyCompositionTimestamp(
+    bodyCompositionEffective.recordedAt
+  );
+  const latestBodyCompositionSource = formatBodyCompositionSource(
+    bodyCompositionEffective.source,
+    bodyCompositionEffective.originLabel
+  );
+  const bodyCompositionHistory = bodyCompositionProfile?.history ?? [];
+  const visibleBodyCompositionHistory = bodyHistoryExpanded
+    ? bodyCompositionHistory.slice(0, 8)
+    : bodyCompositionHistory.slice(0, 3);
+  const lastBodySyncLabel = bodyCompositionProfile?.lastSyncedAt
+    ? bodyCompositionProfile.lastSyncedAt.toDate().toLocaleString()
+    : "Not synced yet";
 
   if (redirectTo) return <Redirect href={redirectTo} />;
   if (loading) {
@@ -710,7 +1146,26 @@ export default function ProfileIndex() {
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Nickname</Text>
+          <Text style={styles.cardTitle}>Profile identity</Text>
+          <View style={styles.identityRow}>
+            <View style={styles.profilePhotoWrap}>
+              {profilePhotoUri ? (
+                <Image source={{ uri: profilePhotoUri }} style={styles.profilePhoto} contentFit="cover" />
+              ) : (
+                <View style={[styles.profilePhoto, styles.profilePhotoPlaceholder]}>
+                  <Ionicons name="person" size={28} color="#d8daec" />
+                </View>
+              )}
+              <TouchableOpacity
+                style={styles.profilePhotoAction}
+                onPress={() => setPhotoActionMenuVisible(true)}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="camera" size={15} color="#eef1ff" />
+              </TouchableOpacity>
+            </View>
+          </View>
+          <Text style={styles.targetLabel}>Nickname</Text>
           <TextInput
             placeholder="Your nickname"
             placeholderTextColor="#7a7a8c"
@@ -718,7 +1173,42 @@ export default function ProfileIndex() {
             value={nickname}
             onChangeText={setNickname}
           />
+          <Text style={styles.targetLabel}>Description</Text>
+          <TextInput
+            placeholder="Short description"
+            placeholderTextColor="#7a7a8c"
+            style={[styles.input, styles.multilineInput]}
+            value={profileDescription}
+            onChangeText={setProfileDescription}
+            multiline
+            textAlignVertical="top"
+            maxLength={160}
+          />
         </View>
+
+        <Modal
+          visible={photoActionMenuVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setPhotoActionMenuVisible(false)}
+        >
+          <Pressable style={styles.photoActionOverlay} onPress={() => setPhotoActionMenuVisible(false)}>
+            <Pressable style={styles.photoActionSheet} onPress={(event) => event.stopPropagation()}>
+              <TouchableOpacity style={styles.photoActionItem} onPress={handlePickProfilePhoto}>
+                <Ionicons name={profilePhotoUri ? "image-outline" : "camera-outline"} size={18} color="#f4f7ff" />
+                <Text style={styles.photoActionItemText}>
+                  {profilePhotoUri ? "Change photo" : "Add photo"}
+                </Text>
+              </TouchableOpacity>
+              {profilePhotoUri ? (
+                <TouchableOpacity style={styles.photoActionItem} onPress={handleRemoveProfilePhoto}>
+                  <Ionicons name="trash-outline" size={18} color="#ffb4b4" />
+                  <Text style={[styles.photoActionItemText, styles.photoActionDeleteText]}>Remove photo</Text>
+                </TouchableOpacity>
+              ) : null}
+            </Pressable>
+          </Pressable>
+        </Modal>
 
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Goal</Text>
@@ -813,7 +1303,7 @@ export default function ProfileIndex() {
             {(["kg", "lbs"] as WeightUnit[]).map((unit) => (
               <TouchableOpacity
                 key={unit}
-                onPress={() => setWeightUnit(unit)}
+                onPress={() => applyWeightUnit(unit)}
                 style={[styles.chip, weightUnit === unit && styles.chipActive]}
               >
                 <Text style={[styles.chipText, weightUnit === unit && styles.chipTextActive]}>
@@ -849,6 +1339,89 @@ export default function ProfileIndex() {
                 </Text>
               </TouchableOpacity>
             ))}
+          </View>
+        </View>
+
+        <View style={styles.card}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.cardTitleNoMargin}>Body composition</Text>
+          </View>
+          <Text style={styles.helperText}>Latest source: {latestBodyCompositionSource}</Text>
+          <Text style={styles.helperText}>Last updated: {latestBodyCompositionLabel}</Text>
+          <View style={styles.targetRow}>
+            <View style={styles.targetColumn}>
+              <Text style={styles.targetLabel}>Weight ({weightUnit})</Text>
+              <TextInput
+                placeholder={weightUnit === "lbs" ? "176.4" : "80.0"}
+                placeholderTextColor="#7a7a8c"
+                style={styles.input}
+                value={bodyWeight}
+                onChangeText={setBodyWeight}
+                keyboardType="decimal-pad"
+              />
+            </View>
+            <View style={styles.targetColumn}>
+              <Text style={styles.targetLabel}>Body fat (%)</Text>
+              <TextInput
+                placeholder="15.0"
+                placeholderTextColor="#7a7a8c"
+                style={styles.input}
+                value={bodyFatPercent}
+                onChangeText={setBodyFatPercent}
+                keyboardType="decimal-pad"
+              />
+            </View>
+            <View style={styles.targetColumn}>
+              <Text style={styles.targetLabel}>Skeletal muscle ({weightUnit})</Text>
+              <TextInput
+                placeholder={weightUnit === "lbs" ? "88.2" : "40.0"}
+                placeholderTextColor="#7a7a8c"
+                style={styles.input}
+                value={muscleMass}
+                onChangeText={setMuscleMass}
+                keyboardType="decimal-pad"
+              />
+            </View>
+          </View>
+          <View style={styles.historySection}>
+            <Text style={styles.targetLabel}>Recent history</Text>
+            {bodyCompositionHistory.length === 0 ? (
+              <Text style={styles.helperText}>No body composition records yet.</Text>
+            ) : (
+              <>
+                {visibleBodyCompositionHistory.map((entry, index) => (
+                  <View
+                    key={`${entry.source}-${entry.recordedAt?.toMillis() ?? index}-${index}`}
+                    style={styles.historyRow}
+                  >
+                    <View style={styles.historyRowHeader}>
+                      <Text style={styles.historyRowTitle}>
+                        {formatBodyCompositionSource(entry.source, entry.originLabel)}
+                      </Text>
+                      <Text style={styles.historyRowMeta}>
+                        {formatBodyCompositionTimestamp(entry.recordedAt)}
+                      </Text>
+                    </View>
+                    <Text style={styles.historyRowValues}>
+                      {`W ${formatWeightForUnit(entry.weightKg, weightUnit) || "-"} ${weightUnit} | BF ${
+                        formatPercent(entry.bodyFatPercent) || "-"
+                      }% | MM ${formatWeightForUnit(entry.muscleMassKg, weightUnit) || "-"} ${weightUnit}`}
+                    </Text>
+                  </View>
+                ))}
+                {bodyCompositionHistory.length > 3 ? (
+                  <TouchableOpacity
+                    style={styles.historyToggle}
+                    onPress={() => setBodyHistoryExpanded((previous) => !previous)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.historyToggleText}>
+                      {bodyHistoryExpanded ? "Show less" : "Show more"}
+                    </Text>
+                  </TouchableOpacity>
+                ) : null}
+              </>
+            )}
           </View>
         </View>
 
@@ -925,14 +1498,20 @@ export default function ProfileIndex() {
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Health Connect</Text>
+          <Text style={styles.cardTitle}>Health sync</Text>
+          <Text style={styles.helperText}>Sleep uses Health Connect. Body composition uses Samsung Health.</Text>
+          <Text style={styles.helperText}>Account: {connectedAccountLabel ?? "Not signed in"}</Text>
           <Text style={styles.helperText}>
-            Linked account: {connectedAccountLabel ?? "Not signed in"}
+            Sleep access: {healthPermissionState === "granted" ? "Ready" : "Needs permission"}
           </Text>
           <Text style={styles.helperText}>
-            Last sleep sync for this account: {lastSleepSyncLabel}
+            Body composition access: {bodyHealthPermissionGranted ? "Ready" : "Needs permission"}
           </Text>
+          <Text style={styles.helperText}>Last sleep sync: {lastSleepSyncLabel}</Text>
+          <Text style={styles.helperText}>Last body sync: {lastBodySyncLabel}</Text>
           <Text style={styles.helperText}>{healthConnectMessage()}</Text>
+          <Text style={styles.healthHint}>Connect sets up permissions. Sync now imports your latest health data.</Text>
+          {samsungHealthIssue ? <Text style={styles.healthHint}>{samsungHealthIssue}</Text> : null}
           <View style={styles.healthActionsRow}>
             <TouchableOpacity
               style={[
@@ -945,13 +1524,26 @@ export default function ProfileIndex() {
               onPress={handleConnectHealthPermission}
             >
               <Text style={[styles.secondaryButtonText, isHealthConnected && styles.connectedButtonText]}>
-                {isHealthConnected ? "Connected" : "🔗 Connect"}
+                {isHealthConnected ? "Permissions set" : "Connect"}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.secondaryButton,
+                styles.healthActionButton,
+                healthLoading && styles.buttonDisabled,
+              ]}
+              disabled={healthLoading}
+              onPress={handleSyncHealthConnectData}
+            >
+              <Text style={styles.secondaryButtonText}>
+                {healthLoading ? "Syncing..." : "Sync now"}
               </Text>
             </TouchableOpacity>
           </View>
-          {!isHealthConnected ? (
+          {!isHealthConnected || !bodyHealthPermissionGranted ? (
             <Text style={styles.healthHint}>
-              In Health Connect: App permissions {"->"} Lastrep Dev {"->"} Allow all.
+              If prompted, allow sleep in Health Connect and body composition in Samsung Health.
             </Text>
           ) : null}
           {healthAvailability === "provider_update_required" ? (
@@ -1014,6 +1606,76 @@ const styles = StyleSheet.create({
   },
   energyUnitToggleText: { color: "#fff", fontWeight: "700", fontSize: 12 },
   availabilityValue: { color: "#fff", fontSize: 18, fontWeight: "700", marginBottom: 2 },
+  identityRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  profilePhotoWrap: {
+    position: "relative",
+  },
+  profilePhoto: {
+    width: 104,
+    height: 104,
+    borderRadius: 28,
+    overflow: "hidden",
+    backgroundColor: "rgba(255,255,255,0.12)",
+  },
+  profilePhotoPlaceholder: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  profilePhotoAction: {
+    position: "absolute",
+    right: 4,
+    bottom: 4,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "rgba(22, 22, 37, 0.82)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+  photoActionOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(5, 8, 18, 0.56)",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 24,
+  },
+  photoActionSheet: {
+    width: "100%",
+    maxWidth: 280,
+    borderRadius: 22,
+    paddingVertical: 10,
+    backgroundColor: "#171a2a",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+  photoActionItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+  },
+  photoActionItemText: {
+    color: "#f4f7ff",
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  photoActionDeleteText: {
+    color: "#ffb4b4",
+  },
+  multilineInput: {
+    minHeight: 88,
+  },
   availabilityTicksRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -1081,6 +1743,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.24)",
     paddingVertical: 12,
+    paddingHorizontal: 12,
     alignItems: "center",
   },
   secondaryButtonText: { color: "#fff", fontSize: 14, fontWeight: "600" },
@@ -1101,7 +1764,48 @@ const styles = StyleSheet.create({
   connectedButtonText: {
     color: "#c6f5d8",
   },
+  historySection: {
+    gap: 10,
+    paddingTop: 4,
+  },
+  historyRow: {
+    gap: 4,
+    paddingTop: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "rgba(255,255,255,0.08)",
+  },
+  historyRowHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  historyRowTitle: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  historyRowMeta: {
+    color: "#8f96ae",
+    fontSize: 11,
+  },
+  historyRowValues: {
+    color: "#cfcfe6",
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  historyToggle: {
+    alignSelf: "flex-start",
+    paddingTop: 4,
+    paddingBottom: 2,
+  },
+  historyToggleText: {
+    color: "#dbe3ff",
+    fontSize: 12,
+    fontWeight: "700",
+  },
   save: { backgroundColor: "#7b61ff", borderRadius: 12, alignItems: "center", paddingVertical: 14, marginTop: 22 },
   saveText: { color: "#fff", fontWeight: "800", fontSize: 15 },
   saveFeedback: { color: "#a6e3a1", textAlign: "center", fontSize: 13, marginTop: 8 },
 });
+

@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import Slider from "@react-native-community/slider";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Image } from "expo-image";
 import { Href, Redirect, useFocusEffect, useRouter } from "expo-router";
 import { onAuthStateChanged } from "firebase/auth";
 import {
@@ -212,6 +213,8 @@ export default function Home() {
   const [authReady, setAuthReady] = useState(false);
   const [uid, setUid] = useState<string | null>(null);
   const [userNickname, setUserNickname] = useState<string | null>(null);
+  const [profilePhotoUri, setProfilePhotoUri] = useState<string | null>(null);
+  const [profileDescription, setProfileDescription] = useState<string | null>(null);
   const [showFirstTimeBanner, setShowFirstTimeBanner] = useState(false);
 
   const [soreness, setSoreness] = useState(4);
@@ -227,6 +230,7 @@ export default function Home() {
   const [latestDecision, setLatestDecision] = useState<LastResultPayload | null>(null);
   const [showAdjustHelp, setShowAdjustHelp] = useState(false);
   const [showAdjustInputsModal, setShowAdjustInputsModal] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
   const [showCalendarModal, setShowCalendarModal] = useState(false);
   const [showDayModal, setShowDayModal] = useState(false);
   const [activeDashboardMetric, setActiveDashboardMetric] = useState<DashboardMetricKey | null>(
@@ -311,6 +315,8 @@ export default function Home() {
   useEffect(() => {
     if (!uid) {
       setUserNickname(null);
+      setProfilePhotoUri(null);
+      setProfileDescription(null);
       return;
     }
 
@@ -319,7 +325,12 @@ export default function Home() {
       (snap) => {
         const data: any = snap.data();
         const nickname = typeof data?.nickname === "string" ? data.nickname.trim() : "";
+        const photoUri = typeof data?.profilePhotoUri === "string" ? data.profilePhotoUri.trim() : "";
+        const description =
+          typeof data?.description === "string" ? data.description.trim() : "";
         setUserNickname(nickname || null);
+        setProfilePhotoUri(photoUri || null);
+        setProfileDescription(description || null);
         if (isTrainingPhase(data?.trainingPhase)) {
           setTrainingPhase(data.trainingPhase);
         }
@@ -1346,8 +1357,31 @@ export default function Home() {
     <View style={styles.container}>
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Text style={styles.greeting}>lastrep</Text>
-          <View style={styles.userRow}>
+          <View style={styles.headerTopRow}>
+            <Text style={styles.greeting}>lastrep</Text>
+            <View style={styles.iconContainer}>
+              <TouchableOpacity onPress={() => setShowCalendarModal(true)}>
+                <Ionicons name="calendar-outline" size={26} color="#fff" />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => router.push("/settings" as Href)} style={{ marginLeft: 12 }}>
+                <Ionicons name="settings-outline" size={28} color="#fff" />
+              </TouchableOpacity>
+            </View>
+          </View>
+          <TouchableOpacity
+            style={styles.userRow}
+            activeOpacity={0.85}
+            onPress={() => setShowProfileModal(true)}
+          >
+            {profilePhotoUri ? (
+              <Image source={{ uri: profilePhotoUri }} style={styles.headerAvatar} contentFit="cover" />
+            ) : (
+              <View style={[styles.headerAvatar, styles.headerAvatarPlaceholder]}>
+                <Text style={styles.headerAvatarInitial}>
+                  {(userNickname ?? "L").trim().charAt(0).toUpperCase() || "L"}
+                </Text>
+              </View>
+            )}
             <Text style={styles.userName}>{userNickname ?? "Lifter"}</Text>
             <View
               style={[
@@ -1374,14 +1408,6 @@ export default function Home() {
                     : "Checking"}
               </Text>
             </View>
-          </View>
-        </View>
-        <View style={styles.iconContainer}>
-          <TouchableOpacity onPress={() => setShowCalendarModal(true)}>
-            <Ionicons name="calendar-outline" size={26} color="#fff" />
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => router.push("/settings" as Href)} style={{ marginLeft: 12 }}>
-            <Ionicons name="settings-outline" size={28} color="#fff" />
           </TouchableOpacity>
         </View>
       </View>
@@ -2005,6 +2031,38 @@ export default function Home() {
         </View>
       </Modal>
 
+      <Modal visible={showProfileModal} transparent animationType="fade">
+        <TouchableWithoutFeedback onPress={() => setShowProfileModal(false)}>
+          <View style={styles.modalBackdrop}>
+            <TouchableWithoutFeedback onPress={() => {}}>
+              <View style={styles.profileModalCard}>
+                {profilePhotoUri ? (
+                  <Image
+                    source={{ uri: profilePhotoUri }}
+                    style={styles.profileModalAvatar}
+                    contentFit="cover"
+                  />
+                ) : (
+                  <View style={[styles.profileModalAvatar, styles.headerAvatarPlaceholder]}>
+                    <Text style={styles.profileModalInitial}>
+                      {(userNickname ?? "L").trim().charAt(0).toUpperCase() || "L"}
+                    </Text>
+                  </View>
+                )}
+                <Text style={styles.profileModalName}>{userNickname ?? "Lifter"}</Text>
+                {profileDescription ? (
+                  <Text style={styles.profileModalDescription}>{profileDescription}</Text>
+                ) : (
+                  <Text style={styles.profileModalDescriptionMuted}>
+                    No description added yet.
+                  </Text>
+                )}
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
+
       <Modal visible={showAdjustInputsModal} transparent animationType="fade">
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
@@ -2073,7 +2131,28 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   headerLeft: {
-    flexShrink: 1,
+    flex: 1,
+  },
+  headerTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  headerAvatar: {
+    width: 64,
+    height: 64,
+    borderRadius: 18,
+    backgroundColor: "rgba(255,255,255,0.1)",
+  },
+  headerAvatarPlaceholder: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  headerAvatarInitial: {
+    color: "#fff",
+    fontSize: 24,
+    fontWeight: "800",
   },
   greeting: {
     color: "#ccc",
@@ -2082,14 +2161,15 @@ const styles = StyleSheet.create({
   },
   userName: {
     color: "#fff",
-    fontSize: 16,
-    fontWeight: "700",
+    fontSize: 18,
+    fontWeight: "800",
   },
   userRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    flexWrap: "wrap",
+    gap: 14,
+    flexWrap: "nowrap",
+    marginTop: 12,
   },
   entitlementBadge: {
     borderRadius: 999,
@@ -2416,6 +2496,47 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 24,
+  },
+  profileModalCard: {
+    width: "100%",
+    maxWidth: 360,
+    backgroundColor: "#161625",
+    borderRadius: 24,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.12)",
+    alignItems: "center",
+    paddingHorizontal: 24,
+    paddingVertical: 28,
+    gap: 14,
+  },
+  profileModalAvatar: {
+    width: 148,
+    height: 148,
+    borderRadius: 40,
+    backgroundColor: "rgba(255,255,255,0.1)",
+  },
+  profileModalInitial: {
+    color: "#fff",
+    fontSize: 52,
+    fontWeight: "800",
+  },
+  profileModalName: {
+    color: "#fff",
+    fontSize: 24,
+    fontWeight: "800",
+    textAlign: "center",
+  },
+  profileModalDescription: {
+    color: "#d5d9ea",
+    fontSize: 15,
+    lineHeight: 22,
+    textAlign: "center",
+  },
+  profileModalDescriptionMuted: {
+    color: "#8e96ad",
+    fontSize: 14,
+    lineHeight: 21,
+    textAlign: "center",
   },
   modalCard: {
     width: "100%",

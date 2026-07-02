@@ -15,7 +15,10 @@
     "android": {
       "package": "com.kjeehwan.lastrep",
       "permissions": [
-        "android.permission.health.READ_SLEEP"
+        "android.permission.health.READ_SLEEP",
+        "android.permission.health.READ_WEIGHT",
+        "android.permission.health.READ_BODY_FAT",
+        "android.permission.health.READ_LEAN_BODY_MASS"
       ],
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
@@ -36,7 +39,7 @@
         "expo-build-properties",
         {
           "android": {
-            "minSdkVersion": 26
+            "minSdkVersion": 29
           }
         }
       ],

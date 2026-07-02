@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="title desc">
+  <title id="title">Lastrep Data Flow Diagram</title>
+  <desc id="desc">High-Level Architecture Diagram for reading body composition and sleep data from Samsung Health into Lastrep.</desc>
+  <defs>
+    <style>
+      .bg { fill: #0b1020; }
+      .title { fill: #f5f7ff; font: 700 34px Arial, sans-serif; }
+      .subtitle { fill: #c7d1ee; font: 400 18px Arial, sans-serif; }
+      .boxSources { fill: #243044; stroke: #90a5c8; stroke-width: 2; rx: 20; ry: 20; }
+      .boxSamsung { fill: #173224; stroke: #63b186; stroke-width: 2; rx: 20; ry: 20; }
+      .boxSdk { fill: #2d2442; stroke: #aa92d9; stroke-width: 2; rx: 20; ry: 20; }
+      .boxNative { fill: #1d3652; stroke: #78aee2; stroke-width: 2; rx: 20; ry: 20; }
+      .boxStorage { fill: #3a281c; stroke: #da9162; stroke-width: 2; rx: 20; ry: 20; }
+      .boxUi { fill: #3a2137; stroke: #d48cbe; stroke-width: 2; rx: 20; ry: 20; }
+      .label { fill: #f2f5ff; font: 700 20px Arial, sans-serif; }
+      .body { fill: #d4dcf1; font: 400 16px Arial, sans-serif; }
+      .arrow { stroke: #e5ebff; stroke-width: 4; fill: none; marker-end: url(#arrowhead); }
+    </style>
+    <marker id="arrowhead" markerWidth="12" markerHeight="12" refX="9" refY="6" orient="auto">
+      <polygon points="0 0, 12 6, 0 12" fill="#e5ebff" />
+    </marker>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1600" height="900" />
+
+  <text class="title" x="70" y="70">Lastrep Data Flow Diagram</text>
+  <text class="subtitle" x="70" y="104">High-Level Architecture Diagram for reading body composition and sleep data from Samsung Health into Lastrep.</text>
+
+  <rect class="boxSources" x="90" y="180" width="380" height="180" />
+  <text class="label" x="120" y="220">Data Sources</text>
+  <text class="body" x="120" y="258">Galaxy Watch and device sensors</text>
+  <text class="body" x="120" y="288">InBody app and device</text>
+  <text class="body" x="120" y="318">Other data recorded in Samsung Health</text>
+
+  <rect class="boxSamsung" x="610" y="180" width="380" height="180" />
+  <text class="label" x="640" y="220">Samsung Health App</text>
+  <text class="body" x="640" y="258">Stores body composition data</text>
+  <text class="body" x="640" y="288">Stores sleep data</text>
+  <text class="body" x="640" y="318">Central Samsung Health data store</text>
+
+  <rect class="boxSdk" x="1130" y="180" width="380" height="180" />
+  <text class="label" x="1160" y="220">Samsung Health Data SDK</text>
+  <text class="body" x="1160" y="258">Provides authorized read access</text>
+  <text class="body" x="1160" y="288">Used to read body composition data</text>
+  <text class="body" x="1160" y="318">Used to read sleep data</text>
+
+  <rect class="boxNative" x="90" y="520" width="380" height="180" />
+  <text class="label" x="120" y="560">Lastrep Native Integration</text>
+  <text class="body" x="120" y="598">Requests Samsung Health permissions</text>
+  <text class="body" x="120" y="628">Reads and parses SDK records</text>
+  <text class="body" x="120" y="658">Maps returned data for the app</text>
+
+  <rect class="boxStorage" x="610" y="520" width="380" height="180" />
+  <text class="label" x="640" y="560">Lastrep Data Storage</text>
+  <text class="body" x="640" y="598">Stores sleep history</text>
+  <text class="body" x="640" y="628">Stores body composition history</text>
+  <text class="body" x="640" y="658">Stores timestamps and source metadata</text>
+
+  <rect class="boxUi" x="1130" y="520" width="380" height="180" />
+  <text class="label" x="1160" y="560">Lastrep User Interface</text>
+  <text class="body" x="1160" y="598">Displays body composition trends</text>
+  <text class="body" x="1160" y="628">Displays sleep trends</text>
+  <text class="body" x="1160" y="658">Displays recovery and progress views</text>
+
+  <path class="arrow" d="M470 270 H610" />
+  <path class="arrow" d="M990 270 H1130" />
+  <path class="arrow" d="M470 610 H610" />
+  <path class="arrow" d="M990 610 H1130" />
+  <path class="arrow" d="M1320 360 V430 H280 V520" />
+</svg>
