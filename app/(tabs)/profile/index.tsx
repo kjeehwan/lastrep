@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import Slider from "@react-native-community/slider";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
 import { Href, Redirect, useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from "expo-router";
@@ -120,6 +121,7 @@ type ProfileSnapshot = {
 };
 const KCAL_TO_KJ = 4.184;
 const LBS_TO_KG = 0.453592;
+const HEALTH_SYNC_CONSENT_KEY = "healthSyncConsentAccepted";
 const isWeightUnit = (value: unknown): value is WeightUnit => value === "kg" || value === "lbs";
 const isHeightUnit = (value: unknown): value is HeightUnit => value === "cm" || value === "ft/in";
 const isEnergyUnit = (value: unknown): value is EnergyUnit => value === "kcal" || value === "kJ";
@@ -187,6 +189,8 @@ export default function ProfileIndex() {
   const [bodyHealthPermissionGranted, setBodyHealthPermissionGranted] = useState(false);
   const [healthConnectBodyPermissionGranted, setHealthConnectBodyPermissionGranted] = useState(false);
   const [samsungHealthIssue, setSamsungHealthIssue] = useState<string | null>(null);
+  const [healthConsentAccepted, setHealthConsentAccepted] = useState(false);
+  const [healthConsentVisible, setHealthConsentVisible] = useState(false);
   const [saveFeedback, setSaveFeedback] = useState<string | null>(null);
   const [redirectTo, setRedirectTo] = useState<Href | null>(null);
   const [connectedAccountLabel, setConnectedAccountLabel] = useState<string | null>(null);
@@ -477,6 +481,23 @@ export default function ProfileIndex() {
     return unsub;
   }, [applyBodyCompositionState, refreshHealthConnectStatus]);
 
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const accepted = await AsyncStorage.getItem(HEALTH_SYNC_CONSENT_KEY);
+        if (!cancelled) {
+          setHealthConsentAccepted(accepted === "true");
+        }
+      } catch (error) {
+        console.log("Failed to load health sync consent state", error);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
       void refreshHealthConnectStatus();
@@ -633,6 +654,57 @@ export default function ProfileIndex() {
       setHealthLoading(false);
     }
   };
+
+  const handleOpenHealthConsent = () => {
+    if (healthConsentAccepted) {
+      void handleConnectHealthPermission();
+      return;
+    }
+    setHealthConsentVisible(true);
+  };
+
+  const handleAcceptHealthConsent = () => {
+    void (async () => {
+      try {
+        await AsyncStorage.setItem(HEALTH_SYNC_CONSENT_KEY, "true");
+        setHealthConsentAccepted(true);
+      } catch (error) {
+        console.log("Failed to persist health sync consent", error);
+      } finally {
+        setHealthConsentVisible(false);
+        void handleConnectHealthPermission();
+      }
+    })();
+  };
+
+  const handleManageHealthPermissions = useCallback(async () => {
+    const opened =
+      (await openHealthConnectAppPermissionsScreen()) ||
+      (await openHealthConnectDataManagementScreen());
+    setHealthFeedback(
+      opened
+        ? "Review sleep permission in Health Connect. For body composition, review Lastrep access inside Samsung Health."
+        : "Unable to open health permission settings on this device."
+    );
+  }, []);
+
+  const handleDisconnectHealth = useCallback(() => {
+    showAppDialog({
+      title: "Disconnect health sync",
+      message:
+        "Lastrep cannot revoke health access directly. Continue to permission settings and turn off sleep in Health Connect and body composition in Samsung Health.",
+      buttons: [
+        {
+          text: "Open settings",
+          role: "destructive",
+          onPress: () => {
+            void handleManageHealthPermissions();
+          },
+        },
+        { text: "Cancel", role: "cancel" },
+      ],
+    });
+  }, [handleManageHealthPermissions]);
 
   const applyEnergyUnit = (nextUnit: EnergyUnit) => {
     if (nextUnit === energyUnit) return;
@@ -1106,6 +1178,11 @@ export default function ProfileIndex() {
 
   const isHealthConnected =
     healthPermissionState === "granted" && (bodyHealthPermissionGranted || healthConnectBodyPermissionGranted);
+  const healthConnectionStatus = isHealthConnected
+    ? "Connected"
+    : healthPermissionState === "granted" || bodyHealthPermissionGranted
+      ? "Partially connected"
+      : "Not connected";
   const latestBodyCompositionLabel = formatBodyCompositionTimestamp(
     bodyCompositionEffective.recordedAt
   );
@@ -1501,6 +1578,8 @@ export default function ProfileIndex() {
           <Text style={styles.cardTitle}>Health sync</Text>
           <Text style={styles.helperText}>Sleep uses Health Connect. Body composition uses Samsung Health.</Text>
           <Text style={styles.helperText}>Account: {connectedAccountLabel ?? "Not signed in"}</Text>
+          <Text style={styles.helperText}>Connected status: {healthConnectionStatus}</Text>
+          <Text style={styles.helperText}>Data used: Sleep, Body composition</Text>
           <Text style={styles.helperText}>
             Sleep access: {healthPermissionState === "granted" ? "Ready" : "Needs permission"}
           </Text>
@@ -1521,7 +1600,7 @@ export default function ProfileIndex() {
                 healthLoading && styles.buttonDisabled,
               ]}
               disabled={healthLoading}
-              onPress={handleConnectHealthPermission}
+              onPress={handleOpenHealthConsent}
             >
               <Text style={[styles.secondaryButtonText, isHealthConnected && styles.connectedButtonText]}>
                 {isHealthConnected ? "Permissions set" : "Connect"}
@@ -1541,6 +1620,22 @@ export default function ProfileIndex() {
               </Text>
             </TouchableOpacity>
           </View>
+          <View style={styles.healthActionsRow}>
+            <TouchableOpacity
+              style={[styles.secondaryButton, styles.healthActionButton, healthLoading && styles.buttonDisabled]}
+              disabled={healthLoading}
+              onPress={handleManageHealthPermissions}
+            >
+              <Text style={styles.secondaryButtonText}>Manage permissions</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.secondaryButton, styles.healthActionButton, healthLoading && styles.buttonDisabled]}
+              disabled={healthLoading}
+              onPress={handleDisconnectHealth}
+            >
+              <Text style={styles.secondaryButtonText}>Disconnect</Text>
+            </TouchableOpacity>
+          </View>
           {!isHealthConnected || !bodyHealthPermissionGranted ? (
             <Text style={styles.healthHint}>
               If prompted, allow sleep in Health Connect and body composition in Samsung Health.
@@ -1557,6 +1652,33 @@ export default function ProfileIndex() {
           ) : null}
           {healthFeedback ? <Text style={styles.healthFeedback}>{healthFeedback}</Text> : null}
         </View>
+
+        <Modal
+          visible={healthConsentVisible}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setHealthConsentVisible(false)}
+        >
+          <Pressable style={styles.sheetOverlay} onPress={() => setHealthConsentVisible(false)}>
+            <Pressable style={styles.sheetCard} onPress={(event) => event.stopPropagation()}>
+              <View style={styles.sheetHandle} />
+              <Text style={styles.sheetTitle}>Connect health data</Text>
+              <Text style={styles.sheetText}>
+                Lastrep can read sleep and body composition data to show trends, recovery insights, and progress.
+              </Text>
+              <Text style={styles.sheetText}>Data read: Sleep, Body composition</Text>
+              <Text style={styles.sheetText}>You can manage or disconnect this later in Profile.</Text>
+              <View style={styles.sheetActions}>
+                <TouchableOpacity style={styles.sheetSecondaryButton} onPress={() => setHealthConsentVisible(false)}>
+                  <Text style={styles.sheetSecondaryButtonText}>Not now</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.sheetPrimaryButton} onPress={handleAcceptHealthConsent}>
+                  <Text style={styles.sheetPrimaryButtonText}>Continue</Text>
+                </TouchableOpacity>
+              </View>
+            </Pressable>
+          </Pressable>
+        </Modal>
 
         <TouchableOpacity style={styles.save} onPress={save}>
           <Text style={styles.saveText}>Save Changes</Text>
@@ -1763,6 +1885,75 @@ const styles = StyleSheet.create({
   },
   connectedButtonText: {
     color: "#c6f5d8",
+  },
+  sheetOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(6, 10, 20, 0.62)",
+    justifyContent: "flex-end",
+  },
+  sheetCard: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    backgroundColor: "#171a2a",
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 28,
+    gap: 12,
+    borderTopWidth: 1,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+  sheetHandle: {
+    alignSelf: "center",
+    width: 42,
+    height: 4,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.24)",
+    marginBottom: 6,
+  },
+  sheetTitle: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "800",
+  },
+  sheetText: {
+    color: "#c7cde0",
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  sheetActions: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 6,
+  },
+  sheetSecondaryButton: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.18)",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.06)",
+  },
+  sheetSecondaryButtonText: {
+    color: "#eef1ff",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  sheetPrimaryButton: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#7b61ff",
+  },
+  sheetPrimaryButtonText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "800",
   },
   historySection: {
     gap: 10,

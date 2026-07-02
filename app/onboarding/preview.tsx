@@ -115,6 +115,16 @@ export default function PreviewScreen() {
           ))}
         </ScrollView>
 
+        <View style={styles.healthSyncCard}>
+          <Text style={styles.healthSyncTitle}>Optional health sync</Text>
+          <Text style={styles.healthSyncText}>
+            You can connect Samsung Health later to import sleep and body composition data into Lastrep.
+          </Text>
+          <Text style={styles.healthSyncText}>
+            Lastrep asks for consent before reading health data, and you can manage it later in Profile.
+          </Text>
+        </View>
+
         <View style={styles.actionRow}>
           <TouchableOpacity
             style={styles.confirmButton}
@@ -193,6 +203,24 @@ const styles = StyleSheet.create({
   },
   actionRow: {
     marginTop: 2,
+  },
+  healthSyncCard: {
+    backgroundColor: "rgba(255,255,255,0.1)",
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.16)",
+    gap: 6,
+  },
+  healthSyncTitle: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "800",
+  },
+  healthSyncText: {
+    color: "#dfe5fa",
+    fontSize: 13,
+    lineHeight: 18,
   },
   confirmButton: {
     backgroundColor: "#2a67b1",
