@@ -603,8 +603,10 @@ export default function ProfileIndex() {
         if (!opened) {
           setHealthFeedback("Unable to open Health Connect settings on this device.");
         }
+        return;
       } else if (healthAvailability !== "available") {
         setHealthFeedback("Health Connect is unavailable on this device.");
+        return;
       } else {
         const healthConnect = await import("react-native-health-connect");
         await healthConnect.initialize();
@@ -705,14 +707,14 @@ export default function ProfileIndex() {
     const opened =
       (await openHealthConnectAppPermissionsScreen()) ||
       (await openHealthConnectDataManagementScreen());
-    setHealthFeedback(opened ? null : "Unable to open health permission settings on this device.");
+    setHealthFeedback(opened ? null : "Unable to open Health Connect permissions on this device.");
   }, []);
 
   const handleDisconnectHealth = useCallback(() => {
     showAppDialog({
       title: "Disconnect health sync",
       message:
-        "Lastrep can stop using connected health data now. If you also want to remove Health Connect access, open permission settings.",
+        "Lastrep can stop using connected health data now. If you also want to remove access at the source, open Health Connect permissions.",
       buttonLayout: "vertical",
       buttons: [
         {
@@ -723,7 +725,7 @@ export default function ProfileIndex() {
           },
         },
         {
-          text: "Open permissions",
+          text: "Open Health Connect",
           onPress: () => {
             void handleManageHealthPermissions();
           },
@@ -1694,7 +1696,7 @@ export default function ProfileIndex() {
             <View style={styles.healthLinkRow}>
               <TouchableOpacity disabled={healthLoading} onPress={handleManageHealthPermissions}>
                 <Text style={[styles.healthLinkText, healthLoading && styles.buttonDisabled]}>
-                  Manage permissions
+                  Health Connect permissions
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity disabled={healthLoading} onPress={handleDisconnectHealth}>
