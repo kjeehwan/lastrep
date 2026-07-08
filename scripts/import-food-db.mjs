@@ -766,16 +766,15 @@ if (requiredCanonicalNames.size > 0) {
 }
 
 fs.mkdirSync(path.resolve(outputDir), { recursive: true });
+const assetOutputDir = path.resolve("./assets/nutrition-data");
+fs.mkdirSync(assetOutputDir, { recursive: true });
 
 const coreSize = Math.min(200, normalized.length);
 const core = normalized.slice(0, coreSize);
 const rest = normalized.slice(coreSize);
 
-const writeTs = (filePath, exportName, dataRows) => {
-  const content =
-    `import type { FoodItem } from "../foodDb";\n\n` +
-    `export const ${exportName}: FoodItem[] = ${JSON.stringify(dataRows, null, 2)};\n`;
-  fs.writeFileSync(filePath, content, "utf8");
+const writeBlob = (filePath, data) => {
+  fs.writeFileSync(filePath, `${JSON.stringify(data, null, 2)}\n`, "utf8");
 };
 
 const STOP_TOKENS = new Set([
@@ -891,34 +890,35 @@ const buildSearchIndex = (rows, coreCount, restChunkSize) => {
   };
 };
 
-const writeSearchIndexTs = (filePath, rows, coreCount, restChunkSize) => {
+const buildSearchIndexBlob = (rows, coreCount, restChunkSize) => {
   const built = buildSearchIndex(rows, coreCount, restChunkSize);
-  const content =
-    `export const FOOD_TOKEN_INDEX: Record<string, string[]> = ${JSON.stringify(
-      built.FOOD_TOKEN_INDEX,
-      null,
-      2
-    )};\n\n` +
-    `export const FOOD_PREFIX_INDEX: Record<string, string[]> = ${JSON.stringify(
-      built.FOOD_PREFIX_INDEX,
-      null,
-      2
-    )};\n\n` +
-    `export const FOOD_ID_TO_CHUNK: Record<string, number> = ${JSON.stringify(
-      built.FOOD_ID_TO_CHUNK,
-      null,
-      2
-    )};\n`;
-  fs.writeFileSync(filePath, content, "utf8");
+  return built;
 };
 
-writeTs(path.resolve(outputDir, "foods-core.ts"), "FOODS_CORE", core);
+writeBlob(path.resolve(assetOutputDir, "foods-core.blob"), core);
+const assetManifestEntries = [];
 for (let i = 0; i < rest.length; i += chunkSize) {
   const chunk = rest.slice(i, i + chunkSize);
   const chunkNumber = Math.floor(i / chunkSize) + 1;
-  writeTs(path.resolve(outputDir, `foods-rest-${chunkNumber}.ts`), `FOODS_REST_${chunkNumber}`, chunk);
+  const assetFileName = `foods-rest-${chunkNumber}.blob`;
+  writeBlob(path.resolve(assetOutputDir, assetFileName), chunk);
+  assetManifestEntries.push(
+    `  ${chunkNumber}: require("../../../assets/nutrition-data/${assetFileName}")`
+  );
 }
-writeSearchIndexTs(path.resolve(outputDir, "foods-search-index.ts"), normalized, coreSize, chunkSize);
+writeBlob(
+  path.resolve(assetOutputDir, "foods-search-index.blob"),
+  buildSearchIndexBlob(normalized, coreSize, chunkSize)
+);
+
+const manifestContent = `/* eslint-disable @typescript-eslint/no-require-imports */
+export const FOOD_CORE_ASSET = require("../../../assets/nutrition-data/foods-core.blob");
+export const FOOD_SEARCH_INDEX_ASSET = require("../../../assets/nutrition-data/foods-search-index.blob");
+export const FOOD_REST_ASSETS: Record<number, number> = {
+${assetManifestEntries.join(",\n")}
+};
+`;
+fs.writeFileSync(path.resolve(outputDir, "foodsAssetManifest.ts"), manifestContent, "utf8");
 
 console.log(
   `[${source}] Imported ${normalized.length} foods (after cap). Core=${core.length}, rest chunks=${Math.ceil(

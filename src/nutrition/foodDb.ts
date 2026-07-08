@@ -1,6 +1,10 @@
-import { FOODS_CORE } from "./data/foods-core";
-import { FOOD_ID_TO_CHUNK, FOOD_PREFIX_INDEX, FOOD_TOKEN_INDEX } from "./data/foods-search-index";
-import { FOODS_REST_LOADERS } from "./data/foods-rest-map";
+import { Asset } from "expo-asset";
+import * as FileSystem from "expo-file-system/legacy";
+import {
+  FOOD_CORE_ASSET,
+  FOOD_REST_ASSETS,
+  FOOD_SEARCH_INDEX_ASSET,
+} from "./data/foodsAssetManifest";
 
 export type FoodItem = {
   id: string;
@@ -28,9 +32,184 @@ const SEARCH_LIMIT_DEFAULT = 20;
 const queryCache = new Map<string, FoodItem[]>();
 const CACHE_LIMIT = 180;
 let usdaFallbackPromise: Promise<IndexedFood[]> | null = null;
-const canonicalCoreUsda = FOODS_CORE
-  .filter((f) => String(f.id).startsWith("usda-"))
-  .map((f) => toIndexedFood(f));
+let searchIndexPromise: Promise<SearchIndexData> | null = null;
+let coreFoodsPromise: Promise<FoodItem[]> | null = null;
+let canonicalCoreUsdaPromise: Promise<IndexedFood[]> | null = null;
+let coreByIdPromise: Promise<Map<string, FoodItem>> | null = null;
+let allFoodsIndexedPromise: Promise<IndexedFood[]> | null = null;
+
+type SearchIndexData = {
+  FOOD_TOKEN_INDEX: Record<string, string[]>;
+  FOOD_PREFIX_INDEX: Record<string, string[]>;
+  FOOD_ID_TO_CHUNK: Record<string, number>;
+};
+
+function extractLegacyExportJsonBlock(content: string, exportName: string): string {
+  const startToken = `export const ${exportName}`;
+  const startIndex = content.indexOf(startToken);
+  if (startIndex === -1) {
+    throw new Error(`Missing legacy export ${exportName}`);
+  }
+  const equalsIndex = content.indexOf("=", startIndex);
+  if (equalsIndex === -1) {
+    throw new Error(`Missing assignment for legacy export ${exportName}`);
+  }
+  const valueStart = equalsIndex + 1;
+  const firstBraceIndex = content.indexOf("{", valueStart);
+  const firstBracketIndex = content.indexOf("[", valueStart);
+  const hasBrace =
+    firstBraceIndex !== -1 && (firstBracketIndex === -1 || firstBraceIndex < firstBracketIndex);
+  const openChar = hasBrace ? "{" : "[";
+  const closeChar = hasBrace ? "}" : "]";
+  const openIndex = hasBrace ? firstBraceIndex : firstBracketIndex;
+  if (openIndex === -1) {
+    throw new Error(`Missing JSON start for legacy export ${exportName}`);
+  }
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let index = openIndex; index < content.length; index += 1) {
+    const char = content[index];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (char === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (char === "\"") {
+      inString = !inString;
+      continue;
+    }
+    if (inString) continue;
+    if (char === openChar) depth += 1;
+    if (char === closeChar) {
+      depth -= 1;
+      if (depth === 0) {
+        return content.slice(openIndex, index + 1).trim();
+      }
+    }
+  }
+
+  throw new Error(`Unterminated JSON block for legacy export ${exportName}`);
+}
+
+function tryParseLegacySearchIndexModule(content: string): SearchIndexData | null {
+  if (!content.includes("export const FOOD_TOKEN_INDEX")) return null;
+  const tokenIndex = JSON.parse(
+    extractLegacyExportJsonBlock(content, "FOOD_TOKEN_INDEX")
+  ) as Record<string, string[]>;
+  const prefixIndex = JSON.parse(
+    extractLegacyExportJsonBlock(content, "FOOD_PREFIX_INDEX")
+  ) as Record<string, string[]>;
+  const idToChunk = JSON.parse(
+    extractLegacyExportJsonBlock(content, "FOOD_ID_TO_CHUNK")
+  ) as Record<string, number>;
+  return {
+    FOOD_TOKEN_INDEX: tokenIndex,
+    FOOD_PREFIX_INDEX: prefixIndex,
+    FOOD_ID_TO_CHUNK: idToChunk,
+  };
+}
+
+async function readBlobModuleJson<T>(moduleId: number): Promise<T> {
+  const asset = Asset.fromModule(moduleId);
+  if (!asset.downloaded) {
+    await asset.downloadAsync();
+  }
+  const uri = asset.localUri ?? asset.uri;
+  const content = await FileSystem.readAsStringAsync(uri, {
+    encoding: FileSystem.EncodingType.UTF8,
+  });
+  const normalized = content.trim().replace(/^\uFEFF/, "");
+  try {
+    return JSON.parse(normalized) as T;
+  } catch (initialError) {
+    let parseError: unknown = initialError;
+    try {
+      const legacySearchIndex = tryParseLegacySearchIndexModule(normalized);
+      if (legacySearchIndex) {
+        return legacySearchIndex as T;
+      }
+    } catch (legacyError) {
+      parseError = legacyError;
+    }
+    const sanitized = normalized
+      .replace(/;\s*$/, "")
+      .replace(/^export const [^=]+=\s*/, "")
+      .trim();
+    try {
+      return JSON.parse(sanitized) as T;
+    } catch (sanitizedError) {
+      const previewStart = normalized.slice(0, 180);
+      const previewEnd = normalized.slice(-180);
+      console.log("Food asset parse failed", {
+        moduleId,
+        uri,
+        previewStart,
+        previewEnd,
+        initialError:
+          parseError instanceof Error ? parseError.message : String(parseError),
+        sanitizedError:
+          sanitizedError instanceof Error ? sanitizedError.message : String(sanitizedError),
+      });
+      throw sanitizedError;
+    }
+  }
+}
+
+async function loadCoreFoods(): Promise<FoodItem[]> {
+  if (!coreFoodsPromise) {
+    coreFoodsPromise = readBlobModuleJson<FoodItem[]>(FOOD_CORE_ASSET);
+  }
+  return coreFoodsPromise;
+}
+
+async function loadCoreById(): Promise<Map<string, FoodItem>> {
+  if (!coreByIdPromise) {
+    coreByIdPromise = (async () => {
+      const foods = await loadCoreFoods();
+      return new Map<string, FoodItem>(foods.map((food) => [food.id, food]));
+    })();
+  }
+  return coreByIdPromise;
+}
+
+async function loadCanonicalCoreUsda(): Promise<IndexedFood[]> {
+  if (!canonicalCoreUsdaPromise) {
+    canonicalCoreUsdaPromise = (async () => {
+      const foods = await loadCoreFoods();
+      return foods
+        .filter((food) => String(food.id).startsWith("usda-"))
+        .map((food) => toIndexedFood(food));
+    })();
+  }
+  return canonicalCoreUsdaPromise;
+}
+
+async function loadAllFoodsIndexed(): Promise<IndexedFood[]> {
+  if (!allFoodsIndexedPromise) {
+    allFoodsIndexedPromise = (async () => {
+      const core = await loadCoreFoods();
+      const chunkNos = Object.keys(FOOD_REST_ASSETS)
+        .map((key) => Number(key))
+        .filter((value) => Number.isFinite(value))
+        .sort((a, b) => a - b);
+      const chunks = await Promise.all(chunkNos.map((chunkNo) => loadRestChunk(chunkNo)));
+      return dedupeFoodsByName([...core, ...chunks.flat()]).map(toIndexedFood);
+    })();
+  }
+  return allFoodsIndexedPromise;
+}
+
+async function loadSearchIndex() {
+  if (!searchIndexPromise) {
+    searchIndexPromise = readBlobModuleJson<SearchIndexData>(FOOD_SEARCH_INDEX_ASSET);
+  }
+  return searchIndexPromise;
+}
 
 export function clearFoodSearchCache() {
   queryCache.clear();
@@ -107,22 +286,23 @@ function dedupeFoodsByName(foods: FoodItem[]): FoodItem[] {
   return [...byName.values()];
 }
 
-const coreById = new Map<string, FoodItem>(FOODS_CORE.map((f) => [f.id, f]));
 const restChunkPromises = new Map<number, Promise<FoodItem[]>>();
 
 async function loadRestChunk(chunk: number): Promise<FoodItem[]> {
   const cached = restChunkPromises.get(chunk);
   if (cached) return cached;
   const promise = (async () => {
-    const loader = FOODS_REST_LOADERS[chunk];
-    if (!loader) return [];
-    return loader();
+    const moduleId = FOOD_REST_ASSETS[chunk];
+    if (!moduleId) return [];
+    return readBlobModuleJson<FoodItem[]>(moduleId);
   })();
   restChunkPromises.set(chunk, promise);
   return promise;
 }
 
 async function resolveFoodsByIds(ids: string[]): Promise<FoodItem[]> {
+  const { FOOD_ID_TO_CHUNK } = await loadSearchIndex();
+  const coreById = await loadCoreById();
   const byChunk = new Map<number, string[]>();
   const found: FoodItem[] = [];
 
@@ -159,6 +339,8 @@ async function resolveFoodsByIds(ids: string[]): Promise<FoodItem[]> {
 async function loadUsdaFallbackFoods(): Promise<IndexedFood[]> {
   if (usdaFallbackPromise) return usdaFallbackPromise;
   usdaFallbackPromise = (async () => {
+    const { FOOD_ID_TO_CHUNK } = await loadSearchIndex();
+    const coreFoods = await loadCoreFoods();
     const chunkSet = new Set<number>();
     for (const id of Object.keys(FOOD_ID_TO_CHUNK)) {
       if (!id.startsWith("usda-")) continue;
@@ -167,7 +349,7 @@ async function loadUsdaFallbackFoods(): Promise<IndexedFood[]> {
     }
 
     const rows: FoodItem[] = [];
-    for (const f of FOODS_CORE) {
+    for (const f of coreFoods) {
       if (f.id.startsWith("usda-")) rows.push(f);
     }
     for (const chunk of [...chunkSet].sort((a, b) => a - b)) {
@@ -521,6 +703,7 @@ function topTierScore(food: FoodItem, ctx: QueryCtx): number {
 
 
 async function canonicalUsdaRank(ctx: QueryCtx, limit: number): Promise<FoodItem[]> {
+  const { FOOD_PREFIX_INDEX, FOOD_TOKEN_INDEX } = await loadSearchIndex();
   const usdaFoods = await loadUsdaFallbackFoods();
   const qTokens = unique([ctx.q, ...ctx.tokens, ...ctx.expanded, ...getQueryLemmas(ctx.tokens)].map((x) => normalize(x)).filter(Boolean));
   const candidateIds = new Set<string>();
@@ -602,6 +785,7 @@ async function canonicalUsdaRank(ctx: QueryCtx, limit: number): Promise<FoodItem
 }
 
 async function resolvePotatoFamilyStrict(ctx: QueryCtx, limit: number): Promise<FoodItem[]> {
+  const { FOOD_PREFIX_INDEX, FOOD_TOKEN_INDEX } = await loadSearchIndex();
   const queryTokens = unique([ctx.q, ...ctx.tokens, ...ctx.expanded].map((t) => normalize(t)).filter(Boolean));
   const candidateIds = new Set<string>();
   for (const token of queryTokens) {
@@ -645,6 +829,77 @@ async function resolvePotatoFamilyStrict(ctx: QueryCtx, limit: number): Promise<
     .map((x) => x.f);
 
   return dedupeFoodsByName(rows).slice(0, limit);
+}
+
+async function resolveOatFamilyStrict(ctx: QueryCtx, limit: number): Promise<FoodItem[]> {
+  const plainOatRows = (await loadAllFoodsIndexed())
+    .filter((f) => {
+      const n = f._name;
+      if (!/\b(oat|oats|oatmeal)\b/.test(n)) return false;
+      if (
+        /\b(cookie|cookies|bar|bars|granola|snack|dessert|pie|pies|muffin|muffins|smoothie|drink|beverage|shake|baby|toddler|animal|chocolate|raisin|pecan|walnut|cinnamon|apple|maple|brown sugar|flax)\b/.test(
+          n
+        )
+      ) {
+        return false;
+      }
+      if (TOP_TIER_EXCLUDE_TERMS.test(n)) return false;
+      if (DISH_CONTAINS_PATTERN.test(n)) return false;
+      return true;
+    })
+    .map((f) => {
+      let s = score(f, ctx);
+      if (f._name === "oats") s += 2600;
+      if (f._name === "oatmeal") s += 2300;
+      if (f._name === "rolled oats") s += 2500;
+      if (f._name === "quick oats") s += 2400;
+      if (f._name === "steel cut oats") s += 2350;
+      if (f._name === "oatmeal cereal") s += 1600;
+      if (/\b(oats|oatmeal)\b/.test(f._name)) s += 500;
+      if (/\b(rolled|quick|steel cut)\b/.test(f._name)) s += 450;
+      if (typeof f.isBaseFood === "boolean") s += f.isBaseFood ? 700 : -320;
+      if (typeof f.isPrepared === "boolean") s += f.isPrepared ? -500 : 180;
+      if (typeof f.isBranded === "boolean") s += f.isBranded ? -650 : 240;
+      if (typeof f.isDerivative === "boolean" && f.isDerivative) s -= 700;
+      if (typeof f.isComboMeal === "boolean" && f.isComboMeal) s -= 600;
+      if (/\b(raw|plain|whole grain)\b/.test(f._blob)) s += 220;
+      return { f: f as FoodItem, s };
+    })
+    .filter((x) => x.s > 0)
+    .sort((a, b) => b.s - a.s || a.f.name.localeCompare(b.f.name))
+    .map((x) => x.f);
+
+  return dedupeFoodsByName(plainOatRows).slice(0, limit);
+}
+
+function hasBroadQueryMatch(food: IndexedFood, ctx: QueryCtx): boolean {
+  if (!ctx.q) return false;
+  if (food._name.includes(ctx.q) || food._blob.includes(ctx.q)) return true;
+  const lemmas = getQueryLemmas(ctx.tokens);
+  if (ctx.tokens.length > 1) {
+    return ctx.tokens.every(
+      (token) =>
+        new RegExp(`\\b${token}\\b`).test(food._name) ||
+        new RegExp(`\\b${token}\\b`).test(food._aliases) ||
+        new RegExp(`\\b${token}\\b`).test(food._blob)
+    );
+  }
+  return [...ctx.tokens, ...ctx.expanded, ...lemmas].some((token) => {
+    if (!token) return false;
+    const rx = new RegExp(`\\b${token}\\b`);
+    return rx.test(food._name) || rx.test(food._aliases) || rx.test(food._blob);
+  });
+}
+
+async function broadRankAllFoods(ctx: QueryCtx, limit: number): Promise<FoodItem[]> {
+  const pool = await loadAllFoodsIndexed();
+  const ranked = pool
+    .filter((food) => hasBroadQueryMatch(food, ctx))
+    .map((food) => ({ food, s: score(food, ctx) }))
+    .filter((entry) => entry.s > 0)
+    .sort((a, b) => b.s - a.s || a.food.name.localeCompare(b.food.name))
+    .map((entry) => entry.food as FoodItem);
+  return dedupeFoodsByName(ranked).slice(0, limit);
 }
 
 function buildQueryCtx(query: string): QueryCtx {
@@ -839,6 +1094,7 @@ function score(food: IndexedFood, ctx: QueryCtx): number {
 
 
 export async function searchFoodsAsync(query: string, limit = SEARCH_LIMIT_DEFAULT): Promise<FoodItem[]> {
+  const { FOOD_PREFIX_INDEX, FOOD_TOKEN_INDEX } = await loadSearchIndex();
   const q = normalize(query);
   const ctx = buildQueryCtx(q);
   const cacheKey = `canonical::${q}::${limit}`;
@@ -846,6 +1102,7 @@ export async function searchFoodsAsync(query: string, limit = SEARCH_LIMIT_DEFAU
   if (cached) return cached;
 
   if (!q) {
+    const canonicalCoreUsda = await loadCanonicalCoreUsda();
     const defaultRows = canonicalCoreUsda
       .slice(0, Math.max(limit, 20))
       .map((x) => x as FoodItem)
@@ -859,6 +1116,11 @@ export async function searchFoodsAsync(query: string, limit = SEARCH_LIMIT_DEFAU
     const strictPotato = await resolvePotatoFamilyStrict(ctx, limit);
     queryCache.set(cacheKey, strictPotato);
     return strictPotato;
+  }
+  if (q === "oat" || q === "oats" || q === "oatmeal") {
+    const strictOats = await resolveOatFamilyStrict(ctx, limit);
+    queryCache.set(cacheKey, strictOats);
+    return strictOats;
   }
 
   const canonicalTop = await canonicalUsdaRank(ctx, Math.max(limit, 240));
@@ -925,6 +1187,20 @@ export async function searchFoodsAsync(query: string, limit = SEARCH_LIMIT_DEFAU
     }
   }
   let result = [...head, ...restNoisy].slice(0, limit);
+  const broadMatches = await broadRankAllFoods(ctx, Math.max(limit * 3, 60));
+  if (broadMatches.length > 0) {
+    const mergedByName = new Map<string, FoodItem>();
+    for (const row of [...result, ...broadMatches]) {
+      const key = normalize(row.name);
+      if (!mergedByName.has(key)) mergedByName.set(key, row);
+    }
+    result = [...mergedByName.values()]
+      .map((food) => ({ food, s: score(toIndexedFood(food), ctx) }))
+      .filter((entry) => entry.s > 0)
+      .sort((a, b) => b.s - a.s || a.food.name.localeCompare(b.food.name))
+      .map((entry) => entry.food)
+      .slice(0, limit);
+  }
   if (result.length < Math.min(3, limit)) {
     const queryTokens = unique([ctx.q, ...ctx.tokens, ...ctx.expanded].map((t) => normalize(t)).filter(Boolean));
     const candidateIds = new Set<string>();
@@ -972,6 +1248,7 @@ export async function searchFoodsAsync(query: string, limit = SEARCH_LIMIT_DEFAU
 }
 
 export async function searchFoodsBrandedAsync(query: string, limit = SEARCH_LIMIT_DEFAULT): Promise<FoodItem[]> {
+  const { FOOD_PREFIX_INDEX, FOOD_TOKEN_INDEX } = await loadSearchIndex();
   const q = normalize(query);
   if (!q) return [];
   const ctx = buildQueryCtx(q);

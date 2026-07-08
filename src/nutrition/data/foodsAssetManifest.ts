@@ -1,0 +1,38 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
+export const FOOD_CORE_ASSET = require("../../../assets/nutrition-data/foods-core.blob");
+export const FOOD_SEARCH_INDEX_ASSET = require("../../../assets/nutrition-data/foods-search-index.blob");
+export const FOOD_REST_ASSETS: Record<number, number> = {
+  1: require("../../../assets/nutrition-data/foods-rest-1.blob"),
+  2: require("../../../assets/nutrition-data/foods-rest-2.blob"),
+  3: require("../../../assets/nutrition-data/foods-rest-3.blob"),
+  4: require("../../../assets/nutrition-data/foods-rest-4.blob"),
+  5: require("../../../assets/nutrition-data/foods-rest-5.blob"),
+  6: require("../../../assets/nutrition-data/foods-rest-6.blob"),
+  7: require("../../../assets/nutrition-data/foods-rest-7.blob"),
+  8: require("../../../assets/nutrition-data/foods-rest-8.blob"),
+  9: require("../../../assets/nutrition-data/foods-rest-9.blob"),
+  10: require("../../../assets/nutrition-data/foods-rest-10.blob"),
+  11: require("../../../assets/nutrition-data/foods-rest-11.blob"),
+  12: require("../../../assets/nutrition-data/foods-rest-12.blob"),
+  13: require("../../../assets/nutrition-data/foods-rest-13.blob"),
+  14: require("../../../assets/nutrition-data/foods-rest-14.blob"),
+  15: require("../../../assets/nutrition-data/foods-rest-15.blob"),
+  16: require("../../../assets/nutrition-data/foods-rest-16.blob"),
+  17: require("../../../assets/nutrition-data/foods-rest-17.blob"),
+  18: require("../../../assets/nutrition-data/foods-rest-18.blob"),
+  19: require("../../../assets/nutrition-data/foods-rest-19.blob"),
+  20: require("../../../assets/nutrition-data/foods-rest-20.blob"),
+  21: require("../../../assets/nutrition-data/foods-rest-21.blob"),
+  22: require("../../../assets/nutrition-data/foods-rest-22.blob"),
+  23: require("../../../assets/nutrition-data/foods-rest-23.blob"),
+  24: require("../../../assets/nutrition-data/foods-rest-24.blob"),
+  25: require("../../../assets/nutrition-data/foods-rest-25.blob"),
+  26: require("../../../assets/nutrition-data/foods-rest-26.blob"),
+  27: require("../../../assets/nutrition-data/foods-rest-27.blob"),
+  28: require("../../../assets/nutrition-data/foods-rest-28.blob"),
+  29: require("../../../assets/nutrition-data/foods-rest-29.blob"),
+  30: require("../../../assets/nutrition-data/foods-rest-30.blob"),
+  31: require("../../../assets/nutrition-data/foods-rest-31.blob"),
+  32: require("../../../assets/nutrition-data/foods-rest-32.blob"),
+  33: require("../../../assets/nutrition-data/foods-rest-33.blob")
+};
