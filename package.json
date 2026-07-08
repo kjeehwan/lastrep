@@ -18,6 +18,7 @@
     "start:dev-client:fast:clear": "node scripts/start-dev-client-android.js --fast --clear",
     "open:dev-client": "node scripts/open-dev-client-android.js",
     "web": "expo start --web",
+    "check:web-export": "expo export --platform web",
     "lint": "expo lint",
     "test": "vitest run",
     "test:firestore-rules": "firebase emulators:exec --only firestore \"npx vitest run src/firestore.rules.test.ts\"",
