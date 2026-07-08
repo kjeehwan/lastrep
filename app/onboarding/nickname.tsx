@@ -21,13 +21,13 @@ const NicknameScreen = () => {
     }
     const userId = user.uid;
     await saveUserData(userId, { nickname }); // Save nickname to Firestore
-    router.replace("/(tabs)/home");
+    router.replace("/onboarding/preview");
   };
 
   return (
     <OnboardingLayout
       title="What’s your nickname?"
-      onSkip={() => router.replace("/(tabs)/home")}
+      onSkip={() => router.replace("/onboarding/preview")}
       onBack={() => router.push("/onboarding/availability")}
     >
       <SafeAreaView style={styles.safeArea} edges={["bottom"]}>

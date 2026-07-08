@@ -2,8 +2,16 @@ import { useRouter } from "expo-router";
 import { getAuth } from "firebase/auth";
 import { MotiView } from "moti";
 import React, { useEffect, useMemo, useState } from "react";
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import {
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  TouchableWithoutFeedback,
+  View,
+} from "react-native";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import OnboardingLayout from "../../components/OnboardingLayout";
 import { getUserData } from "../../src/userData";
 import { buildSampleProgramDays } from "../../src/workouts/program";
@@ -49,7 +57,9 @@ const buildSevenDayPlan = (availabilityDays: number): DayPlan[] => {
 
 export default function PreviewScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [availabilityDays, setAvailabilityDays] = useState(4);
+  const [healthInfoVisible, setHealthInfoVisible] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -115,14 +125,11 @@ export default function PreviewScreen() {
           ))}
         </ScrollView>
 
-        <View style={styles.healthSyncCard}>
-          <Text style={styles.healthSyncTitle}>Optional health sync</Text>
-          <Text style={styles.healthSyncText}>
-            You can connect Samsung Health later to import sleep and body composition data into Lastrep.
-          </Text>
-          <Text style={styles.healthSyncText}>
-            Lastrep asks for consent before reading health data, and you can manage it later in Profile.
-          </Text>
+        <View style={styles.healthSyncRow}>
+          <Text style={styles.healthSyncRowTitle}>Optional health sync</Text>
+          <TouchableOpacity onPress={() => setHealthInfoVisible(true)}>
+            <Text style={styles.healthSyncRowAction}>Learn more</Text>
+          </TouchableOpacity>
         </View>
 
         <View style={styles.actionRow}>
@@ -134,6 +141,41 @@ export default function PreviewScreen() {
           </TouchableOpacity>
         </View>
       </SafeAreaView>
+
+      <Modal
+        visible={healthInfoVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setHealthInfoVisible(false)}
+      >
+        <TouchableWithoutFeedback onPress={() => setHealthInfoVisible(false)}>
+          <View style={styles.sheetOverlay}>
+            <TouchableWithoutFeedback onPress={() => void 0}>
+              <View style={[styles.sheetCard, { paddingBottom: 24 + Math.max(insets.bottom, 8) }]}>
+                <View style={styles.sheetHandle} />
+                <Text style={styles.sheetTitle}>Optional health sync</Text>
+                <Text style={styles.sheetText}>
+                  Lastrep can read supported sleep and body composition data.
+                </Text>
+                <Text style={styles.sheetText}>
+                  This helps show recovery and progress trends.
+                </Text>
+                <Text style={styles.sheetText}>
+                  This is optional, and you can connect it later in Profile.
+                </Text>
+                <View style={styles.sheetActions}>
+                  <TouchableOpacity
+                    style={styles.sheetPrimaryButton}
+                    onPress={() => setHealthInfoVisible(false)}
+                  >
+                    <Text style={styles.sheetPrimaryButtonText}>Close</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
     </OnboardingLayout>
   );
 }
@@ -204,23 +246,74 @@ const styles = StyleSheet.create({
   actionRow: {
     marginTop: 2,
   },
-  healthSyncCard: {
-    backgroundColor: "rgba(255,255,255,0.1)",
-    borderRadius: 14,
-    padding: 14,
+  healthSyncRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: "rgba(255,255,255,0.08)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.16)",
-    gap: 6,
+    borderColor: "rgba(255,255,255,0.14)",
   },
-  healthSyncTitle: {
+  healthSyncRowTitle: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  healthSyncRowAction: {
+    color: "#dfe5fa",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  sheetOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(7,10,20,0.62)",
+    justifyContent: "flex-end",
+    paddingHorizontal: 16,
+  },
+  sheetCard: {
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    backgroundColor: "#161a2b",
+    paddingHorizontal: 18,
+    paddingTop: 12,
+    gap: 10,
+  },
+  sheetHandle: {
+    alignSelf: "center",
+    width: 42,
+    height: 4,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.24)",
+    marginBottom: 2,
+  },
+  sheetTitle: {
+    color: "#fff",
+    fontSize: 17,
+    fontWeight: "800",
+  },
+  sheetText: {
+    color: "#dfe5fa",
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  sheetActions: {
+    marginTop: 6,
+  },
+  sheetPrimaryButton: {
+    minHeight: 48,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#2a67b1",
+  },
+  sheetPrimaryButtonText: {
     color: "#fff",
     fontSize: 15,
     fontWeight: "800",
-  },
-  healthSyncText: {
-    color: "#dfe5fa",
-    fontSize: 13,
-    lineHeight: 18,
   },
   confirmButton: {
     backgroundColor: "#2a67b1",
