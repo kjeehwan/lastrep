@@ -8,6 +8,7 @@ export type AppDialogOptions = {
   title: string;
   message?: string;
   buttons?: AppDialogButton[];
+  buttonLayout?: "horizontal" | "vertical";
 };
 
 type Presenter = (options: AppDialogOptions) => void;

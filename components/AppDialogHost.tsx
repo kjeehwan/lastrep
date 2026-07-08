@@ -19,6 +19,7 @@ export default function AppDialogHost() {
   if (!dialog) return null;
 
   const buttons = dialog.buttons?.length ? dialog.buttons : DEFAULT_BUTTONS;
+  const isVerticalLayout = dialog.buttonLayout === "vertical";
 
   return (
     <Modal transparent animationType="fade" visible={Boolean(dialog)} onRequestClose={() => setDialog(null)}>
@@ -26,7 +27,7 @@ export default function AppDialogHost() {
         <View style={styles.card}>
           <Text style={styles.title}>{dialog.title}</Text>
           {dialog.message ? <Text style={styles.message}>{dialog.message}</Text> : null}
-          <View style={styles.buttonRow}>
+          <View style={[styles.buttonRow, isVerticalLayout && styles.buttonColumn]}>
             {buttons.map((button, index) => {
               const role = button.role ?? "default";
               const isDestructive = role === "destructive";
@@ -36,6 +37,7 @@ export default function AppDialogHost() {
                   key={`${button.text}-${index}`}
                   style={[
                     styles.button,
+                    isVerticalLayout && styles.buttonVertical,
                     isDestructive && styles.buttonDestructive,
                     isCancel && styles.buttonCancel,
                   ]}
@@ -96,6 +98,9 @@ const styles = StyleSheet.create({
     gap: 8,
     marginTop: 2,
   },
+  buttonColumn: {
+    flexDirection: "column",
+  },
   button: {
     flex: 1,
     alignItems: "center",
@@ -105,6 +110,10 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(123,97,255,0.25)",
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "rgba(123,97,255,0.7)",
+  },
+  buttonVertical: {
+    flex: 0,
+    width: "100%",
   },
   buttonDestructive: {
     backgroundColor: "rgba(239,68,68,0.22)",
