@@ -1,9 +1,9 @@
 import { useRouter } from "expo-router";
 import { getAuth } from "firebase/auth";
-import { MotiView } from "moti";
 import React, { useState } from "react";
 import { StyleSheet, Text, TouchableOpacity } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import EntranceView from "../../components/EntranceView";
 import OnboardingLayout from "../../components/OnboardingLayout";
 import { saveUserData } from "../../src/userData"; // Import Firestore save function
 
@@ -38,7 +38,7 @@ const ExperienceScreen = () => {
     >
       <SafeAreaView style={styles.safeArea} edges={["bottom"]}>
         {options.map((item, idx) => (
-          <MotiView
+          <EntranceView
             key={item.id}
             from={{ opacity: 0, translateY: 20 }}
             animate={{ opacity: 1, translateY: 0 }}
@@ -57,10 +57,10 @@ const ExperienceScreen = () => {
                 {item.label}
               </Text>
             </TouchableOpacity>
-          </MotiView>
+          </EntranceView>
         ))}
 
-        <MotiView
+        <EntranceView
           from={{ opacity: 0, translateY: 10 }}
           animate={{ opacity: 1, translateY: 0 }}
           transition={{ delay: 400, duration: 400 }}
@@ -72,7 +72,7 @@ const ExperienceScreen = () => {
           >
             <Text style={styles.nextText}>Next</Text>
           </TouchableOpacity>
-        </MotiView>
+        </EntranceView>
       </SafeAreaView>
     </OnboardingLayout>
   );

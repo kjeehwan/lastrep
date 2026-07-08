@@ -1,6 +1,5 @@
 import { useRouter } from "expo-router";
 import { getAuth } from "firebase/auth";
-import { MotiView } from "moti";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   Modal,
@@ -12,6 +11,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import EntranceView from "../../components/EntranceView";
 import OnboardingLayout from "../../components/OnboardingLayout";
 import { getUserData } from "../../src/userData";
 import { buildSampleProgramDays } from "../../src/workouts/program";
@@ -100,7 +100,7 @@ export default function PreviewScreen() {
 
         <ScrollView contentContainerStyle={styles.planList} showsVerticalScrollIndicator={false}>
           {weekPlan.map((day, index) => (
-            <MotiView
+            <EntranceView
               key={`${day.dayLabel}-${day.title}`}
               from={{ opacity: 0, translateY: 16 }}
               animate={{ opacity: 1, translateY: 0 }}
@@ -121,7 +121,7 @@ export default function PreviewScreen() {
                   • {exercise}
                 </Text>
               ))}
-            </MotiView>
+            </EntranceView>
           ))}
         </ScrollView>
 

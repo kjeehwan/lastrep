@@ -4,8 +4,7 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { onAuthStateChanged } from 'firebase/auth';
 import { useEffect } from 'react';
-import { InteractionManager, LogBox } from 'react-native';
-import 'react-native-reanimated';
+import { InteractionManager, LogBox, Platform } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import OfflineBanner from '@/components/OfflineBanner';
@@ -18,6 +17,11 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 export const unstable_settings = {
   anchor: '(tabs)',
 };
+
+if (Platform.OS !== 'web') {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('react-native-reanimated');
+}
 
 void SplashScreen.preventAutoHideAsync().catch(() => {
   // already prevented or unavailable

@@ -1,9 +1,9 @@
 import { useRouter } from "expo-router";
 import { getAuth } from "firebase/auth";
-import { MotiView } from "moti";
 import React, { useState } from "react";
 import { StyleSheet, Text, TextInput, TouchableOpacity } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import EntranceView from "../../components/EntranceView";
 import OnboardingLayout from "../../components/OnboardingLayout";
 import { saveUserData } from "../../src/userData"; // Import Firestore save function
 
@@ -31,7 +31,7 @@ const NicknameScreen = () => {
       onBack={() => router.push("/onboarding/availability")}
     >
       <SafeAreaView style={styles.safeArea} edges={["bottom"]}>
-        <MotiView
+        <EntranceView
           from={{ opacity: 0, translateY: 20 }}
           animate={{ opacity: 1, translateY: 0 }}
           transition={{ duration: 400 }}
@@ -44,9 +44,9 @@ const NicknameScreen = () => {
             placeholder="Enter your nickname"
             placeholderTextColor="#888"
           />
-        </MotiView>
+        </EntranceView>
 
-        <MotiView
+        <EntranceView
           from={{ opacity: 0, translateY: 10 }}
           animate={{ opacity: 1, translateY: 0 }}
           transition={{ delay: 300, duration: 400 }}
@@ -58,7 +58,7 @@ const NicknameScreen = () => {
           >
             <Text style={styles.buttonText}>Start Lastrep</Text>
           </TouchableOpacity>
-        </MotiView>
+        </EntranceView>
       </SafeAreaView>
     </OnboardingLayout>
   );

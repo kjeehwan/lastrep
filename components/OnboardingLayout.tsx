@@ -1,8 +1,8 @@
 import { LinearGradient } from "expo-linear-gradient";
-import { MotiView } from "moti";
 import React from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import EntranceView from "./EntranceView";
 
 type OnboardingLayoutProps = {
   title: string;
@@ -23,7 +23,7 @@ export default function OnboardingLayout({
     <LinearGradient colors={["#4a90e2", "#7b61ff"]} style={styles.gradient}>
       <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
         <View style={styles.topRow}>
-          <MotiView
+          <EntranceView
             from={{ opacity: 0, translateY: -5 }}
             animate={{ opacity: 1, translateY: 0 }}
             transition={{ type: "timing", delay: 120, duration: 300 }}
@@ -36,8 +36,8 @@ export default function OnboardingLayout({
             ) : (
               <View style={styles.topActionPlaceholder} />
             )}
-          </MotiView>
-          <MotiView
+          </EntranceView>
+          <EntranceView
             from={{ opacity: 0, translateY: -5 }}
             animate={{ opacity: 1, translateY: 0 }}
             transition={{ type: "timing", delay: 200, duration: 400 }}
@@ -50,10 +50,10 @@ export default function OnboardingLayout({
             ) : (
               <View style={styles.topActionPlaceholder} />
             )}
-          </MotiView>
+          </EntranceView>
         </View>
 
-        <MotiView
+        <EntranceView
           from={{ opacity: 0, translateY: 20 }}
           animate={{ opacity: 1, translateY: 0 }}
           transition={{ type: "timing", duration: 600 }}
@@ -61,7 +61,7 @@ export default function OnboardingLayout({
         >
           <Text style={styles.header}>{title}</Text>
           <View style={styles.content}>{children}</View>
-        </MotiView>
+        </EntranceView>
       </SafeAreaView>
     </LinearGradient>
   );
