@@ -35,6 +35,8 @@ describe("nutrition meal helpers", () => {
     ).toEqual({
       calories: 870,
       proteinGrams: 40,
+      carbGrams: 0,
+      fatGrams: 0,
     });
   });
 

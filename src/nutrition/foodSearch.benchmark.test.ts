@@ -1,5 +1,40 @@
-import { beforeEach, describe, expect, it } from "vitest";
-import { clearFoodSearchCache, searchFoodsAsync } from "./foodDb";
+import fs from "node:fs/promises";
+import path from "node:path";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("expo-asset", () => ({
+  Asset: {
+    fromModule: (moduleId: string) => ({
+      downloaded: true,
+      localUri: moduleId,
+      uri: moduleId,
+      downloadAsync: async () => undefined,
+    }),
+  },
+}));
+
+vi.mock("expo-file-system/legacy", () => ({
+  default: {
+    readAsStringAsync: async (filePath: string) => fs.readFile(filePath, "utf8"),
+    EncodingType: { UTF8: "utf8" },
+  },
+  readAsStringAsync: async (filePath: string) => fs.readFile(filePath, "utf8"),
+  EncodingType: { UTF8: "utf8" },
+}));
+
+vi.mock("./data/foodsAssetManifest", () => {
+  const assetPath = (...parts: string[]) => path.join(process.cwd(), ...parts);
+  const restAssets: Record<number, string> = {};
+  for (let index = 1; index <= 33; index += 1) {
+    restAssets[index] = assetPath("assets", "nutrition-data", `foods-rest-${index}.blob`);
+  }
+  return {
+    FOOD_CORE_ASSET: assetPath("assets", "nutrition-data", "foods-core.blob"),
+    FOOD_SEARCH_INDEX_ASSET: assetPath("assets", "nutrition-data", "foods-search-index.blob"),
+    FOOD_REST_ASSETS: restAssets,
+  };
+});
+const { clearFoodSearchCache, searchFoodsAsync } = await import("./foodDb");
 
 type QueryCase = {
   q: string;

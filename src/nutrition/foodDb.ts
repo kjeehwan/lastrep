@@ -599,6 +599,12 @@ function isTopTierWholeFood(food: IndexedFood, queryLemmas: string[]): boolean {
   return /(raw|fresh|plain|whole|white|brown|sweet|wheat|rice|bread|cherries|cherry|melon|potato)/.test(n);
 }
 
+function getStrictQueryTokenPattern(token: string): RegExp {
+  if (token === "potato") return /\bpotato(?:es)?\b/;
+  const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`\\b${escaped}\\b`);
+}
+
 function isHardTopEligible(food: FoodItem, ctx: QueryCtx): boolean {
   if (ctx.tokens.length === 0) return false;
   const f = toIndexedFood(food);
@@ -606,7 +612,7 @@ function isHardTopEligible(food: FoodItem, ctx: QueryCtx): boolean {
   if (!isTopTierWholeFood(f, lemmas)) return false;
   // Require explicit token/lemma word hit for top slots.
   if (ctx.tokens.length > 1) {
-    const strictHit = ctx.tokens.every((t) => new RegExp(`\\b${t}\\b`).test(f._name));
+    const strictHit = ctx.tokens.every((t) => getStrictQueryTokenPattern(t).test(f._name));
     if (!strictHit) return false;
   } else {
     const hit = lemmas.some((q) => new RegExp(`\\b${q}\\b`).test(f._name));
@@ -806,29 +812,38 @@ async function resolvePotatoFamilyStrict(ctx: QueryCtx, limit: number): Promise<
       if (candidateIds.size >= 1800) break;
     }
   }
-  const pool = (await resolveFoodsByIds([...candidateIds])).map(toIndexedFood);
   const isSweet = ctx.q.includes("sweet potato");
-  const rows = pool
-    .filter((f) => {
-      const n = f._name;
-      if (isSweet) {
-        if (!/\bsweet\b/.test(n) || !/\bpotato(?:es)?\b/.test(n)) return false;
-      } else {
-        if (!/\bpotato(?:es)?\b/.test(n)) return false;
-      }
-      const isPlainBase = /^(potato|potatoes|sweet potato|sweet potatoes)\s*(,|$)/.test(n);
-      const isCookingBase = /\b(raw|cooked|boiled|baked|flesh|with skin|without skin)\b/.test(n);
-      if (!(isPlainBase || isCookingBase)) return false;
-      if (/\b(fries|french|hash brown|chips?|crisps?|snack|mix|bread|cookie|pie|salad|soup|dumpling|gnocchi|knish|flour|flakes|bites|blintzes|crowns|crusted|munchers|pancakes|puffs|sausage|skins|starch|stix|ridges)\b/.test(n)) {
-        return false;
-      }
-      return true;
-    })
-    .map((f) => ({ f: f as FoodItem, s: score(f, ctx) + (f.id.startsWith("usda-") ? 2400 : 2000) }))
-    .sort((a, b) => b.s - a.s || a.f.name.localeCompare(b.f.name))
-    .map((x) => x.f);
+  const selectRows = (pool: IndexedFood[]) =>
+    pool
+      .filter((f) => {
+        const n = f._name;
+        if (isSweet) {
+          if (!/\bsweet\b/.test(n) || !/\bpotato(?:es)?\b/.test(n)) return false;
+        } else {
+          if (!/\bpotato(?:es)?\b/.test(n)) return false;
+        }
+        const isPlainBase = /^(potato|potatoes|sweet potato|sweet potatoes)\s*(,|$)/.test(n);
+        const isCookingBase = /\b(raw|cooked|boiled|baked|flesh|with skin|without skin)\b/.test(n);
+        if (!(isPlainBase || isCookingBase)) return false;
+        if (
+          /\b(fries|french|hash brown|chips?|crisps?|snack|mix|bread|cookie|pie|salad|soup|dumpling|gnocchi|knish|flour|flakes|bites|blintzes|crowns|crusted|munchers|pancakes|puffs|sausage|skins|starch|stix|ridges)\b/.test(
+            n
+          )
+        ) {
+          return false;
+        }
+        return true;
+      })
+      .map((f) => ({ f: f as FoodItem, s: score(f, ctx) + (f.id.startsWith("usda-") ? 2400 : 2000) }))
+      .sort((a, b) => b.s - a.s || a.f.name.localeCompare(b.f.name))
+      .map((x) => x.f);
 
-  return dedupeFoodsByName(rows).slice(0, limit);
+  const indexedPool = (await resolveFoodsByIds([...candidateIds])).map(toIndexedFood);
+  const indexedRows = dedupeFoodsByName(selectRows(indexedPool)).slice(0, limit);
+  if (indexedRows.length > 0) return indexedRows;
+
+  const allRows = dedupeFoodsByName(selectRows(await loadAllFoodsIndexed()));
+  return allRows.slice(0, limit);
 }
 
 async function resolveOatFamilyStrict(ctx: QueryCtx, limit: number): Promise<FoodItem[]> {
