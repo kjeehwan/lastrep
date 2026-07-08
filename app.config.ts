@@ -4,7 +4,7 @@ import path from "node:path";
 
 type AppVariant = "dev" | "prod";
 
-const appJsonPath = path.join(__dirname, "app.json");
+const appJsonPath = path.join(__dirname, "app.base.json");
 const appJson = JSON.parse(fs.readFileSync(appJsonPath, "utf8")) as { expo: ExpoConfig };
 const baseConfig = appJson.expo;
 

@@ -3,5 +3,27 @@
     "source.fixAll": "explicit",
     "source.organizeImports": "explicit",
     "source.sortMembers": "explicit"
-  }
+  },
+  "java.jdt.ls.java.home": "C:\\Program Files\\Java\\jdk-17",
+  "java.import.gradle.java.home": "C:\\Program Files\\Java\\jdk-17",
+  "java.configuration.runtimes": [
+    {
+      "name": "JavaSE-17",
+      "path": "C:\\Program Files\\Java\\jdk-17",
+      "default": true
+    },
+    {
+      "name": "JavaSE-21",
+      "path": "C:\\Program Files\\Eclipse Adoptium\\jdk-21.0.10.7-hotspot"
+    }
+  ],
+  "java.import.exclusions": [
+    "**/node_modules/**",
+    "**/android/build/**",
+    "**/.gradle/**"
+  ],
+  "java.import.gradle.enabled": false,
+  "gradle.autoDetect": "off",
+  "gradle.nestedProjects": false,
+  "java.gradle.buildServer.enabled": "off"
 }
