@@ -4,7 +4,7 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { onAuthStateChanged } from 'firebase/auth';
 import { useEffect } from 'react';
-import { LogBox } from 'react-native';
+import { InteractionManager, LogBox } from 'react-native';
 import 'react-native-reanimated';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
@@ -52,19 +52,23 @@ export default function RootLayout() {
   }, []);
 
   useEffect(() => {
+    if (__DEV__) return;
     let cancelled = false;
-    const warmNutritionSearch = async () => {
-      try {
-        const foodDb = await import('@/src/nutrition/foodDb');
-        if (cancelled) return;
-        await foodDb.prewarmFoodSearch();
-      } catch {
-        // Best-effort warmup only.
-      }
-    };
-    void warmNutritionSearch();
+    const task = InteractionManager.runAfterInteractions(() => {
+      const warmNutritionSearch = async () => {
+        try {
+          const foodDb = await import('@/src/nutrition/foodDb');
+          if (cancelled) return;
+          await foodDb.prewarmFoodSearch();
+        } catch {
+          // Best-effort warmup only.
+        }
+      };
+      void warmNutritionSearch();
+    });
     return () => {
       cancelled = true;
+      task.cancel();
     };
   }, []);
 

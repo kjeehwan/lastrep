@@ -20,9 +20,10 @@ import {
   updateDoc,
   where,
 } from "firebase/firestore";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   BackHandler,
+  InteractionManager,
   Modal,
   Platform,
   ScrollView,
@@ -271,6 +272,8 @@ export default function Home() {
   const [sorenessHistory, setSorenessHistory] = useState<ChartPoint[]>([]);
   const [fatigueHistory, setFatigueHistory] = useState<ChartPoint[]>([]);
   const [motivationHistory, setMotivationHistory] = useState<ChartPoint[]>([]);
+  const hasDeferredInitialInsightsRef = useRef(false);
+  const homeInsightsRequestRef = useRef<Promise<void> | null>(null);
 
   const entitlement = useEntitlement(authReady, uid);
   const { isOffline } = useOfflineStatus();
@@ -551,153 +554,181 @@ export default function Home() {
 
   const loadHomeInsights = useCallback(async () => {
     if (!uid) return;
-    setWorkoutsLoading(true);
-    setInsightsError(null);
-    try {
-      const workoutsRef = collection(db, "users", uid, "workouts");
-      const workoutsSnap = await getDocs(query(workoutsRef, orderBy("date", "desc"), limit(120)));
-      const parsedWorkouts: WorkoutSummary[] = [];
-      workoutsSnap.forEach((docSnap) => {
-        const data: any = docSnap.data();
-        const rawDate =
-          data?.date?.toDate?.() ||
-          data?.endedAt?.toDate?.() ||
-          data?.createdAt?.toDate?.() ||
-          null;
-        if (!(rawDate instanceof Date)) return;
-        parsedWorkouts.push({
-          id: docSnap.id,
-          title: typeof data?.title === "string" ? data.title : "Workout",
-          date: rawDate,
-          trainingPhase: typeof data?.trainingPhase === "string" ? data.trainingPhase : null,
-          exercises: (data?.exercises ?? []).map((exercise: any) => ({
-            name: typeof exercise?.name === "string" ? exercise.name : "Exercise",
-            notes: typeof exercise?.notes === "string" ? exercise.notes : "",
-            tempo: typeof exercise?.tempo === "string" ? exercise.tempo : "",
-            zone: typeof exercise?.zone === "string" ? exercise.zone : "",
-            mode: exercise?.mode === "cardio" ? "cardio" : "resistance",
-            sets: (exercise?.sets ?? []).map((set: any) => ({
-              weightKg: typeof set?.weightKg === "number" ? set.weightKg : null,
-              reps: String(set?.reps ?? ""),
-              distanceKm: typeof set?.distanceKm === "number" ? set.distanceKm : null,
-              durationSec: typeof set?.durationSec === "number" ? set.durationSec : null,
-              zone: typeof set?.zone === "string" ? set.zone : null,
-              setType: typeof set?.setType === "string" ? set.setType : null,
-              rpe:
-                typeof set?.rpe === "number" && Number.isFinite(set.rpe)
-                  ? set.rpe
-                  : null,
-            })),
-          })),
-        });
-      });
-      setWorkouts(parsedWorkouts);
-
+    if (homeInsightsRequestRef.current) return homeInsightsRequestRef.current;
+    let request: Promise<void> | null = null;
+    request = (async () => {
+      setWorkoutsLoading(true);
+      setInsightsError(null);
       try {
-        const [profile, userData, sleepProfile] = await Promise.all([
-          getNutritionProfile(uid),
-          getUserData(uid),
-          getSleepProfile(uid),
-        ]);
-        const userDietPhase =
-          typeof userData?.dietPhase === "string" && isDietPhase(userData.dietPhase)
-            ? userData.dietPhase
-            : dietPhase;
-        setWeightUnit(resolveWeightUnit(userData));
-        setEnergyUnit(resolveEnergyUnit(userData));
-        const target = getCalorieTargetForDietPhase(profile.calorieTargetsByDietPhase, userDietPhase);
-        const nutritionTrends = await getNutritionTrendReport(uid, target, 30);
-        const last7Days = nutritionTrends.dailyHistory.slice(0, 7);
-        const averageCalories7d =
-          last7Days.length > 0
-            ? Math.round(last7Days.reduce((sum, day) => sum + day.calories, 0) / last7Days.length)
-            : null;
-        setNutritionSnapshot({
-          averageCalories: averageCalories7d,
-          consistencyScore: nutritionTrends.consistencyScore ?? null,
+        const workoutsRef = collection(db, "users", uid, "workouts");
+        const workoutsSnap = await getDocs(query(workoutsRef, orderBy("date", "desc"), limit(120)));
+        const parsedWorkouts: WorkoutSummary[] = [];
+        workoutsSnap.forEach((docSnap) => {
+          const data: any = docSnap.data();
+          const rawDate =
+            data?.date?.toDate?.() ||
+            data?.endedAt?.toDate?.() ||
+            data?.createdAt?.toDate?.() ||
+            null;
+          if (!(rawDate instanceof Date)) return;
+          parsedWorkouts.push({
+            id: docSnap.id,
+            title: typeof data?.title === "string" ? data.title : "Workout",
+            date: rawDate,
+            trainingPhase: typeof data?.trainingPhase === "string" ? data.trainingPhase : null,
+            exercises: (data?.exercises ?? []).map((exercise: any) => ({
+              name: typeof exercise?.name === "string" ? exercise.name : "Exercise",
+              notes: typeof exercise?.notes === "string" ? exercise.notes : "",
+              tempo: typeof exercise?.tempo === "string" ? exercise.tempo : "",
+              zone: typeof exercise?.zone === "string" ? exercise.zone : "",
+              mode: exercise?.mode === "cardio" ? "cardio" : "resistance",
+              sets: (exercise?.sets ?? []).map((set: any) => ({
+                weightKg: typeof set?.weightKg === "number" ? set.weightKg : null,
+                reps: String(set?.reps ?? ""),
+                distanceKm: typeof set?.distanceKm === "number" ? set.distanceKm : null,
+                durationSec: typeof set?.durationSec === "number" ? set.durationSec : null,
+                zone: typeof set?.zone === "string" ? set.zone : null,
+                setType: typeof set?.setType === "string" ? set.setType : null,
+                rpe:
+                  typeof set?.rpe === "number" && Number.isFinite(set.rpe)
+                    ? set.rpe
+                    : null,
+              })),
+            })),
+          });
         });
-        const byDate = new Map(
-          nutritionTrends.dailyHistory.map((entry) => [entry.dateKey, entry.calories])
+        setWorkouts(parsedWorkouts);
+
+        try {
+          const [profile, userData, sleepProfile] = await Promise.all([
+            getNutritionProfile(uid),
+            getUserData(uid),
+            getSleepProfile(uid),
+          ]);
+          const userDietPhase =
+            typeof userData?.dietPhase === "string" && isDietPhase(userData.dietPhase)
+              ? userData.dietPhase
+              : dietPhase;
+          setWeightUnit(resolveWeightUnit(userData));
+          setEnergyUnit(resolveEnergyUnit(userData));
+          const target = getCalorieTargetForDietPhase(
+            profile.calorieTargetsByDietPhase,
+            userDietPhase
+          );
+          const nutritionTrends = await getNutritionTrendReport(uid, target, 30);
+          const last7Days = nutritionTrends.dailyHistory.slice(0, 7);
+          const averageCalories7d =
+            last7Days.length > 0
+              ? Math.round(
+                  last7Days.reduce((sum, day) => sum + day.calories, 0) / last7Days.length
+                )
+              : null;
+          setNutritionSnapshot({
+            averageCalories: averageCalories7d,
+            consistencyScore: nutritionTrends.consistencyScore ?? null,
+          });
+          const byDate = new Map(
+            nutritionTrends.dailyHistory.map((entry) => [entry.dateKey, entry.calories])
+          );
+          const calorieHistory: ChartPoint[] = [];
+          const start = new Date();
+          start.setDate(start.getDate() - 29);
+          start.setHours(12, 0, 0, 0);
+          const end = new Date();
+          end.setHours(12, 0, 0, 0);
+          const cursor = new Date(start);
+          while (cursor.getTime() <= end.getTime()) {
+            const key = toDateKey(cursor);
+            calorieHistory.push({
+              key,
+              label: `${cursor.getMonth() + 1}/${cursor.getDate()}`,
+              value: Math.round(convertKcalToUnit(byDate.get(key) ?? 0, energyUnit)),
+            });
+            cursor.setDate(cursor.getDate() + 1);
+          }
+          const adherenceHistory = [...nutritionTrends.dailyHistory]
+            .reverse()
+            .map((entry) => ({
+              key: entry.dateKey,
+              label: entry.dateKey.slice(5),
+              value: entry.adherence === "on_target" ? 100 : entry.adherence ? 0 : 50,
+            }));
+          setNutritionCalorieHistory(calorieHistory);
+          setNutritionAdherenceHistory(adherenceHistory);
+          const recentSleep = sleepProfile.recentNightlyHours ?? [];
+          const last7Sleep = recentSleep.slice(0, 7);
+          const sleepValues = last7Sleep
+            .map((entry) => entry.sleepHours)
+            .filter(
+              (value): value is number => typeof value === "number" && Number.isFinite(value)
+            );
+          const sleepByDate = new Map(
+            recentSleep.map((entry) => [entry.dateKey, entry.sleepHours])
+          );
+          const nextSleepHistory: ChartPoint[] = [];
+          const sleepStart = new Date();
+          sleepStart.setDate(sleepStart.getDate() - 29);
+          sleepStart.setHours(12, 0, 0, 0);
+          const sleepEnd = new Date();
+          sleepEnd.setHours(12, 0, 0, 0);
+          const sleepCursor = new Date(sleepStart);
+          while (sleepCursor.getTime() <= sleepEnd.getTime()) {
+            const key = toDateKey(sleepCursor);
+            nextSleepHistory.push({
+              key,
+              label: `${sleepCursor.getMonth() + 1}/${sleepCursor.getDate()}`,
+              value: sleepByDate.get(key) ?? 0,
+            });
+            sleepCursor.setDate(sleepCursor.getDate() + 1);
+          }
+          setSleepHistory(nextSleepHistory);
+          const avgSleep =
+            sleepValues.length > 0
+              ? Math.round(
+                  (sleepValues.reduce((sum, value) => sum + value, 0) / sleepValues.length) * 10
+                ) / 10
+              : null;
+          setSleepSnapshot({
+            averageSleepHours: avgSleep,
+            nightsCaptured: sleepValues.length,
+          });
+        } catch (contextError) {
+          if (!isExpectedOfflineError(contextError)) {
+            console.log("Failed to load nutrition/sleep insight context", contextError);
+          }
+        }
+      } catch (error) {
+        if (!isExpectedOfflineError(error)) {
+          console.log("Failed to load home insights", error);
+        }
+        setInsightsError(
+          isExpectedOfflineError(error)
+            ? "You're offline. Insights will refresh when you reconnect."
+            : "Couldn't refresh home insights right now."
         );
-        const calorieHistory: ChartPoint[] = [];
-        const start = new Date();
-        start.setDate(start.getDate() - 29);
-        start.setHours(12, 0, 0, 0);
-        const end = new Date();
-        end.setHours(12, 0, 0, 0);
-        const cursor = new Date(start);
-        while (cursor.getTime() <= end.getTime()) {
-          const key = toDateKey(cursor);
-          calorieHistory.push({
-            key,
-            label: `${cursor.getMonth() + 1}/${cursor.getDate()}`,
-            value: Math.round(convertKcalToUnit(byDate.get(key) ?? 0, energyUnit)),
-          });
-          cursor.setDate(cursor.getDate() + 1);
-        }
-        const adherenceHistory = [...nutritionTrends.dailyHistory]
-          .reverse()
-          .map((entry) => ({
-            key: entry.dateKey,
-            label: entry.dateKey.slice(5),
-            value: entry.adherence === "on_target" ? 100 : entry.adherence ? 0 : 50,
-          }));
-        setNutritionCalorieHistory(calorieHistory);
-        setNutritionAdherenceHistory(adherenceHistory);
-        const recentSleep = sleepProfile.recentNightlyHours ?? [];
-        const last7Sleep = recentSleep.slice(0, 7);
-        const sleepValues = last7Sleep
-          .map((entry) => entry.sleepHours)
-          .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
-        const sleepByDate = new Map(recentSleep.map((entry) => [entry.dateKey, entry.sleepHours]));
-        const nextSleepHistory: ChartPoint[] = [];
-        const sleepStart = new Date();
-        sleepStart.setDate(sleepStart.getDate() - 29);
-        sleepStart.setHours(12, 0, 0, 0);
-        const sleepEnd = new Date();
-        sleepEnd.setHours(12, 0, 0, 0);
-        const sleepCursor = new Date(sleepStart);
-        while (sleepCursor.getTime() <= sleepEnd.getTime()) {
-          const key = toDateKey(sleepCursor);
-          nextSleepHistory.push({
-            key,
-            label: `${sleepCursor.getMonth() + 1}/${sleepCursor.getDate()}`,
-            value: sleepByDate.get(key) ?? 0,
-          });
-          sleepCursor.setDate(sleepCursor.getDate() + 1);
-        }
-        setSleepHistory(nextSleepHistory);
-        const avgSleep =
-          sleepValues.length > 0
-            ? Math.round(
-                (sleepValues.reduce((sum, value) => sum + value, 0) / sleepValues.length) * 10
-              ) / 10
-            : null;
-        setSleepSnapshot({
-          averageSleepHours: avgSleep,
-          nightsCaptured: sleepValues.length,
-        });
-      } catch (contextError) {
-        if (!isExpectedOfflineError(contextError)) {
-          console.log("Failed to load nutrition/sleep insight context", contextError);
-        }
+      } finally {
+        setWorkoutsLoading(false);
       }
-    } catch (error) {
-      if (!isExpectedOfflineError(error)) {
-        console.log("Failed to load home insights", error);
-      }
-      setInsightsError(
-        isExpectedOfflineError(error)
-          ? "You're offline. Insights will refresh when you reconnect."
-          : "Couldn't refresh home insights right now."
-      );
+    })();
+    homeInsightsRequestRef.current = request;
+    try {
+      await request;
     } finally {
-      setWorkoutsLoading(false);
+      if (homeInsightsRequestRef.current === request) {
+        homeInsightsRequestRef.current = null;
+      }
     }
   }, [uid, dietPhase, energyUnit]);
 
   useFocusEffect(
     useCallback(() => {
+      if (!hasDeferredInitialInsightsRef.current) {
+        hasDeferredInitialInsightsRef.current = true;
+        const task = InteractionManager.runAfterInteractions(() => {
+          void loadHomeInsights();
+        });
+        return () => task.cancel();
+      }
       void loadHomeInsights();
       return undefined;
     }, [loadHomeInsights])

@@ -9,7 +9,7 @@ import { auth } from "../../src/config/firebaseConfig";
 import { getUserData } from "../../src/userData";
 
 const ONBOARDING_COMPLETE_KEY = "onboardingComplete";
-const MIN_SPLASH_MS = 900;
+const MIN_SPLASH_MS = __DEV__ ? 250 : 900;
 
 const hasCompletedLegacyOnboarding = (userData: any): boolean =>
   typeof userData?.nickname === "string" &&

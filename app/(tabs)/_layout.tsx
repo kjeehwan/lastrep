@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
 import { onAuthStateChanged } from "firebase/auth";
 import React, { useEffect, useRef } from "react";
+import { InteractionManager } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { auth } from "../../src/config/firebaseConfig";
 import { useOfflineStatus } from "../../src/hooks/useOfflineStatus";
@@ -54,18 +55,26 @@ export default function TabsLayout() {
   const bottomInset = Math.max(insets.bottom, 12);
   const { isOffline } = useOfflineStatus();
   const inFlightRef = useRef(false);
+  const syncTaskRef = useRef<{ cancel: () => void } | null>(null);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (user) => {
       if (!user || isOffline || inFlightRef.current) return;
-      inFlightRef.current = true;
-      void autoSyncSleepFromHealthConnectIfEligible(user.uid, { minIntervalMinutes: 30 }).finally(
-        () => {
-          inFlightRef.current = false;
-        }
-      );
+      syncTaskRef.current?.cancel();
+      const task = InteractionManager.runAfterInteractions(() => {
+        inFlightRef.current = true;
+        void autoSyncSleepFromHealthConnectIfEligible(user.uid, { minIntervalMinutes: 30 }).finally(
+          () => {
+            inFlightRef.current = false;
+          }
+        );
+      });
+      syncTaskRef.current = task;
     });
-    return unsub;
+    return () => {
+      syncTaskRef.current?.cancel();
+      unsub();
+    };
   }, [isOffline]);
 
   return (
