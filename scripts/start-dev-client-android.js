@@ -2,7 +2,7 @@ const { spawn } = require("child_process");
 
 const extraArgs = process.argv.slice(2);
 const hasClear = extraArgs.includes("--clear");
-const shouldOpen = extraArgs.includes("--open");
+const shouldOpen = !extraArgs.includes("--no-open");
 const fastMode = extraArgs.includes("--fast");
 
 const env = {
@@ -156,21 +156,36 @@ const runAdbReverse = async (port) =>
     child.on("error", reject);
   });
 
-const openDevApp = (port) => {
-  spawn(
-    "cmd.exe",
-    [
-      "/d",
-      "/s",
-      "/c",
-      `adb shell am start -W -a android.intent.action.VIEW -d "lastrep-dev://expo-development-client/?url=${encodeURIComponent(`http://127.0.0.1:${port}`)}"`,
-    ],
-    {
-      stdio: "inherit",
-      windowsVerbatimArguments: false,
-      env,
+const openDevApp = async (port) =>
+  new Promise((resolve) => {
+    const child = spawn(
+      "cmd.exe",
+      [
+        "/d",
+        "/s",
+        "/c",
+        `adb shell am start -W -a android.intent.action.VIEW -d "lastrep-dev://expo-development-client/?url=${encodeURIComponent(`http://127.0.0.1:${port}`)}"`,
+      ],
+      {
+        stdio: "inherit",
+        windowsVerbatimArguments: false,
+        env,
+      }
+    );
+
+    child.on("exit", (code) => resolve((code ?? 1) === 0));
+    child.on("error", () => resolve(false));
+  });
+
+const openDevAppWithRetries = async (port, attempts = 3, delayMs = 1500) => {
+  for (let index = 0; index < attempts; index += 1) {
+    const opened = await openDevApp(port);
+    if (opened) {
+      return true;
     }
-  );
+    await sleep(delayMs);
+  }
+  return false;
 };
 
 void (async () => {
@@ -203,8 +218,9 @@ void (async () => {
       const ready = await waitForMetro(port);
       if (ready) {
         const prewarmed = await prewarmAndroidBundle(port);
-        void prewarmed;
-        openDevApp(port);
+        if (prewarmed) {
+          await openDevAppWithRetries(port);
+        }
       }
     })();
   }

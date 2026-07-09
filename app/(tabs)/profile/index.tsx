@@ -59,6 +59,7 @@ import {
   type HealthConnectAvailability,
 } from "../../../src/sleep/sleep";
 import { getUserData, saveUserData } from "../../../src/userData";
+import { scheduleAfterInteractions } from "../../../src/utils/scheduleAfterInteractions";
 
 const goals = [
   { key: "buildMuscle", label: "Build Muscle" },
@@ -232,6 +233,8 @@ export default function ProfileIndex() {
   const [initialSnapshot, setInitialSnapshot] = useState<string | null>(null);
   const skipNextBlurPromptRef = useRef(false);
   const blurPromptOpenRef = useRef(false);
+  const profileFocusTaskRef = useRef<{ cancel: () => void } | null>(null);
+  const lastProfileHealthRefreshAtRef = useRef(0);
   const buildSnapshot = useCallback(
     () =>
       JSON.stringify({
@@ -504,9 +507,12 @@ export default function ProfileIndex() {
 
   useFocusEffect(
     useCallback(() => {
-      void refreshHealthConnectStatus();
-      if (uid) {
-        void (async () => {
+      if (Date.now() - lastProfileHealthRefreshAtRef.current >= 60_000) {
+        profileFocusTaskRef.current?.cancel();
+        profileFocusTaskRef.current = scheduleAfterInteractions(async () => {
+          lastProfileHealthRefreshAtRef.current = Date.now();
+          await refreshHealthConnectStatus();
+          if (!uid) return;
           const samsungAutoSyncResult = await autoSyncBodyCompositionFromSamsungHealthIfEligible(uid, {
             minIntervalMinutes: 60,
           });
@@ -525,9 +531,9 @@ export default function ProfileIndex() {
               ? sleepProfile.lastSyncedAt.toDate().toLocaleString()
               : "Not synced yet"
           );
-        })();
+        });
       }
-      return undefined;
+      return () => profileFocusTaskRef.current?.cancel();
     }, [refreshBodyComposition, refreshHealthConnectStatus, uid, weightUnit])
   );
 

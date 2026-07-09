@@ -43,6 +43,7 @@ import WorkoutSetList from "../../../src/components/WorkoutSetList";
 import type { Decision } from "../../../src/types/decision";
 import { showAppAlert, showAppDialog } from "../../../src/ui/appDialog";
 import { isExpectedOfflineError } from "../../../src/utils/networkErrors";
+import { scheduleAfterInteractions } from "../../../src/utils/scheduleAfterInteractions";
 import { popPendingExerciseSelection } from "../../../src/workouts/addExerciseBridge";
 import { loadFreeExerciseDbCatalog } from "../../../src/workouts/freeExerciseDbCatalog";
 import { resolveFreeExerciseDbImagesForNames } from "../../../src/workouts/freeExerciseDbImages";
@@ -325,6 +326,9 @@ export default function WorkoutLog() {
   const scrollNativeGesture = useMemo(() => Gesture.Native(), []);
   const workoutStartedAtMsRef = useRef<number | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const startupLoadTaskRef = useRef<{ cancel: () => void } | null>(null);
+  const focusHydrationTaskRef = useRef<{ cancel: () => void } | null>(null);
+  const lastFocusHydrationAtRef = useRef(0);
   const createRoutineParamHandledRef = useRef(false);
   const lastCompletedSetByExerciseRef = useRef<Record<string, number>>({});
   const lastSetToggleAtRef = useRef<Record<string, number>>({});
@@ -887,7 +891,6 @@ export default function WorkoutLog() {
     }
   }, [auth]);
 
-  // Load draft and recent exercises
   useEffect(() => {
     const loadDraft = async () => {
       try {
@@ -986,9 +989,14 @@ export default function WorkoutLog() {
         }
       }
     };
-    loadDraft();
-    loadPastWorkouts();
-    loadRoutines();
+    startupLoadTaskRef.current?.cancel();
+    startupLoadTaskRef.current = scheduleAfterInteractions(async () => {
+      await loadDraft();
+      await Promise.allSettled([loadPastWorkouts(), loadRoutines()]);
+    });
+    return () => {
+      startupLoadTaskRef.current?.cancel();
+    };
   }, [auth.currentUser, loadPastWorkouts, loadRoutines, auth, getDraftKey]);
 
   useEffect(() => {
@@ -1050,16 +1058,21 @@ export default function WorkoutLog() {
         handleGoBack();
         return true;
       });
-      void loadLatestDecision();
-      void loadFavoriteExercises();
-      void (async () => {
-        const pendingExerciseName = await popPendingExerciseSelection(activeUid);
-        if (!active || !pendingExerciseName) return;
-        addExercise(pendingExerciseName);
-        setUiFeedback(`Added ${pendingExerciseName}.`);
-      })();
+      const shouldHydrateFocus = Date.now() - lastFocusHydrationAtRef.current >= 30_000;
+      if (shouldHydrateFocus) {
+        focusHydrationTaskRef.current?.cancel();
+        focusHydrationTaskRef.current = scheduleAfterInteractions(async () => {
+          lastFocusHydrationAtRef.current = Date.now();
+          await Promise.allSettled([loadLatestDecision(), loadFavoriteExercises()]);
+          const pendingExerciseName = await popPendingExerciseSelection(activeUid);
+          if (!active || !pendingExerciseName) return;
+          addExercise(pendingExerciseName);
+          setUiFeedback(`Added ${pendingExerciseName}.`);
+        });
+      }
       return () => {
         active = false;
+        focusHydrationTaskRef.current?.cancel();
         subscription.remove();
       };
     }, [loadLatestDecision, loadFavoriteExercises, addExercise, activeUid, handleGoBack])
@@ -1109,7 +1122,13 @@ export default function WorkoutLog() {
   }, [uiFeedback]);
 
   useEffect(() => {
-    void loadFavoriteExercises();
+    focusHydrationTaskRef.current?.cancel();
+    focusHydrationTaskRef.current = scheduleAfterInteractions(async () => {
+      await loadFavoriteExercises();
+    });
+    return () => {
+      focusHydrationTaskRef.current?.cancel();
+    };
   }, [loadFavoriteExercises]);
 
   useEffect(() => {
@@ -1119,9 +1138,10 @@ export default function WorkoutLog() {
       if (cancelled || !remote.length) return;
       setFreeDbCatalog(remote);
     };
-    void loadCatalog();
+    const task = scheduleAfterInteractions(loadCatalog);
     return () => {
       cancelled = true;
+      task.cancel();
     };
   }, []);
 

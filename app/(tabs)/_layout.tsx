@@ -2,13 +2,14 @@ import { Ionicons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
 import { onAuthStateChanged } from "firebase/auth";
 import React, { useEffect, useRef } from "react";
-import { InteractionManager } from "react-native";
+import { TouchableOpacity } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { auth } from "../../src/config/firebaseConfig";
 import { useOfflineStatus } from "../../src/hooks/useOfflineStatus";
 import { getProfileLeaveGuard } from "../../src/profile/leaveGuard";
 import { autoSyncSleepFromHealthConnectIfEligible } from "../../src/sleep/sleep";
 import { showAppDialog } from "../../src/ui/appDialog";
+import { scheduleAfterInteractions } from "../../src/utils/scheduleAfterInteractions";
 
 function createProfileTabLeaveListener(targetName: string) {
   return ({ navigation }: { navigation: { getState: () => { index: number; routes: { name: string }[] }; navigate: (name: string) => void } }) => ({
@@ -61,7 +62,7 @@ export default function TabsLayout() {
     const unsub = onAuthStateChanged(auth, (user) => {
       if (!user || isOffline || inFlightRef.current) return;
       syncTaskRef.current?.cancel();
-      const task = InteractionManager.runAfterInteractions(() => {
+      const task = scheduleAfterInteractions(() => {
         inFlightRef.current = true;
         void autoSyncSleepFromHealthConnectIfEligible(user.uid, { minIntervalMinutes: 30 }).finally(
           () => {
@@ -82,6 +83,7 @@ export default function TabsLayout() {
       initialRouteName="home"
       screenOptions={({ route }) => ({
         headerShown: false,
+        lazy: false,
         tabBarStyle: {
           backgroundColor: "#0d0d1a",
           borderTopColor: "rgba(255,255,255,0.08)",
@@ -91,6 +93,9 @@ export default function TabsLayout() {
         },
         tabBarActiveTintColor: "#7b61ff",
         tabBarInactiveTintColor: "#888",
+        tabBarActiveBackgroundColor: "transparent",
+        tabBarInactiveBackgroundColor: "transparent",
+        tabBarButton: (props) => <TouchableOpacity {...props} activeOpacity={0.8} />,
         tabBarIcon: ({ color, size }) => {
           const icons: Record<string, keyof typeof Ionicons.glyphMap> = {
             home: "home-outline",
