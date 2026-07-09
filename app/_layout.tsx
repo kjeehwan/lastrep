@@ -1,10 +1,9 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import * as SplashScreen from 'expo-splash-screen';
-import { Stack } from 'expo-router';
+import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { onAuthStateChanged } from 'firebase/auth';
 import { useEffect } from 'react';
-import { InteractionManager, LogBox, Platform } from 'react-native';
+import { LogBox, Platform } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import OfflineBanner from '@/components/OfflineBanner';
@@ -12,6 +11,7 @@ import AppDialogHost from '@/components/AppDialogHost';
 import { auth } from '@/src/config/firebaseConfig';
 import { initializeRevenueCat, syncRevenueCatIdentity } from '@/src/billing/revenuecat';
 import { logAnalyticsRuntimeDiagnostics } from '@/src/analytics/analytics';
+import { scheduleAfterInteractions } from '@/src/utils/scheduleAfterInteractions';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export const unstable_settings = {
@@ -58,7 +58,7 @@ export default function RootLayout() {
   useEffect(() => {
     if (__DEV__) return;
     let cancelled = false;
-    const task = InteractionManager.runAfterInteractions(() => {
+    const task = scheduleAfterInteractions(() => {
       const warmNutritionSearch = async () => {
         try {
           const foodDb = await import('@/src/nutrition/foodDb');
