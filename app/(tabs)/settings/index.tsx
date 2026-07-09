@@ -68,7 +68,7 @@ export default function SettingsIndex() {
   };
 
   const contactSupport = () => {
-    Linking.openURL("mailto:kjeehwan@gmail.com?subject=Support%20request");
+    Linking.openURL("mailto:lastrep.dev@gmail.com?subject=Support%20request");
   };
 
   const handleGoBack = () => {
