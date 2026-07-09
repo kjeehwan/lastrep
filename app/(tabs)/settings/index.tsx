@@ -52,12 +52,6 @@ export default function SettingsIndex() {
     return unsub;
   }, []);
 
-  useEffect(() => {
-    if (entitlement.state !== "active") {
-      setManageFallbackText(null);
-    }
-  }, [entitlement.state]);
-
   const handleSignOut = async () => {
     try {
       await signOut(auth);
@@ -226,7 +220,9 @@ export default function SettingsIndex() {
               <Text style={styles.secondaryButtonText}>Upgrade to Premium</Text>
             </TouchableOpacity>
           )}
-          {manageFallbackText ? <Text style={styles.subText}>{manageFallbackText}</Text> : null}
+          {entitlement.state === "active" && manageFallbackText ? (
+            <Text style={styles.subText}>{manageFallbackText}</Text>
+          ) : null}
         </View>
 
         <View style={styles.card}>

@@ -21,6 +21,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { auth } from "@/src/config/firebaseConfig";
 import type { SleepNightlySummary } from "@/src/contracts";
 import { useOfflineStatus } from "@/src/hooks/useOfflineStatus";
+import { useNow } from "@/src/hooks/useNow";
 import { getSleepRecoveryHint, classifySleepVsTarget } from "@/src/sleep/sleepInsights";
 import {
   autoSyncSleepFromHealthConnectIfEligible,
@@ -35,6 +36,7 @@ import {
 import { showAppDialog } from "@/src/ui/appDialog";
 import { getUserData } from "@/src/userData";
 import { isExpectedOfflineError } from "@/src/utils/networkErrors";
+import { scheduleAfterInteractions } from "@/src/utils/scheduleAfterInteractions";
 import { ChartEmptyState, type ChartPoint } from "@/src/components/charts/TrendCharts";
 
 const ACCENT = "#7b61ff";
@@ -59,10 +61,13 @@ export default function SleepIndex() {
   >("unknown");
   const [availability, setAvailability] = useState<HealthConnectAvailability>("unsupported");
   const timelineScrollRef = React.useRef<FlatList<ChartPoint> | null>(null);
+  const refreshSleepTaskRef = React.useRef<{ cancel: () => void } | null>(null);
+  const lastSleepRefreshAtRef = React.useRef(0);
   const [timelineWindowStart, setTimelineWindowStart] = useState(0);
   const [timelineShouldSnapToLatest, setTimelineShouldSnapToLatest] = useState(true);
   const [timelineViewportWidthMeasured, setTimelineViewportWidthMeasured] = useState(0);
   const [selectedSleepDateKey, setSelectedSleepDateKey] = useState<string | null>(null);
+  const nowMs = useNow(60_000, sleepSource === "health" && sampleRecordedAt != null);
 
   const applyProfile = useCallback((profile: Awaited<ReturnType<typeof getSleepProfile>>) => {
     setSleepSource(profile.source);
@@ -147,12 +152,21 @@ export default function SleepIndex() {
 
   useFocusEffect(
     useCallback(() => {
-      void refreshSleep({ autoSync: true });
+      if (Date.now() - lastSleepRefreshAtRef.current >= 30_000) {
+        refreshSleepTaskRef.current?.cancel();
+        refreshSleepTaskRef.current = scheduleAfterInteractions(async () => {
+          lastSleepRefreshAtRef.current = Date.now();
+          await refreshSleep({ autoSync: true });
+        });
+      }
       const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
         router.replace("/home");
         return true;
       });
-      return () => subscription.remove();
+      return () => {
+        refreshSleepTaskRef.current?.cancel();
+        subscription.remove();
+      };
     }, [refreshSleep, router])
   );
 
@@ -183,9 +197,14 @@ export default function SleepIndex() {
   const timelinePlotTopInset = 4;
   const timelineDatesRowHeight = 24;
   const timelineTargetLaneWidth = 34;
+  const effectiveTimelineWindowStart = Math.min(timelineWindowStart, timelineMaxWindowStart);
   const focusedSleepPoints = useMemo(
-    () => sleepChartPoints.slice(timelineWindowStart, timelineWindowStart + timelineVisiblePoints),
-    [sleepChartPoints, timelineWindowStart]
+    () =>
+      sleepChartPoints.slice(
+        effectiveTimelineWindowStart,
+        effectiveTimelineWindowStart + timelineVisiblePoints
+      ),
+    [sleepChartPoints, effectiveTimelineWindowStart]
   );
   const trendAverage = useMemo(() => {
     if (!focusedSleepPoints.length) return null;
@@ -212,10 +231,10 @@ export default function SleepIndex() {
   }, [sleepChartPoints, selectedSleepDateKey]);
   const sampleAgeHours = useMemo(() => {
     if (!sampleRecordedAt) return null;
-    const diffMs = Date.now() - sampleRecordedAt.getTime();
+    const diffMs = nowMs - sampleRecordedAt.getTime();
     if (diffMs < 0) return 0;
     return Math.round((diffMs / (60 * 60 * 1000)) * 10) / 10;
-  }, [sampleRecordedAt]);
+  }, [nowMs, sampleRecordedAt]);
   const isStale = useMemo(() => {
     if (sleepSource !== "health") return false;
     if (sampleAgeHours == null) return true;
@@ -245,10 +264,6 @@ export default function SleepIndex() {
     }, 0);
     return () => clearTimeout(timer);
   }, [timelineShouldSnapToLatest, sleepChartPoints, timelineMaxWindowStart, timelinePointCellWidth]);
-
-  useEffect(() => {
-    setTimelineWindowStart((prev) => Math.min(prev, timelineMaxWindowStart));
-  }, [timelineMaxWindowStart]);
 
   const snapTimelineToNearestWindow = useCallback(
     (offsetX: number) => {

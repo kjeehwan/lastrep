@@ -1,6 +1,7 @@
 import { Href, useLocalSearchParams, useRouter } from "expo-router";
 import { onAuthStateChanged } from "firebase/auth";
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import type { GestureResponderEvent } from "react-native";
 import { ActivityIndicator, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import type { PurchasesOfferings, PurchasesPackage } from "react-native-purchases";
 import { getUidPrefix, logAnalyticsEvent } from "../src/analytics/analytics";
@@ -39,7 +40,7 @@ type PendingEntitlementAction = "purchase" | "restore" | null;
 
 type PurchaseAttempt = {
   packageParams: Record<string, string | number | boolean | undefined>;
-  successAtMs?: number;
+  startedAtMs: number;
   waitingForActivation: boolean;
   terminalLogged: boolean;
 };
@@ -146,8 +147,8 @@ export default function PaywallScreen() {
   const [screenState, setScreenState] = useState<ScreenState>("idle");
   const [feedback, setFeedback] = useState<string | null>(null);
   const [manageFallbackText, setManageFallbackText] = useState<string | null>(null);
-  const [activationStartedAt, setActivationStartedAt] = useState<number | null>(null);
   const [pendingEntitlementAction, setPendingEntitlementAction] = useState<PendingEntitlementAction>(null);
+  const [showActivationDelayHint, setShowActivationDelayHint] = useState(false);
   const devBillingBuild = __DEV__ || isDevBillingBuild();
 
   const entitlement = useEntitlement(authReady, uid);
@@ -159,6 +160,15 @@ export default function PaywallScreen() {
   const paywallOpenedAtRef = useRef<number | null>(null);
   const purchaseAttemptRef = useRef<PurchaseAttempt | null>(null);
   const restoreAttemptRef = useRef<RestoreAttempt | null>(null);
+  const activationHintTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mountedRef = useRef(false);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -263,10 +273,7 @@ export default function PaywallScreen() {
       purchaseAttemptRef.current = null;
       void logAnalyticsEvent("purchase_completed", {
         ...purchaseAttempt.packageParams,
-        latency_ms:
-          typeof purchaseAttempt.successAtMs === "number"
-            ? now - purchaseAttempt.successAtMs
-            : undefined,
+        latency_ms: now - purchaseAttempt.startedAtMs,
       });
     }
 
@@ -283,14 +290,25 @@ export default function PaywallScreen() {
       });
     }
 
-    setScreenState("idle");
-    setActivationStartedAt(null);
-    setPendingEntitlementAction(null);
-    setFeedback(null);
+    if (activationHintTimeoutRef.current) {
+      clearTimeout(activationHintTimeoutRef.current);
+      activationHintTimeoutRef.current = null;
+    }
+    const resetId = setTimeout(() => {
+      if (!mountedRef.current) return;
+      setShowActivationDelayHint(false);
+      setScreenState("idle");
+      setPendingEntitlementAction(null);
+      setFeedback(null);
+    }, 0);
+    return () => clearTimeout(resetId);
   }, [entitlement.state]);
 
   useEffect(() => {
     return () => {
+      if (activationHintTimeoutRef.current) {
+        clearTimeout(activationHintTimeoutRef.current);
+      }
       if (restoreAttemptRef.current?.timeoutId) {
         clearTimeout(restoreAttemptRef.current.timeoutId);
       }
@@ -307,7 +325,7 @@ export default function PaywallScreen() {
     screenState !== "loading" &&
     pendingEntitlementAction === null;
 
-  const handlePurchase = async (selectedPackage: PurchasesPackage) => {
+  const handlePurchase = async (selectedPackage: PurchasesPackage, eventTimestampMs: number) => {
     if (devBillingBuild) {
       setFeedback("Billing test is disabled in Lastrep Dev. Open the Play-installed app.");
       return;
@@ -318,7 +336,7 @@ export default function PaywallScreen() {
     setFeedback(null);
     setPendingEntitlementAction(null);
 
-    const purchaseStartedAt = Date.now();
+    const purchaseStartedAt = Math.round(eventTimestampMs);
     const packageParams = {
       ...getCommonAnalyticsParams(sourceScreen, reasonCode, entitlement.state, uid),
       ...getPackageAnalyticsParams(selectedPackage, currentOffering?.identifier ?? OFFERING_ID),
@@ -330,6 +348,7 @@ export default function PaywallScreen() {
 
     purchaseAttemptRef.current = {
       packageParams,
+      startedAtMs: purchaseStartedAt,
       waitingForActivation: false,
       terminalLogged: false,
     };
@@ -363,14 +382,22 @@ export default function PaywallScreen() {
 
     purchaseAttemptRef.current = {
       packageParams,
-      successAtMs: Date.now(),
+      startedAtMs: purchaseStartedAt,
       waitingForActivation: true,
       terminalLogged: false,
     };
 
+    if (activationHintTimeoutRef.current) {
+      clearTimeout(activationHintTimeoutRef.current);
+    }
+    setShowActivationDelayHint(false);
+    activationHintTimeoutRef.current = setTimeout(() => {
+      if (mountedRef.current) {
+        setShowActivationDelayHint(true);
+      }
+    }, 30000);
     setScreenState("success");
     setPendingEntitlementAction("purchase");
-    setActivationStartedAt(Date.now());
     setFeedback("Purchase successful. Activating subscription...");
     try {
       await syncRevenueCatPurchases();
@@ -379,7 +406,7 @@ export default function PaywallScreen() {
     }
   };
 
-  const handleRestore = async () => {
+  const handleRestore = async (eventTimestampMs: number) => {
     if (devBillingBuild) {
       setFeedback("Restore is disabled in Lastrep Dev. Open the Play-installed app.");
       return;
@@ -388,7 +415,7 @@ export default function PaywallScreen() {
     if (entitlement.state === "active") {
       setScreenState("idle");
       setPendingEntitlementAction(null);
-      setActivationStartedAt(null);
+      setShowActivationDelayHint(false);
       setFeedback("You already have active premium.");
       return;
     }
@@ -397,7 +424,7 @@ export default function PaywallScreen() {
     setFeedback("Checking for previous purchases...");
     setPendingEntitlementAction(null);
 
-    const restoreStartedAt = Date.now();
+    const restoreStartedAt = Math.round(eventTimestampMs);
     const restoreParams = {
       ...getCommonAnalyticsParams(sourceScreen, reasonCode, entitlement.state, uid),
     };
@@ -440,7 +467,7 @@ export default function PaywallScreen() {
       restoreAttemptRef.current = null;
       void logAnalyticsEvent("restore_failed", currentAttempt.baseParams);
       setPendingEntitlementAction(null);
-      setActivationStartedAt(null);
+      setShowActivationDelayHint(false);
       setScreenState("idle");
       setFeedback(
         "We couldn't confirm an active subscription yet. If you recently subscribed, wait a moment and reopen the app, or try Restore again."
@@ -457,7 +484,7 @@ export default function PaywallScreen() {
 
     setScreenState("success");
     setPendingEntitlementAction("restore");
-    setActivationStartedAt(Date.now());
+    setShowActivationDelayHint(false);
     setFeedback("Checking for previous purchases...");
     try {
       await syncRevenueCatPurchases();
@@ -528,10 +555,9 @@ export default function PaywallScreen() {
       {feedback ? (
         <View style={styles.notice}>
           <Text style={styles.noticeText}>{feedback}</Text>
-          {activationStartedAt &&
+          {showActivationDelayHint &&
           pendingEntitlementAction === "purchase" &&
-          entitlement.state !== "active" &&
-          Date.now() - activationStartedAt >= 30000 ? (
+          entitlement.state !== "active" ? (
             <Text style={styles.noticeSub}>
               If it does not activate within ~30 seconds, reopen the app or tap Restore.
             </Text>
@@ -554,7 +580,9 @@ export default function PaywallScreen() {
                   key={aPackage.identifier}
                   style={[styles.packageButton, !canInteract && styles.disabled]}
                   disabled={!canInteract}
-                  onPress={() => handlePurchase(aPackage)}
+                  onPress={(event: GestureResponderEvent) =>
+                    void handlePurchase(aPackage, event.nativeEvent.timestamp)
+                  }
                 >
                   <View style={styles.packageContent}>
                     <Text style={styles.packageText}>{formatPrice(aPackage)}</Text>
@@ -576,7 +604,7 @@ export default function PaywallScreen() {
 
       <TouchableOpacity
         style={[styles.secondaryButton, !canInteract && styles.disabled]}
-        onPress={handleRestore}
+        onPress={(event: GestureResponderEvent) => void handleRestore(event.nativeEvent.timestamp)}
         disabled={!canInteract}
       >
         <Text style={styles.secondaryButtonText}>

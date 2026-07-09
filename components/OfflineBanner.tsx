@@ -6,12 +6,24 @@ import { useOfflineStatus } from "../src/hooks/useOfflineStatus";
 export default function OfflineBanner() {
   const { isOffline, ready } = useOfflineStatus();
   const [dismissed, setDismissed] = React.useState(false);
+  const mountedRef = React.useRef(false);
 
   React.useEffect(() => {
-    if (!isOffline) {
-      setDismissed(false);
-    }
-  }, [isOffline]);
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  React.useEffect(() => {
+    if (isOffline || !dismissed) return;
+    const timer = setTimeout(() => {
+      if (mountedRef.current) {
+        setDismissed(false);
+      }
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [dismissed, isOffline]);
 
   if (!ready || !isOffline || dismissed) {
     return null;

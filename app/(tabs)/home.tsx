@@ -23,7 +23,6 @@ import {
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   BackHandler,
-  InteractionManager,
   Modal,
   Platform,
   ScrollView,
@@ -60,6 +59,8 @@ import { resolveDecisionSleepInput } from "../../src/sleep/resolveDecisionSleepI
 import { getDecision, isNormalizedDecisionError } from "../../src/services/decision/getDecision";
 import { hashDecisionInputs } from "../../src/services/decision/inputHash";
 import type { DecisionInputs, DietPhase, LastResultPayload, TrainingPhase } from "../../src/types/decision";
+import { useNow } from "../../src/hooks/useNow";
+import { scheduleAfterInteractions } from "../../src/utils/scheduleAfterInteractions";
 import { isExpectedOfflineError } from "../../src/utils/networkErrors";
 import {
   computeWeeklyWorkoutMetrics,
@@ -274,9 +275,11 @@ export default function Home() {
   const [motivationHistory, setMotivationHistory] = useState<ChartPoint[]>([]);
   const hasDeferredInitialInsightsRef = useRef(false);
   const homeInsightsRequestRef = useRef<Promise<void> | null>(null);
+  const lastHomeInsightsLoadAtRef = useRef(0);
 
   const entitlement = useEntitlement(authReady, uid);
   const { isOffline } = useOfflineStatus();
+  const nowMs = useNow(60_000);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (user) => {
@@ -284,6 +287,8 @@ export default function Home() {
       if (!user) {
         setUid(null);
         setUserNickname(null);
+        setProfilePhotoUri(null);
+        setProfileDescription(null);
         setShowFirstTimeBanner(false);
         setLatestDecision(null);
         setRedirectTo("/auth/sign-in");
@@ -316,12 +321,7 @@ export default function Home() {
   }, [uid]);
 
   useEffect(() => {
-    if (!uid) {
-      setUserNickname(null);
-      setProfilePhotoUri(null);
-      setProfileDescription(null);
-      return;
-    }
+    if (!uid) return;
 
     const unsubscribe = onSnapshot(
       doc(db, "users", uid),
@@ -722,15 +722,18 @@ export default function Home() {
 
   useFocusEffect(
     useCallback(() => {
-      if (!hasDeferredInitialInsightsRef.current) {
-        hasDeferredInitialInsightsRef.current = true;
-        const task = InteractionManager.runAfterInteractions(() => {
-          void loadHomeInsights();
-        });
-        return () => task.cancel();
+      const now = Date.now();
+      const shouldRefreshNow =
+        !hasDeferredInitialInsightsRef.current || now - lastHomeInsightsLoadAtRef.current >= 30_000;
+      if (!shouldRefreshNow) {
+        return undefined;
       }
-      void loadHomeInsights();
-      return undefined;
+      hasDeferredInitialInsightsRef.current = true;
+      const task = scheduleAfterInteractions(async () => {
+        lastHomeInsightsLoadAtRef.current = Date.now();
+        await loadHomeInsights();
+      });
+      return () => task.cancel();
     }, [loadHomeInsights])
   );
 
@@ -759,17 +762,17 @@ export default function Home() {
   const trainingPhaseWeek = useMemo(() => {
     if (!trainingPhaseStartedAt) return 1;
     const start = trainingPhaseStartedAt.toDate();
-    const diffMs = Date.now() - start.getTime();
+    const diffMs = nowMs - start.getTime();
     const week = Math.floor(diffMs / (7 * 24 * 60 * 60 * 1000)) + 1;
     return Math.max(1, week);
-  }, [trainingPhaseStartedAt]);
+  }, [nowMs, trainingPhaseStartedAt]);
   const dietPhaseWeek = useMemo(() => {
     if (!dietPhaseStartedAt) return 1;
     const start = dietPhaseStartedAt.toDate();
-    const diffMs = Date.now() - start.getTime();
+    const diffMs = nowMs - start.getTime();
     const week = Math.floor(diffMs / (7 * 24 * 60 * 60 * 1000)) + 1;
     return Math.max(1, week);
-  }, [dietPhaseStartedAt]);
+  }, [dietPhaseStartedAt, nowMs]);
 
   const selectedDayWorkouts = useMemo(
     () => workouts.filter((workout) => toDateKey(workout.date) === selectedDateKey),

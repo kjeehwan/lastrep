@@ -28,6 +28,7 @@ import {
 import type { DietPhase } from "@/src/types/decision";
 import { isExpectedOfflineError } from "@/src/utils/networkErrors";
 import { getUserData } from "@/src/userData";
+import { scheduleAfterInteractions } from "@/src/utils/scheduleAfterInteractions";
 
 const DIET_PHASES: DietPhase[] = ["Cut", "Maintain", "Bulk"];
 const DEFAULT_SECTIONS = ["Breakfast", "Snack 1", "Lunch", "Snack 2", "Dinner", "Snack 3"];
@@ -103,21 +104,17 @@ export default function NutritionIndex() {
   const [newMealName, setNewMealName] = useState("");
   const [trendReport, setTrendReport] = useState<NutritionTrendReport | null>(null);
   const [loadingTrends, setLoadingTrends] = useState(false);
-  const [selectedDateKey, setSelectedDateKey] = useState(() => {
-    const fromParams = typeof params.date === "string" ? params.date : "";
-    return parseDateKey(fromParams) ? fromParams : formatDateKey(new Date());
-  });
   const [timelinePoints, setTimelinePoints] = useState<ChartPoint[]>([]);
   const [energyUnit, setEnergyUnit] = useState<EnergyUnit>("kcal");
   const timelineScrollRef = React.useRef<FlatList<ChartPoint> | null>(null);
+  const refreshProfileTaskRef = React.useRef<{ cancel: () => void } | null>(null);
+  const lastProfileRefreshAtRef = React.useRef(0);
   const [timelineShouldSnapToLatest, setTimelineShouldSnapToLatest] = useState(true);
   const [timelineWindowStart, setTimelineWindowStart] = useState(0);
   const [timelineViewportWidthMeasured, setTimelineViewportWidthMeasured] = useState<number>(0);
-
-  useEffect(() => {
+  const selectedDateKey = useMemo(() => {
     const fromParams = typeof params.date === "string" ? params.date : "";
-    if (!parseDateKey(fromParams)) return;
-    setSelectedDateKey(fromParams);
+    return parseDateKey(fromParams) ? fromParams : formatDateKey(new Date());
   }, [params.date]);
 
   useEffect(() => {
@@ -174,12 +171,13 @@ export default function NutritionIndex() {
   }, [uid, calorieTarget]);
 
   useEffect(() => {
-    if (!uid) {
-      setMeals([]);
-      setLoadingMeals(false);
-      return;
-    }
-    setLoadingMeals(true);
+    if (!uid) return;
+    let active = true;
+    const loadingTimer = setTimeout(() => {
+      if (active) {
+        setLoadingMeals(true);
+      }
+    }, 0);
     const targetDate = parseDateKey(selectedDateKey) ?? new Date();
     const unsubscribe = subscribeToMealsForDate(
       uid,
@@ -196,38 +194,45 @@ export default function NutritionIndex() {
         setLoadingMeals(false);
       }
     );
-    return unsubscribe;
+    return () => {
+      active = false;
+      clearTimeout(loadingTimer);
+      unsubscribe();
+    };
   }, [uid, selectedDateKey, fetchHistoryData]);
 
-  const fetchTimelineData = useCallback(async () => {
-    if (!uid) return;
-    try {
-      const recentMeals = await getRecentMeals(uid, 60);
-      const grouped = groupMealsByLocalDay(recentMeals);
-      const byDate = new Map(grouped.map((entry) => [entry.dateKey, entry]));
-      const points: ChartPoint[] = [];
-      for (let offset = 59; offset >= 0; offset -= 1) {
-        const d = new Date();
-        d.setDate(d.getDate() - offset);
-        const key = formatDateKey(d);
-        const calories = byDate.get(key)?.calories ?? 0;
-        points.push({
-          key,
-          label: key.slice(5).replace("-", "/"),
-          value: Math.round(toEnergyUnit(calories, energyUnit)),
-        });
-      }
-      setTimelinePoints(points);
-    } catch (error) {
-      if (!isExpectedOfflineError(error)) {
-        console.log("Failed to load timeline", error);
-      }
-    }
-  }, [uid, energyUnit]);
-
   useEffect(() => {
-    void fetchTimelineData();
-  }, [fetchTimelineData, meals]);
+    if (!uid) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const recentMeals = await getRecentMeals(uid, 60);
+        if (cancelled) return;
+        const grouped = groupMealsByLocalDay(recentMeals);
+        const byDate = new Map(grouped.map((entry) => [entry.dateKey, entry]));
+        const points: ChartPoint[] = [];
+        for (let offset = 59; offset >= 0; offset -= 1) {
+          const d = new Date();
+          d.setDate(d.getDate() - offset);
+          const key = formatDateKey(d);
+          const calories = byDate.get(key)?.calories ?? 0;
+          points.push({
+            key,
+            label: key.slice(5).replace("-", "/"),
+            value: Math.round(toEnergyUnit(calories, energyUnit)),
+          });
+        }
+        setTimelinePoints(points);
+      } catch (error) {
+        if (!isExpectedOfflineError(error)) {
+          console.log("Failed to load timeline", error);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [uid, energyUnit, meals]);
 
   const refreshProfileContext = useCallback(async () => {
     if (!uid) return;
@@ -252,14 +257,21 @@ export default function NutritionIndex() {
   useFocusEffect(
     useCallback(() => {
       setTimelineShouldSnapToLatest(true);
-      if (uid) {
-        void refreshProfileContext();
+      if (uid && Date.now() - lastProfileRefreshAtRef.current >= 30_000) {
+        refreshProfileTaskRef.current?.cancel();
+        refreshProfileTaskRef.current = scheduleAfterInteractions(async () => {
+          lastProfileRefreshAtRef.current = Date.now();
+          await refreshProfileContext();
+        });
       }
       const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
         router.replace("/home");
         return true;
       });
-      return () => subscription.remove();
+      return () => {
+        refreshProfileTaskRef.current?.cancel();
+        subscription.remove();
+      };
     }, [uid, refreshProfileContext, router])
   );
 
@@ -470,13 +482,15 @@ export default function NutritionIndex() {
     return () => clearTimeout(timer);
   }, [timelineShouldSnapToLatest, timelinePoints.length, timelineMaxWindowStart, timelineBarCellWidth]);
 
-  useEffect(() => {
-    setTimelineWindowStart((previous) => Math.min(previous, timelineMaxWindowStart));
-  }, [timelineMaxWindowStart]);
+  const effectiveTimelineWindowStart = Math.min(timelineWindowStart, timelineMaxWindowStart);
 
   const timelineFocusedPoints = useMemo(
-    () => timelinePoints.slice(timelineWindowStart, timelineWindowStart + timelineVisibleBars),
-    [timelinePoints, timelineWindowStart]
+    () =>
+      timelinePoints.slice(
+        effectiveTimelineWindowStart,
+        effectiveTimelineWindowStart + timelineVisibleBars
+      ),
+    [timelinePoints, effectiveTimelineWindowStart]
   );
   const timelineSnapOffsets = useMemo(
     () => Array.from({ length: timelineMaxWindowStart + 1 }, (_, index) => index * timelineBarCellWidth),
@@ -541,8 +555,8 @@ export default function NutritionIndex() {
   );
 
   const handlePressTimelineDate = useCallback((dateKey: string) => {
-    setSelectedDateKey(dateKey);
-  }, []);
+    router.setParams({ date: dateKey });
+  }, [router]);
 
   const renderTimelineItem = useCallback(
     ({ item: point }: { item: ChartPoint }) => (
