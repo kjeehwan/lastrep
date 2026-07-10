@@ -5,10 +5,13 @@ apply plugin: "com.facebook.react"
 def projectRoot = rootDir.getAbsoluteFile().getParentFile().getAbsolutePath()
 def prodGoogleServicesFile = new File(projectRoot, "google-services.json")
 def devGoogleServicesFile = new File(projectRoot, "google-services.dev.json")
+def activeAppVariant = (System.getenv("APP_VARIANT") ?: "prod") == "dev" ? "dev" : "prod"
 
 tasks.register("prepareProdGoogleServices", Copy) {
-    if (!prodGoogleServicesFile.exists()) {
-        throw new GradleException("Missing prod google-services.json: ${prodGoogleServicesFile}")
+    doFirst {
+        if (!prodGoogleServicesFile.exists()) {
+            throw new GradleException("Missing prod google-services.json: ${prodGoogleServicesFile}")
+        }
     }
     from(prodGoogleServicesFile)
     into(new File(projectDir, "src/prod"))
@@ -16,8 +19,10 @@ tasks.register("prepareProdGoogleServices", Copy) {
 }
 
 tasks.register("prepareDevGoogleServices", Copy) {
-    if (!devGoogleServicesFile.exists()) {
-        throw new GradleException("Missing dev google-services.dev.json: ${devGoogleServicesFile}")
+    doFirst {
+        if (!devGoogleServicesFile.exists()) {
+            throw new GradleException("Missing dev google-services.dev.json: ${devGoogleServicesFile}")
+        }
     }
     from(devGoogleServicesFile)
     into(new File(projectDir, "src/dev"))
@@ -141,6 +146,15 @@ android {
                 expoAppAuthScheme: "exp+lastrep",
             ]
             buildConfigField "String", "APP_VARIANT", "\"prod\""
+        }
+    }
+    variantFilter { variant ->
+        def flavorNames = variant.flavors*.name
+        if (activeAppVariant == "prod" && flavorNames.contains("dev")) {
+            variant.setIgnore(true)
+        }
+        if (activeAppVariant == "dev" && flavorNames.contains("prod")) {
+            variant.setIgnore(true)
         }
     }
     signingConfigs {

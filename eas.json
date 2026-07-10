@@ -8,6 +8,9 @@
       "environment": "development",
       "developmentClient": true,
       "distribution": "internal",
+      "android": {
+        "gradleCommand": ":app:assembleDevDebug"
+      },
       "env": {
         "APP_VARIANT": "dev"
       }
@@ -15,6 +18,9 @@
     "preview": {
       "environment": "preview",
       "distribution": "internal",
+      "android": {
+        "gradleCommand": ":app:assembleDevRelease"
+      },
       "env": {
         "APP_VARIANT": "dev"
       }
@@ -22,6 +28,9 @@
     "production": {
       "environment": "production",
       "autoIncrement": true,
+      "android": {
+        "gradleCommand": ":app:bundleProdRelease"
+      },
       "env": {
         "APP_VARIANT": "prod"
       }
