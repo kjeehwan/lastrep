@@ -32,7 +32,8 @@
         "gradleCommand": ":app:bundleProdRelease"
       },
       "env": {
-        "APP_VARIANT": "prod"
+        "APP_VARIANT": "prod",
+        "NODE_ENV": "production"
       }
     }
   },

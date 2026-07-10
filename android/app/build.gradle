@@ -6,26 +6,21 @@ def projectRoot = rootDir.getAbsoluteFile().getParentFile().getAbsolutePath()
 def prodGoogleServicesFile = new File(projectRoot, "google-services.json")
 def devGoogleServicesFile = new File(projectRoot, "google-services.dev.json")
 def activeAppVariant = (System.getenv("APP_VARIANT") ?: "prod") == "dev" ? "dev" : "prod"
+def selectedGoogleServicesFile = activeAppVariant == "dev" ? devGoogleServicesFile : prodGoogleServicesFile
+def appGoogleServicesFile = new File(projectDir, "google-services.json")
 
-tasks.register("prepareProdGoogleServices", Copy) {
+tasks.register("prepareGoogleServices", Copy) {
     doFirst {
-        if (!prodGoogleServicesFile.exists()) {
-            throw new GradleException("Missing prod google-services.json: ${prodGoogleServicesFile}")
+        if (!selectedGoogleServicesFile.exists()) {
+            throw new GradleException(
+                activeAppVariant == "dev"
+                    ? "Missing dev google-services.dev.json: ${selectedGoogleServicesFile}"
+                    : "Missing prod google-services.json: ${selectedGoogleServicesFile}"
+            )
         }
     }
-    from(prodGoogleServicesFile)
-    into(new File(projectDir, "src/prod"))
-    rename { "google-services.json" }
-}
-
-tasks.register("prepareDevGoogleServices", Copy) {
-    doFirst {
-        if (!devGoogleServicesFile.exists()) {
-            throw new GradleException("Missing dev google-services.dev.json: ${devGoogleServicesFile}")
-        }
-    }
-    from(devGoogleServicesFile)
-    into(new File(projectDir, "src/dev"))
+    from(selectedGoogleServicesFile)
+    into(projectDir)
     rename { "google-services.json" }
 }
 
@@ -35,9 +30,6 @@ tasks.register("prepareDevGoogleServices", Copy) {
  */
 react {
     entryFile = file(["node", "-e", "require('expo/scripts/resolveAppEntry')", projectRoot, "android", "absolute"].execute(null, rootDir).text.trim())
-    reactNativeDir = new File(["node", "--print", "require.resolve('react-native/package.json')"].execute(null, rootDir).text.trim()).getParentFile().getAbsoluteFile()
-    hermesCommand = new File(["node", "--print", "require.resolve('react-native/package.json')"].execute(null, rootDir).text.trim()).getParentFile().getAbsolutePath() + "/sdks/hermesc/%OS-BIN%/hermesc"
-    codegenDir = new File(["node", "--print", "require.resolve('@react-native/codegen/package.json', { paths: [require.resolve('react-native/package.json')] })"].execute(null, rootDir).text.trim()).getParentFile().getAbsoluteFile()
 
     enableBundleCompression = (findProperty('android.enableBundleCompression') ?: false).toBoolean()
     // Use Expo CLI to bundle the app, this ensures the Metro config
@@ -192,6 +184,8 @@ android {
     }
 }
 
+preBuild.dependsOn("prepareGoogleServices")
+
 afterEvaluate {
     tasks.matching { task ->
         task.name in [
@@ -201,12 +195,7 @@ afterEvaluate {
             "processProdReleaseGoogleServices",
         ]
     }.configureEach { task ->
-        if (task.name.startsWith("processDev")) {
-            task.dependsOn("prepareDevGoogleServices")
-        }
-        if (task.name.startsWith("processProd")) {
-            task.dependsOn("prepareProdGoogleServices")
-        }
+        task.dependsOn("prepareGoogleServices")
     }
 }
 
