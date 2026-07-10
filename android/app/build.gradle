@@ -178,8 +178,6 @@ android {
     }
 }
 
-preBuild.dependsOn("prepareProdGoogleServices", "prepareDevGoogleServices")
-
 afterEvaluate {
     tasks.matching { task ->
         task.name in [

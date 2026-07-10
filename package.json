@@ -97,6 +97,11 @@
         "@react-navigation/bottom-tabs",
         "@react-navigation/native-stack"
       ]
+    },
+    "doctor": {
+      "appConfigFieldsNotSyncedCheck": {
+        "enabled": false
+      }
     }
   },
   "private": true
