@@ -5,6 +5,8 @@ import { getAuth, onAuthStateChanged } from "firebase/auth";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   FlatList,
+  KeyboardAvoidingView,
+  Platform,
   StyleSheet,
   Text,
   TextInput,
@@ -198,94 +200,100 @@ export default function AddExerciseScreen() {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.headerIcon}>
-          <Ionicons name="chevron-back" size={20} color="#fff" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Add Exercise</Text>
-        <View style={styles.headerSpacer} />
-      </View>
+      <KeyboardAvoidingView
+        style={styles.keyboardAvoiding}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+      >
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.headerIcon}>
+            <Ionicons name="chevron-back" size={20} color="#fff" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Add Exercise</Text>
+          <View style={styles.headerSpacer} />
+        </View>
 
-      <View style={styles.topControls}>
-        <TextInput
-          placeholder="Search exercises"
-          placeholderTextColor="#7a7a8c"
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          style={styles.input}
-        />
+        <View style={styles.topControls}>
+          <TextInput
+            placeholder="Search exercises"
+            placeholderTextColor="#7a7a8c"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            style={styles.input}
+          />
+          <FlatList
+            horizontal
+            data={[
+              { key: "all", label: "All" },
+              { key: "favorites", label: "Favorites" },
+              ...(recentExercises.length > 0 ? [{ key: "recent", label: "Recent" }] : []),
+              ...EXERCISE_GROUPS.map((g) => ({ key: g.key, label: g.label })),
+            ]}
+            keyExtractor={(item) => item.key}
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.groupChips}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={[styles.groupChip, activeGroup === item.key && styles.groupChipActive]}
+                onPress={() => setActiveGroup(item.key)}
+              >
+                <Text style={[styles.groupChipText, activeGroup === item.key && styles.groupChipTextActive]}>
+                  {item.label}
+                </Text>
+              </TouchableOpacity>
+            )}
+          />
+        </View>
+
         <FlatList
-          horizontal
-          data={[
-            { key: "all", label: "All" },
-            { key: "favorites", label: "Favorites" },
-            ...(recentExercises.length > 0 ? [{ key: "recent", label: "Recent" }] : []),
-            ...EXERCISE_GROUPS.map((g) => ({ key: g.key, label: g.label })),
-          ]}
-          keyExtractor={(item) => item.key}
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.groupChips}
+          data={filtered}
+          keyExtractor={(item) => item.id}
+          keyboardShouldPersistTaps="handled"
+          initialNumToRender={24}
+          maxToRenderPerBatch={36}
+          windowSize={10}
+          removeClippedSubviews
           renderItem={({ item }) => (
-            <TouchableOpacity
-              style={[styles.groupChip, activeGroup === item.key && styles.groupChipActive]}
-              onPress={() => setActiveGroup(item.key)}
-            >
-              <Text style={[styles.groupChipText, activeGroup === item.key && styles.groupChipTextActive]}>
-                {item.label}
-              </Text>
-            </TouchableOpacity>
+            <View style={styles.row}>
+              <TouchableOpacity style={styles.rowMain} onPress={() => void submitSelection(item.name)}>
+                <Ionicons name="add-circle-outline" size={18} color="#7b61ff" />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.rowTitle}>{item.name}</Text>
+                  <Text style={styles.rowMeta}>
+                    {item.primaryMuscles.slice(0, 2).join(", ")} | {item.equipment.slice(0, 2).join(", ")}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => void toggleFavorite(item.name)} style={styles.iconButton}>
+                <Ionicons
+                  name={favoriteSet.has(item.name.toLowerCase()) ? "star" : "star-outline"}
+                  size={16}
+                  color="#ffd166"
+                />
+              </TouchableOpacity>
+            </View>
           )}
         />
-      </View>
 
-      <FlatList
-        data={filtered}
-        keyExtractor={(item) => item.id}
-        keyboardShouldPersistTaps="handled"
-        initialNumToRender={24}
-        maxToRenderPerBatch={36}
-        windowSize={10}
-        removeClippedSubviews
-        renderItem={({ item }) => (
-          <View style={styles.row}>
-            <TouchableOpacity style={styles.rowMain} onPress={() => void submitSelection(item.name)}>
-              <Ionicons name="add-circle-outline" size={18} color="#7b61ff" />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.rowTitle}>{item.name}</Text>
-                <Text style={styles.rowMeta}>
-                  {item.primaryMuscles.slice(0, 2).join(", ")} | {item.equipment.slice(0, 2).join(", ")}
-                </Text>
-              </View>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => void toggleFavorite(item.name)} style={styles.iconButton}>
-              <Ionicons
-                name={favoriteSet.has(item.name.toLowerCase()) ? "star" : "star-outline"}
-                size={16}
-                color="#ffd166"
-              />
-            </TouchableOpacity>
-          </View>
-        )}
-      />
-
-      <View style={styles.customRow}>
-        <TextInput
-          placeholder="Custom exercise"
-          placeholderTextColor="#7a7a8c"
-          value={customExercise}
-          onChangeText={setCustomExercise}
-          style={[styles.input, { flex: 1, marginBottom: 0 }]}
-        />
-        <TouchableOpacity style={styles.addButton} onPress={() => void submitSelection(customExercise)}>
-          <Text style={styles.addButtonText}>Add</Text>
-        </TouchableOpacity>
-      </View>
+        <View style={styles.customRow}>
+          <TextInput
+            placeholder="Custom exercise"
+            placeholderTextColor="#7a7a8c"
+            value={customExercise}
+            onChangeText={setCustomExercise}
+            style={[styles.input, { flex: 1, marginBottom: 0 }]}
+          />
+          <TouchableOpacity style={styles.addButton} onPress={() => void submitSelection(customExercise)}>
+            <Text style={styles.addButtonText}>Add</Text>
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#0d0d1a" },
+  keyboardAvoiding: { flex: 1 },
   header: {
     paddingHorizontal: 16,
     paddingVertical: 8,

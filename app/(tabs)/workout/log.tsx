@@ -70,6 +70,8 @@ type SetType = "warmup" | "normal" | "failure" | "drop";
 type ExerciseMode = "resistance" | "cardio";
 type SetEntry = {
   weightKg: number | null;
+  // Preserve partially typed decimals such as "20." until the user finishes the value.
+  weightText?: string;
   reps: string;
   rpe?: string;
   distanceKm?: number | null;
@@ -116,6 +118,8 @@ type PastWorkout = {
     }[];
   }[];
 };
+
+const isSameDateKey = (left: string, right: string) => left.trim() === right.trim();
 
 type Routine = {
   id: string;
@@ -325,9 +329,13 @@ export default function WorkoutLog() {
   const [activeUid, setActiveUid] = useState<string | null>(auth.currentUser?.uid ?? null);
   const scrollNativeGesture = useMemo(() => Gesture.Native(), []);
   const workoutStartedAtMsRef = useRef<number | null>(null);
+  const draftSavedAtRef = useRef<Date | null>(null);
+  const buildExerciseDraftRef = useRef<((name: string, id: string) => Exercise) | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const startupLoadTaskRef = useRef<{ cancel: () => void } | null>(null);
   const focusHydrationTaskRef = useRef<{ cancel: () => void } | null>(null);
+  const focusRefreshTaskRef = useRef<{ cancel: () => void } | null>(null);
+  const favoriteHydrationTaskRef = useRef<{ cancel: () => void } | null>(null);
   const lastFocusHydrationAtRef = useRef(0);
   const createRoutineParamHandledRef = useRef(false);
   const lastCompletedSetByExerciseRef = useRef<Record<string, number>>({});
@@ -508,26 +516,9 @@ export default function WorkoutLog() {
       setExercises((prev) => {
         const exists = prev.some((e) => e.name.toLowerCase() === trimmed.toLowerCase());
         if (exists) return prev;
-        return [
-          ...prev,
-          {
-            id,
-            name: trimmed,
-            tempo: mode === "cardio" ? "" : undefined,
-            sets: [
-              {
-                weightKg: null,
-                reps: "",
-                rpe: "",
-                distanceKm: null,
-                durationSec: null,
-                zone: "",
-                setType: "normal",
-                done: false,
-              },
-            ],
-          },
-        ];
+        const draft = buildExerciseDraftRef.current;
+        if (!draft) return prev;
+        return [...prev, draft(trimmed, id)];
       });
       // default to kg for resistance and km for cardio
       setExerciseUnits((prev) => ({ ...prev, [id]: mode === "cardio" ? "km" : "kg" }));
@@ -709,6 +700,8 @@ export default function WorkoutLog() {
         if (candidate.group === target.group) value += 5;
         if (candidate.movementPattern === target.movementPattern) value += 4;
         if (candidate.primaryMuscles.some((muscle) => target.primaryMuscles.includes(muscle))) value += 4;
+        if (candidate.secondaryMuscles.some((muscle) => target.primaryMuscles.includes(muscle))) value += 2;
+        if (candidate.primaryMuscles.some((muscle) => target.secondaryMuscles.includes(muscle))) value += 2;
         if (candidate.equipment.some((equipment) => target.equipment.includes(equipment))) value += 3;
         if (candidate.difficulty === target.difficulty) value += 1;
         return value;
@@ -727,19 +720,37 @@ export default function WorkoutLog() {
   const replacementOptions = useMemo(() => {
     const targetExercise = exercises.find((exercise) => exercise.id === replaceTarget);
     if (targetExercise) {
-      const substitutions = getSubstitutionCandidates(targetExercise.name, 16);
-      const normalized = replaceSearch.trim().toLowerCase();
-      return substitutions.filter((candidate) => {
-        if (!normalized) return true;
-        const haystack = [candidate.name, ...candidate.aliases].join(" ").toLowerCase();
-        return haystack.includes(normalized);
+      const targetCatalog = findCatalogExercise(targetExercise.name);
+      // A custom name has no reliable metadata. Do not show arbitrary alphabetic exercises.
+      if (!targetCatalog && !replaceSearch.trim()) return [];
+      const searchGroup =
+        replaceGroup === "all"
+          ? targetCatalog?.group ?? "all"
+          : (replaceGroup as ExerciseGroupKey);
+      const normalizedTargetName = targetExercise.name.trim().toLowerCase();
+      const substitutions = getSubstitutionCandidates(targetExercise.name, 24);
+      const searched = searchMergedCatalog({
+        query: replaceSearch,
+        group: searchGroup,
       });
+      const merged = [...substitutions, ...searched].filter(
+        (candidate) => candidate.name.trim().toLowerCase() !== normalizedTargetName
+      );
+      const deduped: ExerciseCatalogItem[] = [];
+      const seen = new Set<string>();
+      merged.forEach((candidate) => {
+        const key = candidate.name.trim().toLowerCase();
+        if (seen.has(key)) return;
+        seen.add(key);
+        deduped.push(candidate);
+      });
+      return deduped.slice(0, 24);
     }
     return searchMergedCatalog({
       query: replaceSearch,
       group: replaceGroup === "all" ? "all" : (replaceGroup as ExerciseGroupKey),
     });
-  }, [replaceGroup, replaceSearch, replaceTarget, exercises, getSubstitutionCandidates, searchMergedCatalog]);
+  }, [replaceGroup, replaceSearch, replaceTarget, exercises, findCatalogExercise, getSubstitutionCandidates, searchMergedCatalog]);
 
   const loadPastWorkouts = useCallback(async () => {
     try {
@@ -913,6 +924,12 @@ export default function WorkoutLog() {
         }
         if (raw) {
           const parsed = JSON.parse(raw);
+          const todayKey = toLocalDateKey(new Date());
+          const savedAtDate =
+            typeof parsed.draftSavedAt === "number" && Number.isFinite(parsed.draftSavedAt)
+              ? new Date(parsed.draftSavedAt)
+              : null;
+          draftSavedAtRef.current = savedAtDate;
           if (parsed.exercises) {
             const hydratedExercises: Exercise[] = (parsed.exercises as any[]).map((exercise: any) => ({
               id: typeof exercise?.id === "string" ? exercise.id : `${Date.now()}-${Math.random().toString(16).slice(2)}`,
@@ -936,6 +953,7 @@ export default function WorkoutLog() {
               sets: Array.isArray(exercise?.sets)
                 ? exercise.sets.map((set: any) => ({
                     weightKg: typeof set?.weightKg === "number" ? set.weightKg : null,
+                    weightText: typeof set?.weightText === "string" ? set.weightText : undefined,
                     reps: String(set?.reps ?? ""),
                     rpe:
                       typeof set?.rpe === "number" || typeof set?.rpe === "string"
@@ -967,7 +985,10 @@ export default function WorkoutLog() {
           if (parsed.exerciseUnits) setExerciseUnits(parsed.exerciseUnits);
           if (parsed.sessionTitle) setSessionTitle(parsed.sessionTitle);
           if (typeof parsed.sessionDateText === "string" && parseSessionDate(parsed.sessionDateText)) {
-            setSessionDateText(parsed.sessionDateText);
+            const shouldRefreshDraftDate =
+              !savedAtDate ||
+              !isSameDateKey(toLocalDateKey(savedAtDate), todayKey);
+            setSessionDateText(shouldRefreshDraftDate ? todayKey : parsed.sessionDateText);
           }
           setElapsedSeconds(
             typeof parsed.elapsedSeconds === "number" && Number.isFinite(parsed.elapsedSeconds)
@@ -1058,24 +1079,37 @@ export default function WorkoutLog() {
         handleGoBack();
         return true;
       });
+      focusHydrationTaskRef.current?.cancel();
+      focusHydrationTaskRef.current = scheduleAfterInteractions(async () => {
+        const pendingExerciseName = await popPendingExerciseSelection(activeUid);
+        if (!active || !pendingExerciseName) return;
+        addExercise(pendingExerciseName);
+        setUiFeedback(`Added ${pendingExerciseName}.`);
+      });
+      const savedAt = draftSavedAtRef.current;
+      const todayKey = toLocalDateKey(new Date());
+      if (
+        savedAt &&
+        !isSameDateKey(toLocalDateKey(savedAt), todayKey) &&
+        isSameDateKey(sessionDateText, toLocalDateKey(savedAt))
+      ) {
+        setSessionDateText(todayKey);
+      }
       const shouldHydrateFocus = Date.now() - lastFocusHydrationAtRef.current >= 30_000;
       if (shouldHydrateFocus) {
-        focusHydrationTaskRef.current?.cancel();
-        focusHydrationTaskRef.current = scheduleAfterInteractions(async () => {
+        focusRefreshTaskRef.current?.cancel();
+        focusRefreshTaskRef.current = scheduleAfterInteractions(async () => {
           lastFocusHydrationAtRef.current = Date.now();
           await Promise.allSettled([loadLatestDecision(), loadFavoriteExercises()]);
-          const pendingExerciseName = await popPendingExerciseSelection(activeUid);
-          if (!active || !pendingExerciseName) return;
-          addExercise(pendingExerciseName);
-          setUiFeedback(`Added ${pendingExerciseName}.`);
         });
       }
       return () => {
         active = false;
         focusHydrationTaskRef.current?.cancel();
+        focusRefreshTaskRef.current?.cancel();
         subscription.remove();
       };
-    }, [loadLatestDecision, loadFavoriteExercises, addExercise, activeUid, handleGoBack])
+    }, [loadLatestDecision, loadFavoriteExercises, addExercise, activeUid, handleGoBack, sessionDateText])
   );
 
   // Persist draft
@@ -1093,8 +1127,13 @@ export default function WorkoutLog() {
           sessionDateText,
           elapsedSeconds,
           workoutTimerRunning,
+          draftSavedAt: Date.now(),
         })
-      ).catch((e) => console.log("Failed to save draft", e));
+      )
+        .then(() => {
+          draftSavedAtRef.current = new Date();
+        })
+        .catch((e) => console.log("Failed to save draft", e));
     }, 400);
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
@@ -1122,12 +1161,12 @@ export default function WorkoutLog() {
   }, [uiFeedback]);
 
   useEffect(() => {
-    focusHydrationTaskRef.current?.cancel();
-    focusHydrationTaskRef.current = scheduleAfterInteractions(async () => {
+    favoriteHydrationTaskRef.current?.cancel();
+    favoriteHydrationTaskRef.current = scheduleAfterInteractions(async () => {
       await loadFavoriteExercises();
     });
     return () => {
-      focusHydrationTaskRef.current?.cancel();
+      favoriteHydrationTaskRef.current?.cancel();
     };
   }, [loadFavoriteExercises]);
 
@@ -1286,7 +1325,13 @@ export default function WorkoutLog() {
   }, [undoDeletedSet]);
 
   useEffect(() => {
-    const names = Array.from(new Set(exercises.map((exercise) => exercise.name.trim()).filter(Boolean)));
+    const names = Array.from(
+      new Set(
+        exercises
+          .map((exercise) => exercise.name.trim())
+          .filter((name) => Boolean(name) && Boolean(findCatalogExercise(name)))
+      )
+    );
     if (!names.length) return;
     let cancelled = false;
     const loadImages = async () => {
@@ -1298,7 +1343,7 @@ export default function WorkoutLog() {
     return () => {
       cancelled = true;
     };
-  }, [exercises]);
+  }, [exercises, findCatalogExercise]);
 
   useEffect(() => {
     if (!activeRestTimerExerciseId) return;
@@ -1396,6 +1441,7 @@ export default function WorkoutLog() {
                           : unit === "kg"
                             ? parseFloat(value)
                             : convertWeight(parseFloat(value), "lbs", "kg"),
+                      weightText: value,
                     }
                 : s
             ),
@@ -1565,6 +1611,10 @@ export default function WorkoutLog() {
 
   const openExerciseDemo = async (exerciseName: string) => {
     const catalogExercise = findCatalogExercise(exerciseName);
+    if (!catalogExercise) {
+      showAppAlert("No demo available", "This custom exercise does not have a demo yet.");
+      return;
+    }
     const key = imageLookupKey(exerciseName);
     const resolved = await resolveFreeExerciseDbImagesForNames([exerciseName]);
     const next = resolved[key] ?? [];
@@ -1613,7 +1663,6 @@ export default function WorkoutLog() {
       if (!exercise || !exercise.sets[setIndex]) return prev;
       const set = exercise.sets[setIndex];
       setUndoDeletedSet({ exerciseId, setIndex, set });
-      setUiFeedback("Set deleted. Undo?");
       return prev.map((item) =>
         item.id === exerciseId
           ? { ...item, sets: item.sets.filter((_, index) => index !== setIndex) }
@@ -1811,8 +1860,15 @@ export default function WorkoutLog() {
     const target = exercises.find((ex) => ex.id === exerciseId);
     const doReplace = () => {
       setExercises((prev) =>
-        prev.map((ex) => (ex.id === exerciseId ? { ...ex, name: trimmed } : ex))
+        prev.map((ex) => (ex.id === exerciseId ? buildExerciseDraft(trimmed, ex.id) : ex))
       );
+      const mode = getExerciseModeByName(trimmed);
+      const restSeconds = getSavedRestPreference(trimmed);
+      setExerciseUnits((prev) => ({ ...prev, [exerciseId]: mode === "cardio" ? "km" : "kg" }));
+      setRestPreferenceByExercise((prev) => ({ ...prev, [exerciseId]: restSeconds }));
+      setRestCustomInputByExercise((prev) => ({ ...prev, [exerciseId]: "" }));
+      setRestTimerByExercise((prev) => ({ ...prev, [exerciseId]: { remainingSec: restSeconds, running: false } }));
+      setUiFeedback(`Replaced with ${trimmed}. Loaded its recent-set baseline when available.`);
       setReplaceTarget(null);
       setReplaceSearch("");
       setReplaceGroup("all");
@@ -1820,7 +1876,7 @@ export default function WorkoutLog() {
     if (target && target.sets.length > 0) {
       showAppDialog({
         title: "Replace exercise?",
-        message: "Existing sets will stay but the exercise name will change.",
+        message: "This will reset the current sets and preload the new exercise from its recent history when available.",
         buttons: [
           { text: "Cancel", role: "cancel" },
           { text: "Replace", role: "destructive", onPress: doReplace },
@@ -2125,6 +2181,13 @@ export default function WorkoutLog() {
       if (current === next) return prev;
       return { ...prev, [exerciseId]: next };
     });
+    setExercises((prev) =>
+      prev.map((exercise) =>
+        exercise.id === exerciseId
+          ? { ...exercise, sets: exercise.sets.map((set) => ({ ...set, weightText: undefined })) }
+          : exercise
+      )
+    );
   };
 
   const duplicateLastSet = (exerciseId: string) => {
@@ -2559,6 +2622,47 @@ export default function WorkoutLog() {
     }
     return map;
   }, [pastWorkouts]);
+  function buildExerciseDraft(name: string, id: string): Exercise {
+    const trimmed = name.trim();
+    const mode = getExerciseModeByName(trimmed);
+    const previousSets = previousExerciseSetsByName.get(normalizeExerciseName(trimmed)) ?? [];
+    const sets =
+      previousSets.length > 0
+        ? previousSets.map((set) => ({
+            weightKg: mode === "cardio" ? null : set.weightKg ?? null,
+            reps: mode === "cardio" ? "" : String(set.reps ?? ""),
+            rpe: mode === "cardio" ? "" : String(set.rpe ?? ""),
+            distanceKm: mode === "cardio" ? set.distanceKm ?? null : null,
+            durationSec: mode === "cardio" ? set.durationSec ?? null : null,
+            zone: mode === "cardio" ? String(set.zone ?? "") : "",
+            setType: toSetType(set.setType),
+            done: false,
+            baselineWeightKg: mode === "cardio" ? null : set.weightKg ?? null,
+            baselineReps: mode === "cardio" ? "" : String(set.reps ?? ""),
+          }))
+        : [
+            {
+              weightKg: null,
+              reps: "",
+              rpe: "",
+              distanceKm: null,
+              durationSec: null,
+              zone: "",
+              setType: "normal" as SetType,
+              done: false,
+            },
+          ];
+    return {
+      id,
+      name: trimmed,
+      notes: "",
+      tempo: mode === "cardio" ? "" : undefined,
+      cardioSessionType: undefined,
+      cardioEffortLevel: undefined,
+      sets,
+    };
+  }
+  buildExerciseDraftRef.current = buildExerciseDraft;
   const activeSetExercise = useMemo(() => {
     if (!activeSetMenu) return null;
     return exercises.find((exercise) => exercise.id === activeSetMenu.exerciseId) ?? null;
@@ -2759,6 +2863,7 @@ export default function WorkoutLog() {
           const unit = exerciseUnits[ex.id] || "kg";
           const mode = getExerciseMode(ex.name);
           const isCardio = mode === "cardio";
+          const usesNativeSetRows = Platform.OS === "android" && !isCardio;
           const weightLabel = isCardio
             ? "Distance"
             : unit === "kg"
@@ -2779,20 +2884,29 @@ export default function WorkoutLog() {
           return (
             <View key={ex.id} style={styles.card}>
               <View style={styles.exerciseHeader}>
-                <TouchableOpacity
-                  style={styles.exerciseDemoThumbButton}
-                  onPress={() => openExerciseDemo(ex.name)}
-                >
-                  {demoThumbnailUri ? (
-                    <Image source={demoThumbnailUri} style={styles.exerciseDemoThumbImage} contentFit="cover" />
-                  ) : demoThumbnail ? (
-                    <Image source={demoThumbnail} style={styles.exerciseDemoThumbImage} contentFit="cover" />
-                  ) : (
+                {exerciseCatalogItem ? (
+                  <TouchableOpacity
+                    style={styles.exerciseDemoThumbButton}
+                    onPress={() => openExerciseDemo(ex.name)}
+                    accessibilityLabel={`Open ${ex.name} demo`}
+                  >
+                    {demoThumbnailUri ? (
+                      <Image source={demoThumbnailUri} style={styles.exerciseDemoThumbImage} contentFit="cover" />
+                    ) : demoThumbnail ? (
+                      <Image source={demoThumbnail} style={styles.exerciseDemoThumbImage} contentFit="cover" />
+                    ) : (
+                      <View style={styles.exerciseDemoThumbFallback}>
+                        <Ionicons name="images-outline" size={18} color="#cdd0e0" />
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                ) : (
+                  <View style={styles.exerciseDemoThumbButton} accessibilityLabel="No demo available for this custom exercise">
                     <View style={styles.exerciseDemoThumbFallback}>
                       <Ionicons name="images-outline" size={18} color="#cdd0e0" />
                     </View>
-                  )}
-                </TouchableOpacity>
+                  </View>
+                )}
                 <Text
                   style={styles.exerciseName}
                   numberOfLines={1}
@@ -2874,6 +2988,13 @@ export default function WorkoutLog() {
                         </View>
                       </TouchableOpacity>
                     ))}
+                    {replacementOptions.length === 0 ? (
+                      <Text style={styles.replacementEmptyText}>
+                        {exerciseCatalogItem
+                          ? "No matching alternatives. Try another search or body part."
+                          : "Custom exercises do not have automatic alternatives. Search for the exercise you want instead."}
+                      </Text>
+                    ) : null}
                   </ScrollView>
                 </View>
               ) : null}
@@ -2908,16 +3029,32 @@ export default function WorkoutLog() {
                   </TouchableOpacity>
                 </View>
               ) : null}
-              <View style={[styles.setHeaderRow, isTabletLayout && styles.setHeaderRowTablet]}>
+              <View
+                style={[
+                  styles.setHeaderRow,
+                  isTabletLayout && styles.setHeaderRowTablet,
+                  usesNativeSetRows && styles.nativeSetHeaderRow,
+                ]}
+              >
                 {!isCardio ? <Text style={[styles.setHeaderText, styles.setHeaderSet]}>Set</Text> : null}
-                <Text style={[styles.setHeaderText, styles.setHeaderCheck]}>{"\u2713"}</Text>
-                <Text style={[styles.setHeaderText, styles.setHeaderLast]}>Last</Text>
-                <View style={styles.setHeaderInputsGroup}>
-                  <Text style={[styles.setHeaderText, styles.setColReps]}>{isCardio ? "Time" : weightLabel}</Text>
-                  <Text style={[styles.setHeaderText, styles.setColWeight]}>
+                <Text style={[styles.setHeaderText, styles.setHeaderCheck, usesNativeSetRows && styles.nativeSetHeaderCheck]}>
+                  {"\u2713"}
+                </Text>
+                <Text style={[styles.setHeaderText, styles.setHeaderLast, usesNativeSetRows && styles.nativeSetHeaderLast]}>
+                  Last
+                </Text>
+                <View style={[styles.setHeaderInputsGroup, usesNativeSetRows && styles.nativeSetHeaderInputsGroup]}>
+                  <Text style={[styles.setHeaderText, styles.setColReps, usesNativeSetRows && styles.nativeSetHeaderInput]}>
+                    {isCardio ? "Time" : weightLabel}
+                  </Text>
+                  <Text style={[styles.setHeaderText, styles.setColWeight, usesNativeSetRows && styles.nativeSetHeaderInput]}>
                     {isCardio ? String(unit).toLowerCase() : repsLabel}
                   </Text>
-                  {!isCardio ? <Text style={[styles.setHeaderText, styles.setColRpe]}>{rpeLabel}</Text> : null}
+                  {!isCardio ? (
+                    <Text style={[styles.setHeaderText, styles.setColRpe, usesNativeSetRows && styles.nativeSetHeaderInput]}>
+                      {rpeLabel}
+                    </Text>
+                  ) : null}
                 </View>
               </View>
               {ex.sets.length === 0 ? (
@@ -2934,9 +3071,9 @@ export default function WorkoutLog() {
                   sets={ex.sets.map((set, idx) => ({
                     marker: getSetTypeMarker(set, idx),
                     last: previousSets[idx] ? formatLastSetSummary(previousSets[idx]) : "-",
-                    weight: isCardio
-                      ? formatDistanceInput(set.distanceKm ?? null, unit)
-                      : formatWeightInput(set.weightKg, unit),
+                      weight: isCardio
+                        ? formatDistanceInput(set.distanceKm ?? null, unit)
+                        : set.weightText ?? formatWeightInput(set.weightKg, unit),
                     reps: isCardio ? formatDurationInput(set.durationSec ?? null) : set.reps,
                     rpe: isCardio ? String(set.zone || "") : set.rpe ?? "",
                     done: set.done,
@@ -3006,9 +3143,10 @@ export default function WorkoutLog() {
                           </TouchableOpacity>
                         ) : null}
                         <TouchableOpacity
-                          style={styles.checkboxInline}
+                          style={[styles.checkboxInline, styles.checkboxHitbox]}
                           onPress={() => toggleSetDone(ex.id, idx)}
                           activeOpacity={0.8}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                         >
                           <View style={[styles.checkbox, s.done && styles.checkboxChecked]}>
                             {s.done ? <Ionicons name="checkmark" size={14} color="#0d0d1a" /> : null}
@@ -3042,8 +3180,8 @@ export default function WorkoutLog() {
                               <WorkoutGestureTextInput
                                 placeholder={weightLabel}
                                 placeholderTextColor="#7a7a8c"
-                                keyboardType="numeric"
-                                value={formatWeightInput(s.weightKg, unit)}
+                                keyboardType="decimal-pad"
+                                value={s.weightText ?? formatWeightInput(s.weightKg, unit)}
                                 onChangeText={(v) => updateSetWeight(ex.id, idx, unit, v)}
                                 selectTextOnFocus={false}
                                 style={[
@@ -3164,6 +3302,14 @@ export default function WorkoutLog() {
                   <View style={styles.setActionButton} />
                 )}
               </View>
+              {undoDeletedSet?.exerciseId === ex.id ? (
+                <View style={styles.inlineUndoBanner}>
+                  <Text style={styles.inlineUndoBannerText}>Set deleted</Text>
+                  <TouchableOpacity onPress={undoRemoveSet} style={styles.inlineUndoBannerAction}>
+                    <Text style={styles.inlineUndoBannerActionText}>Undo</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : null}
             </View>
           );
         })
@@ -4314,11 +4460,18 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   setHeaderRowTablet: { gap: 10 },
+  // Mirrors WorkoutSetListView.kt: 4px row inset, 24px set marker, 40px touch column,
+  // 84px last-set column, then a 6px inset before each editable field.
+  nativeSetHeaderRow: { gap: 0, paddingHorizontal: 4 },
   setHeaderText: { color: "#9aa1c3", fontSize: 12, fontWeight: "700" },
   setHeaderSet: { width: 24, textAlign: "center" },
   setHeaderCheck: { width: 24, textAlign: "center" },
+  nativeSetHeaderCheck: { width: 40, marginRight: 2 },
   setHeaderLast: { width: 84 },
+  nativeSetHeaderLast: { marginLeft: 2 },
   setHeaderInputsGroup: { flex: 1, flexDirection: "row", alignItems: "center", gap: 8 },
+  nativeSetHeaderInputsGroup: { gap: 0 },
+  nativeSetHeaderInput: { marginLeft: 6 },
   setColWeight: { flex: 1, textAlign: "center" },
   setColReps: { flex: 1, textAlign: "center" },
   setColRpe: { flex: 0.8, textAlign: "center" },
@@ -4344,6 +4497,12 @@ const styles = StyleSheet.create({
   setInputReps: { marginRight: 0 },
   setInputRepsTablet: { marginRight: 0 },
   checkboxInline: { paddingRight: 2 },
+  checkboxHitbox: {
+    minWidth: 34,
+    minHeight: 34,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   checkbox: {
     width: 22,
     height: 22,
@@ -4358,6 +4517,28 @@ const styles = StyleSheet.create({
     backgroundColor: "#7b61ff",
     borderColor: "#7b61ff",
   },
+  inlineUndoBanner: {
+    marginTop: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: "rgba(123,97,255,0.12)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(123,97,255,0.35)",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  inlineUndoBannerText: { color: "#e8e7ff", fontSize: 13, fontWeight: "600", flex: 1 },
+  inlineUndoBannerAction: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "rgba(123,97,255,0.22)",
+  },
+  inlineUndoBannerActionText: { color: "#fff", fontSize: 12, fontWeight: "800" },
+  replacementEmptyText: { color: "#9aa1c3", fontSize: 13, lineHeight: 19, paddingVertical: 12 },
   pickerCard: {
     backgroundColor: "rgba(255,255,255,0.06)",
     borderRadius: 12,

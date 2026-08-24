@@ -5,6 +5,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.RectF
+import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.text.Editable
 import android.text.InputType
@@ -16,6 +17,7 @@ import android.view.View
 import android.view.ViewConfiguration
 import android.view.ViewGroup
 import android.widget.LinearLayout
+import android.widget.FrameLayout
 import android.widget.TextView
 import androidx.appcompat.widget.AppCompatEditText
 import androidx.appcompat.widget.AppCompatTextView
@@ -39,6 +41,7 @@ data class WorkoutSetItem(
 private data class WorkoutSetRowBinding(
   val root: View,
   val setLabel: TextView,
+  val checkHitbox: FrameLayout,
   val check: AppCompatTextView,
   val last: TextView,
   val weight: AppCompatEditText,
@@ -264,15 +267,21 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
       }
       root.addView(setLabel)
 
-      val check = AppCompatTextView(context).apply {
-        layoutParams = LayoutParams(dp(24f), dp(24f)).apply {
-          marginEnd = dp(6f)
+      val checkHitbox = FrameLayout(context).apply {
+        // Keep the visible checkbox compact while providing a reliable 40dp hit target.
+        layoutParams = LayoutParams(dp(40f), dp(40f)).apply {
+          marginEnd = dp(2f)
         }
+      }
+      val check = AppCompatTextView(context).apply {
+        layoutParams = FrameLayout.LayoutParams(dp(24f), dp(24f), Gravity.CENTER)
         gravity = Gravity.CENTER
         textSize = 12f
+        setTypeface(typeface, Typeface.BOLD)
         setPadding(dp(2f))
       }
-      root.addView(check)
+      checkHitbox.addView(check)
+      root.addView(checkHitbox)
 
       val last = TextView(context).apply {
         setTextColor(Color.parseColor("#AAB0CC"))
@@ -282,7 +291,11 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
       }
       root.addView(last, LayoutParams(dp(84f), LayoutParams.WRAP_CONTENT).apply { marginStart = dp(2f) })
 
-      val weight = createInput(context, "Weight", InputType.TYPE_CLASS_NUMBER)
+      val weight = createInput(
+        context,
+        "Weight",
+        InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
+      )
       val reps = createInput(context, "Reps", InputType.TYPE_CLASS_NUMBER)
       val rpe = createInput(
         context,
@@ -294,7 +307,7 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
       root.addView(reps, LayoutParams(0, dp(40f), 1f).apply { marginStart = dp(6f) })
       root.addView(rpe, LayoutParams(0, dp(40f), 0.8f).apply { marginStart = dp(6f) })
 
-      return WorkoutSetRowBinding(root, setLabel, check, last, weight, reps, rpe)
+      return WorkoutSetRowBinding(root, setLabel, checkHitbox, check, last, weight, reps, rpe)
     }
 
     private fun createInput(context: Context, hint: String, inputType: Int): AppCompatEditText {
@@ -361,7 +374,7 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
         binding.last.text = item.last.ifBlank { "-" }
         localDone = item.done
         applyCheckStyle(localDone)
-        binding.check.setOnClickListener {
+        binding.checkHitbox.setOnClickListener {
           localDone = !localDone
           applyCheckStyle(localDone)
           if (boundIndex >= 0) onToggleDone(boundIndex, localDone)
@@ -428,4 +441,3 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
 
   }
 }
-
