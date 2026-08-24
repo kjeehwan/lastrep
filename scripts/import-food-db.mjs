@@ -11,6 +11,10 @@ import zlib from "node:zlib";
  * node scripts/import-food-db.mjs --source usda-csv --in ./data/usda_csv_2025-12-18/FoodData_Central_csv_2025-12-18 --out ./src/nutrition/data --chunk 500
  * node scripts/import-food-db.mjs --source off --in ./data/openfoodfacts.json --out ./src/nutrition/data --chunk 500
  * node scripts/import-food-db.mjs --source off-jsonl --in ./data/openfoodfacts-products.jsonl.gz --out ./src/nutrition/data --chunk 500
+ *
+ * Optional:
+ *   set RAW_DATA_DIR=D:\\nutrition-data
+ *   node scripts/import-food-db.mjs --source off-jsonl --in openfoodfacts-products.jsonl.gz
  */
 
 const args = process.argv.slice(2);
@@ -28,13 +32,25 @@ const maxRows = Number(readArg("--max", "50000"));
 const includeBranded = String(readArg("--include-branded", "false")).toLowerCase() === "true";
 const mergeWithExisting = String(readArg("--merge-existing", "false")).toLowerCase() === "true";
 const canonicalKeepListPath = path.resolve("./scripts/canonical-food-keep-list.json");
+const rawDataDir = process.env.RAW_DATA_DIR ? path.resolve(process.env.RAW_DATA_DIR) : path.resolve("./data");
 
 if (!inputPath) {
   console.error("Missing --in path");
   process.exit(1);
 }
 
-const resolvedInputPath = path.resolve(inputPath);
+const resolveRawInputPath = (candidatePath) => {
+  if (!candidatePath) return "";
+  if (path.isAbsolute(candidatePath)) return candidatePath;
+
+  const repoRelative = path.resolve(candidatePath);
+  if (fs.existsSync(repoRelative)) return repoRelative;
+
+  const trimmed = candidatePath.replace(/^\.?[\\/]/, "");
+  return path.resolve(rawDataDir, trimmed);
+};
+
+const resolvedInputPath = resolveRawInputPath(inputPath);
 
 const slugify = (value) =>
   String(value ?? "")
@@ -727,8 +743,8 @@ if (requiredCanonicalNames.size > 0) {
     let usdaRowsForBackfill = [];
     if (source === "usda-csv") {
       usdaRowsForBackfill = normalized.filter((r) => String(r.id ?? "").startsWith("usda-"));
-    } else if (fs.existsSync(path.resolve("./data/FoodData_Central_csv_2026-04-30/FoodData_Central_csv_2026-04-30"))) {
-      usdaRowsForBackfill = (await loadFromUsdaCsv(path.resolve("./data/FoodData_Central_csv_2026-04-30/FoodData_Central_csv_2026-04-30")))
+    } else if (fs.existsSync(path.resolve(rawDataDir, "FoodData_Central_csv_2026-04-30/FoodData_Central_csv_2026-04-30"))) {
+      usdaRowsForBackfill = (await loadFromUsdaCsv(path.resolve(rawDataDir, "FoodData_Central_csv_2026-04-30/FoodData_Central_csv_2026-04-30")))
         .filter((row) => isValidRow(row) && isSaneRow(row));
     }
     const byName = new Map(usdaRowsForBackfill.map((r) => [String(r.name ?? "").toLowerCase().trim(), r]));

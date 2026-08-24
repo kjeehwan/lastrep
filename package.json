@@ -11,6 +11,7 @@
     "build:android:dev-standalone": "eas build -p android --profile preview",
     "build:android:prod": "eas build -p android --profile production",
     "verify:android-native": "node scripts/verify-android-native.js",
+    "clean:dev-artifacts": "node scripts/clean-dev-artifacts.js",
     "start:dev-client": "node scripts/start-dev-client-android.js",
     "start:dev-client:android": "node scripts/start-dev-client-android.js",
     "start:dev-client:clear": "node scripts/start-dev-client-android.js --clear",

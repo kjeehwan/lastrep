@@ -1,234 +1,62 @@
-const { spawn } = require("child_process");
+const { spawn, spawnSync } = require("child_process");
+const fs = require("fs");
+const path = require("path");
 
 const extraArgs = process.argv.slice(2);
 const hasClear = extraArgs.includes("--clear");
-const shouldOpen = !extraArgs.includes("--no-open");
 const fastMode = extraArgs.includes("--fast");
+
+const localWatchmanBin = path.resolve(process.cwd(), ".dev-tools", "watchman", "bin");
+const hasLocalWatchman = fs.existsSync(path.join(localWatchmanBin, "watchman.exe"));
 
 const env = {
   ...process.env,
   APP_VARIANT: "dev",
+  EXPO_NO_DEPENDENCY_VALIDATION: "1",
+  EXPO_NO_TELEMETRY: "1",
+  // Android's adb reverse forwards 127.0.0.1. Keep Metro on IPv4 localhost.
+  NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ""} --dns-result-order=ipv4first`.trim(),
+  PATH: hasLocalWatchman
+    ? `${localWatchmanBin};${process.env.PATH ?? ""}`
+    : process.env.PATH,
 };
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+// The dev client uses localhost. Map the phone's port 8081 to Metro on this PC.
+const adbReverse = spawnSync("adb", ["reverse", "tcp:8081", "tcp:8081"], {
+  stdio: "inherit",
+  env,
+});
 
-const runPowerShellJson = async (script) =>
-  new Promise((resolve) => {
-    let stdout = "";
-    const child = spawn(
-      "powershell.exe",
-      ["-NoProfile", "-Command", script],
-      {
-        stdio: ["ignore", "pipe", "ignore"],
-        windowsVerbatimArguments: false,
-        env,
-      }
-    );
-    child.stdout.on("data", (chunk) => {
-      stdout += String(chunk);
-    });
-    child.on("exit", () => {
-      const trimmed = stdout.trim();
-      if (!trimmed) {
-        resolve(null);
-        return;
-      }
-      try {
-        resolve(JSON.parse(trimmed));
-      } catch {
-        resolve(null);
-      }
-    });
-    child.on("error", () => resolve(null));
-  });
-
-const isPortFree = async (port) => {
-  const result = await runPowerShellJson(
-    "$conn = Get-NetTCPConnection -LocalPort " +
-      String(port) +
-      " -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1;" +
-      "if ($conn) { '{\"busy\":true}' } else { '{\"busy\":false}' }"
+if (adbReverse.error || adbReverse.status !== 0) {
+  throw new Error(
+    "Could not map the Android device to Metro. Connect an authorized device by USB, then run the command again."
   );
-  return !result || result.busy !== true;
-};
+}
 
-const resolveExpoPort = async () => {
-  const preferredPorts = [8081, 8082, 8083, 8084, 8085, 8086, 8087, 8088, 8089, 8090];
-  for (const port of preferredPorts) {
-    if (await isPortFree(port)) return port;
+const args = [
+  "start",
+  "--dev-client",
+  "--scheme",
+  "lastrep-dev",
+  "--localhost",
+  "--max-workers",
+  "4",
+];
+
+if (hasClear) args.push("--clear");
+if (fastMode) args.push("--no-dev", "--minify");
+
+const expoCliPath = ".\\node_modules\\.bin\\expo.cmd";
+const child = spawn("cmd.exe", ["/d", "/s", "/c", `${expoCliPath} ${args.join(" ")}`], {
+  stdio: "inherit",
+  windowsVerbatimArguments: false,
+  env,
+});
+
+child.on("exit", (exitCode, signal) => {
+  if (signal) {
+    process.kill(process.pid, signal);
+    return;
   }
-  throw new Error("Unable to find a free Metro port between 8081 and 8090.");
-};
-
-const waitForMetro = async (port, attempts = 60, delayMs = 1000) => {
-  for (let index = 0; index < attempts; index += 1) {
-    const probe = spawn(
-      "powershell.exe",
-      [
-        "-Command",
-        "$ProgressPreference='SilentlyContinue';" +
-          "try {" +
-          "  $response = Invoke-WebRequest -Uri 'http://127.0.0.1:" +
-          String(port) +
-          "/status' -UseBasicParsing -TimeoutSec 2;" +
-          "  if ($response.Content -match 'packager-status:running') { exit 0 }" +
-          "  exit 1" +
-          "} catch { exit 1 }",
-      ],
-      {
-      stdio: "ignore",
-      windowsVerbatimArguments: false,
-      env,
-      }
-    );
-
-    const exitCode = await new Promise((resolve) => {
-      probe.on("exit", (code) => resolve(code ?? 1));
-      probe.on("error", () => resolve(1));
-    });
-
-    if (exitCode === 0) {
-      return true;
-    }
-
-    await sleep(delayMs);
-  }
-
-  return false;
-};
-
-const prewarmAndroidBundle = async (port, attempts = 90, delayMs = 1000) => {
-  for (let index = 0; index < attempts; index += 1) {
-    const probe = spawn(
-      "powershell.exe",
-      [
-        "-NoProfile",
-        "-Command",
-        "$ProgressPreference='SilentlyContinue';" +
-          "try {" +
-          "  $response = Invoke-WebRequest -Uri 'http://127.0.0.1:" +
-          String(port) +
-          "/index.bundle?platform=android&dev=true&minify=false' -UseBasicParsing -TimeoutSec 15;" +
-          "  if ($response.StatusCode -eq 200 -and $response.Content.Length -gt 0) { exit 0 }" +
-          "  exit 1" +
-          "} catch { exit 1 }",
-      ],
-      {
-        stdio: "ignore",
-        windowsVerbatimArguments: false,
-        env,
-      }
-    );
-
-    const exitCode = await new Promise((resolve) => {
-      probe.on("exit", (code) => resolve(code ?? 1));
-      probe.on("error", () => resolve(1));
-    });
-
-    if (exitCode === 0) {
-      return true;
-    }
-
-    await sleep(delayMs);
-  }
-
-  return false;
-};
-
-const runAdbReverse = async (port) =>
-  new Promise((resolve, reject) => {
-    const child = spawn(
-      "cmd.exe",
-      ["/d", "/s", "/c", `adb reverse tcp:${port} tcp:${port}`],
-      {
-        stdio: "inherit",
-        windowsVerbatimArguments: false,
-        env,
-      }
-    );
-    child.on("exit", (code) => {
-      if ((code ?? 1) === 0) {
-        resolve();
-        return;
-      }
-      reject(new Error(`adb reverse failed with code ${code ?? 1}`));
-    });
-    child.on("error", reject);
-  });
-
-const openDevApp = async (port) =>
-  new Promise((resolve) => {
-    const child = spawn(
-      "cmd.exe",
-      [
-        "/d",
-        "/s",
-        "/c",
-        `adb shell am start -W -a android.intent.action.VIEW -d "lastrep-dev://expo-development-client/?url=${encodeURIComponent(`http://127.0.0.1:${port}`)}"`,
-      ],
-      {
-        stdio: "inherit",
-        windowsVerbatimArguments: false,
-        env,
-      }
-    );
-
-    child.on("exit", (code) => resolve((code ?? 1) === 0));
-    child.on("error", () => resolve(false));
-  });
-
-const openDevAppWithRetries = async (port, attempts = 3, delayMs = 1500) => {
-  for (let index = 0; index < attempts; index += 1) {
-    const opened = await openDevApp(port);
-    if (opened) {
-      return true;
-    }
-    await sleep(delayMs);
-  }
-  return false;
-};
-
-void (async () => {
-  const port = await resolveExpoPort();
-  await runAdbReverse(port);
-  const baseArgs = [
-    "expo",
-    "start",
-    "--dev-client",
-    "--scheme",
-    "lastrep-dev",
-    "--localhost",
-    "--max-workers",
-    "4",
-    "--port",
-    String(port),
-  ];
-
-  if (hasClear) baseArgs.push("--clear");
-  if (fastMode) baseArgs.push("--no-dev", "--minify");
-
-  const command = `npx.cmd ${baseArgs.join(" ")}`;
-  const child = spawn("cmd.exe", ["/d", "/s", "/c", command], {
-    stdio: "inherit",
-    windowsVerbatimArguments: false,
-    env,
-  });
-  if (shouldOpen) {
-    void (async () => {
-      const ready = await waitForMetro(port);
-      if (ready) {
-        const prewarmed = await prewarmAndroidBundle(port);
-        if (prewarmed) {
-          await openDevAppWithRetries(port);
-        }
-      }
-    })();
-  }
-  child.on("exit", (exitCode, signal) => {
-    if (signal) {
-      process.kill(process.pid, signal);
-      return;
-    }
-    process.exit(exitCode ?? 1);
-  });
-})();
+  process.exit(exitCode ?? 1);
+});
