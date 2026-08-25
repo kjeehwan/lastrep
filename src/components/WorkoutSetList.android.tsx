@@ -23,6 +23,7 @@ type SetChangeEvent = NativeSyntheticEvent<{
 type ToggleDoneEvent = NativeSyntheticEvent<{ index: number; done?: boolean }>;
 type DeleteSetEvent = NativeSyntheticEvent<{ index: number }>;
 type SetLabelPressEvent = NativeSyntheticEvent<{ index: number }>;
+type LastPressEvent = NativeSyntheticEvent<{ index: number }>;
 
 type NativeProps = {
   sets: WorkoutSetUi[];
@@ -34,6 +35,7 @@ type NativeProps = {
   onToggleDone?: (event: ToggleDoneEvent) => void;
   onDeleteSet?: (event: DeleteSetEvent) => void;
   onSetLabelPress?: (event: SetLabelPressEvent) => void;
+  onLastPress?: (event: LastPressEvent) => void;
 };
 
 const NativeWorkoutSetList = requireNativeComponent<NativeProps>("WorkoutSetList");

@@ -134,7 +134,6 @@ type Routine = {
     cardioEffortLevel?: "easy" | "moderate" | "hard" | "max";
     sets: {
       reps: string;
-      targetRpe?: string;
       defaultWeightKg?: number | null;
       defaultDistanceKm?: number | null;
       defaultDurationSec?: number | null;
@@ -296,6 +295,11 @@ export default function WorkoutLog() {
   const [showRoutineStartModal, setShowRoutineStartModal] = useState(false);
   const [showRoutineActionsModal, setShowRoutineActionsModal] = useState(false);
   const [showRoutineDeleteModal, setShowRoutineDeleteModal] = useState(false);
+  const [showWorkoutSavedModal, setShowWorkoutSavedModal] = useState(false);
+  const [showRoutineUpdateAfterFinishModal, setShowRoutineUpdateAfterFinishModal] = useState(false);
+  const [showRoutineUpdatedConfirmationModal, setShowRoutineUpdatedConfirmationModal] = useState(false);
+  const [completedRoutineId, setCompletedRoutineId] = useState<string | null>(null);
+  const [completedRoutineSnapshot, setCompletedRoutineSnapshot] = useState<Exercise[] | null>(null);
   const [routineNameInput, setRoutineNameInput] = useState("");
   const [routineFormError, setRoutineFormError] = useState<string | null>(null);
   const [editingRoutineId, setEditingRoutineId] = useState<string | null>(null);
@@ -330,7 +334,6 @@ export default function WorkoutLog() {
   const scrollNativeGesture = useMemo(() => Gesture.Native(), []);
   const workoutStartedAtMsRef = useRef<number | null>(null);
   const draftSavedAtRef = useRef<Date | null>(null);
-  const buildExerciseDraftRef = useRef<((name: string, id: string) => Exercise) | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const startupLoadTaskRef = useRef<{ cancel: () => void } | null>(null);
   const focusHydrationTaskRef = useRef<{ cancel: () => void } | null>(null);
@@ -506,6 +509,52 @@ export default function WorkoutLog() {
   );
 
 
+  const buildExerciseDraft = useCallback(
+    (name: string, id: string): Exercise => {
+      const trimmed = name.trim();
+      const mode = getExerciseModeByName(trimmed);
+      const previousSets =
+        pastWorkouts
+          .flatMap((workout) => workout.exercises)
+          .find((exercise) => normalizeExerciseName(exercise.name) === normalizeExerciseName(trimmed))?.sets ?? [];
+      const sets = previousSets.length
+        ? previousSets.map((set) => ({
+            weightKg: mode === "cardio" ? null : set.weightKg ?? null,
+            reps: mode === "cardio" ? "" : String(set.reps ?? ""),
+            rpe: mode === "cardio" ? "" : String(set.rpe ?? ""),
+            distanceKm: mode === "cardio" ? set.distanceKm ?? null : null,
+            durationSec: mode === "cardio" ? set.durationSec ?? null : null,
+            zone: mode === "cardio" ? String(set.zone ?? "") : "",
+            setType: toSetType(set.setType),
+            done: false,
+            baselineWeightKg: mode === "cardio" ? null : set.weightKg ?? null,
+            baselineReps: mode === "cardio" ? "" : String(set.reps ?? ""),
+          }))
+        : [
+            {
+              weightKg: null,
+              reps: "",
+              rpe: "",
+              distanceKm: null,
+              durationSec: null,
+              zone: "",
+              setType: "normal" as SetType,
+              done: false,
+            },
+          ];
+      return {
+        id,
+        name: trimmed,
+        notes: "",
+        tempo: mode === "cardio" ? "" : undefined,
+        cardioSessionType: undefined,
+        cardioEffortLevel: undefined,
+        sets,
+      };
+    },
+    [getExerciseModeByName, pastWorkouts]
+  );
+
   const addExercise = useCallback(
     (name: string) => {
       const trimmed = name.trim();
@@ -516,9 +565,7 @@ export default function WorkoutLog() {
       setExercises((prev) => {
         const exists = prev.some((e) => e.name.toLowerCase() === trimmed.toLowerCase());
         if (exists) return prev;
-        const draft = buildExerciseDraftRef.current;
-        if (!draft) return prev;
-        return [...prev, draft(trimmed, id)];
+        return [...prev, buildExerciseDraft(trimmed, id)];
       });
       // default to kg for resistance and km for cardio
       setExerciseUnits((prev) => ({ ...prev, [id]: mode === "cardio" ? "km" : "kg" }));
@@ -526,7 +573,7 @@ export default function WorkoutLog() {
       setRestCustomInputByExercise((prev) => ({ ...prev, [id]: "" }));
       setRestTimerByExercise((prev) => ({ ...prev, [id]: { remainingSec: restSeconds, running: false } }));
     },
-    [getExerciseModeByName, getSavedRestPreference]
+    [buildExerciseDraft, getExerciseModeByName, getSavedRestPreference]
   );
 
   const openAddExercise = useCallback(() => {
@@ -858,10 +905,6 @@ export default function WorkoutLog() {
                 : undefined,
             sets: (exercise?.sets || []).map((set: any) => ({
               reps: String(set?.reps ?? ""),
-              targetRpe:
-                typeof set?.targetRpe === "number" || typeof set?.targetRpe === "string"
-                  ? String(set.targetRpe)
-                  : "",
               defaultWeightKg: typeof set?.defaultWeightKg === "number" ? set.defaultWeightKg : null,
               defaultDistanceKm: typeof set?.defaultDistanceKm === "number" ? set.defaultDistanceKm : null,
               defaultDurationSec: typeof set?.defaultDurationSec === "number" ? set.defaultDurationSec : null,
@@ -1021,9 +1064,11 @@ export default function WorkoutLog() {
   }, [auth.currentUser, loadPastWorkouts, loadRoutines, auth, getDraftKey]);
 
   useEffect(() => {
-    if (routerParams.trainingPhase) {
+    if (!routerParams.trainingPhase) return;
+    const task = scheduleAfterInteractions(() => {
       setSessionPhase(String(routerParams.trainingPhase));
-    }
+    });
+    return () => task.cancel();
   }, [routerParams.trainingPhase]);
 
   useEffect(() => {
@@ -1081,10 +1126,14 @@ export default function WorkoutLog() {
       });
       focusHydrationTaskRef.current?.cancel();
       focusHydrationTaskRef.current = scheduleAfterInteractions(async () => {
-        const pendingExerciseName = await popPendingExerciseSelection(activeUid);
-        if (!active || !pendingExerciseName) return;
-        addExercise(pendingExerciseName);
-        setUiFeedback(`Added ${pendingExerciseName}.`);
+        const pendingExerciseNames = await popPendingExerciseSelection(activeUid);
+        if (!active || pendingExerciseNames.length === 0) return;
+        pendingExerciseNames.forEach(addExercise);
+        setUiFeedback(
+          pendingExerciseNames.length === 1
+            ? `Added ${pendingExerciseNames[0]}.`
+            : `Added ${pendingExerciseNames.length} exercises.`
+        );
       });
       const savedAt = draftSavedAtRef.current;
       const todayKey = toLocalDateKey(new Date());
@@ -1194,9 +1243,11 @@ export default function WorkoutLog() {
 
   useEffect(() => {
     if (!activeUid) {
-      setRestPreferenceByName({});
-      setRestPrefsHydratedUid(null);
-      return;
+      const task = scheduleAfterInteractions(() => {
+        setRestPreferenceByName({});
+        setRestPrefsHydratedUid(null);
+      });
+      return () => task.cancel();
     }
     const loadRestPreferences = async () => {
       try {
@@ -1243,6 +1294,7 @@ export default function WorkoutLog() {
 
   useEffect(() => {
     if (!exercises.length) return;
+    const task = scheduleAfterInteractions(() => {
     setRestPreferenceByExercise((prev) => {
       const next: Record<string, number> = {};
       exercises.forEach((exercise) => {
@@ -1268,6 +1320,8 @@ export default function WorkoutLog() {
       });
       return next;
     });
+    });
+    return () => task.cancel();
   }, [exercises, restPreferenceByName]);
 
   useEffect(() => {
@@ -1349,8 +1403,11 @@ export default function WorkoutLog() {
     if (!activeRestTimerExerciseId) return;
     const exists = exercises.some((exercise) => exercise.id === activeRestTimerExerciseId);
     if (!exists) {
-      setShowRestTimerModal(false);
-      setActiveRestTimerExerciseId(null);
+      const task = scheduleAfterInteractions(() => {
+        setShowRestTimerModal(false);
+        setActiveRestTimerExerciseId(null);
+      });
+      return () => task.cancel();
     }
   }, [activeRestTimerExerciseId, exercises]);
 
@@ -1358,8 +1415,11 @@ export default function WorkoutLog() {
     if (!activeExerciseActionId) return;
     const exists = exercises.some((exercise) => exercise.id === activeExerciseActionId);
     if (!exists) {
-      setShowExerciseActionsModal(false);
-      setActiveExerciseActionId(null);
+      const task = scheduleAfterInteractions(() => {
+        setShowExerciseActionsModal(false);
+        setActiveExerciseActionId(null);
+      });
+      return () => task.cancel();
     }
   }, [activeExerciseActionId, exercises]);
 
@@ -1403,10 +1463,11 @@ export default function WorkoutLog() {
 
   const toggleSetDone = (exerciseId: string, setIndex: number) => {
     const toggleKey = `${exerciseId}:${setIndex}`;
-    const now = Date.now();
-    const lastToggleAt = lastSetToggleAtRef.current[toggleKey] ?? 0;
-    if (now - lastToggleAt < 120) return;
-    lastSetToggleAtRef.current[toggleKey] = now;
+    if (lastSetToggleAtRef.current[toggleKey]) return;
+    lastSetToggleAtRef.current[toggleKey] = 1;
+    setTimeout(() => {
+      delete lastSetToggleAtRef.current[toggleKey];
+    }, 120);
 
     const exercise = exercises.find((ex) => ex.id === exerciseId);
     const targetSet = exercise?.sets?.[setIndex];
@@ -1487,6 +1548,55 @@ export default function WorkoutLog() {
           : ex
       )
     );
+  };
+
+  const copyLastSetToCurrent = (exerciseId: string, setIndex: number) => {
+    const exercise = exercises.find((item) => item.id === exerciseId);
+    if (!exercise) return;
+    const previousSets = previousExerciseSetsByName.get(normalizeExerciseName(exercise.name)) ?? [];
+    const previous = previousSets[setIndex];
+    if (!previous) {
+      setUiFeedback("No previous set is available to copy.");
+      return;
+    }
+    const mode = getExerciseMode(exercise.name);
+    setExercises((prev) =>
+      prev.map((item) =>
+        item.id !== exerciseId
+          ? item
+          : {
+              ...item,
+              sets: item.sets.map((set, index) =>
+                index !== setIndex
+                  ? set
+                  : {
+                      ...set,
+                      weightKg: mode === "cardio" ? null : previous.weightKg ?? null,
+                      weightText: undefined,
+                      reps: mode === "cardio" ? "" : String(previous.reps ?? ""),
+                      rpe: mode === "cardio" ? "" : String(previous.rpe ?? ""),
+                      distanceKm: mode === "cardio" ? previous.distanceKm ?? null : null,
+                      durationSec: mode === "cardio" ? previous.durationSec ?? null : null,
+                      zone: mode === "cardio" ? String(previous.zone ?? "") : "",
+                      baselineWeightKg: mode === "cardio" ? null : previous.weightKg ?? null,
+                      baselineReps: mode === "cardio" ? "" : String(previous.reps ?? ""),
+                    }
+              ),
+            }
+      )
+    );
+    setUiFeedback("Copied the previous set.");
+  };
+
+  const moveExercise = (exerciseId: string, direction: -1 | 1) => {
+    setExercises((prev) => {
+      const fromIndex = prev.findIndex((exercise) => exercise.id === exerciseId);
+      const toIndex = fromIndex + direction;
+      if (fromIndex < 0 || toIndex < 0 || toIndex >= prev.length) return prev;
+      const next = [...prev];
+      [next[fromIndex], next[toIndex]] = [next[toIndex], next[fromIndex]];
+      return next;
+    });
   };
   const updateSetType = (exerciseId: string, setIndex: number, setType: SetType) => {
     setExercises((prev) =>
@@ -2143,14 +2253,13 @@ export default function WorkoutLog() {
         createdAt: Timestamp.now(),
       };
       await addDoc(collection(db, "users", user.uid, "workouts"), payload);
-      if (__DEV__) {
-        showAppAlert("Workout saved", "Nice work.");
-      }
-        setExercises([]);
-        setExerciseUnits({});
-        setRestPreferenceByExercise({});
-        setRestCustomInputByExercise({});
-        setRestTimerByExercise({});
+      const appliedRoutineId = lastAppliedRoutineId;
+      const routineSnapshot = sanitizedExercises as Exercise[];
+      setExercises([]);
+      setExerciseUnits({});
+      setRestPreferenceByExercise({});
+      setRestCustomInputByExercise({});
+      setRestTimerByExercise({});
       setSessionTitle("");
       setSessionDateText(toLocalDateKey(new Date()));
       setElapsedSeconds(0);
@@ -2163,10 +2272,11 @@ export default function WorkoutLog() {
       setShowFinishModal(false);
       setShowFinishTitleInput(false);
       await loadPastWorkouts();
-      if (!__DEV__) {
-        showAppAlert("Workout saved", "Nice work.");
+      if (appliedRoutineId) {
+        setCompletedRoutineId(appliedRoutineId);
+        setCompletedRoutineSnapshot(routineSnapshot);
       }
-      router.replace("/(tabs)/home");
+      setShowWorkoutSavedModal(true);
     } catch (e) {
       console.log("Error saving workout", e);
       showAppAlert("Save failed", "We couldn't save your workout. Please try again.");
@@ -2204,8 +2314,8 @@ export default function WorkoutLog() {
     );
   };
 
-  const buildRoutineExercisesFromEditor = () =>
-    exercises.map((exercise) => ({
+  const buildRoutineExercisesFromEditor = (source: Exercise[] = exercises) =>
+    source.map((exercise) => ({
       name: exercise.name,
       notes: String(exercise.notes || "").trim(),
       tempo: getExerciseMode(exercise.name) === "cardio" ? "" : String(exercise.tempo || "").trim(),
@@ -2217,8 +2327,6 @@ export default function WorkoutLog() {
         getExerciseMode(exercise.name) === "cardio" ? exercise.cardioEffortLevel ?? null : null,
       sets: exercise.sets.map((set) => ({
         reps: String(set.reps || "").trim(),
-        targetRpe:
-          getExerciseMode(exercise.name) === "cardio" ? String(set.zone || "").trim() : String(set.rpe || "").trim(),
         defaultWeightKg: typeof set.weightKg === "number" ? set.weightKg : null,
         defaultDistanceKm: typeof set.distanceKm === "number" ? set.distanceKm : null,
         defaultDurationSec: typeof set.durationSec === "number" ? set.durationSec : null,
@@ -2324,27 +2432,89 @@ export default function WorkoutLog() {
     }
   };
 
+  const closeRoutineUpdateAfterFinish = () => {
+    setShowWorkoutSavedModal(false);
+    setShowRoutineUpdateAfterFinishModal(false);
+    setShowRoutineUpdatedConfirmationModal(false);
+    setCompletedRoutineId(null);
+    setCompletedRoutineSnapshot(null);
+    router.replace("/(tabs)/home");
+  };
+
+  const continueAfterWorkoutSaved = () => {
+    setShowWorkoutSavedModal(false);
+    if (completedRoutineId && completedRoutineSnapshot) {
+      setShowRoutineUpdateAfterFinishModal(true);
+      return;
+    }
+    router.replace("/(tabs)/home");
+  };
+
+  const updateAppliedRoutineAfterFinish = async () => {
+    const user = auth.currentUser;
+    const routine = completedRoutineId
+      ? routines.find((item) => item.id === completedRoutineId)
+      : null;
+    const snapshot = completedRoutineSnapshot;
+    if (!user || !routine || !snapshot) {
+      closeRoutineUpdateAfterFinish();
+      return;
+    }
+    try {
+      await setDoc(
+        doc(db, "users", user.uid, "routines", routine.id),
+        { exercises: buildRoutineExercisesFromEditor(snapshot), updatedAt: Timestamp.now() },
+        { merge: true }
+      );
+      await loadRoutines();
+      setShowRoutineUpdateAfterFinishModal(false);
+      setShowRoutineUpdatedConfirmationModal(true);
+    } catch (error) {
+      console.log("Failed to update routine after workout", error);
+      showAppAlert("Routine not updated", "Your workout was saved, but the routine could not be updated.");
+      closeRoutineUpdateAfterFinish();
+    }
+  };
+
   const applyRoutineToEditor = (routine: Routine, mode: "replace" | "append") => {
-    const mapped: Exercise[] = routine.exercises.map((exercise) => ({
-      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-      name: exercise.name,
-      notes: exercise.notes ?? "",
-      tempo: (exercise.mode === "cardio" ? exercise.zone : exercise.tempo) ?? "",
-      cardioSessionType: exercise.cardioSessionType,
-      cardioEffortLevel: exercise.cardioEffortLevel,
-      sets: exercise.sets.map((set) => ({
-        weightKg: typeof set.defaultWeightKg === "number" ? set.defaultWeightKg : null,
-        reps: set.reps,
-        rpe: exercise.mode === "cardio" ? "" : set.targetRpe ?? "",
-        distanceKm: typeof set.defaultDistanceKm === "number" ? set.defaultDistanceKm : null,
-        durationSec: typeof set.defaultDurationSec === "number" ? set.defaultDurationSec : null,
-        zone: set.defaultZone ?? "",
-        setType: toSetType(set.setType),
-        done: false,
-        baselineWeightKg: typeof set.defaultWeightKg === "number" ? set.defaultWeightKg : null,
-        baselineReps: set.reps,
-      })),
-    }));
+    const mapped: Exercise[] = routine.exercises.map((exercise) => {
+      const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      const latestSets = previousExerciseSetsByName.get(normalizeExerciseName(exercise.name)) ?? [];
+      const sets = latestSets.length
+        ? latestSets.map((set) => ({
+            weightKg: exercise.mode === "cardio" ? null : set.weightKg ?? null,
+            reps: exercise.mode === "cardio" ? "" : String(set.reps ?? ""),
+            rpe: "",
+            distanceKm: exercise.mode === "cardio" ? set.distanceKm ?? null : null,
+            durationSec: exercise.mode === "cardio" ? set.durationSec ?? null : null,
+            zone: exercise.mode === "cardio" ? String(set.zone ?? "") : "",
+            setType: toSetType(set.setType),
+            done: false,
+            baselineWeightKg: exercise.mode === "cardio" ? null : set.weightKg ?? null,
+            baselineReps: exercise.mode === "cardio" ? "" : String(set.reps ?? ""),
+          }))
+        : exercise.sets.map((set) => ({
+            weightKg: typeof set.defaultWeightKg === "number" ? set.defaultWeightKg : null,
+            reps: set.reps,
+            rpe: "",
+            distanceKm: typeof set.defaultDistanceKm === "number" ? set.defaultDistanceKm : null,
+            durationSec: typeof set.defaultDurationSec === "number" ? set.defaultDurationSec : null,
+            zone: set.defaultZone ?? "",
+            setType: toSetType(set.setType),
+            done: false,
+            baselineWeightKg: typeof set.defaultWeightKg === "number" ? set.defaultWeightKg : null,
+            baselineReps: set.reps,
+          }));
+      return {
+        id,
+        name: exercise.name,
+        notes: exercise.notes ?? "",
+        tempo: (exercise.mode === "cardio" ? exercise.zone : exercise.tempo) ?? "",
+        cardioSessionType: exercise.cardioSessionType,
+        cardioEffortLevel: exercise.cardioEffortLevel,
+        sets,
+      };
+    });
     setExercises((prev) => (mode === "append" ? [...prev, ...mapped] : mapped));
     setExerciseUnits((prev) => {
       const next = { ...prev };
@@ -2606,11 +2776,14 @@ export default function WorkoutLog() {
     const needle = activeActionExercise.name.trim().toLowerCase();
     return favoriteExercises.some((entry) => entry.toLowerCase() === needle);
   }, [activeActionExercise, favoriteExercises]);
+  const activeActionMode =
+    activeActionExercise && getExerciseMode(activeActionExercise.name) === "cardio" ? "cardio" : "resistance";
   const activeActionUnit = activeExerciseActionId
     ? exerciseUnits[activeExerciseActionId] || (activeActionMode === "cardio" ? "km" : "kg")
     : "kg";
-  const activeActionMode =
-    activeActionExercise && getExerciseMode(activeActionExercise.name) === "cardio" ? "cardio" : "resistance";
+  const activeActionIndex = activeExerciseActionId
+    ? exercises.findIndex((exercise) => exercise.id === activeExerciseActionId)
+    : -1;
   const previousExerciseSetsByName = useMemo(() => {
     const map = new Map<string, PastWorkout["exercises"][number]["sets"]>();
     for (const workout of pastWorkouts) {
@@ -2622,47 +2795,6 @@ export default function WorkoutLog() {
     }
     return map;
   }, [pastWorkouts]);
-  function buildExerciseDraft(name: string, id: string): Exercise {
-    const trimmed = name.trim();
-    const mode = getExerciseModeByName(trimmed);
-    const previousSets = previousExerciseSetsByName.get(normalizeExerciseName(trimmed)) ?? [];
-    const sets =
-      previousSets.length > 0
-        ? previousSets.map((set) => ({
-            weightKg: mode === "cardio" ? null : set.weightKg ?? null,
-            reps: mode === "cardio" ? "" : String(set.reps ?? ""),
-            rpe: mode === "cardio" ? "" : String(set.rpe ?? ""),
-            distanceKm: mode === "cardio" ? set.distanceKm ?? null : null,
-            durationSec: mode === "cardio" ? set.durationSec ?? null : null,
-            zone: mode === "cardio" ? String(set.zone ?? "") : "",
-            setType: toSetType(set.setType),
-            done: false,
-            baselineWeightKg: mode === "cardio" ? null : set.weightKg ?? null,
-            baselineReps: mode === "cardio" ? "" : String(set.reps ?? ""),
-          }))
-        : [
-            {
-              weightKg: null,
-              reps: "",
-              rpe: "",
-              distanceKm: null,
-              durationSec: null,
-              zone: "",
-              setType: "normal" as SetType,
-              done: false,
-            },
-          ];
-    return {
-      id,
-      name: trimmed,
-      notes: "",
-      tempo: mode === "cardio" ? "" : undefined,
-      cardioSessionType: undefined,
-      cardioEffortLevel: undefined,
-      sets,
-    };
-  }
-  buildExerciseDraftRef.current = buildExerciseDraft;
   const activeSetExercise = useMemo(() => {
     if (!activeSetMenu) return null;
     return exercises.find((exercise) => exercise.id === activeSetMenu.exerciseId) ?? null;
@@ -3037,7 +3169,14 @@ export default function WorkoutLog() {
                 ]}
               >
                 {!isCardio ? <Text style={[styles.setHeaderText, styles.setHeaderSet]}>Set</Text> : null}
-                <Text style={[styles.setHeaderText, styles.setHeaderCheck, usesNativeSetRows && styles.nativeSetHeaderCheck]}>
+                <Text
+                  style={[
+                    styles.setHeaderText,
+                    styles.setHeaderCheck,
+                    isCardio && styles.cardioSetHeaderCheck,
+                    usesNativeSetRows && styles.nativeSetHeaderCheck,
+                  ]}
+                >
                   {"\u2713"}
                 </Text>
                 <Text style={[styles.setHeaderText, styles.setHeaderLast, usesNativeSetRows && styles.nativeSetHeaderLast]}>
@@ -3067,7 +3206,7 @@ export default function WorkoutLog() {
                   style={{ height: Math.max(ex.sets.length, 1) * 52 }}
                   weightLabel={weightLabel}
                   repsLabel={repsLabel}
-                  rpeLabel={rpeLabel}
+                  rpeLabel={isCardio ? rpeLabel : "6-10"}
                   sets={ex.sets.map((set, idx) => ({
                     marker: getSetTypeMarker(set, idx),
                     last: previousSets[idx] ? formatLastSetSummary(previousSets[idx]) : "-",
@@ -3105,6 +3244,11 @@ export default function WorkoutLog() {
                     const idx = nativeEvent.index;
                     if (typeof idx !== "number" || idx < 0 || idx >= ex.sets.length) return;
                     openSetMenu(ex.id, idx);
+                  }}
+                  onLastPress={({ nativeEvent }) => {
+                    const idx = nativeEvent.index;
+                    if (typeof idx !== "number" || idx < 0 || idx >= ex.sets.length) return;
+                    copyLastSetToCurrent(ex.id, idx);
                   }}
                 />
               ) : (
@@ -3149,12 +3293,19 @@ export default function WorkoutLog() {
                           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                         >
                           <View style={[styles.checkbox, s.done && styles.checkboxChecked]}>
-                            {s.done ? <Ionicons name="checkmark" size={14} color="#0d0d1a" /> : null}
+                            {s.done ? <Text style={styles.cardioCheckboxMark}>✓</Text> : null}
                           </View>
                         </TouchableOpacity>
-                        <Text style={styles.lastSetText}>
+                        <TouchableOpacity
+                          style={styles.lastSetButton}
+                          onPress={() => copyLastSetToCurrent(ex.id, idx)}
+                          disabled={!previousSets[idx]}
+                          accessibilityLabel={`Copy previous values into set ${idx + 1}`}
+                        >
+                          <Text style={styles.lastSetText}>
                           {previousSets[idx] ? formatLastSetSummary(previousSets[idx]) : "-"}
-                        </Text>
+                          </Text>
+                        </TouchableOpacity>
                         <View style={[styles.setInputsGroup, isTabletLayout && styles.setInputsGroupTablet]}>
                           {isCardio ? (
                             <>
@@ -3210,7 +3361,7 @@ export default function WorkoutLog() {
                                 ]}
                               />
                               <WorkoutGestureTextInput
-                                placeholder={rpeLabel}
+                                placeholder={isCardio ? rpeLabel : "6-10"}
                                 placeholderTextColor="#7a7a8c"
                                 keyboardType="decimal-pad"
                                 value={s.rpe ?? ""}
@@ -3495,6 +3646,28 @@ export default function WorkoutLog() {
                   </View>
                 </View>
 
+                <View style={styles.exerciseMoveRow}>
+                  <TouchableOpacity
+                    style={[styles.exerciseMoveButton, activeActionIndex <= 0 && styles.disabled]}
+                    disabled={!activeExerciseActionId || activeActionIndex <= 0}
+                    onPress={() => activeExerciseActionId && moveExercise(activeExerciseActionId, -1)}
+                  >
+                    <Ionicons name="arrow-up-outline" size={16} color="#cdd0e0" />
+                    <Text style={styles.exerciseMoveText}>Move up</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.exerciseMoveButton,
+                      (activeActionIndex < 0 || activeActionIndex >= exercises.length - 1) && styles.disabled,
+                    ]}
+                    disabled={!activeExerciseActionId || activeActionIndex < 0 || activeActionIndex >= exercises.length - 1}
+                    onPress={() => activeExerciseActionId && moveExercise(activeExerciseActionId, 1)}
+                  >
+                    <Ionicons name="arrow-down-outline" size={16} color="#cdd0e0" />
+                    <Text style={styles.exerciseMoveText}>Move down</Text>
+                  </TouchableOpacity>
+                </View>
+
                 <TouchableOpacity
                   style={styles.exerciseOptionRow}
                   onPress={() => {
@@ -3729,6 +3902,67 @@ export default function WorkoutLog() {
                 onPress={handleConfirmDeleteSelectedRoutine}
               >
                 <Text style={styles.primaryText}>Delete</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={showWorkoutSavedModal} transparent animationType="fade">
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Workout saved</Text>
+            <Text style={styles.modalText}>Your workout has been saved.</Text>
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.primaryButton, styles.modalActionButton, styles.modalPrimaryButton]}
+                onPress={continueAfterWorkoutSaved}
+              >
+                <Text style={styles.primaryText}>Continue</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={showRoutineUpdateAfterFinishModal} transparent animationType="fade">
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Update routine?</Text>
+            <Text style={styles.modalText}>
+              Use this workout&apos;s exercise order, sets, and weights as the new routine baseline? RPE is not saved to routines.
+            </Text>
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.secondaryButton, styles.modalActionButton]}
+                onPress={closeRoutineUpdateAfterFinish}
+              >
+                <Text style={styles.secondaryText}>Not now</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.primaryButton, styles.modalActionButton, styles.modalPrimaryButton]}
+                onPress={() => void updateAppliedRoutineAfterFinish()}
+              >
+                <Text style={styles.primaryText}>Update routine</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={showRoutineUpdatedConfirmationModal} transparent animationType="fade">
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Routine updated</Text>
+            <Text style={styles.modalText}>
+              Your routine now uses this workout&apos;s exercise order, sets, and weights. RPE was not saved.
+            </Text>
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.primaryButton, styles.modalActionButton, styles.modalPrimaryButton]}
+                onPress={closeRoutineUpdateAfterFinish}
+              >
+                <Text style={styles.primaryText}>Done</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -4466,6 +4700,7 @@ const styles = StyleSheet.create({
   setHeaderText: { color: "#9aa1c3", fontSize: 12, fontWeight: "700" },
   setHeaderSet: { width: 24, textAlign: "center" },
   setHeaderCheck: { width: 24, textAlign: "center" },
+  cardioSetHeaderCheck: { width: 34 },
   nativeSetHeaderCheck: { width: 40, marginRight: 2 },
   setHeaderLast: { width: 84 },
   nativeSetHeaderLast: { marginLeft: 2 },
@@ -4484,6 +4719,7 @@ const styles = StyleSheet.create({
   },
   setLabel: { color: "#cdd0e0", fontWeight: "700", fontSize: 13, width: 24, textAlign: "center" },
   setLabelTablet: { width: 28, fontSize: 15 },
+  lastSetButton: { width: 84 },
   lastSetText: { width: 84, color: "#aab0cc", fontSize: 11, lineHeight: 14 },
   cardioTapValue: { color: "#fff", textAlign: "center", fontWeight: "700" },
   cardioMetaRow: { marginTop: 8 },
@@ -4504,8 +4740,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   checkbox: {
-    width: 22,
-    height: 22,
+    width: 24,
+    height: 24,
     borderRadius: 6,
     borderWidth: 2,
     borderColor: "#cdd0e0",
@@ -4517,6 +4753,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#7b61ff",
     borderColor: "#7b61ff",
   },
+  cardioCheckboxMark: { color: "#0d0d1a", fontSize: 12, fontWeight: "700", lineHeight: 14 },
   inlineUndoBanner: {
     marginTop: 10,
     paddingHorizontal: 12,
@@ -4745,6 +4982,9 @@ const styles = StyleSheet.create({
     borderBottomColor: "rgba(255,255,255,0.1)",
   },
   exerciseOptionUnits: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
+  exerciseMoveRow: { flexDirection: "row", gap: 8, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "rgba(255,255,255,0.1)" },
+  exerciseMoveButton: { flex: 1, minHeight: 40, borderRadius: 10, backgroundColor: "rgba(255,255,255,0.06)", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 },
+  exerciseMoveText: { color: "#d8daec", fontSize: 13, fontWeight: "700" },
   exerciseUnitChip: { paddingVertical: 6, paddingHorizontal: 10 },
   exerciseOptionText: { color: "#d8daec", fontWeight: "700", fontSize: 14 },
   demoImageRow: { flexDirection: "row", gap: 8, marginBottom: 10 },

@@ -4,24 +4,26 @@ export const ADD_EXERCISE_SELECTION_KEY = "workout-add-exercise-selection-v1";
 const ADD_EXERCISE_SELECTION_KEY_PREFIX = "workout-add-exercise-selection-v1";
 
 type PendingExerciseSelection = {
-  name: string;
+  names: string[];
   createdAt: number;
 };
 
 const getScopedSelectionKey = (uid?: string | null) =>
   uid ? `${ADD_EXERCISE_SELECTION_KEY_PREFIX}:${uid}` : ADD_EXERCISE_SELECTION_KEY;
 
-export const setPendingExerciseSelection = async (name: string, uid?: string | null) => {
-  const trimmed = name.trim();
-  if (!trimmed) return;
+export const setPendingExerciseSelection = async (names: string[], uid?: string | null) => {
+  const normalized = Array.from(
+    new Set(names.map((name) => name.trim()).filter(Boolean).map((name) => name.toLowerCase()))
+  ).map((name) => names.find((candidate) => candidate.trim().toLowerCase() === name)?.trim() ?? name);
+  if (!normalized.length) return;
   const payload: PendingExerciseSelection = {
-    name: trimmed,
+    names: normalized,
     createdAt: Date.now(),
   };
   await AsyncStorage.setItem(getScopedSelectionKey(uid), JSON.stringify(payload));
 };
 
-export const popPendingExerciseSelection = async (uid?: string | null): Promise<string | null> => {
+export const popPendingExerciseSelection = async (uid?: string | null): Promise<string[]> => {
   const scopedKey = getScopedSelectionKey(uid);
   let raw = await AsyncStorage.getItem(scopedKey);
   let removeKey = scopedKey;
@@ -32,13 +34,16 @@ export const popPendingExerciseSelection = async (uid?: string | null): Promise<
     removeKey = ADD_EXERCISE_SELECTION_KEY;
   }
 
-  if (!raw) return null;
+  if (!raw) return [];
   await AsyncStorage.removeItem(removeKey);
   try {
-    const parsed = JSON.parse(raw) as PendingExerciseSelection;
-    const name = String(parsed?.name ?? "").trim();
-    return name || null;
+    const parsed = JSON.parse(raw) as PendingExerciseSelection & { name?: unknown };
+    const names = Array.isArray(parsed?.names)
+      ? parsed.names.map((name) => String(name).trim()).filter(Boolean)
+      : [String(parsed?.name ?? "").trim()].filter(Boolean);
+    return Array.from(new Set(names.map((name) => name.toLowerCase())))
+      .map((name) => names.find((candidate) => candidate.toLowerCase() === name) ?? name);
   } catch {
-    return null;
+    return [];
   }
 };

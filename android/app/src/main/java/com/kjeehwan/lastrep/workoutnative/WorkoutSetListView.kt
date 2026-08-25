@@ -51,7 +51,7 @@ private data class WorkoutSetRowBinding(
 
 class WorkoutSetListView(context: Context) : LinearLayout(context) {
   private val recyclerView = RecyclerView(context)
-  private val adapter = WorkoutSetAdapter(::emitChange, ::emitToggleDone, ::emitSetLabelPress)
+  private val adapter = WorkoutSetAdapter(::emitChange, ::emitToggleDone, ::emitSetLabelPress, ::emitLastPress)
   private val deletePaint = Paint().apply {
     color = Color.parseColor("#D94848")
     style = Paint.Style.FILL
@@ -182,6 +182,15 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
       ?.receiveEvent(reactTagForEvents, "topSetLabelPress", payload)
   }
 
+  private fun emitLastPress(index: Int) {
+    if (reactTagForEvents == View.NO_ID) return
+    val payload = Arguments.createMap()
+    payload.putInt("index", index)
+    (context as? com.facebook.react.bridge.ReactContext)
+      ?.getJSModule(RCTEventEmitter::class.java)
+      ?.receiveEvent(reactTagForEvents, "topLastPress", payload)
+  }
+
   private fun dp(value: Float): Int =
     TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, value, resources.displayMetrics).toInt()
 
@@ -191,7 +200,8 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
   private inner class WorkoutSetAdapter(
     private val onChange: (Int, String, String) -> Unit,
     private val onToggleDone: (Int, Boolean) -> Unit,
-    private val onSetLabelPress: (Int) -> Unit
+    private val onSetLabelPress: (Int) -> Unit,
+    private val onLastPress: (Int) -> Unit
   ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
     private val items = mutableListOf<WorkoutSetItem>()
     private var weightHint: String = "Weight"
@@ -287,6 +297,10 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
         setTextColor(Color.parseColor("#AAB0CC"))
         textSize = 11f
         maxLines = 3
+        minHeight = dp(40f)
+        gravity = Gravity.CENTER_VERTICAL
+        isClickable = true
+        isFocusable = true
         setLineSpacing(0f, 1.05f)
       }
       root.addView(last, LayoutParams(dp(84f), LayoutParams.WRAP_CONTENT).apply { marginStart = dp(2f) })
@@ -372,6 +386,9 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
           if (boundIndex >= 0) onSetLabelPress(boundIndex)
         }
         binding.last.text = item.last.ifBlank { "-" }
+        binding.last.setOnClickListener {
+          if (boundIndex >= 0) onLastPress(boundIndex)
+        }
         localDone = item.done
         applyCheckStyle(localDone)
         binding.checkHitbox.setOnClickListener {

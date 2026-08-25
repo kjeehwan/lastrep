@@ -60,6 +60,7 @@ export default function AddExerciseScreen() {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeGroup, setActiveGroup] = useState<string>("all");
   const [customExercise, setCustomExercise] = useState("");
+  const [selectedExercises, setSelectedExercises] = useState<string[]>([]);
   const [catalog, setCatalog] = useState<ExerciseCatalogItem[]>(EXERCISE_CATALOG);
   const [favoriteExercises, setFavoriteExercises] = useState<string[]>([]);
 
@@ -188,11 +189,19 @@ export default function AddExerciseScreen() {
     });
   }, [activeUid]);
 
+  const toggleExerciseSelection = useCallback((name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    setSelectedExercises((prev) => {
+      const exists = prev.some((item) => item.toLowerCase() === trimmed.toLowerCase());
+      return exists ? prev.filter((item) => item.toLowerCase() !== trimmed.toLowerCase()) : [...prev, trimmed];
+    });
+  }, []);
+
   const submitSelection = useCallback(
-    async (name: string) => {
-      const trimmed = name.trim();
-      if (!trimmed) return;
-      await setPendingExerciseSelection(trimmed, activeUid);
+    async (names: string[]) => {
+      if (!names.length) return;
+      await setPendingExerciseSelection(names, activeUid);
       router.back();
     },
     [activeUid, router]
@@ -209,7 +218,15 @@ export default function AddExerciseScreen() {
             <Ionicons name="chevron-back" size={20} color="#fff" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Add Exercise</Text>
-          <View style={styles.headerSpacer} />
+          <TouchableOpacity
+            style={[styles.addSelectedButton, selectedExercises.length === 0 && styles.addSelectedButtonDisabled]}
+            disabled={selectedExercises.length === 0}
+            onPress={() => void submitSelection(selectedExercises)}
+          >
+            <Text style={styles.addSelectedText}>
+              {selectedExercises.length ? `Add (${selectedExercises.length})` : "Add"}
+            </Text>
+          </TouchableOpacity>
         </View>
 
         <View style={styles.topControls}>
@@ -220,6 +237,16 @@ export default function AddExerciseScreen() {
             onChangeText={setSearchQuery}
             style={styles.input}
           />
+          {selectedExercises.length ? (
+            <View style={styles.selectedExerciseList}>
+              {selectedExercises.map((name) => (
+                <TouchableOpacity key={name.toLowerCase()} style={styles.selectedExerciseChip} onPress={() => toggleExerciseSelection(name)}>
+                  <Text style={styles.selectedExerciseText} numberOfLines={1}>{name}</Text>
+                  <Ionicons name="close" size={14} color="#e8e7ff" />
+                </TouchableOpacity>
+              ))}
+            </View>
+          ) : null}
           <FlatList
             horizontal
             data={[
@@ -254,8 +281,12 @@ export default function AddExerciseScreen() {
           removeClippedSubviews
           renderItem={({ item }) => (
             <View style={styles.row}>
-              <TouchableOpacity style={styles.rowMain} onPress={() => void submitSelection(item.name)}>
-                <Ionicons name="add-circle-outline" size={18} color="#7b61ff" />
+              <TouchableOpacity style={styles.rowMain} onPress={() => toggleExerciseSelection(item.name)}>
+                <Ionicons
+                  name={selectedExercises.some((name) => name.toLowerCase() === item.name.toLowerCase()) ? "checkmark-circle" : "add-circle-outline"}
+                  size={20}
+                  color="#7b61ff"
+                />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.rowTitle}>{item.name}</Text>
                   <Text style={styles.rowMeta}>
@@ -282,7 +313,14 @@ export default function AddExerciseScreen() {
             onChangeText={setCustomExercise}
             style={[styles.input, { flex: 1, marginBottom: 0 }]}
           />
-          <TouchableOpacity style={styles.addButton} onPress={() => void submitSelection(customExercise)}>
+          <TouchableOpacity
+            style={styles.addButton}
+            onPress={() => {
+              const trimmed = customExercise.trim();
+              if (!trimmed) return;
+              void submitSelection([...selectedExercises, trimmed]);
+            }}
+          >
             <Text style={styles.addButtonText}>Add</Text>
           </TouchableOpacity>
         </View>
@@ -310,10 +348,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: "rgba(255,255,255,0.08)",
   },
-  headerSpacer: {
-    width: 34,
-    height: 34,
-  },
+  addSelectedButton: { minWidth: 58, paddingHorizontal: 10, height: 34, borderRadius: 10, backgroundColor: "#7b61ff", alignItems: "center", justifyContent: "center" },
+  addSelectedButtonDisabled: { backgroundColor: "rgba(255,255,255,0.08)" },
+  addSelectedText: { color: "#fff", fontSize: 12, fontWeight: "800" },
   topControls: { paddingHorizontal: 12, paddingBottom: 8 },
   input: {
     backgroundColor: "rgba(255,255,255,0.06)",
@@ -326,6 +363,9 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   groupChips: { gap: 8, paddingVertical: 4 },
+  selectedExerciseList: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 6 },
+  selectedExerciseChip: { maxWidth: "100%", flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 999, backgroundColor: "rgba(123,97,255,0.22)", borderWidth: StyleSheet.hairlineWidth, borderColor: "rgba(123,97,255,0.75)", paddingHorizontal: 10, paddingVertical: 6 },
+  selectedExerciseText: { color: "#e8e7ff", fontSize: 12, fontWeight: "700", flexShrink: 1 },
   groupChip: {
     borderRadius: 999,
     paddingHorizontal: 12,
