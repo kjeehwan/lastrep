@@ -13,6 +13,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import { auth } from "@/src/config/firebaseConfig";
 import type { NutritionMeal } from "@/src/contracts";
 import {
@@ -425,18 +426,30 @@ export default function MealSectionScreen() {
           <Text style={styles.sectionTitle}>Foods</Text>
           {sectionMeals.length === 0 ? <Text style={styles.subText}>No entries yet.</Text> : null}
           {sectionMeals.map((meal) => (
-            <View key={meal.id} style={styles.mealRow}>
-              <TouchableOpacity style={styles.mealBody} onPress={() => void openEditorForMeal(meal)}>
-                <Text style={styles.mealTitle}>{meal.name}</Text>
-                {formatMealQuantity(meal) ? <Text style={styles.subText}>{formatMealQuantity(meal)}</Text> : null}
-                <Text style={styles.subText}>
-                  P {meal.proteinGrams ?? 0}g / C {meal.carbGrams ?? 0}g / F {meal.fatGrams ?? 0}g
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => handleDeleteMeal(meal)} style={styles.iconBtnSmall}>
-                <Ionicons name="trash-outline" size={17} color="#ff8f8f" />
-              </TouchableOpacity>
-            </View>
+            <ReanimatedSwipeable
+              key={meal.id}
+              friction={1.2}
+              rightThreshold={18}
+              overshootRight={false}
+              renderRightActions={() => (
+                <View style={styles.swipeDeleteContainer}>
+                  <TouchableOpacity style={styles.swipeDeleteButton} onPress={() => handleDeleteMeal(meal)}>
+                    <Ionicons name="trash-outline" size={16} color="#fff" />
+                    <Text style={styles.swipeDeleteText}>Delete</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            >
+              <View style={styles.mealRow}>
+                <TouchableOpacity style={styles.mealBody} onPress={() => void openEditorForMeal(meal)}>
+                  <Text style={styles.mealTitle}>{meal.name}</Text>
+                  {formatMealQuantity(meal) ? <Text style={styles.subText}>{formatMealQuantity(meal)}</Text> : null}
+                  <Text style={styles.subText}>
+                    P {meal.proteinGrams ?? 0}g / C {meal.carbGrams ?? 0}g / F {meal.fatGrams ?? 0}g
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </ReanimatedSwipeable>
           ))}
           <TouchableOpacity
             style={styles.inlineAddBtn}
@@ -576,14 +589,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: "rgba(255,255,255,0.08)",
   },
-  iconBtnSmall: {
-    width: 30,
-    height: 30,
-    borderRadius: 8,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.06)",
-  },
   content: { padding: 16, gap: 12, paddingBottom: 120 },
   card: {
     backgroundColor: "rgba(255,255,255,0.06)",
@@ -599,6 +604,9 @@ const styles = StyleSheet.create({
   mealRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 8 },
   mealBody: { flex: 1, gap: 2 },
   mealTitle: { color: "#fff", fontSize: 14, fontWeight: "700" },
+  swipeDeleteContainer: { justifyContent: "center", alignItems: "flex-end", width: 92 },
+  swipeDeleteButton: { width: 84, borderRadius: 10, paddingVertical: 10, alignItems: "center", gap: 3, backgroundColor: "rgba(248,113,113,0.95)" },
+  swipeDeleteText: { color: "#fff", fontSize: 11, fontWeight: "800" },
   inlineAddBtn: {
     marginTop: 4,
     borderRadius: 10,

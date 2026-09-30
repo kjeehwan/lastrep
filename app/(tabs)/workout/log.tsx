@@ -57,17 +57,36 @@ import {
   DEFAULT_WORKOUT_TEMPLATES,
   getAverageRpe,
   getDominantGroup,
-  goalToLabel,
-  isPhaseGoalAligned,
   pickTemplate,
   resolveRecommendationTargets,
   type WorkoutLike,
 } from "../../../src/workouts/recommendationHeuristics";
+import {
+  recommendExerciseProgression,
+  type ExercisePerformanceSession,
+  type ProgressionPhase,
+} from "../../../src/workouts/exerciseProgression";
+import { selectRecommendedExercises } from "../../../src/workouts/recommendationExerciseSelection";
 import { getCalendarMatrix } from "../../../src/workouts/homeInsights";
 
 type Unit = "kg" | "lbs" | "km" | "mi";
 type SetType = "warmup" | "normal" | "failure" | "drop";
 type ExerciseMode = "resistance" | "cardio";
+type RecommendationFocusId =
+  | "auto"
+  | "chest"
+  | "chest-triceps"
+  | "back"
+  | "back-biceps"
+  | "legs"
+  | "anterior-legs"
+  | "posterior-legs"
+  | "shoulders"
+  | "shoulders-arms"
+  | "arms"
+  | "push"
+  | "pull";
+type RecommendationLengthId = "quick" | "standard" | "extended";
 type SetEntry = {
   weightKg: number | null;
   // Preserve partially typed decimals such as "20." until the user finishes the value.
@@ -150,6 +169,7 @@ const FAVORITES_KEY = "workout-favorite-exercises-v1";
 const FAVORITES_KEY_PREFIX = "workout-favorite-exercises-v1";
 const REST_PREFS_KEY = "workout-rest-preferences-v1";
 const REST_PREFS_KEY_PREFIX = "workout-rest-preferences-v1";
+const RECOMMENDATION_LENGTH_KEY_PREFIX = "workout-recommendation-length-v1";
 const TEMPO_FORMAT_HINT =
   "Use eccentric-hold-concentric-hold (e.g. 3-0-X-0). Numbers are seconds, X is explosive.";
 const TEMPO_TOKENS = ["X", "0", "1", "2", "3"] as const;
@@ -188,6 +208,84 @@ const CARDIO_EFFORT_LEVELS = [
   { value: "hard", label: "Hard" },
   { value: "max", label: "Max" },
 ] as const;
+const RECOMMENDATION_FOCUSES: {
+  id: RecommendationFocusId;
+  label: string;
+  template?: { name: string; primaryGroup: string; exercises: string[] };
+}[] = [
+  { id: "auto", label: "Auto" },
+  {
+    id: "chest",
+    label: "Chest",
+    template: { name: "Chest", primaryGroup: "chest", exercises: ["Bench Press", "Incline Dumbbell Press", "Cable Fly"] },
+  },
+  {
+    id: "chest-triceps",
+    label: "Chest + Triceps",
+    template: { name: "Chest + Triceps", primaryGroup: "chest", exercises: ["Bench Press", "Incline Dumbbell Press", "Tricep Pushdown"] },
+  },
+  {
+    id: "back",
+    label: "Back",
+    template: { name: "Back", primaryGroup: "back", exercises: ["Barbell Row", "Lat Pulldown", "Seated Cable Row"] },
+  },
+  {
+    id: "back-biceps",
+    label: "Back + Biceps",
+    template: { name: "Back + Biceps", primaryGroup: "back", exercises: ["Barbell Row", "Lat Pulldown", "Bicep Curl"] },
+  },
+  {
+    id: "legs",
+    label: "Legs",
+    template: { name: "Legs", primaryGroup: "legs", exercises: ["Squat", "Romanian Deadlift", "Leg Press"] },
+  },
+  {
+    id: "anterior-legs",
+    label: "Anterior Legs",
+    template: { name: "Anterior Legs", primaryGroup: "legs", exercises: ["Squat", "Leg Press", "Leg Extension"] },
+  },
+  {
+    id: "posterior-legs",
+    label: "Posterior Legs",
+    template: { name: "Posterior Legs", primaryGroup: "legs", exercises: ["Romanian Deadlift", "Leg Curl", "Hip Thrust"] },
+  },
+  {
+    id: "shoulders",
+    label: "Shoulders",
+    template: { name: "Shoulders", primaryGroup: "shoulders", exercises: ["Overhead Press", "Lateral Raise", "Rear Delt Fly"] },
+  },
+  {
+    id: "shoulders-arms",
+    label: "Shoulders + Arms",
+    template: { name: "Shoulders + Arms", primaryGroup: "shoulders", exercises: ["Overhead Press", "Lateral Raise", "Bicep Curl", "Tricep Pushdown"] },
+  },
+  {
+    id: "arms",
+    label: "Arms",
+    template: { name: "Arms", primaryGroup: "arms", exercises: ["Bicep Curl", "Tricep Pushdown", "Skullcrusher"] },
+  },
+  {
+    id: "push",
+    label: "Push",
+    template: { name: "Push", primaryGroup: "chest", exercises: ["Bench Press", "Overhead Press", "Tricep Pushdown"] },
+  },
+  {
+    id: "pull",
+    label: "Pull",
+    template: { name: "Pull", primaryGroup: "back", exercises: ["Barbell Row", "Lat Pulldown", "Bicep Curl"] },
+  },
+];
+const RECOMMENDATION_LENGTHS: {
+  id: RecommendationLengthId;
+  title: string;
+  detail: string;
+  exerciseCount: number;
+  targetHardSets: number;
+}[] = [
+  { id: "quick", title: "Quick", detail: "30-40 min | 8-10 hard sets", exerciseCount: 3, targetHardSets: 9 },
+  { id: "standard", title: "Standard", detail: "45-60 min | 12-16 hard sets", exerciseCount: 4, targetHardSets: 14 },
+  { id: "extended", title: "Extended", detail: "60-75 min | 16-20 hard sets", exerciseCount: 5, targetHardSets: 18 },
+];
 const isValidSetType = (value: string): value is SetType =>
   value === "warmup" || value === "normal" || value === "failure" || value === "drop";
 const toSetType = (value: unknown): SetType =>
@@ -237,6 +335,7 @@ export default function WorkoutLog() {
   const [replaceTarget, setReplaceTarget] = useState<string | null>(null);
   const [replaceSearch, setReplaceSearch] = useState("");
   const [replaceGroup, setReplaceGroup] = useState<string>("all");
+  const [recommendationFocus, setRecommendationFocus] = useState<RecommendationFocusId>("auto");
   const [showExerciseDemo, setShowExerciseDemo] = useState(false);
   const [activeDemoExercise, setActiveDemoExercise] = useState<ExerciseCatalogItem | null>(null);
   const [activeDemoImageUris, setActiveDemoImageUris] = useState<string[]>([]);
@@ -295,6 +394,9 @@ export default function WorkoutLog() {
   const [showRoutineStartModal, setShowRoutineStartModal] = useState(false);
   const [showRoutineActionsModal, setShowRoutineActionsModal] = useState(false);
   const [showRoutineDeleteModal, setShowRoutineDeleteModal] = useState(false);
+  const [showDeloadConfirmModal, setShowDeloadConfirmModal] = useState(false);
+  const [showExerciseHistoryModal, setShowExerciseHistoryModal] = useState(false);
+  const [historyExerciseName, setHistoryExerciseName] = useState<string | null>(null);
   const [showWorkoutSavedModal, setShowWorkoutSavedModal] = useState(false);
   const [showRoutineUpdateAfterFinishModal, setShowRoutineUpdateAfterFinishModal] = useState(false);
   const [showRoutineUpdatedConfirmationModal, setShowRoutineUpdatedConfirmationModal] = useState(false);
@@ -310,6 +412,8 @@ export default function WorkoutLog() {
   const [lastAppliedRoutineId, setLastAppliedRoutineId] = useState<string | null>(null);
   const [recommending, setRecommending] = useState(false);
   const [recommendationSummary, setRecommendationSummary] = useState<string[]>([]);
+  const [showWorkoutLengthModal, setShowWorkoutLengthModal] = useState(false);
+  const [recommendationLength, setRecommendationLength] = useState<RecommendationLengthId>("standard");
   const [showFinishModal, setShowFinishModal] = useState(false);
   const [showFinishTitleInput, setShowFinishTitleInput] = useState(false);
   const [showTempoEditorModal, setShowTempoEditorModal] = useState(false);
@@ -368,6 +472,30 @@ export default function WorkoutLog() {
     });
     return unsubscribe;
   }, [auth]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!activeUid) {
+      Promise.resolve().then(() => {
+        if (!cancelled) setRecommendationLength("standard");
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    AsyncStorage.getItem(`${RECOMMENDATION_LENGTH_KEY_PREFIX}:${activeUid}`)
+      .then((savedLength) => {
+        if (!cancelled && RECOMMENDATION_LENGTHS.some((option) => option.id === savedLength)) {
+          setRecommendationLength(savedLength as RecommendationLengthId);
+        }
+      })
+      .catch((error) => console.log("Failed to load recommendation length", error));
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeUid]);
 
   useEffect(() => {
     const showSub = Keyboard.addListener("keyboardDidShow", (event) => {
@@ -2476,7 +2604,12 @@ export default function WorkoutLog() {
     }
   };
 
-  const applyRoutineToEditor = (routine: Routine, mode: "replace" | "append") => {
+  const applyRoutineToEditor = (
+    routine: Routine,
+    mode: "replace" | "append",
+    options: { deload?: boolean } = {}
+  ) => {
+    setRecommendationSummary([]);
     const mapped: Exercise[] = routine.exercises.map((exercise) => {
       const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
       const latestSets = previousExerciseSetsByName.get(normalizeExerciseName(exercise.name)) ?? [];
@@ -2515,44 +2648,67 @@ export default function WorkoutLog() {
         sets,
       };
     });
-    setExercises((prev) => (mode === "append" ? [...prev, ...mapped] : mapped));
+    const workoutExercises = options.deload
+      ? mapped.map((exercise, index) => {
+          const plannedSetCount = routine.exercises[index]?.sets.length ?? exercise.sets.length;
+          const deloadSetCount = Math.max(1, Math.ceil(plannedSetCount * 0.6));
+          const isCardio = getExerciseMode(exercise.name) === "cardio";
+          return {
+            ...exercise,
+            sets: exercise.sets.slice(0, deloadSetCount).map((set) => ({
+              ...set,
+              weightKg:
+                !isCardio && typeof set.weightKg === "number"
+                  ? Math.round(set.weightKg * 0.85 * 2) / 2
+                  : set.weightKg,
+              baselineWeightKg:
+                !isCardio && typeof set.baselineWeightKg === "number"
+                  ? Math.round(set.baselineWeightKg * 0.85 * 2) / 2
+                  : set.baselineWeightKg,
+              durationSec:
+                isCardio && typeof set.durationSec === "number" ? Math.round(set.durationSec * 0.8) : set.durationSec,
+            })),
+          };
+        })
+      : mapped;
+    setExercises((prev) => (mode === "append" ? [...prev, ...workoutExercises] : workoutExercises));
     setExerciseUnits((prev) => {
       const next = { ...prev };
-      mapped.forEach((exercise) => {
+      workoutExercises.forEach((exercise) => {
         next[exercise.id] = getExerciseMode(exercise.name) === "cardio" ? "km" : "kg";
       });
       return next;
     });
     setRestPreferenceByExercise((prev) => {
       const next = mode === "append" ? { ...prev } : {};
-      mapped.forEach((exercise) => {
+      workoutExercises.forEach((exercise) => {
         next[exercise.id] = getSavedRestPreference(exercise.name);
       });
       return next;
     });
     setRestCustomInputByExercise((prev) => {
       const next = mode === "append" ? { ...prev } : {};
-      mapped.forEach((exercise) => {
+      workoutExercises.forEach((exercise) => {
         next[exercise.id] = "";
       });
       return next;
     });
     setRestTimerByExercise((prev) => {
       const next = mode === "append" ? { ...prev } : {};
-      mapped.forEach((exercise) => {
+      workoutExercises.forEach((exercise) => {
         const restSeconds = getSavedRestPreference(exercise.name);
         next[exercise.id] = { remainingSec: restSeconds, running: false };
       });
       return next;
     });
-    setSessionTitle(routine.name);
+    setSessionTitle(options.deload ? `${routine.name} (Deload)` : routine.name);
     if (mode === "replace") {
       setSessionDateText(toLocalDateKey(new Date()));
       setElapsedSeconds(0);
       setWorkoutTimerRunning(false);
       workoutStartedAtMsRef.current = null;
-      setLastAppliedRoutineId(routine.id);
-      setUiFeedback(`Applied "${routine.name}".`);
+      setLastAppliedRoutineId(options.deload ? null : routine.id);
+      setUiFeedback(options.deload ? `Applied deload for "${routine.name}".` : `Applied "${routine.name}".`);
     } else {
       setUiFeedback(`Appended "${routine.name}".`);
       setLastAppliedRoutineId(null);
@@ -2562,6 +2718,37 @@ export default function WorkoutLog() {
   const handleApplyRoutine = (routine: Routine) => {
     applyRoutineToEditor(routine, "replace");
   };
+
+  const openDeloadConfirm = (routine: Routine) => {
+    setSelectedRoutine(routine);
+    setShowRoutineActionsModal(false);
+    setShowDeloadConfirmModal(true);
+  };
+
+  const applySelectedRoutineDeload = () => {
+    if (!selectedRoutine) return;
+    applyRoutineToEditor(selectedRoutine, "replace", { deload: true });
+    setShowDeloadConfirmModal(false);
+    setShowMyRoutinesModal(false);
+    setSelectedRoutine(null);
+  };
+
+  const openExerciseHistory = (exerciseName: string) => {
+    setHistoryExerciseName(exerciseName);
+    setShowExerciseHistoryModal(true);
+  };
+
+  const exerciseHistory = useMemo(() => {
+    const normalizedName = normalizeExerciseName(historyExerciseName ?? "");
+    if (!normalizedName) return [] as { date: Date; sets: PastWorkout["exercises"][number]["sets"] }[];
+    return pastWorkouts
+      .flatMap((workout) =>
+        workout.exercises
+          .filter((exercise) => normalizeExerciseName(exercise.name) === normalizedName)
+          .map((exercise) => ({ date: workout.date, sets: exercise.sets }))
+      )
+      .sort((left, right) => right.date.getTime() - left.date.getTime());
+  }, [historyExerciseName, pastWorkouts]);
 
   const handleRepeatPastWorkoutPress = () => {
     if (pastWorkouts.length === 0) {
@@ -2609,22 +2796,7 @@ export default function WorkoutLog() {
     setSelectedRoutine(null);
   };
 
-  const buildLastKnownWeightMap = () => {
-    const map = new Map<string, number>();
-    pastWorkouts.forEach((workout) => {
-      workout.exercises.forEach((exercise) => {
-        const key = exercise.name.toLowerCase();
-        if (map.has(key)) return;
-        const firstWeight = exercise.sets.find((set) => typeof set.weightKg === "number")?.weightKg;
-        if (typeof firstWeight === "number") {
-          map.set(key, firstWeight);
-        }
-      });
-    });
-    return map;
-  };
-
-  const recommendWorkout = async () => {
+  const recommendWorkout = async (lengthId: RecommendationLengthId = recommendationLength) => {
     if (recommending) return;
     setRecommending(true);
     try {
@@ -2632,7 +2804,6 @@ export default function WorkoutLog() {
       const userSnap = user ? await getDoc(doc(db, "users", user.uid)) : null;
       const userData: any = userSnap?.data?.() ?? {};
       const goal = String(userData?.goal || "");
-      const goalLabel = goalToLabel(goal);
       const trainingPhase =
         typeof userData?.trainingPhase === "string" ? userData.trainingPhase : sessionPhase;
       const dietPhase = typeof userData?.dietPhase === "string" ? userData.dietPhase : "Maintain";
@@ -2649,11 +2820,14 @@ export default function WorkoutLog() {
       const yesterdayGroup = getDominantGroup(latestWorkoutForHeuristics);
       const avgRpe = getAverageRpe(latestWorkoutForHeuristics);
       const highFatigue = avgRpe != null && avgRpe >= 9;
-      const pickedTemplate = pickTemplate(
-        DEFAULT_WORKOUT_TEMPLATES,
-        yesterdayGroup,
-        Math.max(0, Math.floor(Date.now() / (24 * 60 * 60 * 1000)))
-      );
+      const selectedFocus = RECOMMENDATION_FOCUSES.find((item) => item.id === recommendationFocus);
+      const pickedTemplate =
+        selectedFocus?.template ??
+        pickTemplate(
+          DEFAULT_WORKOUT_TEMPLATES,
+          yesterdayGroup,
+          Number(sessionDateText.replace(/-/g, "")) || 0
+        );
       const targets = resolveRecommendationTargets(
         trainingPhase,
         goal,
@@ -2661,31 +2835,59 @@ export default function WorkoutLog() {
         latestDecision?.adjustments?.intensityPct ?? 0,
         highFatigue
       );
-      const { targetSets, targetReps, intensityPct, tempo } = targets;
-      const intensityFactor = 1 + intensityPct / 100;
-      const lastKnownWeights = buildLastKnownWeightMap();
-      const phaseGoalAligned = isPhaseGoalAligned(trainingPhase, goal);
+      const selectedLength = RECOMMENDATION_LENGTHS.find((option) => option.id === lengthId) ?? RECOMMENDATION_LENGTHS[1];
+      const { intensityPct, tempo } = targets;
+      const selection = selectRecommendedExercises({
+        focusId: selectedFocus?.id ?? "auto",
+        primaryGroup: pickedTemplate.primaryGroup,
+        templateExercises: pickedTemplate.exercises,
+        exerciseCount: selectedLength.exerciseCount,
+        catalog: mergedCatalog,
+        completedExerciseNames: pastWorkouts.flatMap((workout) => workout.exercises.map((exercise) => exercise.name)),
+        recentlyTrainedExerciseNames: pastWorkouts.slice(0, 3).flatMap((workout) => workout.exercises.map((exercise) => exercise.name)),
+        trainingPhase,
+        dietPhase,
+        highFatigue,
+      });
+      const exerciseNames = selection.exerciseNames;
+      // High recent effort calls for a modest volume reduction across the session.
+      const contextualSetBudget = highFatigue
+        ? Math.max(exerciseNames.length * 2, Math.round(selectedLength.targetHardSets * 0.8))
+        : selectedLength.targetHardSets;
+      const baseSetsPerExercise = Math.floor(contextualSetBudget / Math.max(1, exerciseNames.length));
+      const extraSets = contextualSetBudget % Math.max(1, exerciseNames.length);
 
-      const recommendedExercises: Exercise[] = pickedTemplate.exercises.map((name) => {
-        const knownWeight = lastKnownWeights.get(name.toLowerCase());
-        const adjustedWeight =
-          typeof knownWeight === "number" ? Math.round(knownWeight * intensityFactor * 10) / 10 : null;
+      const recommendedExercises: Exercise[] = exerciseNames.map((name, index) => {
+        const normalizedName = normalizeExerciseName(name);
+        const sessions: ExercisePerformanceSession[] = pastWorkouts
+          .map((workout) => workout.exercises.find((exercise) => normalizeExerciseName(exercise.name) === normalizedName))
+          .filter((exercise): exercise is PastWorkout["exercises"][number] => Boolean(exercise))
+          .map((exercise) => ({ sets: exercise.sets }));
+        const progression = recommendExerciseProgression({
+          exerciseName: name,
+          sessions,
+          phase: (trainingPhase === "Strength" || trainingPhase === "Power" ? trainingPhase : "Hypertrophy") as ProgressionPhase,
+          baseSets: baseSetsPerExercise + (index < extraSets ? 1 : 0),
+          decisionIntensityPct: intensityPct,
+          dietPhase: dietPhase === "Cut" || dietPhase === "Bulk" ? dietPhase : "Maintain",
+          highFatigue,
+        });
         return {
           id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
           name,
           notes: "",
           tempo,
-          sets: Array.from({ length: targetSets }, () => ({
-            weightKg: adjustedWeight,
-            reps: targetReps,
+          sets: Array.from({ length: progression.sets }, () => ({
+            weightKg: progression.weightKg,
+            reps: progression.reps,
             rpe: "",
             distanceKm: null,
             durationSec: null,
             zone: "",
             setType: "normal" as SetType,
             done: false,
-            baselineWeightKg: adjustedWeight,
-            baselineReps: targetReps,
+            baselineWeightKg: progression.weightKg,
+            baselineReps: progression.reps,
           })),
         };
       });
@@ -2724,17 +2926,17 @@ export default function WorkoutLog() {
       setElapsedSeconds(0);
       setWorkoutTimerRunning(false);
       workoutStartedAtMsRef.current = null;
+      const plannedHardSetCount = recommendedExercises.reduce((sum, exercise) => sum + exercise.sets.length, 0);
       setRecommendationSummary([
-        phaseGoalAligned
-          ? `Built for your ${trainingPhase} phase in a ${dietPhase} diet context.`
-          : `Prioritized your ${trainingPhase} phase, while keeping your long-term goal (${goalLabel}) in mind.`,
-        yesterdayGroup
-          ? `Avoided repeating yesterday's main focus (${yesterdayGroup}).`
-          : "No recent day focus detected, so a balanced split was selected.",
+        `${selectedFocus?.label ?? pickedTemplate.name} | ${selectedLength.title} | ${plannedHardSetCount} planned hard sets.`,
+        selection.addedRoles.length
+          ? `Added ${selection.addedRoles.join(" and ")} coverage to complete the session.`
+          : null,
+        `Sets, reps, and loads use your training phase, diet phase, latest performance, RPE, and today's decision. New exercises start without a load.`,
         highFatigue
-          ? "Recent RPE trend was high, so today's set count/intensity was reduced."
-          : "Intensity was tuned from your latest decision and training context.",
-      ]);
+          ? "Recent RPE was high, so volume and intensity were reduced from the selected plan."
+          : null,
+      ].filter((line): line is string => Boolean(line)));
       setUiFeedback("Recommended workout applied.");
       setLastAppliedRoutineId(null);
     } catch (error) {
@@ -2743,6 +2945,17 @@ export default function WorkoutLog() {
     } finally {
       setRecommending(false);
     }
+  };
+
+  const selectRecommendationLength = (lengthId: RecommendationLengthId) => {
+    setRecommendationLength(lengthId);
+    setShowWorkoutLengthModal(false);
+    if (activeUid) {
+      AsyncStorage.setItem(`${RECOMMENDATION_LENGTH_KEY_PREFIX}:${activeUid}`, lengthId).catch((error) =>
+        console.log("Failed to save recommendation length", error)
+      );
+    }
+    void recommendWorkout(lengthId);
   };
 
   const totalSets = useMemo(
@@ -2811,14 +3024,7 @@ export default function WorkoutLog() {
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         keyboardVerticalOffset={Platform.OS === "ios" ? insets.top : 0}
       >
-        <GestureDetector gesture={scrollNativeGesture}>
-          <ScrollView
-            style={styles.container}
-            contentContainerStyle={[styles.content, { paddingBottom: 140 + keyboardHeight }]}
-            keyboardShouldPersistTaps="handled"
-            keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
-            scrollEventThrottle={16}
-          >
+        <View style={styles.scrollShell}>
         <View style={styles.header}>
           <TouchableOpacity onPress={handleGoBack} style={styles.backButton}>
             <Ionicons name="chevron-back" size={22} color="#fff" />
@@ -2832,7 +3038,14 @@ export default function WorkoutLog() {
             <Ionicons name="trash-outline" size={18} color="#ffb8b8" />
           </TouchableOpacity>
         </View>
-
+        <GestureDetector gesture={scrollNativeGesture}>
+          <ScrollView
+            style={styles.container}
+            contentContainerStyle={[styles.content, { paddingBottom: 140 + keyboardHeight }]}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+            scrollEventThrottle={16}
+          >
       <View style={styles.card}>
         <Text style={styles.sectionTitle}>Session</Text>
         <TextInput
@@ -2947,10 +3160,23 @@ export default function WorkoutLog() {
 
       <View style={styles.card}>
         <Text style={styles.sectionTitle}>Recommendation</Text>
-        <Text style={styles.muted}>Autofill today&apos;s workout from your context and recent history.</Text>
+        <Text style={styles.muted}>Choose a focus, or let Lastrep choose from your context and recent history.</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.focusChipRow}>
+          {RECOMMENDATION_FOCUSES.map((focus) => (
+            <TouchableOpacity
+              key={focus.id}
+              style={[styles.answerChip, recommendationFocus === focus.id && styles.answerChipActive]}
+              onPress={() => setRecommendationFocus(focus.id)}
+            >
+              <Text style={[styles.answerText, recommendationFocus === focus.id && styles.answerTextActive]}>
+                {focus.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
         <TouchableOpacity
           style={[styles.primaryButton, { marginTop: 10, opacity: recommending ? 0.7 : 1 }]}
-          onPress={recommendWorkout}
+          onPress={() => setShowWorkoutLengthModal(true)}
           disabled={recommending}
         >
           <Text style={styles.primaryText}>
@@ -3039,13 +3265,15 @@ export default function WorkoutLog() {
                     </View>
                   </View>
                 )}
-                <Text
-                  style={styles.exerciseName}
-                  numberOfLines={1}
-                  ellipsizeMode="tail"
+                <TouchableOpacity
+                  style={styles.exerciseNameButton}
+                  onPress={() => openExerciseHistory(ex.name)}
+                  accessibilityLabel={`View ${ex.name} history`}
                 >
-                  {ex.name}
-                </Text>
+                  <Text style={styles.exerciseName} numberOfLines={1} ellipsizeMode="tail">
+                    {ex.name}
+                  </Text>
+                </TouchableOpacity>
                 <TouchableOpacity style={styles.iconButton} onPress={() => openExerciseActions(ex.id)}>
                   <Ionicons name="ellipsis-horizontal" size={18} color="#cdd0e0" />
                 </TouchableOpacity>
@@ -3646,26 +3874,30 @@ export default function WorkoutLog() {
                   </View>
                 </View>
 
-                <View style={styles.exerciseMoveRow}>
-                  <TouchableOpacity
-                    style={[styles.exerciseMoveButton, activeActionIndex <= 0 && styles.disabled]}
-                    disabled={!activeExerciseActionId || activeActionIndex <= 0}
-                    onPress={() => activeExerciseActionId && moveExercise(activeExerciseActionId, -1)}
-                  >
-                    <Ionicons name="arrow-up-outline" size={16} color="#cdd0e0" />
-                    <Text style={styles.exerciseMoveText}>Move up</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[
-                      styles.exerciseMoveButton,
-                      (activeActionIndex < 0 || activeActionIndex >= exercises.length - 1) && styles.disabled,
-                    ]}
-                    disabled={!activeExerciseActionId || activeActionIndex < 0 || activeActionIndex >= exercises.length - 1}
-                    onPress={() => activeExerciseActionId && moveExercise(activeExerciseActionId, 1)}
-                  >
-                    <Ionicons name="arrow-down-outline" size={16} color="#cdd0e0" />
-                    <Text style={styles.exerciseMoveText}>Move down</Text>
-                  </TouchableOpacity>
+                <View style={styles.exerciseReorderRow}>
+                  <Ionicons name="swap-vertical-outline" size={18} color="#cdd0e0" />
+                  <Text style={styles.exerciseOptionText}>Reorder</Text>
+                  <View style={styles.exerciseMoveRow}>
+                    <TouchableOpacity
+                      style={[styles.exerciseMoveButton, activeActionIndex <= 0 && styles.disabled]}
+                      disabled={!activeExerciseActionId || activeActionIndex <= 0}
+                      onPress={() => activeExerciseActionId && moveExercise(activeExerciseActionId, -1)}
+                    >
+                      <Ionicons name="arrow-up-outline" size={15} color="#cdd0e0" />
+                      <Text style={styles.exerciseMoveText}>Up</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.exerciseMoveButton,
+                        (activeActionIndex < 0 || activeActionIndex >= exercises.length - 1) && styles.disabled,
+                      ]}
+                      disabled={!activeExerciseActionId || activeActionIndex < 0 || activeActionIndex >= exercises.length - 1}
+                      onPress={() => activeExerciseActionId && moveExercise(activeExerciseActionId, 1)}
+                    >
+                      <Ionicons name="arrow-down-outline" size={15} color="#cdd0e0" />
+                      <Text style={styles.exerciseMoveText}>Down</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
 
                 <TouchableOpacity
@@ -3862,6 +4094,13 @@ export default function WorkoutLog() {
               <Text style={styles.primaryText}>Update from current workout</Text>
             </TouchableOpacity>
             <TouchableOpacity
+              style={[styles.secondaryButton, { marginTop: 10 }]}
+              onPress={() => selectedRoutine && openDeloadConfirm(selectedRoutine)}
+              disabled={!selectedRoutine}
+            >
+              <Text style={styles.secondaryText}>Apply deload</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
               style={[styles.dangerButton, { marginTop: 10 }]}
               onPress={handleAskDeleteSelectedRoutine}
               disabled={!selectedRoutine}
@@ -3873,6 +4112,104 @@ export default function WorkoutLog() {
               onPress={closeRoutineActions}
             >
               <Text style={styles.secondaryText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={showWorkoutLengthModal} transparent animationType="fade" onRequestClose={() => setShowWorkoutLengthModal(false)}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Build workout</Text>
+            <Text style={styles.modalText}>Choose the amount of work you want today.</Text>
+            <View style={styles.recommendationLengthList}>
+              {RECOMMENDATION_LENGTHS.map((option) => {
+                const selected = option.id === recommendationLength;
+                return (
+                  <TouchableOpacity
+                    key={option.id}
+                    style={[styles.recommendationLengthOption, selected && styles.recommendationLengthOptionActive]}
+                    onPress={() => selectRecommendationLength(option.id)}
+                    disabled={recommending}
+                  >
+                    <View>
+                      <Text style={[styles.recommendationLengthTitle, selected && styles.recommendationLengthTitleActive]}>
+                        {option.title}
+                      </Text>
+                      <Text style={[styles.recommendationLengthDetail, selected && styles.recommendationLengthDetailActive]}>
+                        {option.detail}
+                      </Text>
+                    </View>
+                    {selected ? <Ionicons name="checkmark-circle" size={22} color="#a99bff" /> : null}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            <TouchableOpacity
+              style={[styles.secondaryButton, { marginTop: 12 }]}
+              onPress={() => setShowWorkoutLengthModal(false)}
+              disabled={recommending}
+            >
+              <Text style={styles.secondaryText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={showDeloadConfirmModal} transparent animationType="fade">
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Apply deload?</Text>
+            <Text style={styles.modalText}>
+              This creates a lighter session with 15% less weight and about 40% fewer sets. Your saved routine will not be changed.
+            </Text>
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.secondaryButton, styles.modalActionButton]}
+                onPress={() => setShowDeloadConfirmModal(false)}
+              >
+                <Text style={styles.secondaryText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.primaryButton, styles.modalActionButton, styles.modalPrimaryButton]}
+                onPress={applySelectedRoutineDeload}
+              >
+                <Text style={styles.primaryText}>Apply deload</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={showExerciseHistoryModal} transparent animationType="fade">
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>{historyExerciseName ?? "Exercise"} history</Text>
+            {exerciseHistory.length ? (
+              <ScrollView style={styles.exerciseHistoryList}>
+                {exerciseHistory.map((entry, index) => (
+                  <View key={`${entry.date.getTime()}-${entry.sets.length}-${index}`} style={styles.exerciseHistoryRow}>
+                    <Text style={styles.exerciseHistoryDate}>
+                      {entry.date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+                    </Text>
+                    <View style={styles.exerciseHistorySetList}>
+                      {entry.sets.map((set, setIndex) => (
+                        <Text key={`${entry.date.getTime()}-${index}-${setIndex}`} style={styles.exerciseHistorySets}>
+                          Set {setIndex + 1}: {formatLastSetSummary(set)}
+                        </Text>
+                      ))}
+                    </View>
+                  </View>
+                ))}
+              </ScrollView>
+            ) : (
+              <Text style={styles.modalText}>No completed records yet.</Text>
+            )}
+            <TouchableOpacity
+              style={[styles.secondaryButton, { marginTop: 12 }]}
+              onPress={() => setShowExerciseHistoryModal(false)}
+            >
+              <Text style={styles.secondaryText}>Close</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -4492,6 +4829,7 @@ export default function WorkoutLog() {
 
           </ScrollView>
         </GestureDetector>
+        </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -4501,12 +4839,15 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#0d0d1a" },
   keyboardAvoiding: { flex: 1 },
   container: { flex: 1, backgroundColor: "#0d0d1a" },
-  content: { padding: 20, paddingTop: 20, paddingBottom: 140 },
+  scrollShell: { flex: 1 },
+  content: { padding: 20, paddingTop: 8, paddingBottom: 140 },
   header: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-      marginBottom: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 8,
   },
   backButton: {
     width: 32,
@@ -4544,6 +4885,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "space-between",
+    backgroundColor: "#0d0d1a",
+    zIndex: 2,
     columnGap: 10,
     rowGap: 8,
   },
@@ -4568,7 +4911,8 @@ const styles = StyleSheet.create({
   disabled: { opacity: 0.5 },
   muted: { color: "#a3a3b5" },
   exerciseBlock: { marginTop: 8 },
-  exerciseName: { color: "#fff", fontWeight: "700", marginBottom: 0, flex: 1, flexShrink: 1, marginLeft: 6 },
+  exerciseNameButton: { flex: 1, flexShrink: 1, marginLeft: 6 },
+  exerciseName: { color: "#fff", fontWeight: "700", marginBottom: 0 },
   exerciseDemoThumbButton: {
     width: 38,
     height: 38,
@@ -4914,6 +5258,12 @@ const styles = StyleSheet.create({
   },
   groupChipText: { color: "#d8daec", fontWeight: "700" },
   groupChipTextActive: { color: "#0d0d1a" },
+  focusChipRow: { gap: 8, paddingTop: 10 },
+  exerciseHistoryList: { maxHeight: 320 },
+  exerciseHistoryRow: { gap: 4, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "rgba(255,255,255,0.1)" },
+  exerciseHistorySetList: { gap: 3 },
+  exerciseHistoryDate: { color: "#cdd0e0", fontSize: 12, fontWeight: "700" },
+  exerciseHistorySets: { color: "#fff", fontSize: 13, lineHeight: 19 },
   exerciseHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -4972,6 +5322,27 @@ const styles = StyleSheet.create({
   },
   modalTitle: { color: "#fff", fontSize: 18, fontWeight: "800", marginBottom: 8 },
   modalText: { color: "#d8daec", marginBottom: 4 },
+  recommendationLengthList: { gap: 8, marginTop: 12 },
+  recommendationLengthOption: {
+    minHeight: 70,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.16)",
+    backgroundColor: "rgba(255,255,255,0.04)",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  recommendationLengthOptionActive: {
+    borderColor: "#7b61ff",
+    backgroundColor: "rgba(123,97,255,0.16)",
+  },
+  recommendationLengthTitle: { color: "#fff", fontSize: 15, fontWeight: "800" },
+  recommendationLengthTitleActive: { color: "#c9c0ff" },
+  recommendationLengthDetail: { color: "#aeb2c8", fontSize: 13, marginTop: 3 },
+  recommendationLengthDetailActive: { color: "#d8daec" },
   exerciseOptionRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -4982,8 +5353,27 @@ const styles = StyleSheet.create({
     borderBottomColor: "rgba(255,255,255,0.1)",
   },
   exerciseOptionUnits: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
-  exerciseMoveRow: { flexDirection: "row", gap: 8, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "rgba(255,255,255,0.1)" },
-  exerciseMoveButton: { flex: 1, minHeight: 40, borderRadius: 10, backgroundColor: "rgba(255,255,255,0.06)", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 },
+  exerciseReorderRow: {
+    minHeight: 54,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "rgba(255,255,255,0.1)",
+  },
+  exerciseMoveRow: { flexDirection: "row", gap: 6, marginLeft: "auto" },
+  exerciseMoveButton: {
+    minWidth: 66,
+    minHeight: 34,
+    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.2)",
+    backgroundColor: "rgba(255,255,255,0.04)",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+  },
   exerciseMoveText: { color: "#d8daec", fontSize: 13, fontWeight: "700" },
   exerciseUnitChip: { paddingVertical: 6, paddingHorizontal: 10 },
   exerciseOptionText: { color: "#d8daec", fontWeight: "700", fontSize: 14 },

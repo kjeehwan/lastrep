@@ -436,8 +436,10 @@ export default function NutritionIndex() {
   const calorieConsumedRatio = calorieTargetRaw > 0 ? Math.min(1, calorieConsumed / calorieTargetRaw) : 0;
   const calorieRemaining = calorieTargetRaw > 0 ? Math.max(0, calorieTargetRaw - calorieConsumed) : 0;
   const proteinConsumed = totals.proteinGrams;
+  const proteinTarget = proteinTargetGrams ?? 0;
+  const proteinRemaining = proteinTarget > 0 ? Math.max(0, proteinTarget - proteinConsumed) : 0;
   const proteinRatio =
-    proteinTargetGrams && proteinTargetGrams > 0 ? Math.min(1, proteinConsumed / proteinTargetGrams) : 0;
+    proteinTarget > 0 ? Math.min(1, proteinConsumed / proteinTarget) : 0;
 
   const consumedMacroKcal = {
     protein: totals.proteinGrams * 4,
@@ -450,6 +452,37 @@ export default function NutritionIndex() {
     carbs: consumedMacroTotal > 0 ? consumedMacroKcal.carbs / consumedMacroTotal : 0,
     fats: consumedMacroTotal > 0 ? consumedMacroKcal.fats / consumedMacroTotal : 0,
   };
+  const recommendedProteinKcal = calorieTargetRaw > 0
+    ? Math.min(
+        calorieTargetRaw,
+        proteinTargetGrams != null && proteinTargetGrams > 0
+          ? proteinTargetGrams * 4
+          : calorieTargetRaw * RECOMMENDED_MACRO_RATIO.protein
+      )
+    : 0;
+  const remainingRecommendedMacroKcal = Math.max(0, calorieTargetRaw - recommendedProteinKcal);
+  const carbFatRatioTotal = RECOMMENDED_MACRO_RATIO.carbs + RECOMMENDED_MACRO_RATIO.fats;
+  const recommendedMacroKcal = calorieTargetRaw > 0
+    ? {
+        protein: recommendedProteinKcal,
+        carbs: remainingRecommendedMacroKcal * (RECOMMENDED_MACRO_RATIO.carbs / carbFatRatioTotal),
+        fats: remainingRecommendedMacroKcal * (RECOMMENDED_MACRO_RATIO.fats / carbFatRatioTotal),
+      }
+    : { protein: 0, carbs: 0, fats: 0 };
+  const recommendedMacroRatio = calorieTargetRaw > 0
+    ? {
+        protein: recommendedMacroKcal.protein / calorieTargetRaw,
+        carbs: recommendedMacroKcal.carbs / calorieTargetRaw,
+        fats: recommendedMacroKcal.fats / calorieTargetRaw,
+      }
+    : RECOMMENDED_MACRO_RATIO;
+  const recommendedMacroGrams = calorieTargetRaw > 0
+    ? {
+        protein: Math.round(recommendedMacroKcal.protein / 4),
+        carbs: Math.round(recommendedMacroKcal.carbs / 4),
+        fats: Math.round(recommendedMacroKcal.fats / 9),
+      }
+    : null;
   const selectedDateLabel = selectedDateKey === formatDateKey(new Date()) ? "Today" : selectedDateKey;
 
   const timelineMax = useMemo(() => Math.max(1, ...timelinePoints.map((item) => item.value, 0)), [timelinePoints]);
@@ -582,14 +615,14 @@ export default function NutritionIndex() {
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.backButton} onPress={handleGoBack}>
+          <Ionicons name="chevron-back" size={22} color="#fff" />
+        </TouchableOpacity>
+        <Text style={styles.title}>Nutrition</Text>
+        <View style={styles.headerSpacer} />
+      </View>
       <ScrollView contentContainerStyle={styles.content} style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity style={styles.backButton} onPress={handleGoBack}>
-            <Ionicons name="chevron-back" size={22} color="#fff" />
-          </TouchableOpacity>
-          <Text style={styles.title}>Nutrition</Text>
-          <View style={styles.headerSpacer} />
-        </View>
 
         <View style={styles.card}>
           <View style={styles.sectionHeaderRow}>
@@ -679,44 +712,122 @@ export default function NutritionIndex() {
             <View style={styles.metricHeaderRow}>
               <Text style={[styles.totalLabel, styles.totalLabelNoUpper]}>Calories</Text>
               <Text style={styles.subText}>
-                {Math.round(toEnergyUnit(calorieConsumed, energyUnit))} consumed / {calorieTarget == null ? "Set target" : `${Math.round(toEnergyUnit(calorieTarget, energyUnit))} target`} /{" "}
-                {calorieTarget == null ? "-" : `${Math.round(toEnergyUnit(calorieRemaining, energyUnit))} remaining`}
+                {calorieTarget == null ? "Set target" : `${Math.round(toEnergyUnit(calorieRemaining, energyUnit))} ${energyUnit} remaining`}
               </Text>
             </View>
             <View style={styles.progressTrack}>
               <View style={[styles.progressFill, { width: `${calorieConsumedRatio * 100}%` }]} />
+            </View>
+            <View style={styles.calorieProgressLabels}>
+              <View
+                style={[
+                  styles.calorieConsumedLabel,
+                  { left: `${calorieConsumedRatio * 100}%` },
+                ]}
+              >
+                <Text style={styles.calorieProgressLabelText}>
+                  {Math.round(toEnergyUnit(calorieConsumed, energyUnit))}
+                </Text>
+              </View>
+              {calorieTarget != null ? (
+                <Text style={[styles.calorieProgressLabelText, styles.calorieTargetLabel]}>
+                  {calorieTargetSafe}
+                </Text>
+              ) : null}
             </View>
           </View>
           <View style={styles.metricBlock}>
             <View style={styles.metricHeaderRow}>
               <Text style={[styles.totalLabel, styles.totalLabelNoUpper]}>Protein</Text>
               <Text style={styles.subText}>
-                {proteinTargetGrams != null ? `${proteinConsumed}g / ${proteinTargetGrams}g` : `${proteinConsumed}g`}
+                {proteinTargetGrams != null ? `${Math.round(proteinRemaining)}g remaining` : "Set target"}
               </Text>
             </View>
             <View style={styles.progressTrack}>
               <View style={[styles.progressFillProtein, { width: `${proteinRatio * 100}%` }]} />
             </View>
+            <View style={styles.calorieProgressLabels}>
+              <View style={[styles.calorieConsumedLabel, { left: `${proteinRatio * 100}%` }]}>
+                <Text style={styles.calorieProgressLabelText}>{Math.round(proteinConsumed)}</Text>
+              </View>
+              {proteinTargetGrams != null ? (
+                <Text style={[styles.calorieProgressLabelText, styles.calorieTargetLabel]}>
+                  {Math.round(proteinTarget)}
+                </Text>
+              ) : null}
+            </View>
           </View>
           <View style={styles.metricBlock}>
-            <Text style={[styles.totalLabel, styles.totalLabelNoUpper]}>Composition (consumed vs recommended)</Text>
-            <View style={styles.compositionRow}>
-              <Text style={styles.subText}>Protein</Text>
-              <Text style={styles.subText}>
-                {Math.round(consumedMacroRatio.protein * 100)}% / {Math.round(RECOMMENDED_MACRO_RATIO.protein * 100)}%
-              </Text>
+            <Text style={[styles.totalLabel, styles.totalLabelNoUpper]}>Macro composition</Text>
+            <Text style={styles.compositionCaption}>Consumed</Text>
+            <View style={styles.dailyCompositionBar}>
+              <View style={[styles.dailyCompositionProtein, { width: `${consumedMacroRatio.protein * 100}%` }]}>
+                <Text style={styles.compositionSegmentPercentText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
+                  {Math.round(consumedMacroRatio.protein * 100)}%
+                </Text>
+              </View>
+              <View style={[styles.dailyCompositionCarbs, { width: `${consumedMacroRatio.carbs * 100}%` }]}>
+                <Text style={styles.compositionSegmentPercentText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
+                  {Math.round(consumedMacroRatio.carbs * 100)}%
+                </Text>
+              </View>
+              <View style={[styles.dailyCompositionFats, { width: `${consumedMacroRatio.fats * 100}%` }]}>
+                <Text style={styles.compositionSegmentPercentText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
+                  {Math.round(consumedMacroRatio.fats * 100)}%
+                </Text>
+              </View>
             </View>
-            <View style={styles.compositionRow}>
-              <Text style={styles.subText}>Carb</Text>
-              <Text style={styles.subText}>
-                {Math.round(consumedMacroRatio.carbs * 100)}% / {Math.round(RECOMMENDED_MACRO_RATIO.carbs * 100)}%
-              </Text>
+            <View style={styles.compositionSegmentLabelRow}>
+              <View style={[styles.compositionSegmentLabel, { width: `${consumedMacroRatio.protein * 100}%` }]}>
+                <Text style={[styles.compositionSegmentText, styles.compositionLegendProtein]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+                  P {Math.round(totals.proteinGrams)}g
+                </Text>
+              </View>
+              <View style={[styles.compositionSegmentLabel, { width: `${consumedMacroRatio.carbs * 100}%` }]}>
+                <Text style={[styles.compositionSegmentText, styles.compositionLegendCarbs]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+                  C {Math.round(totals.carbGrams)}g
+                </Text>
+              </View>
+              <View style={[styles.compositionSegmentLabel, { width: `${consumedMacroRatio.fats * 100}%` }]}>
+                <Text style={[styles.compositionSegmentText, styles.compositionLegendFats]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+                  F {Math.round(totals.fatGrams)}g
+                </Text>
+              </View>
             </View>
-            <View style={styles.compositionRow}>
-              <Text style={styles.subText}>Fat</Text>
-              <Text style={styles.subText}>
-                {Math.round(consumedMacroRatio.fats * 100)}% / {Math.round(RECOMMENDED_MACRO_RATIO.fats * 100)}%
-              </Text>
+            <Text style={styles.compositionCaption}>Recommended</Text>
+            <View style={styles.dailyCompositionBar}>
+              <View style={[styles.dailyCompositionProtein, { width: `${recommendedMacroRatio.protein * 100}%` }]}>
+                <Text style={styles.compositionSegmentPercentText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
+                  {Math.round(recommendedMacroRatio.protein * 100)}%
+                </Text>
+              </View>
+              <View style={[styles.dailyCompositionCarbs, { width: `${recommendedMacroRatio.carbs * 100}%` }]}>
+                <Text style={styles.compositionSegmentPercentText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
+                  {Math.round(recommendedMacroRatio.carbs * 100)}%
+                </Text>
+              </View>
+              <View style={[styles.dailyCompositionFats, { width: `${recommendedMacroRatio.fats * 100}%` }]}>
+                <Text style={styles.compositionSegmentPercentText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
+                  {Math.round(recommendedMacroRatio.fats * 100)}%
+                </Text>
+              </View>
+            </View>
+            <View style={styles.compositionSegmentLabelRow}>
+              <View style={[styles.compositionSegmentLabel, { width: `${recommendedMacroRatio.protein * 100}%` }]}>
+                <Text style={[styles.compositionSegmentText, styles.compositionLegendProtein]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+                  P {recommendedMacroGrams ? `${recommendedMacroGrams.protein}g` : "-"}
+                </Text>
+              </View>
+              <View style={[styles.compositionSegmentLabel, { width: `${recommendedMacroRatio.carbs * 100}%` }]}>
+                <Text style={[styles.compositionSegmentText, styles.compositionLegendCarbs]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+                  C {recommendedMacroGrams ? `${recommendedMacroGrams.carbs}g` : "-"}
+                </Text>
+              </View>
+              <View style={[styles.compositionSegmentLabel, { width: `${recommendedMacroRatio.fats * 100}%` }]}>
+                <Text style={[styles.compositionSegmentText, styles.compositionLegendFats]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+                  F {recommendedMacroGrams ? `${recommendedMacroGrams.fats}g` : "-"}
+                </Text>
+              </View>
             </View>
           </View>
         </View>
@@ -818,7 +929,7 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#0d0d1a" },
   container: { flex: 1, backgroundColor: "#0d0d1a" },
   content: { padding: 16, paddingTop: 12, paddingBottom: 140, gap: 12 },
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 },
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8, backgroundColor: "#0d0d1a" },
   backButton: {
     width: 32, height: 32, borderRadius: 8, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.08)",
   },
@@ -854,7 +965,11 @@ const styles = StyleSheet.create({
   metricHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
   progressTrack: { height: 10, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.12)", overflow: "hidden" },
   progressFill: { height: "100%", backgroundColor: "#7b61ff" },
-  progressFillProtein: { height: "100%", backgroundColor: "#4ade80" },
+  progressFillProtein: { height: "100%", backgroundColor: "#60a5fa" },
+  calorieProgressLabels: { height: 16, position: "relative" },
+  calorieConsumedLabel: { position: "absolute", top: 3, width: 58, marginLeft: -58, alignItems: "flex-end" },
+  calorieProgressLabelText: { color: MUTED, fontSize: 10, fontWeight: "700", lineHeight: 12 },
+  calorieTargetLabel: { position: "absolute", right: 0, top: 3 },
   timelineStage: { position: "relative", flexDirection: "row", alignItems: "stretch", minHeight: 168 },
   timelineBarsPane: { flex: 1, overflow: "hidden" },
   timelineTargetPane: { position: "relative", alignSelf: "stretch" },
@@ -891,7 +1006,18 @@ const styles = StyleSheet.create({
     includeFontPadding: false,
     textAlign: "right",
   },
-  compositionRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  compositionCaption: { color: MUTED, fontSize: 11, fontWeight: "700", marginTop: 2 },
+  compositionSegmentLabelRow: { flexDirection: "row", minHeight: 14 },
+  compositionSegmentLabel: { alignItems: "center", paddingHorizontal: 1 },
+  compositionSegmentText: { fontSize: 10, fontWeight: "700", lineHeight: 14, textAlign: "center" },
+  compositionLegendProtein: { color: "#60a5fa" },
+  compositionLegendCarbs: { color: "#34d399" },
+  compositionLegendFats: { color: "#f59e0b" },
+  dailyCompositionBar: { flexDirection: "row", height: 18, overflow: "hidden", borderRadius: 999, backgroundColor: "rgba(255,255,255,0.08)" },
+  dailyCompositionProtein: { height: "100%", backgroundColor: "#60a5fa", alignItems: "center", justifyContent: "center" },
+  dailyCompositionCarbs: { height: "100%", backgroundColor: "#34d399", alignItems: "center", justifyContent: "center" },
+  dailyCompositionFats: { height: "100%", backgroundColor: "#f59e0b", alignItems: "center", justifyContent: "center" },
+  compositionSegmentPercentText: { color: "#101827", fontSize: 10, fontWeight: "800", lineHeight: 12, includeFontPadding: false, textAlign: "center" },
   totalRow: { flexDirection: "row", gap: 10 },
   totalChip: { flex: 1, backgroundColor: "rgba(255,255,255,0.05)", borderRadius: 12, paddingVertical: 12, paddingHorizontal: 12, gap: 4 },
   totalLabel: { color: MUTED, fontSize: 11, fontWeight: "700", textTransform: "uppercase" },

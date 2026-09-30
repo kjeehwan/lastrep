@@ -6,7 +6,7 @@ import * as ImagePicker from "expo-image-picker";
 import { Href, Redirect, useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { onAuthStateChanged } from "firebase/auth";
 import { Timestamp } from "firebase/firestore";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   BackHandler,
   Linking,
@@ -101,6 +101,8 @@ type DietPhaseHistoryEntry = {
 type WeightUnit = "kg" | "lbs";
 type HeightUnit = "cm" | "ft/in";
 type EnergyUnit = "kcal" | "kJ";
+type TdeeSex = "female" | "male";
+type TdeeActivity = "sedentary" | "light" | "moderate" | "very-active";
 type ProfileSnapshot = {
   goal: string;
   nickname: string;
@@ -120,10 +122,20 @@ type ProfileSnapshot = {
   bodyWeight: string;
   bodyFatPercent: string;
   muscleMass: string;
+  tdeeAge: string;
+  tdeeHeightCm: string;
+  tdeeSex: TdeeSex;
+  tdeeActivity: TdeeActivity;
 };
 const KCAL_TO_KJ = 4.184;
 const LBS_TO_KG = 0.453592;
 const HEALTH_SYNC_CONSENT_KEY_PREFIX = "healthSyncConsentAccepted";
+const TDEE_ACTIVITY_MULTIPLIERS: Record<TdeeActivity, { label: string; multiplier: number }> = {
+  sedentary: { label: "Sedentary", multiplier: 1.2 },
+  light: { label: "Light", multiplier: 1.375 },
+  moderate: { label: "Moderate", multiplier: 1.55 },
+  "very-active": { label: "Very active", multiplier: 1.725 },
+};
 const isWeightUnit = (value: unknown): value is WeightUnit => value === "kg" || value === "lbs";
 const isHeightUnit = (value: unknown): value is HeightUnit => value === "cm" || value === "ft/in";
 const isEnergyUnit = (value: unknown): value is EnergyUnit => value === "kcal" || value === "kJ";
@@ -205,6 +217,10 @@ export default function ProfileIndex() {
   const [bodyWeight, setBodyWeight] = useState("");
   const [bodyFatPercent, setBodyFatPercent] = useState("");
   const [muscleMass, setMuscleMass] = useState("");
+  const [tdeeAge, setTdeeAge] = useState("");
+  const [tdeeHeightCm, setTdeeHeightCm] = useState("");
+  const [tdeeSex, setTdeeSex] = useState<TdeeSex>("male");
+  const [tdeeActivity, setTdeeActivity] = useState<TdeeActivity>("moderate");
   const [bodyCompositionProfile, setBodyCompositionProfile] = useState<BodyCompositionProfile | null>(null);
   const [bodyCompositionEffective, setBodyCompositionEffective] = useState<BodyCompositionMetricSnapshot>(
     getEffectiveBodyCompositionSnapshot({
@@ -231,6 +247,7 @@ export default function ProfileIndex() {
     })
   );
   const [initialSnapshot, setInitialSnapshot] = useState<string | null>(null);
+  const latestSnapshotRef = useRef("");
   const skipNextBlurPromptRef = useRef(false);
   const blurPromptOpenRef = useRef(false);
   const profileFocusTaskRef = useRef<{ cancel: () => void } | null>(null);
@@ -256,6 +273,10 @@ export default function ProfileIndex() {
         bodyWeight: bodyWeight.trim(),
         bodyFatPercent: bodyFatPercent.trim(),
         muscleMass: muscleMass.trim(),
+        tdeeAge: tdeeAge.trim(),
+        tdeeHeightCm: tdeeHeightCm.trim(),
+        tdeeSex,
+        tdeeActivity,
       } satisfies ProfileSnapshot),
     [
       goal,
@@ -276,10 +297,45 @@ export default function ProfileIndex() {
       bodyWeight,
       bodyFatPercent,
       muscleMass,
+      tdeeAge,
+      tdeeHeightCm,
+      tdeeSex,
+      tdeeActivity,
     ]
   );
 
   const hasUnsavedChanges = initialSnapshot != null && buildSnapshot() !== initialSnapshot;
+  latestSnapshotRef.current = buildSnapshot();
+
+  const tdeeEstimateKcal = useMemo(() => {
+    const displayedWeight = Number(bodyWeight.trim());
+    const weightKg = Number.isFinite(displayedWeight) && displayedWeight > 0
+      ? convertWeightUnitToKg(displayedWeight, weightUnit)
+      : bodyCompositionEffective.weightKg;
+    const age = Number(tdeeAge.trim());
+    const heightCm = Number(tdeeHeightCm.trim());
+    if (
+      typeof weightKg !== "number" ||
+      !Number.isFinite(weightKg) ||
+      !Number.isFinite(age) ||
+      !Number.isFinite(heightCm) ||
+      age < 13 || age > 100 || heightCm < 100 || heightCm > 250
+    ) {
+      return null;
+    }
+    const sexOffset = tdeeSex === "male" ? 5 : -161;
+    const bmr = 10 * weightKg + 6.25 * heightCm - 5 * age + sexOffset;
+    return Math.round(bmr * TDEE_ACTIVITY_MULTIPLIERS[tdeeActivity].multiplier);
+  }, [bodyCompositionEffective.weightKg, bodyWeight, tdeeActivity, tdeeAge, tdeeHeightCm, tdeeSex, weightUnit]);
+
+  const applyTdeeEstimate = () => {
+    if (tdeeEstimateKcal == null) return;
+    const display = (value: number) => String(Math.round(convertEnergyValue(value, "kcal", energyUnit)));
+    setMaintainCalories(display(tdeeEstimateKcal));
+    setCutCalories(display(Math.max(0, tdeeEstimateKcal - 400)));
+    setBulkCalories(display(tdeeEstimateKcal + 300));
+    setSaveFeedback("TDEE estimate applied. Review the targets, then save changes.");
+  };
 
   const applyBodyCompositionState = useCallback(
     (profile: BodyCompositionProfile, unit: WeightUnit) => {
@@ -314,6 +370,12 @@ export default function ProfileIndex() {
       if (typeof parsed.bodyWeight === "string") setBodyWeight(parsed.bodyWeight);
       if (typeof parsed.bodyFatPercent === "string") setBodyFatPercent(parsed.bodyFatPercent);
       if (typeof parsed.muscleMass === "string") setMuscleMass(parsed.muscleMass);
+      if (typeof parsed.tdeeAge === "string") setTdeeAge(parsed.tdeeAge);
+      if (typeof parsed.tdeeHeightCm === "string") setTdeeHeightCm(parsed.tdeeHeightCm);
+      if (parsed.tdeeSex === "female" || parsed.tdeeSex === "male") setTdeeSex(parsed.tdeeSex);
+      if (parsed.tdeeActivity && parsed.tdeeActivity in TDEE_ACTIVITY_MULTIPLIERS) {
+        setTdeeActivity(parsed.tdeeActivity);
+      }
       setSaveFeedback(null);
     } catch (error) {
       console.log("Failed to restore profile snapshot", error);
@@ -473,6 +535,18 @@ export default function ProfileIndex() {
         if (isWeightUnit(data?.weightUnit)) setWeightUnit(data.weightUnit);
         if (isHeightUnit(data?.heightUnit)) setHeightUnit(data.heightUnit);
         if (isEnergyUnit(data?.energyUnit)) setEnergyUnit(data.energyUnit);
+        if (typeof data?.tdeeProfile?.age === "number" && Number.isFinite(data.tdeeProfile.age)) {
+          setTdeeAge(String(Math.round(data.tdeeProfile.age)));
+        }
+        if (typeof data?.tdeeProfile?.heightCm === "number" && Number.isFinite(data.tdeeProfile.heightCm)) {
+          setTdeeHeightCm(String(Math.round(data.tdeeProfile.heightCm * 10) / 10));
+        }
+        if (data?.tdeeProfile?.sex === "female" || data?.tdeeProfile?.sex === "male") {
+          setTdeeSex(data.tdeeProfile.sex);
+        }
+        if (data?.tdeeProfile?.activity in TDEE_ACTIVITY_MULTIPLIERS) {
+          setTdeeActivity(data.tdeeProfile.activity as TdeeActivity);
+        }
         applyBodyCompositionState(compositionProfile, resolvedWeightUnit);
       } catch (e) {
         console.log("Error fetching user data", e);
@@ -539,7 +613,9 @@ export default function ProfileIndex() {
 
   useEffect(() => {
     if (!loading && initialSnapshot == null) {
-      setInitialSnapshot(buildSnapshot());
+      // Wait until all initial profile and auto-sync state updates settle before enabling the leave guard.
+      const task = scheduleAfterInteractions(() => setInitialSnapshot(latestSnapshotRef.current));
+      return task.cancel;
     }
   }, [loading, initialSnapshot, buildSnapshot]);
 
@@ -946,6 +1022,15 @@ export default function ProfileIndex() {
       typeof parsedMuscleMass === "number"
         ? convertWeightUnitToKg(parsedMuscleMass, weightUnit)
         : null;
+    const parsedTdeeAge = Number(tdeeAge.trim());
+    const parsedTdeeHeightCm = Number(tdeeHeightCm.trim());
+    if (
+      (tdeeAge.trim() || tdeeHeightCm.trim()) &&
+      (!Number.isFinite(parsedTdeeAge) || parsedTdeeAge < 13 || parsedTdeeAge > 100 || !Number.isFinite(parsedTdeeHeightCm) || parsedTdeeHeightCm < 100 || parsedTdeeHeightCm > 250)
+    ) {
+      showAppAlert("Invalid TDEE inputs", "Enter an age between 13 and 100 and a height between 100 and 250 cm.");
+      return false;
+    }
 
     try {
       const profilePayload: Record<string, unknown> = {
@@ -960,6 +1045,10 @@ export default function ProfileIndex() {
         energyUnit,
         availabilityDays,
         availability: `${availabilityDays}`,
+        tdeeProfile:
+          tdeeAge.trim() && tdeeHeightCm.trim()
+            ? { age: Math.round(parsedTdeeAge), heightCm: Math.round(parsedTdeeHeightCm * 10) / 10, sex: tdeeSex, activity: tdeeActivity }
+            : null,
       };
       let nextTrainingHistory = trainingPhaseHistory;
       let nextDietHistory = dietPhaseHistory;
@@ -1071,6 +1160,10 @@ export default function ProfileIndex() {
     bodyWeight,
     bodyFatPercent,
     muscleMass,
+    tdeeAge,
+    tdeeHeightCm,
+    tdeeSex,
+    tdeeActivity,
     bodyCompositionEffective.weightKg,
     bodyCompositionEffective.bodyFatPercent,
     bodyCompositionEffective.muscleMassKg,
@@ -1285,19 +1378,18 @@ export default function ProfileIndex() {
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.backButton} onPress={handleGoBack}>
+          <Ionicons name="chevron-back" size={22} color="#fff" />
+        </TouchableOpacity>
+        <Text style={styles.title}>Profile</Text>
+        <View style={styles.headerSpacer} />
+      </View>
       <ScrollView
         style={styles.container}
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
       >
-        <View style={styles.header}>
-          <TouchableOpacity style={styles.backButton} onPress={handleGoBack}>
-            <Ionicons name="chevron-back" size={22} color="#fff" />
-          </TouchableOpacity>
-          <Text style={styles.title}>Profile</Text>
-          <View style={styles.headerSpacer} />
-        </View>
-
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Profile identity</Text>
           <View style={styles.identityRow}>
@@ -1579,6 +1671,43 @@ export default function ProfileIndex() {
         </View>
 
         <View style={styles.card}>
+          <Text style={styles.cardTitle}>TDEE calculator</Text>
+          <Text style={styles.helperText}>Use this as a starting estimate. Your weight is taken from Body composition.</Text>
+          <View style={styles.targetRow}>
+            <View style={styles.targetColumn}>
+              <Text style={styles.targetLabel}>Age</Text>
+              <TextInput placeholder="30" placeholderTextColor="#7a7a8c" style={styles.input} value={tdeeAge} onChangeText={setTdeeAge} keyboardType="numeric" />
+            </View>
+            <View style={styles.targetColumn}>
+              <Text style={styles.targetLabel}>Height (cm)</Text>
+              <TextInput placeholder="175" placeholderTextColor="#7a7a8c" style={styles.input} value={tdeeHeightCm} onChangeText={setTdeeHeightCm} keyboardType="decimal-pad" />
+            </View>
+          </View>
+          <Text style={styles.targetLabel}>Sex</Text>
+          <View style={styles.row}>
+            {(["female", "male"] as TdeeSex[]).map((value) => (
+              <TouchableOpacity key={value} style={[styles.chip, tdeeSex === value && styles.chipActive]} onPress={() => setTdeeSex(value)}>
+                <Text style={[styles.chipText, tdeeSex === value && styles.chipTextActive]}>{value === "male" ? "Male" : "Female"}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <Text style={styles.targetLabel}>Activity</Text>
+          <View style={styles.row}>
+            {(Object.keys(TDEE_ACTIVITY_MULTIPLIERS) as TdeeActivity[]).map((value) => (
+              <TouchableOpacity key={value} style={[styles.chip, tdeeActivity === value && styles.chipActive]} onPress={() => setTdeeActivity(value)}>
+                <Text style={[styles.chipText, tdeeActivity === value && styles.chipTextActive]}>{TDEE_ACTIVITY_MULTIPLIERS[value].label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <Text style={styles.tdeeEstimateText}>
+            {tdeeEstimateKcal == null ? "Enter age, height, and weight to calculate." : `Estimated maintenance: ${Math.round(convertEnergyValue(tdeeEstimateKcal, "kcal", energyUnit))} ${energyUnit}/day`}
+          </Text>
+          <TouchableOpacity style={[styles.secondaryButton, tdeeEstimateKcal == null && styles.disabled]} disabled={tdeeEstimateKcal == null} onPress={applyTdeeEstimate}>
+            <Text style={styles.secondaryButtonText}>Use for nutrition targets</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.card}>
           <View style={styles.nutritionTargetsHeaderRow}>
             <Text style={styles.cardTitleNoMargin}>Nutrition targets</Text>
             <TouchableOpacity
@@ -1771,12 +1900,14 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#0d0d1a" },
   loadingText: { color: "#fff", padding: 20 },
   container: { flex: 1, backgroundColor: "#0d0d1a" },
-  scrollContent: { padding: 20, paddingTop: 20, paddingBottom: 100, gap: 10 },
+  scrollContent: { padding: 20, paddingTop: 8, paddingBottom: 100, gap: 10 },
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 12,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 8,
   },
   backButton: {
     width: 32,
@@ -1794,6 +1925,7 @@ const styles = StyleSheet.create({
   cardTitle: { color: "#fff", fontSize: 15, fontWeight: "700", marginBottom: 8 },
   cardTitleNoMargin: { color: "#fff", fontSize: 15, fontWeight: "700" },
   helperText: { color: "#a5acc1", fontSize: 13, lineHeight: 18 },
+  tdeeEstimateText: { color: "#d8daec", fontSize: 14, fontWeight: "700", lineHeight: 20 },
   nutritionTargetsHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   sectionHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
   energyUnitToggle: {
@@ -1956,6 +2088,8 @@ const styles = StyleSheet.create({
   healthStatusRow: {
     flexDirection: "row",
     justifyContent: "space-between",
+    backgroundColor: "#0d0d1a",
+    zIndex: 2,
     alignItems: "flex-start",
     gap: 12,
   },

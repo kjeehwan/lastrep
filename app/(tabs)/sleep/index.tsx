@@ -426,14 +426,14 @@ export default function SleepIndex() {
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.backButton} onPress={handleGoBack}>
+          <Ionicons name="chevron-back" size={22} color="#fff" />
+        </TouchableOpacity>
+        <Text style={styles.title}>Sleep</Text>
+        <View style={styles.headerSpacer} />
+      </View>
       <ScrollView contentContainerStyle={styles.content} style={styles.container} bounces>
-        <View style={styles.header}>
-          <TouchableOpacity style={styles.backButton} onPress={handleGoBack}>
-            <Ionicons name="chevron-back" size={22} color="#fff" />
-          </TouchableOpacity>
-          <Text style={styles.title}>Sleep</Text>
-          <View style={styles.headerSpacer} />
-        </View>
 
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Sleep trends</Text>
@@ -581,7 +581,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#0d0d1a" },
   content: {
     padding: 16,
-    paddingTop: 12,
+    paddingTop: 8,
     paddingBottom: 140,
     gap: 12,
   },
@@ -589,7 +589,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 12,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 8,
   },
   backButton: {
     width: 32,
