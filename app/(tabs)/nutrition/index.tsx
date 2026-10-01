@@ -723,6 +723,7 @@ export default function NutritionIndex() {
                 style={[
                   styles.calorieConsumedLabel,
                   { left: `${calorieConsumedRatio * 100}%` },
+                  calorieConsumedRatio === 0 && styles.calorieConsumedLabelAtStart,
                 ]}
               >
                 <Text style={styles.calorieProgressLabelText}>
@@ -747,7 +748,13 @@ export default function NutritionIndex() {
               <View style={[styles.progressFillProtein, { width: `${proteinRatio * 100}%` }]} />
             </View>
             <View style={styles.calorieProgressLabels}>
-              <View style={[styles.calorieConsumedLabel, { left: `${proteinRatio * 100}%` }]}>
+              <View
+                style={[
+                  styles.calorieConsumedLabel,
+                  { left: `${proteinRatio * 100}%` },
+                  proteinRatio === 0 && styles.calorieConsumedLabelAtStart,
+                ]}
+              >
                 <Text style={styles.calorieProgressLabelText}>{Math.round(proteinConsumed)}</Text>
               </View>
               {proteinTargetGrams != null ? (
@@ -968,6 +975,7 @@ const styles = StyleSheet.create({
   progressFillProtein: { height: "100%", backgroundColor: "#60a5fa" },
   calorieProgressLabels: { height: 16, position: "relative" },
   calorieConsumedLabel: { position: "absolute", top: 3, width: 58, marginLeft: -58, alignItems: "flex-end" },
+  calorieConsumedLabelAtStart: { marginLeft: 0, alignItems: "flex-start" },
   calorieProgressLabelText: { color: MUTED, fontSize: 10, fontWeight: "700", lineHeight: 12 },
   calorieTargetLabel: { position: "absolute", right: 0, top: 3 },
   timelineStage: { position: "relative", flexDirection: "row", alignItems: "stretch", minHeight: 168 },

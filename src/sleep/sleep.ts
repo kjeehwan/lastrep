@@ -11,6 +11,7 @@ import {
   type SleepSource,
 } from "../contracts";
 import type { Permission } from "react-native-health-connect";
+import { hasHealthSyncConsent } from "../health/healthSyncConsent";
 
 const DEFAULT_SLEEP_SOURCE: SleepSource = "manual";
 export const HEALTH_SLEEP_STALE_HOURS = 36;
@@ -416,6 +417,8 @@ export const autoSyncSleepFromHealthConnectIfEligible = async (
   if (Platform.OS !== "android") return "skipped";
 
   try {
+    if (!(await hasHealthSyncConsent(uid))) return "skipped";
+
     const availability = await getHealthConnectAvailability();
     if (availability !== "available") return "skipped";
 

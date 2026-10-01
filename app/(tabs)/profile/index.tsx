@@ -1,6 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
 import Slider from "@react-native-community/slider";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
 import { Href, Redirect, useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from "expo-router";
@@ -23,6 +22,11 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { auth } from "../../../src/config/firebaseConfig";
 import { useOfflineStatus } from "../../../src/hooks/useOfflineStatus";
+import {
+  acceptHealthSyncConsent,
+  clearHealthSyncConsent,
+  hasHealthSyncConsent,
+} from "../../../src/health/healthSyncConsent";
 import { showAppAlert, showAppDialog } from "../../../src/ui/appDialog";
 import {
   autoSyncBodyCompositionFromHealthConnectIfEligible,
@@ -129,7 +133,6 @@ type ProfileSnapshot = {
 };
 const KCAL_TO_KJ = 4.184;
 const LBS_TO_KG = 0.453592;
-const HEALTH_SYNC_CONSENT_KEY_PREFIX = "healthSyncConsentAccepted";
 const TDEE_ACTIVITY_MULTIPLIERS: Record<TdeeActivity, { label: string; multiplier: number }> = {
   sedentary: { label: "Sedentary", multiplier: 1.2 },
   light: { label: "Light", multiplier: 1.375 },
@@ -209,6 +212,7 @@ export default function ProfileIndex() {
   const [saveFeedback, setSaveFeedback] = useState<string | null>(null);
   const [redirectTo, setRedirectTo] = useState<Href | null>(null);
   const [lastSleepSyncLabel, setLastSleepSyncLabel] = useState<string>("Not synced yet");
+  const [savedSleepDataLabel, setSavedSleepDataLabel] = useState<string>("No saved data");
   const [photoActionMenuVisible, setPhotoActionMenuVisible] = useState(false);
   const [bodyHistoryExpanded, setBodyHistoryExpanded] = useState(false);
   const [weightUnit, setWeightUnit] = useState<WeightUnit>("kg");
@@ -304,8 +308,12 @@ export default function ProfileIndex() {
     ]
   );
 
-  const hasUnsavedChanges = initialSnapshot != null && buildSnapshot() !== initialSnapshot;
-  latestSnapshotRef.current = buildSnapshot();
+  const currentSnapshot = useMemo(() => buildSnapshot(), [buildSnapshot]);
+  const hasUnsavedChanges = initialSnapshot != null && currentSnapshot !== initialSnapshot;
+
+  useEffect(() => {
+    latestSnapshotRef.current = currentSnapshot;
+  }, [currentSnapshot]);
 
   const tdeeEstimateKcal = useMemo(() => {
     const displayedWeight = Number(bodyWeight.trim());
@@ -446,6 +454,11 @@ export default function ProfileIndex() {
             ? sleepProfile.lastSyncedAt.toDate().toLocaleString()
             : "Not synced yet"
         );
+        setSavedSleepDataLabel(
+          sleepProfile.sampleRecordedAt
+            ? sleepProfile.sampleRecordedAt.toDate().toLocaleString()
+            : "No saved data"
+        );
         if (data?.goal) setGoal(data.goal);
         if (data?.nickname) setNickname(data.nickname);
         if (typeof data?.description === "string") setProfileDescription(data.description);
@@ -559,16 +572,13 @@ export default function ProfileIndex() {
   }, [applyBodyCompositionState, refreshHealthConnectStatus]);
 
   useEffect(() => {
-    if (!uid) {
-      setHealthConsentAccepted(false);
-      return;
-    }
+    if (!uid) return;
     let cancelled = false;
     void (async () => {
       try {
-        const accepted = await AsyncStorage.getItem(`${HEALTH_SYNC_CONSENT_KEY_PREFIX}:${uid}`);
+        const accepted = await hasHealthSyncConsent(uid);
         if (!cancelled) {
-          setHealthConsentAccepted(accepted === "true");
+          setHealthConsentAccepted(accepted);
         }
       } catch (error) {
         console.log("Failed to load health sync consent state", error);
@@ -605,6 +615,11 @@ export default function ProfileIndex() {
               ? sleepProfile.lastSyncedAt.toDate().toLocaleString()
               : "Not synced yet"
           );
+          setSavedSleepDataLabel(
+            sleepProfile.sampleRecordedAt
+              ? sleepProfile.sampleRecordedAt.toDate().toLocaleString()
+              : "No saved data"
+          );
         });
       }
       return () => profileFocusTaskRef.current?.cancel();
@@ -617,7 +632,7 @@ export default function ProfileIndex() {
       const task = scheduleAfterInteractions(() => setInitialSnapshot(latestSnapshotRef.current));
       return task.cancel;
     }
-  }, [loading, initialSnapshot, buildSnapshot]);
+  }, [loading, initialSnapshot, currentSnapshot]);
 
   const healthConnectMessage = () => {
     if (!healthConsentAccepted) {
@@ -762,7 +777,7 @@ export default function ProfileIndex() {
     if (!uid) return;
     void (async () => {
       try {
-        await AsyncStorage.setItem(`${HEALTH_SYNC_CONSENT_KEY_PREFIX}:${uid}`, "true");
+        await acceptHealthSyncConsent(uid);
         setHealthConsentAccepted(true);
       } catch (error) {
         console.log("Failed to persist health sync consent", error);
@@ -776,7 +791,7 @@ export default function ProfileIndex() {
   const clearHealthConsentAccepted = useCallback(async () => {
     if (!uid) return;
     try {
-      await AsyncStorage.removeItem(`${HEALTH_SYNC_CONSENT_KEY_PREFIX}:${uid}`);
+      await clearHealthSyncConsent(uid);
     } catch (error) {
       console.log("Failed to clear health sync consent", error);
     } finally {
@@ -918,6 +933,11 @@ export default function ProfileIndex() {
           sleepProfile.lastSyncedAt
             ? sleepProfile.lastSyncedAt.toDate().toLocaleString()
             : "Not synced yet"
+        );
+        setSavedSleepDataLabel(
+          sleepProfile.sampleRecordedAt
+            ? sleepProfile.sampleRecordedAt.toDate().toLocaleString()
+            : "No saved data"
         );
       }
       if (bodyResult.status === "success") {
@@ -1341,10 +1361,23 @@ export default function ProfileIndex() {
         ? "Ready (partial)"
         : "Needs permission"
     : "Not connected";
-  const displayedLastSleepSyncLabel =
-    healthConsentAccepted && hasAnyHealthPermission ? lastSleepSyncLabel : "Not connected";
-  const displayedLastBodySyncLabel =
-    healthConsentAccepted && hasAnyHealthPermission ? lastBodySyncLabel : "Not connected";
+  const latestBodyCompositionLabel = formatBodyCompositionTimestamp(
+    bodyCompositionEffective.recordedAt
+  );
+  const lastBodySyncLabel = bodyCompositionProfile?.lastSyncedAt
+    ? bodyCompositionProfile.lastSyncedAt.toDate().toLocaleString()
+    : "Not synced yet";
+  const showsCurrentSyncDetails = healthConsentAccepted && hasAnyHealthPermission;
+  const savedBodyDataLabel =
+    latestBodyCompositionLabel === "Not recorded" ? "No saved data" : latestBodyCompositionLabel;
+  const sleepSyncRowLabel = showsCurrentSyncDetails ? "Last sleep sync" : "Saved sleep data";
+  const bodySyncRowLabel = showsCurrentSyncDetails ? "Last body sync" : "Saved body data";
+  const displayedLastSleepSyncLabel = showsCurrentSyncDetails
+    ? lastSleepSyncLabel
+    : savedSleepDataLabel;
+  const displayedLastBodySyncLabel = showsCurrentSyncDetails
+    ? lastBodySyncLabel
+    : savedBodyDataLabel;
   const healthPrimaryButtonLabel = healthLoading
     ? "Working..."
     : !healthConsentAccepted
@@ -1352,9 +1385,6 @@ export default function ProfileIndex() {
       : hasAnyHealthPermission
         ? "Sync now"
         : "Reconnect";
-  const latestBodyCompositionLabel = formatBodyCompositionTimestamp(
-    bodyCompositionEffective.recordedAt
-  );
   const latestBodyCompositionSource = formatBodyCompositionSource(
     bodyCompositionEffective.source,
     bodyCompositionEffective.originLabel
@@ -1363,10 +1393,6 @@ export default function ProfileIndex() {
   const visibleBodyCompositionHistory = bodyHistoryExpanded
     ? bodyCompositionHistory.slice(0, 8)
     : bodyCompositionHistory.slice(0, 3);
-  const lastBodySyncLabel = bodyCompositionProfile?.lastSyncedAt
-    ? bodyCompositionProfile.lastSyncedAt.toDate().toLocaleString()
-    : "Not synced yet";
-
   if (redirectTo) return <Redirect href={redirectTo} />;
   if (loading) {
     return (
@@ -1788,7 +1814,7 @@ export default function ProfileIndex() {
               <Text style={styles.healthStatusValue}>{healthConnectionStatus}</Text>
             </View>
             <View style={styles.healthStatusRow}>
-              <Text style={styles.healthStatusLabel}>Data</Text>
+              <Text style={styles.healthStatusLabel}>Supported data</Text>
               <Text style={styles.healthStatusValue}>Sleep, Body composition</Text>
             </View>
               <View style={styles.healthStatusRow}>
@@ -1800,11 +1826,11 @@ export default function ProfileIndex() {
                 <Text style={styles.healthStatusValue}>{displayedBodyStatus}</Text>
               </View>
               <View style={styles.healthStatusRow}>
-                <Text style={styles.healthStatusLabel}>Last sleep sync</Text>
+                <Text style={styles.healthStatusLabel}>{sleepSyncRowLabel}</Text>
                 <Text style={styles.healthStatusValue}>{displayedLastSleepSyncLabel}</Text>
               </View>
               <View style={styles.healthStatusRow}>
-                <Text style={styles.healthStatusLabel}>Last body sync</Text>
+                <Text style={styles.healthStatusLabel}>{bodySyncRowLabel}</Text>
                 <Text style={styles.healthStatusValue}>{displayedLastBodySyncLabel}</Text>
               </View>
           </View>
