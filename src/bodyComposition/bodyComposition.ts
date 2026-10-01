@@ -2,6 +2,7 @@ import { Platform } from "react-native";
 import { doc, getDoc, setDoc, Timestamp } from "firebase/firestore";
 import type { Permission } from "react-native-health-connect";
 import { db } from "../config/firebaseConfig";
+import { hasHealthSyncConsent } from "../health/healthSyncConsent";
 import {
   BODY_COMPOSITION_FIELDS,
   BODY_COMPOSITION_SOURCES,
@@ -537,6 +538,8 @@ export const autoSyncBodyCompositionFromHealthConnectIfEligible = async (
   if (Platform.OS !== "android") return "skipped";
 
   try {
+    if (!(await hasHealthSyncConsent(uid))) return "skipped";
+
     const availability = await getHealthConnectAvailability();
     if (availability !== "available") return "skipped";
 
@@ -565,6 +568,8 @@ export const autoSyncBodyCompositionFromSamsungHealthIfEligible = async (
   if (Platform.OS !== "android") return "skipped";
 
   try {
+    if (!(await hasHealthSyncConsent(uid))) return "skipped";
+
     const available = await isSamsungHealthBodyCompositionAvailable();
     if (!available) return "skipped";
 
