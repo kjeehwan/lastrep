@@ -1,7 +1,45 @@
-import { describe, expect, it } from "vitest";
-import { getUidPrefix, sanitizeAnalyticsParams } from "./analytics";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("expo-constants", () => ({
+  default: {
+    expoConfig: {
+      android: {
+        package: "com.kjeehwan.lastrep.dev",
+      },
+    },
+  },
+}));
+
+vi.mock("@react-native-firebase/app", () => ({
+  getApp: () => ({
+    options: {
+      projectId: "lastrep-test",
+      appId: "1:123:android:test",
+      measurementId: "G-TEST",
+    },
+    automaticDataCollectionEnabled: true,
+  }),
+}));
+
+vi.mock("@react-native-firebase/analytics", () => ({
+  getAnalytics: () => ({ appName: "lastrep-test" }),
+  getAppInstanceId: vi.fn(async () => "instance-id"),
+  logEvent: vi.fn(async () => undefined),
+  setAnalyticsCollectionEnabled: vi.fn(async () => undefined),
+}));
+
+vi.mock("react-native", () => ({
+  Platform: {
+    OS: "android",
+  },
+}));
+const { getUidPrefix, sanitizeAnalyticsParams } = await import("./analytics");
 
 describe("analytics helper", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it("removes unavailable params", () => {
     expect(
       sanitizeAnalyticsParams({

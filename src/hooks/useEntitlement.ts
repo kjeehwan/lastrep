@@ -22,14 +22,7 @@ export function useEntitlement(authReady: boolean, uid: string | null): UseEntit
   const previousLogKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!authReady || !uid) {
-      setState("loading");
-      setIsSubscribed(null);
-      return;
-    }
-
-    setState("loading");
-    setIsSubscribed(null);
+    if (!authReady || !uid) return;
 
     const unsubscribe = onSnapshot(
       doc(db, USERS_COLLECTION, uid),
@@ -60,7 +53,9 @@ export function useEntitlement(authReady: boolean, uid: string | null): UseEntit
   }, [authReady, uid]);
 
   useEffect(() => {
-    const nextLogKey = `${authReady}:${uid ?? "signed_out"}:${state}:${isSubscribed ?? "null"}`;
+    const effectiveState = !authReady || !uid ? "loading" : state;
+    const effectiveSubscribed = !authReady || !uid ? null : isSubscribed;
+    const nextLogKey = `${authReady}:${uid ?? "signed_out"}:${effectiveState}:${effectiveSubscribed ?? "null"}`;
     if (previousLogKeyRef.current === nextLogKey) {
       return;
     }
@@ -69,10 +64,14 @@ export function useEntitlement(authReady: boolean, uid: string | null): UseEntit
     logBillingLifecycleEvent("entitlement_state_changed", {
       auth_ready: authReady,
       uid_prefix: uid ? uid.slice(0, 8) : null,
-      entitlement_state: state,
-      is_subscribed: isSubscribed,
+      entitlement_state: effectiveState,
+      is_subscribed: effectiveSubscribed,
     });
   }, [authReady, isSubscribed, state, uid]);
+
+  if (!authReady || !uid) {
+    return { state: "loading", isSubscribed: null };
+  }
 
   return { state, isSubscribed };
 }

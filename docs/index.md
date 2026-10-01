@@ -2,16 +2,16 @@
 
 **Effective Date:** February 18, 2026
 
-Lastrep (“we”, “our”, or “us”) operates the Lastrep mobile application.
+Lastrep ("we", "our", or "us") operates the Lastrep mobile application.
 
 ## 1. Information We Collect
 
 When you use Lastrep, we may collect:
 
-- Account information (email address) via Firebase Authentication  
-- Workout and training data you enter into the app  
-- Subscription status information via RevenueCat  
-- Basic device information required for app functionality  
+- Account information (email address) via Firebase Authentication
+- Workout and training data you enter into the app
+- Subscription status information via RevenueCat
+- Basic device information required for app functionality
 
 We do not collect sensitive personal information beyond what is required for app functionality.
 
@@ -19,18 +19,18 @@ We do not collect sensitive personal information beyond what is required for app
 
 We use collected information to:
 
-- Provide authentication and secure access  
-- Store and retrieve workout data  
-- Manage subscription status  
-- Improve app performance and reliability  
+- Provide authentication and secure access
+- Store and retrieve workout data
+- Manage subscription status
+- Improve app performance and reliability
 
 ## 3. Third-Party Services
 
 Lastrep uses:
 
-- Firebase (Google) for authentication and data storage  
-- RevenueCat for subscription management  
-- Google Play for billing and app distribution  
+- Firebase (Google) for authentication and data storage
+- RevenueCat for subscription management
+- Google Play for billing and app distribution
 
 These services may collect information according to their own privacy policies.
 
@@ -42,7 +42,7 @@ The app may request camera access. If used, it is solely for in-app functionalit
 
 We use industry-standard security practices through Firebase and Google Cloud infrastructure.
 
-## 6. Children’s Privacy
+## 6. Children's Privacy
 
 Lastrep is not directed to children under 13.
 

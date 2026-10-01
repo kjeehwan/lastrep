@@ -1,13 +1,28 @@
 import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Href, Redirect, useFocusEffect, useRouter } from "expo-router";
 import { onAuthStateChanged } from "firebase/auth";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import {
+  BackHandler,
+  FlatList,
+  LayoutChangeEvent,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { auth } from "@/src/config/firebaseConfig";
 import type { SleepNightlySummary } from "@/src/contracts";
 import { useOfflineStatus } from "@/src/hooks/useOfflineStatus";
-import { getSleepDeltaText, getSleepRecoveryHint, classifySleepVsTarget } from "@/src/sleep/sleepInsights";
+import { useNow } from "@/src/hooks/useNow";
+import { getSleepRecoveryHint, classifySleepVsTarget } from "@/src/sleep/sleepInsights";
 import {
   autoSyncSleepFromHealthConnectIfEligible,
   HEALTH_SLEEP_STALE_HOURS,
@@ -18,26 +33,25 @@ import {
   hasHealthSleepPermission,
   type HealthConnectAvailability,
 } from "@/src/sleep/sleep";
+import { showAppDialog } from "@/src/ui/appDialog";
 import { getUserData } from "@/src/userData";
 import { isExpectedOfflineError } from "@/src/utils/networkErrors";
+import { scheduleAfterInteractions } from "@/src/utils/scheduleAfterInteractions";
+import { ChartEmptyState, type ChartPoint } from "@/src/components/charts/TrendCharts";
 
 const ACCENT = "#7b61ff";
 const MUTED = "#a5acc1";
-
-const formatTimestamp = (value: Date | null): string =>
-  value ? value.toLocaleString() : "Not synced yet";
+const SLEEP_SYNC_CONFIRM_KEY_PREFIX = "sleep-sync-confirmed-v1";
 export default function SleepIndex() {
   const router = useRouter();
   const { isOffline } = useOfflineStatus();
   const [redirectTo, setRedirectTo] = useState<Href | null>(null);
   const [uid, setUid] = useState<string | null>(null);
+  const [accountLabel, setAccountLabel] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [feedback, setFeedback] = useState<string | null>(null);
-  const [sleepHours, setSleepHours] = useState<number | null>(null);
   const [sleepSource, setSleepSource] = useState<"manual" | "health">("manual");
-  const [sleepOriginLabel, setSleepOriginLabel] = useState<string | null>(null);
   const [sampleRecordedAt, setSampleRecordedAt] = useState<Date | null>(null);
-  const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
   const [recentNightlyHours, setRecentNightlyHours] = useState<SleepNightlySummary[]>([]);
   const [sleepTargetHours, setSleepTargetHours] = useState<number>(7);
   const [manualOverrideHours, setManualOverrideHours] = useState("");
@@ -46,21 +60,22 @@ export default function SleepIndex() {
     "granted" | "denied" | "revoked" | "unavailable" | "unsupported" | "unknown"
   >("unknown");
   const [availability, setAvailability] = useState<HealthConnectAvailability>("unsupported");
+  const timelineScrollRef = React.useRef<FlatList<ChartPoint> | null>(null);
+  const refreshSleepTaskRef = React.useRef<{ cancel: () => void } | null>(null);
+  const lastSleepRefreshAtRef = React.useRef(0);
+  const [timelineWindowStart, setTimelineWindowStart] = useState(0);
+  const [timelineShouldSnapToLatest, setTimelineShouldSnapToLatest] = useState(true);
+  const [timelineViewportWidthMeasured, setTimelineViewportWidthMeasured] = useState(0);
+  const [selectedSleepDateKey, setSelectedSleepDateKey] = useState<string | null>(null);
+  const nowMs = useNow(60_000, sleepSource === "health" && sampleRecordedAt != null);
 
   const applyProfile = useCallback((profile: Awaited<ReturnType<typeof getSleepProfile>>) => {
-    setSleepHours(profile.latestSleepHours);
     setSleepSource(profile.source);
-    setSleepOriginLabel(profile.originLabel);
     setSampleRecordedAt(profile.sampleRecordedAt?.toDate() ?? null);
-    setLastSyncedAt(profile.lastSyncedAt?.toDate() ?? null);
     setRecentNightlyHours(profile.recentNightlyHours);
   }, []);
 
   const handleGoBack = () => {
-    if (router.canGoBack()) {
-      router.back();
-      return;
-    }
     router.replace("/home");
   };
 
@@ -117,11 +132,13 @@ export default function SleepIndex() {
     const unsub = onAuthStateChanged(auth, (user) => {
       if (!user) {
         setUid(null);
+        setAccountLabel(null);
         setRedirectTo("/auth/sign-in");
         setLoading(false);
         return;
       }
       setUid(user.uid);
+      setAccountLabel(user.email?.trim() || user.uid);
       setRedirectTo(null);
       void getUserData(user.uid).then((data) => {
         const target = data?.sleepSettings?.targetHours;
@@ -135,15 +152,24 @@ export default function SleepIndex() {
 
   useFocusEffect(
     useCallback(() => {
-      void refreshSleep({ autoSync: true });
-      return undefined;
-    }, [refreshSleep])
+      if (Date.now() - lastSleepRefreshAtRef.current >= 30_000) {
+        refreshSleepTaskRef.current?.cancel();
+        refreshSleepTaskRef.current = scheduleAfterInteractions(async () => {
+          lastSleepRefreshAtRef.current = Date.now();
+          await refreshSleep({ autoSync: true });
+        });
+      }
+      const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+        router.replace("/home");
+        return true;
+      });
+      return () => {
+        refreshSleepTaskRef.current?.cancel();
+        subscription.remove();
+      };
+    }, [refreshSleep, router])
   );
 
-  const sourceLabel = useMemo(() => {
-    if (sleepSource !== "health") return "Manual";
-    return sleepOriginLabel ?? "Health Connect";
-  }, [sleepSource, sleepOriginLabel]);
   const fallbackLastNightDateKey = useMemo(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(
@@ -155,22 +181,60 @@ export default function SleepIndex() {
     () => recentNightlyHours[0] ?? null,
     [recentNightlyHours]
   );
+  const sleepChartPoints = useMemo<ChartPoint[]>(
+    () =>
+      [...recentNightlyHours]
+        .reverse()
+        .map((item) => ({ key: item.dateKey, label: item.dateKey.slice(5).replace("-", "/"), value: item.sleepHours })),
+    [recentNightlyHours]
+  );
+  const timelineVisiblePoints = 7;
+  const timelineMeasuredWidth = timelineViewportWidthMeasured > 0 ? timelineViewportWidthMeasured : 308;
+  const timelinePointCellWidth = Math.max(1, Math.floor(timelineMeasuredWidth / timelineVisiblePoints));
+  const timelineViewportWidth = timelinePointCellWidth * timelineVisiblePoints;
+  const timelineMaxWindowStart = Math.max(0, sleepChartPoints.length - timelineVisiblePoints);
+  const timelinePlotHeight = 120;
+  const timelinePlotTopInset = 4;
+  const timelineDatesRowHeight = 24;
+  const timelineTargetLaneWidth = 34;
+  const effectiveTimelineWindowStart = Math.min(timelineWindowStart, timelineMaxWindowStart);
+  const focusedSleepPoints = useMemo(
+    () =>
+      sleepChartPoints.slice(
+        effectiveTimelineWindowStart,
+        effectiveTimelineWindowStart + timelineVisiblePoints
+      ),
+    [sleepChartPoints, effectiveTimelineWindowStart]
+  );
   const trendAverage = useMemo(() => {
-    if (!recentNightlyHours.length) return null;
-    const total = recentNightlyHours.reduce((sum, item) => sum + item.sleepHours, 0);
-    return Math.round((total / recentNightlyHours.length) * 10) / 10;
-  }, [recentNightlyHours]);
+    if (!focusedSleepPoints.length) return null;
+    const total = focusedSleepPoints.reduce((sum, item) => sum + item.value, 0);
+    return Math.round((total / focusedSleepPoints.length) * 10) / 10;
+  }, [focusedSleepPoints]);
   const trendConsistencyPct = useMemo(() => {
-    if (!recentNightlyHours.length) return null;
-    const onTargetDays = recentNightlyHours.filter((item) => item.sleepHours >= 7).length;
-    return Math.round((onTargetDays / recentNightlyHours.length) * 100);
-  }, [recentNightlyHours]);
+    if (!focusedSleepPoints.length) return null;
+    const onTargetDays = focusedSleepPoints.filter((item) => item.value >= sleepTargetHours).length;
+    return Math.round((onTargetDays / focusedSleepPoints.length) * 100);
+  }, [focusedSleepPoints, sleepTargetHours]);
+  const timelineScaleMax = useMemo(() => {
+    const maxPoint = sleepChartPoints.reduce((max, point) => Math.max(max, point.value), 0);
+    return Math.max(1, maxPoint, sleepTargetHours);
+  }, [sleepChartPoints, sleepTargetHours]);
+  const targetLineTop =
+    timelinePlotTopInset +
+    Math.max(0, Math.min(timelinePlotHeight, timelinePlotHeight - (sleepTargetHours / timelineScaleMax) * timelinePlotHeight));
+  const targetLabelHalfHeight = 5;
+  const selectedSleepPoint = useMemo(() => {
+    if (!sleepChartPoints.length) return null;
+    if (!selectedSleepDateKey) return sleepChartPoints[sleepChartPoints.length - 1] ?? null;
+    return sleepChartPoints.find((point) => point.key === selectedSleepDateKey) ?? sleepChartPoints[sleepChartPoints.length - 1] ?? null;
+  }, [sleepChartPoints, selectedSleepDateKey]);
   const sampleAgeHours = useMemo(() => {
     if (!sampleRecordedAt) return null;
-    const diffMs = Date.now() - sampleRecordedAt.getTime();
+    const diffMs = nowMs - sampleRecordedAt.getTime();
     if (diffMs < 0) return 0;
     return Math.round((diffMs / (60 * 60 * 1000)) * 10) / 10;
-  }, [sampleRecordedAt]);
+  }, [nowMs, sampleRecordedAt]);
   const isStale = useMemo(() => {
     if (sleepSource !== "health") return false;
     if (sampleAgeHours == null) return true;
@@ -180,14 +244,101 @@ export default function SleepIndex() {
     () => classifySleepVsTarget(lastNightSummary?.sleepHours ?? null, sleepTargetHours),
     [lastNightSummary, sleepTargetHours]
   );
-  const lastNightDeltaText = useMemo(
-    () => getSleepDeltaText(lastNightSummary?.sleepHours ?? null, sleepTargetHours),
-    [lastNightSummary, sleepTargetHours]
-  );
   const recoveryHint = useMemo(
     () => getSleepRecoveryHint(lastNightStatus, trendConsistencyPct),
     [lastNightStatus, trendConsistencyPct]
   );
+
+  useEffect(() => {
+    if (!timelineShouldSnapToLatest || sleepChartPoints.length === 0) return;
+    const timer = setTimeout(() => {
+      const nextStart = timelineMaxWindowStart;
+      timelineScrollRef.current?.scrollToOffset({
+        offset: nextStart * timelinePointCellWidth,
+        animated: false,
+      });
+      setTimelineWindowStart(nextStart);
+      setTimelineShouldSnapToLatest(false);
+      const latest = sleepChartPoints[sleepChartPoints.length - 1];
+      setSelectedSleepDateKey(latest?.key ?? null);
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [timelineShouldSnapToLatest, sleepChartPoints, timelineMaxWindowStart, timelinePointCellWidth]);
+
+  const snapTimelineToNearestWindow = useCallback(
+    (offsetX: number) => {
+      const nearestStart = Math.max(0, Math.min(timelineMaxWindowStart, Math.round(offsetX / timelinePointCellWidth)));
+      setTimelineWindowStart(nearestStart);
+    },
+    [timelineMaxWindowStart, timelinePointCellWidth]
+  );
+
+  const handleTimelineViewportLayout = useCallback(
+    (event: LayoutChangeEvent) => {
+      const width = event.nativeEvent.layout.width;
+      if (width > 0 && Math.abs(width - timelineViewportWidthMeasured) > 0.5) {
+        setTimelineViewportWidthMeasured(width);
+      }
+    },
+    [timelineViewportWidthMeasured]
+  );
+
+  const handleTimelineMomentumEnd = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      snapTimelineToNearestWindow(event.nativeEvent.contentOffset.x);
+    },
+    [snapTimelineToNearestWindow]
+  );
+
+  const handleTimelineDragEnd = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      if (event.nativeEvent.velocity?.x) return;
+      snapTimelineToNearestWindow(event.nativeEvent.contentOffset.x);
+    },
+    [snapTimelineToNearestWindow]
+  );
+
+  const selectedSleepHoursText = useMemo(() => {
+    if (!selectedSleepPoint) return "-";
+    const totalMinutes = Math.round(selectedSleepPoint.value * 60);
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = Math.max(0, totalMinutes % 60);
+    return `${hours}h ${minutes}m`;
+  }, [selectedSleepPoint]);
+  const selectedSleepDeltaText = useMemo(() => {
+    if (!selectedSleepPoint) return "-";
+    const diff = Math.round((selectedSleepPoint.value - sleepTargetHours) * 10) / 10;
+    if (diff === 0) return "On target";
+    const prefix = diff > 0 ? "+" : "";
+    return `${prefix}${diff.toFixed(1)}h vs target`;
+  }, [selectedSleepPoint, sleepTargetHours]);
+
+  const performSync = async (activeUid: string) => {
+    const result = await syncSleepFromHealthConnect(activeUid);
+    switch (result.status) {
+      case "success":
+        setFeedback(`Synced ${result.sleepHours.toFixed(1)} hours from Health Connect.`);
+        break;
+      case "permission_denied":
+        setPermissionState(sleepSource === "health" ? "revoked" : "denied");
+        setFeedback("Permission is required to sync sleep from Health Connect.");
+        break;
+      case "no_data":
+        setFeedback("No sleep sessions found for the previous night window.");
+        break;
+      case "provider_update_required":
+        setFeedback("Download or update Health Connect from the Play Store.");
+        break;
+      case "unavailable":
+      case "unsupported":
+        setFeedback("Health Connect is not available on this device.");
+        break;
+      default:
+        setFeedback(result.message);
+        break;
+    }
+    await refreshSleep({ resetFeedback: false });
+  };
 
   const handleSync = async () => {
     if (!uid) return;
@@ -212,30 +363,29 @@ export default function SleepIndex() {
       return;
     }
 
-    const result = await syncSleepFromHealthConnect(uid);
-    switch (result.status) {
-      case "success":
-        setFeedback(`Synced ${result.sleepHours.toFixed(1)} hours from Health Connect.`);
-        break;
-      case "permission_denied":
-        setPermissionState(sleepSource === "health" ? "revoked" : "denied");
-        setFeedback("Permission is required to sync sleep from Health Connect.");
-        break;
-      case "no_data":
-        setFeedback("No sleep sessions found for the previous night window.");
-        break;
-      case "provider_update_required":
-        setFeedback("Download or update Health Connect from the Play Store.");
-        break;
-      case "unavailable":
-      case "unsupported":
-        setFeedback("Health Connect is not available on this device.");
-        break;
-      default:
-        setFeedback(result.message);
-        break;
+    const confirmationKey = `${SLEEP_SYNC_CONFIRM_KEY_PREFIX}:${uid}`;
+    const confirmationValue = await AsyncStorage.getItem(confirmationKey);
+    if (confirmationValue !== "true") {
+      showAppDialog({
+        title: "Confirm account for sleep sync",
+        message: `Import this device's Health Connect sleep data into ${accountLabel ?? "the current account"}?`,
+        buttons: [
+          { text: "Cancel", role: "cancel" },
+          {
+            text: "Import",
+            role: "default",
+            onPress: () => {
+              void (async () => {
+                await AsyncStorage.setItem(confirmationKey, "true");
+                await performSync(uid);
+              })();
+            },
+          },
+        ],
+      });
+      return;
     }
-    await refreshSleep({ resetFeedback: false });
+    await performSync(uid);
   };
 
   const handleManualOverride = async () => {
@@ -276,56 +426,116 @@ export default function SleepIndex() {
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.backButton} onPress={handleGoBack}>
+          <Ionicons name="chevron-back" size={22} color="#fff" />
+        </TouchableOpacity>
+        <Text style={styles.title}>Sleep</Text>
+        <View style={styles.headerSpacer} />
+      </View>
       <ScrollView contentContainerStyle={styles.content} style={styles.container} bounces>
-        <View style={styles.header}>
-          <TouchableOpacity style={styles.backButton} onPress={handleGoBack}>
-            <Ionicons name="chevron-back" size={22} color="#fff" />
-          </TouchableOpacity>
-          <Text style={styles.title}>Sleep</Text>
-          <View style={styles.headerSpacer} />
-        </View>
 
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Current sleep summary</Text>
-          <Text style={styles.valueText}>
-            {lastNightSummary ? `${lastNightSummary.sleepHours.toFixed(1)} hours` : "No sample yet"}
+          <Text style={styles.sectionTitle}>Sleep trends</Text>
+          <Text style={styles.valueText}>{selectedSleepHoursText}</Text>
+          <Text style={styles.subText}>
+            {selectedSleepDeltaText}
           </Text>
           <Text style={styles.subText}>
-            Target: {sleepTargetHours.toFixed(1)}h
-            {lastNightDeltaText ? ` (${lastNightDeltaText})` : ""}
+            7-day avg: {trendAverage == null ? "-" : `${trendAverage.toFixed(1)}h`}
           </Text>
-          <Text style={styles.subText}>Recorded at: {formatTimestamp(sampleRecordedAt)}</Text>
-          <Text style={styles.subText}>Last sync: {formatTimestamp(lastSyncedAt)}</Text>
-          <Text style={styles.subText}>Sleep source: {sourceLabel}</Text>
+          {sleepChartPoints.length ? (
+            <View style={styles.timelineStage}>
+              <View
+                style={[
+                  styles.timelineTargetLine,
+                  {
+                    top: targetLineTop,
+                    right: timelineTargetLaneWidth,
+                  },
+                ]}
+              />
+              <View
+                style={[styles.timelinePointsPane, { width: timelineViewportWidth }]}
+                onLayout={handleTimelineViewportLayout}
+              >
+                <FlatList
+                  ref={timelineScrollRef}
+                  horizontal
+                  data={sleepChartPoints}
+                  keyExtractor={(item) => item.key}
+                  renderItem={({ item }) => (
+                    <TouchableOpacity
+                      activeOpacity={0.8}
+                      onPress={() => setSelectedSleepDateKey(item.key)}
+                      style={[
+                        styles.timelinePointCell,
+                        {
+                          width: timelinePointCellWidth,
+                          height: timelinePlotTopInset + timelinePlotHeight + timelineDatesRowHeight,
+                        },
+                      ]}
+                    >
+                      <View
+                        style={[
+                          styles.sleepBar,
+                          {
+                            height: Math.max(
+                              8,
+                              Math.min(timelinePlotHeight, (item.value / timelineScaleMax) * timelinePlotHeight)
+                            ),
+                            backgroundColor: item.key === selectedSleepPoint?.key ? "#60a5fa" : "rgba(123,97,255,0.45)",
+                            width: Math.max(20, Math.min(28, timelinePointCellWidth - 12)),
+                          },
+                        ]}
+                      />
+                      <Text style={[styles.timelinePointLabel, item.key === selectedSleepPoint?.key && styles.timelinePointLabelSelected]}>
+                        {item.label}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                  getItemLayout={(_, index) => ({
+                    length: timelinePointCellWidth,
+                    offset: timelinePointCellWidth * index,
+                    index,
+                  })}
+                  automaticallyAdjustContentInsets={false}
+                  contentInsetAdjustmentBehavior="never"
+                  automaticallyAdjustsScrollIndicatorInsets={false}
+                  bounces={false}
+                  overScrollMode="never"
+                  decelerationRate="fast"
+                  snapToInterval={timelinePointCellWidth}
+                  snapToAlignment="start"
+                  disableIntervalMomentum
+                  onMomentumScrollEnd={handleTimelineMomentumEnd}
+                  onScrollEndDrag={handleTimelineDragEnd}
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.timelineScrollContent}
+                  style={[styles.timelineScrollViewport, styles.timelineScrollOverlay]}
+                />
+              </View>
+              <View style={[styles.timelineTargetPane, { width: timelineTargetLaneWidth }]}>
+                <View
+                  pointerEvents="none"
+                  style={[
+                    styles.timelineTargetStickyWrap,
+                    { top: targetLineTop - targetLabelHalfHeight },
+                  ]}
+                >
+                  <Text style={styles.timelineTargetText}>{sleepTargetHours.toFixed(1)}h</Text>
+                </View>
+              </View>
+            </View>
+          ) : (
+            <ChartEmptyState text="No recent sleep records yet." />
+          )}
           <Text style={styles.subText}>{recoveryHint}</Text>
           {sleepSource === "health" && isStale ? (
             <Text style={styles.warningText}>
               Health sleep sample is stale. Decision flow will fall back to manual sleep.
             </Text>
           ) : null}
-        </View>
-
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Sleep trends</Text>
-          <Text style={styles.subText}>
-            7-day average: {trendAverage == null ? "—" : `${trendAverage.toFixed(1)}h`}
-          </Text>
-          <Text style={styles.subText}>
-            {"Consistency (>=7h): "}
-            {trendConsistencyPct == null ? "—" : `${trendConsistencyPct}%`}
-          </Text>
-          <View style={styles.trendList}>
-            {recentNightlyHours.length ? (
-              recentNightlyHours.map((item) => (
-                <View key={item.dateKey} style={styles.trendRow}>
-                  <Text style={styles.subText}>{item.dateKey}</Text>
-                  <Text style={styles.trendHours}>{item.sleepHours.toFixed(1)}h</Text>
-                </View>
-              ))
-            ) : (
-              <Text style={styles.subText}>No recent sleep records yet.</Text>
-            )}
-          </View>
           <View style={styles.overrideRow}>
             <TextInput
               placeholder="Manually record last night hours (e.g. 7.5)"
@@ -371,7 +581,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#0d0d1a" },
   content: {
     padding: 16,
-    paddingTop: 12,
+    paddingTop: 8,
     paddingBottom: 140,
     gap: 12,
   },
@@ -379,7 +589,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 12,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 8,
   },
   backButton: {
     width: 32,
@@ -397,9 +609,9 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "rgba(255,255,255,0.08)",
-    gap: 8,
+    gap: 12,
   },
-  sectionTitle: { color: "#fff", fontSize: 16, fontWeight: "700" },
+  sectionTitle: { color: "#fff", fontSize: 16, fontWeight: "700", marginBottom: 4 },
   valueText: { color: "#fff", fontSize: 20, fontWeight: "800" },
   valueTextSmall: { color: "#fff", fontSize: 15, fontWeight: "700" },
   subText: { color: MUTED, fontSize: 12, lineHeight: 16 },
@@ -422,16 +634,39 @@ const styles = StyleSheet.create({
   },
   secondaryButtonText: { color: "#fff", fontSize: 14, fontWeight: "600" },
   disabled: { opacity: 0.6 },
-  trendList: {
-    marginTop: 4,
-    gap: 6,
+  timelineStage: { position: "relative", flexDirection: "row", alignItems: "stretch", minHeight: 168 },
+  timelinePointsPane: { flex: 1, overflow: "hidden" },
+  timelineTargetPane: { position: "relative", alignSelf: "stretch" },
+  timelineScrollViewport: { marginRight: 0 },
+  timelineScrollOverlay: { position: "absolute", left: 0, right: 0, top: 0, bottom: 0, zIndex: 4 },
+  timelineScrollContent: { paddingVertical: 2 },
+  timelinePointCell: { justifyContent: "flex-end", alignItems: "center", height: 24 },
+  sleepBar: { borderRadius: 8, minHeight: 8, marginBottom: 4 },
+  timelinePointLabel: { color: MUTED, fontSize: 10, fontWeight: "600" },
+  timelinePointLabelSelected: { color: "#fff", fontWeight: "700" },
+  timelineTargetLine: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    borderTopWidth: 1.5,
+    borderTopColor: "#8ea2ff",
+    borderStyle: "dashed",
+    zIndex: 2,
   },
-  trendRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+  timelineTargetStickyWrap: {
+    position: "absolute",
+    right: 0,
+    height: 10,
+    justifyContent: "center",
+    zIndex: 5,
   },
-  trendHours: { color: "#fff", fontSize: 12, fontWeight: "600" },
+  timelineTargetText: {
+    color: "#8ea2ff",
+    fontSize: 10,
+    fontWeight: "700",
+    lineHeight: 10,
+    textAlign: "right",
+  },
   overrideRow: { marginTop: 8, gap: 8 },
   overrideInput: {
     backgroundColor: "rgba(255,255,255,0.08)",

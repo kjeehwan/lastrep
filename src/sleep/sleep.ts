@@ -14,6 +14,7 @@ import type { Permission } from "react-native-health-connect";
 
 const DEFAULT_SLEEP_SOURCE: SleepSource = "manual";
 export const HEALTH_SLEEP_STALE_HOURS = 36;
+const SLEEP_HISTORY_DAYS = 30;
 
 type HealthConnectModule = typeof import("react-native-health-connect");
 
@@ -38,6 +39,7 @@ const sleepReadPermission: Permission = {
   accessType: "read",
   recordType: "SleepSession",
 };
+const LASTREP_ANDROID_PACKAGES = ["com.kjeehwan.lastrep.dev", "com.kjeehwan.lastrep"] as const;
 
 const loadHealthConnect = async (): Promise<HealthConnectModule> =>
   import("react-native-health-connect");
@@ -98,7 +100,7 @@ const normalizeRecentNightlyHours = (value: unknown): SleepNightlySummary[] => {
     })
     .filter((item): item is SleepNightlySummary => item != null)
     .sort((a, b) => b.dateKey.localeCompare(a.dateKey))
-    .slice(0, 7);
+    .slice(0, SLEEP_HISTORY_DAYS);
 };
 
 const roundSleepHours = (value: number) => Math.round(value * 10) / 10;
@@ -125,7 +127,7 @@ const upsertRecentNightlySummary = (
   map.set(next.dateKey, next);
   return Array.from(map.values())
     .sort((a, b) => b.dateKey.localeCompare(a.dateKey))
-    .slice(0, 7);
+    .slice(0, SLEEP_HISTORY_DAYS);
 };
 
 const getRecentHealthNightlySummaries = async (
@@ -133,7 +135,7 @@ const getRecentHealthNightlySummaries = async (
   now: Date
 ): Promise<SleepNightlySummary[]> => {
   const start = new Date(now);
-  start.setDate(start.getDate() - 7);
+  start.setDate(start.getDate() - SLEEP_HISTORY_DAYS);
   start.setHours(0, 0, 0, 0);
 
   const records = await healthConnect.readRecords("SleepSession", {
@@ -166,7 +168,7 @@ const getRecentHealthNightlySummaries = async (
     }))
     .filter((row) => row.sleepHours > 0)
     .sort((a, b) => b.dateKey.localeCompare(a.dateKey))
-    .slice(0, 7);
+    .slice(0, SLEEP_HISTORY_DAYS);
 };
 
 const saveHealthSleepSample = async (
@@ -278,6 +280,34 @@ export const openHealthConnectDataManagementScreen = async (): Promise<boolean> 
     }
     const healthConnect = await loadHealthConnect();
     healthConnect.openHealthConnectDataManagement();
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+export const openHealthConnectAppPermissionsScreen = async (): Promise<boolean> => {
+  if (Platform.OS !== "android") return false;
+  try {
+    const availability = await getHealthConnectAvailability();
+    if (availability !== "available" && availability !== "provider_update_required") {
+      return false;
+    }
+    const healthConnect = await loadHealthConnect();
+    const openDataManagement = healthConnect.openHealthConnectDataManagement as unknown as (
+      packageName?: string
+    ) => void;
+
+    for (const packageName of LASTREP_ANDROID_PACKAGES) {
+      try {
+        openDataManagement(packageName);
+        return true;
+      } catch {
+        // Try the next known package name.
+      }
+    }
+
+    openDataManagement();
     return true;
   } catch {
     return false;

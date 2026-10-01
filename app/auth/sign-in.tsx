@@ -37,6 +37,35 @@ const normalizeGoogleAuthErrorMessage = (error: unknown, fallback: string): stri
   return raw || fallback;
 };
 
+const normalizeEmailSignInErrorMessage = (error: unknown): string => {
+  const code =
+    typeof (error as { code?: unknown } | undefined)?.code === "string"
+      ? (error as { code: string }).code.toLowerCase()
+      : "";
+  const raw =
+    typeof (error as { message?: unknown } | undefined)?.message === "string"
+      ? (error as { message: string }).message.toLowerCase()
+      : "";
+
+  if (code.includes("invalid-email") || raw.includes("invalid-email")) {
+    return "Please enter a valid email address.";
+  }
+  if (
+    code.includes("invalid-credential") ||
+    code.includes("user-not-found") ||
+    code.includes("wrong-password") ||
+    raw.includes("invalid-credential") ||
+    raw.includes("user-not-found") ||
+    raw.includes("wrong-password")
+  ) {
+    return "Email or password is incorrect.";
+  }
+  if (code.includes("too-many-requests") || raw.includes("too-many-requests")) {
+    return "Too many attempts. Please wait a moment and try again.";
+  }
+  return "Sign-in failed. Please try again.";
+};
+
 export default function SignIn() {
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -57,7 +86,7 @@ export default function SignIn() {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       await finalizeSession(userCredential);
     } catch (err: any) {
-      setError(err.message);
+      setError(normalizeEmailSignInErrorMessage(err));
     }
   };
 
@@ -93,7 +122,7 @@ export default function SignIn() {
       });
     }
 
-    router.push("/home");
+    router.replace("/(tabs)/home");
   };
 
   const handleGooglePress = async () => {
@@ -126,6 +155,7 @@ export default function SignIn() {
       <TextInput
         style={styles.input}
         placeholder="Email"
+        placeholderTextColor="#777"
         value={email}
         onChangeText={setEmail}
         autoCapitalize="none"
@@ -134,7 +164,13 @@ export default function SignIn() {
       <TextInput
         style={styles.input}
         placeholder="Password"
-        secureTextEntry
+        placeholderTextColor="#777"
+        secureTextEntry={true}
+        autoCapitalize="none"
+        autoCorrect={false}
+        textContentType="password"
+        autoComplete="password"
+        selectionColor="#2a67b1"
         value={password}
         onChangeText={setPassword}
       />
@@ -155,7 +191,7 @@ export default function SignIn() {
       </TouchableOpacity>
 
       <View style={styles.footer}>
-        <Text style={styles.footerText}>Don't have an account? </Text>
+        <Text style={styles.footerText}>Don&apos;t have an account? </Text>
         <TouchableOpacity onPress={() => router.push("/auth/sign-up")}>
           <Text style={styles.link}>Sign up!</Text>
         </TouchableOpacity>
@@ -179,6 +215,7 @@ const styles = StyleSheet.create({
     paddingLeft: 12,
     borderRadius: 12,
     backgroundColor: "#fff",
+    color: "#111",
   },
   button: {
     backgroundColor: "#2a67b1",
@@ -219,5 +256,3 @@ const styles = StyleSheet.create({
     color: "#2a67b1",
   },
 });
-
-

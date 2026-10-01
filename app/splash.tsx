@@ -30,7 +30,7 @@ export default function SplashScreen() {
     setTimeout(() => {
       checkUserState(); // Check user state after logo animation
     }, 2200); // Adjust the delay to match the animation duration
-  }, []);
+  }, [router]);
 
   return (
     <View style={styles.container}>

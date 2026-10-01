@@ -30,7 +30,7 @@ export default function SplashAfterPreview() {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, []);
+  }, [router]);
 
   return (
     <View style={styles.container}>

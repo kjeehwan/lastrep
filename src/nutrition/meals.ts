@@ -12,9 +12,9 @@ import {
   type QueryDocumentSnapshot,
   setDoc,
   Timestamp,
+  type Unsubscribe,
   where,
 } from "firebase/firestore";
-import type { Unsubscribe } from "firebase/firestore";
 import { db } from "../config/firebaseConfig";
 import {
   NUTRITION_PROFILE_FIELDS,
@@ -26,6 +26,7 @@ import {
 import type {
   NutritionCalorieTargetsByDietPhase,
   NutritionMeal,
+  NutritionMealSource,
   NutritionMealWrite,
   NutritionProfile,
 } from "../contracts";
@@ -34,7 +35,6 @@ import {
   buildDecisionNutritionSummary,
   buildTrendReport,
   buildNutritionProfile,
-  DEFAULT_CALORIE_TARGETS_BY_DIET_PHASE,
   getCalorieTargetForDietPhase,
   normalizeCalorieTargets,
 } from "./mealHelpers";
@@ -61,6 +61,24 @@ function startOfLocalDayOffset(date = new Date(), offsetDays = 0): Date {
   return next;
 }
 
+export function formatDateKey(date = new Date()): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
+    date.getDate()
+  ).padStart(2, "0")}`;
+}
+
+export function parseDateKey(dateKey: string): Date | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateKey.trim());
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return null;
+  const parsed = new Date(year, month - 1, day);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed;
+}
+
 function buildTodayMealsQuery(uid: string, now = new Date()) {
   const start = Timestamp.fromDate(startOfLocalDay(now));
   const end = Timestamp.fromDate(endOfLocalDay(now));
@@ -84,11 +102,16 @@ function buildMealsRangeQuery(uid: string, startDate: Date, endDate: Date) {
 
 function mapMealDoc(mealDoc: QueryDocumentSnapshot<DocumentData>): NutritionMeal {
   const data = mealDoc.data() as NutritionMealWrite;
+  const rawSource = (data as { source?: NutritionMealSource | null }).source;
   return {
     id: mealDoc.id,
     name: data.name,
     calories: data.calories,
     proteinGrams: data.proteinGrams ?? null,
+    carbGrams: data.carbGrams ?? null,
+    fatGrams: data.fatGrams ?? null,
+    source: rawSource ?? null,
+    mealSection: data.mealSection ?? null,
     loggedAt: data.loggedAt,
     updatedAt: data.updatedAt,
   };
@@ -102,6 +125,22 @@ export function subscribeToTodayMeals(
 ): Unsubscribe {
   return onSnapshot(
     buildTodayMealsQuery(uid, now),
+    (snapshot) => {
+      const meals = snapshot.docs.map(mapMealDoc);
+      onNext(meals);
+    },
+    onError
+  );
+}
+
+export function subscribeToMealsForDate(
+  uid: string,
+  date: Date,
+  onNext: (meals: NutritionMeal[]) => void,
+  onError: (error: unknown) => void
+): Unsubscribe {
+  return onSnapshot(
+    buildTodayMealsQuery(uid, date),
     (snapshot) => {
       const meals = snapshot.docs.map(mapMealDoc);
       onNext(meals);
@@ -158,35 +197,60 @@ export async function getRecentMeals(
   days = 7,
   now = new Date()
 ): Promise<NutritionMeal[]> {
-  const todayStart = startOfLocalDay(now);
   const startDate = startOfLocalDayOffset(now, -days);
-  const endDate = new Date(todayStart.getTime() - 1);
+  const endDate = endOfLocalDay(now);
 
   const snapshot = await getDocs(buildMealsRangeQuery(uid, startDate, endDate));
+  return snapshot.docs.map(mapMealDoc);
+}
+
+export async function getMealsForDate(uid: string, date = new Date()): Promise<NutritionMeal[]> {
+  const snapshot = await getDocs(buildTodayMealsQuery(uid, date));
   return snapshot.docs.map(mapMealDoc);
 }
 
 export async function getNutritionProfile(uid: string): Promise<NutritionProfile> {
   const snapshot = await getDoc(doc(db, USERS_COLLECTION, uid));
   const data = snapshot.data()?.[USER_NUTRITION_PROFILE_FIELD] as
-    | { calorieTargetsByDietPhase?: unknown; updatedAt?: Timestamp | null }
+    | {
+        calorieTargetsByDietPhase?: unknown;
+        proteinTargetGrams?: unknown;
+        mealSections?: unknown;
+        updatedAt?: Timestamp | null;
+      }
     | undefined;
+  const proteinTargetGrams =
+    typeof data?.proteinTargetGrams === "number" &&
+    Number.isFinite(data.proteinTargetGrams) &&
+    data.proteinTargetGrams > 0
+      ? Math.round(data.proteinTargetGrams)
+      : null;
+
+  const mealSections = Array.isArray(data?.mealSections)
+    ? data!.mealSections.filter((x): x is string => typeof x === "string" && x.trim().length > 0)
+    : null;
 
   return buildNutritionProfile(
     normalizeCalorieTargets(data?.calorieTargetsByDietPhase),
+    proteinTargetGrams,
+    mealSections,
     data?.updatedAt ?? null
   );
 }
 
 export async function saveNutritionProfile(
   uid: string,
-  calorieTargetsByDietPhase: NutritionCalorieTargetsByDietPhase
+  calorieTargetsByDietPhase: NutritionCalorieTargetsByDietPhase,
+  proteinTargetGrams: number | null = null,
+  mealSections: string[] | null = null
 ): Promise<void> {
   await setDoc(
     doc(db, USERS_COLLECTION, uid),
     {
       [USER_NUTRITION_PROFILE_FIELD]: buildNutritionProfile(
         calorieTargetsByDietPhase,
+        proteinTargetGrams,
+        mealSections,
         Timestamp.now()
       ),
     },

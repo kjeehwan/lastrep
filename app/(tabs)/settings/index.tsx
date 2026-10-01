@@ -3,12 +3,13 @@ import { Href, Redirect, useRouter } from "expo-router";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { getFunctions, httpsCallable } from "firebase/functions";
 import React, { useEffect, useState } from "react";
-import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Linking, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { getUidPrefix, logAnalyticsEvent } from "../../../src/analytics/analytics";
 import { MANAGE_SUBSCRIPTION_URL } from "../../../src/config/billingConfig";
 import { auth } from "../../../src/config/firebaseConfig";
 import { useEntitlement } from "../../../src/hooks/useEntitlement";
+import { showAppDialog } from "../../../src/ui/appDialog";
 import { getUserData } from "../../../src/userData";
 
 const ACCENT = "#7b61ff";
@@ -51,12 +52,6 @@ export default function SettingsIndex() {
     return unsub;
   }, []);
 
-  useEffect(() => {
-    if (entitlement.state !== "active") {
-      setManageFallbackText(null);
-    }
-  }, [entitlement.state]);
-
   const handleSignOut = async () => {
     try {
       await signOut(auth);
@@ -67,14 +62,10 @@ export default function SettingsIndex() {
   };
 
   const contactSupport = () => {
-    Linking.openURL("mailto:kjeehwan@gmail.com?subject=Support%20request");
+    Linking.openURL("mailto:lastrep.dev@gmail.com?subject=Support%20request");
   };
 
   const handleGoBack = () => {
-    if (router.canGoBack()) {
-      router.back();
-      return;
-    }
     router.replace("/home");
   };
 
@@ -137,14 +128,14 @@ export default function SettingsIndex() {
 
   const handleDeleteAccount = () => {
     if (deletingAccount) return;
-    Alert.alert(
-      "Delete account?",
-      "This permanently deletes your Lastrep account and associated app data.",
-      [
-        { text: "Cancel", style: "cancel" },
+    showAppDialog({
+      title: "Delete account?",
+      message: "This permanently deletes your Lastrep account and associated app data.",
+      buttons: [
+        { text: "Cancel", role: "cancel" },
         {
           text: "Delete",
-          style: "destructive",
+          role: "destructive",
           onPress: async () => {
             setDeleteFeedback(null);
             setDeletingAccount(true);
@@ -164,8 +155,8 @@ export default function SettingsIndex() {
             }
           },
         },
-      ]
-    );
+      ],
+    });
   };
 
   if (redirectTo) return <Redirect href={redirectTo} />;
@@ -189,7 +180,7 @@ export default function SettingsIndex() {
               <Text style={styles.itemText}>{nickname}</Text>
               {email ? <Text style={styles.subText}>{email}</Text> : null}
             </View>
-            <Pressable onPress={() => router.push("/profile" as Href)}>
+            <Pressable onPress={() => router.push({ pathname: "/profile", params: { from: "/settings/index" } })}>
               <Text style={styles.linkText}>Edit</Text>
             </Pressable>
           </View>
@@ -229,7 +220,9 @@ export default function SettingsIndex() {
               <Text style={styles.secondaryButtonText}>Upgrade to Premium</Text>
             </TouchableOpacity>
           )}
-          {manageFallbackText ? <Text style={styles.subText}>{manageFallbackText}</Text> : null}
+          {entitlement.state === "active" && manageFallbackText ? (
+            <Text style={styles.subText}>{manageFallbackText}</Text>
+          ) : null}
         </View>
 
         <View style={styles.card}>

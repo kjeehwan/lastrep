@@ -6,12 +6,24 @@ import { useOfflineStatus } from "../src/hooks/useOfflineStatus";
 export default function OfflineBanner() {
   const { isOffline, ready } = useOfflineStatus();
   const [dismissed, setDismissed] = React.useState(false);
+  const mountedRef = React.useRef(false);
 
   React.useEffect(() => {
-    if (!isOffline) {
-      setDismissed(false);
-    }
-  }, [isOffline]);
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  React.useEffect(() => {
+    if (isOffline || !dismissed) return;
+    const timer = setTimeout(() => {
+      if (mountedRef.current) {
+        setDismissed(false);
+      }
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [dismissed, isOffline]);
 
   if (!ready || !isOffline || dismissed) {
     return null;
@@ -21,7 +33,7 @@ export default function OfflineBanner() {
     <View style={styles.overlay}>
       <SafeAreaView edges={["bottom"]} style={styles.safeArea}>
         <Pressable onPress={() => setDismissed(true)} style={styles.banner}>
-          <Text style={styles.title}>You're offline</Text>
+          <Text style={styles.title}>You are offline</Text>
           <Text style={styles.subtitle}>Some features may be limited until you reconnect.</Text>
         </Pressable>
       </SafeAreaView>

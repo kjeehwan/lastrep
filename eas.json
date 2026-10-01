@@ -7,15 +7,34 @@
     "development": {
       "environment": "development",
       "developmentClient": true,
-      "distribution": "internal"
+      "distribution": "internal",
+      "android": {
+        "gradleCommand": ":app:assembleDevDebug"
+      },
+      "env": {
+        "APP_VARIANT": "dev"
+      }
     },
     "preview": {
       "environment": "preview",
-      "distribution": "internal"
+      "distribution": "internal",
+      "android": {
+        "gradleCommand": ":app:assembleDevRelease"
+      },
+      "env": {
+        "APP_VARIANT": "dev"
+      }
     },
     "production": {
       "environment": "production",
-      "autoIncrement": true
+      "autoIncrement": true,
+      "android": {
+        "gradleCommand": ":app:bundleProdRelease"
+      },
+      "env": {
+        "APP_VARIANT": "prod",
+        "NODE_ENV": "production"
+      }
     }
   },
   "submit": {

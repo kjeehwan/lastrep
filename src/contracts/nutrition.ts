@@ -11,20 +11,42 @@ export const NUTRITION_MEAL_FIELDS = {
   name: "name",
   calories: "calories",
   proteinGrams: "proteinGrams",
+  carbGrams: "carbGrams",
+  fatGrams: "fatGrams",
+  source: "source",
+  mealSection: "mealSection",
   loggedAt: "loggedAt",
   updatedAt: "updatedAt",
 } as const;
 
 export const NUTRITION_PROFILE_FIELDS = {
   calorieTargetsByDietPhase: "calorieTargetsByDietPhase",
+  proteinTargetGrams: "proteinTargetGrams",
+  mealSections: "mealSections",
   updatedAt: "updatedAt",
 } as const;
+
+export interface NutritionMealSource {
+  foodId?: string | null;
+  servingLabel?: string | null;
+  servingGrams?: number | null;
+  caloriesPer100g?: number | null;
+  proteinPer100g?: number | null;
+  carbsPer100g?: number | null;
+  fatPer100g?: number | null;
+  mode?: "grams" | "servings" | "calories" | null;
+  value?: string | null;
+}
 
 export interface NutritionMeal {
   id: string;
   name: string;
   calories: number;
   proteinGrams: number | null;
+  carbGrams?: number | null;
+  fatGrams?: number | null;
+  source?: NutritionMealSource | null;
+  mealSection?: string | null;
   loggedAt: Timestamp;
   updatedAt: Timestamp;
 }
@@ -35,5 +57,7 @@ export type NutritionCalorieTargetsByDietPhase = Record<NutritionTargetPhase, nu
 
 export interface NutritionProfile {
   calorieTargetsByDietPhase: NutritionCalorieTargetsByDietPhase;
+  proteinTargetGrams?: number | null;
+  mealSections?: string[] | null;
   updatedAt?: Timestamp | null;
 }
