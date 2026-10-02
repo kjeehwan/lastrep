@@ -1893,20 +1893,20 @@ export default function ProfileIndex() {
               <View style={styles.sheetHandle} />
               <Text style={styles.sheetTitle}>Connect health data</Text>
                 <Text style={styles.sheetText}>
-                  Lastrep can read supported sleep and body composition data.
+                  On supported Android devices, Lastrep can read sleep, weight, body-fat, and lean-body-mass records that you permit.
                 </Text>
                 <Text style={styles.sheetText}>
-                  This helps show recovery and progress trends.
+                  We use them for recovery, sleep, and body-composition trends, and store imported summaries in your Lastrep account.
                 </Text>
                 <Text style={styles.sheetText}>
-                  This is optional, and you can manage or disconnect it later in Profile.
+                  This is optional. You can disconnect in Profile or revoke access in your connected health service at any time.
                 </Text>
               <View style={styles.sheetActions}>
                 <TouchableOpacity style={styles.sheetSecondaryButton} onPress={() => setHealthConsentVisible(false)}>
                   <Text style={styles.sheetSecondaryButtonText}>Not now</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.sheetPrimaryButton} onPress={handleAcceptHealthConsent}>
-                  <Text style={styles.sheetPrimaryButtonText}>Continue</Text>
+                  <Text style={styles.sheetPrimaryButtonText}>Review permissions</Text>
                 </TouchableOpacity>
               </View>
             </View>
