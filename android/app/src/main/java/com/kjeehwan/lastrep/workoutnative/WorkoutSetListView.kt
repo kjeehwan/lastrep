@@ -49,6 +49,8 @@ private data class WorkoutSetRowBinding(
   val rpe: AppCompatEditText
 )
 
+private data class ActiveWorkoutSetEditor(val position: Int, val field: String)
+
 class WorkoutSetListView(context: Context) : LinearLayout(context) {
   private val recyclerView = RecyclerView(context)
   private val adapter = WorkoutSetAdapter(::emitChange, ::emitToggleDone, ::emitSetLabelPress, ::emitLastPress)
@@ -207,6 +209,7 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
     private var weightHint: String = "Weight"
     private var repsHint: String = "Reps"
     private var rpeHint: String = "RPE"
+    private var activeEditor: ActiveWorkoutSetEditor? = null
 
     fun setItems(next: List<WorkoutSetItem>) {
       if (items.size == next.size) {
@@ -260,6 +263,7 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
       val root = LinearLayout(context).apply {
         orientation = HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
+        descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
         layoutParams = RecyclerView.LayoutParams(
           RecyclerView.LayoutParams.MATCH_PARENT,
           RecyclerView.LayoutParams.WRAP_CONTENT
@@ -340,34 +344,6 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
         includeFontPadding = false
         background = bg
         setPadding(dp(8f), 0, dp(8f), 0)
-        setTouchArbitration()
-      }
-    }
-
-    private fun AppCompatEditText.setTouchArbitration() {
-      val slop = ViewConfiguration.get(context).scaledTouchSlop
-      var startX = 0f
-      var startY = 0f
-      setOnTouchListener { v, event ->
-        when (event.actionMasked) {
-          MotionEvent.ACTION_DOWN -> {
-            startX = event.x
-            startY = event.y
-            v.parent?.requestDisallowInterceptTouchEvent(true)
-          }
-          MotionEvent.ACTION_MOVE -> {
-            val dx = abs(event.x - startX)
-            val dy = abs(event.y - startY)
-            if (dx > slop || dy > slop) {
-              v.parent?.requestDisallowInterceptTouchEvent(false)
-              return@setOnTouchListener false
-            }
-          }
-          MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-            v.parent?.requestDisallowInterceptTouchEvent(false)
-          }
-        }
-        false
       }
     }
 
@@ -378,6 +354,7 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
       private var rpeWatcher: TextWatcher? = null
       private var localDone: Boolean = false
       private var boundIndex: Int = -1
+      private val inputTouchStarts = mutableMapOf<String, Pair<Float, Float>>()
 
       fun bind(position: Int, item: WorkoutSetItem) {
         boundIndex = position
@@ -414,6 +391,10 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
         binding.reps.hint = repsHint
         binding.rpe.hint = rpeHint
 
+        bindFocusTracking(binding.weight, "weight")
+        bindFocusTracking(binding.reps, "reps")
+        bindFocusTracking(binding.rpe, "rpe")
+
         if (!binding.weight.isFocused) {
           binding.weight.setSelection((binding.weight.text?.length ?: 0).coerceAtLeast(0))
         }
@@ -431,6 +412,63 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
         binding.weight.addTextChangedListener(weightWatcher)
         binding.reps.addTextChangedListener(repsWatcher)
         binding.rpe.addTextChangedListener(rpeWatcher)
+
+        // React state updates can rebind this RecyclerView row while the user is tapping.
+        // Restore only the field that was explicitly touched, never the first input in the row.
+        val editor = activeEditor
+        if (editor?.position == position) {
+          val input = when (editor.field) {
+            "weight" -> binding.weight
+            "reps" -> binding.reps
+            else -> binding.rpe
+          }
+          input.post {
+            if (activeEditor == editor && !input.hasFocus()) {
+              input.requestFocus()
+              input.setSelection(input.text?.length ?: 0)
+            }
+          }
+        }
+      }
+
+      private fun bindFocusTracking(input: AppCompatEditText, field: String) {
+        input.setOnFocusChangeListener { _, hasFocus ->
+          if (hasFocus && boundIndex >= 0) {
+            activeEditor = ActiveWorkoutSetEditor(boundIndex, field)
+          } else if (!hasFocus && activeEditor == ActiveWorkoutSetEditor(boundIndex, field)) {
+            activeEditor = null
+          }
+        }
+        input.setOnTouchListener { view, event ->
+          if (event.actionMasked == MotionEvent.ACTION_DOWN && boundIndex >= 0) {
+            activeEditor = ActiveWorkoutSetEditor(boundIndex, field)
+            // Claim the exact field before RecyclerView can intercept the gesture.
+            view.isFocusableInTouchMode = true
+            view.requestFocus()
+          }
+          handleInputTouch(view, event, field)
+        }
+      }
+
+      private fun handleInputTouch(view: View, event: MotionEvent, field: String): Boolean {
+        val slop = ViewConfiguration.get(context).scaledTouchSlop.toFloat()
+        when (event.actionMasked) {
+          MotionEvent.ACTION_DOWN -> {
+            inputTouchStarts[field] = event.x to event.y
+            view.parent?.requestDisallowInterceptTouchEvent(true)
+          }
+          MotionEvent.ACTION_MOVE -> {
+            val start = inputTouchStarts[field] ?: return false
+            if (abs(event.x - start.first) > slop || abs(event.y - start.second) > slop) {
+              view.parent?.requestDisallowInterceptTouchEvent(false)
+            }
+          }
+          MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+            inputTouchStarts.remove(field)
+            view.parent?.requestDisallowInterceptTouchEvent(false)
+          }
+        }
+        return false
       }
 
       private fun applyCheckStyle(done: Boolean) {
