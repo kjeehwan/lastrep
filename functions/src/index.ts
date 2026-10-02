@@ -1,5 +1,7 @@
-import * as admin from "firebase-admin";
-import * as functions from "firebase-functions";
+import { getApps, initializeApp } from "firebase-admin/app";
+import { FieldValue, getFirestore, Timestamp } from "firebase-admin/firestore";
+import { getAuth } from "firebase-admin/auth";
+import * as functions from "firebase-functions/v1";
 import { defineSecret } from "firebase-functions/params";
 import OpenAI from "openai";
 import { z } from "zod";
@@ -8,9 +10,11 @@ import { heuristicDecision } from "./decisionHeuristic";
 import { parseAndSanitizeDecisionOutputText, sanitizeDecisionOutput } from "./decisionPipeline";
 import type { DecisionInputs, DecisionOutput, DecisionPathUsed } from "./decisionTypes";
 
-if (!admin.apps.length) {
-  admin.initializeApp();
+if (!getApps().length) {
+  initializeApp();
 }
+
+const db = getFirestore();
 
 const decisionInputsSchema: z.ZodType<DecisionInputs> = z.object({
   sleepHours: z.number(),
@@ -410,8 +414,8 @@ type DecisionGateResult =
     };
 
 const checkAndConsumeServerRateLimit = async (uid: string, now: Date): Promise<RateLimitResult> => {
-  const userRef = admin.firestore().doc(`users/${uid}`);
-  return admin.firestore().runTransaction(async (tx) => {
+  const userRef = db.doc(`users/${uid}`);
+  return db.runTransaction(async (tx) => {
     const snap = await tx.get(userRef);
     const userData = snap.data();
     const decisions = userData?.usage?.decisions ?? {};
@@ -432,7 +436,7 @@ const checkAndConsumeServerRateLimit = async (uid: string, now: Date): Promise<R
         usage: {
           decisions: {
             serverRateLimit: {
-              windowStart: admin.firestore.Timestamp.fromDate(nextWindowStart),
+              windowStart: Timestamp.fromDate(nextWindowStart),
               count: nextCountBase + 1,
             },
           },
@@ -480,8 +484,8 @@ const assertDevUidAllowed = (uid: string) => {
 };
 
 const checkAndConsumeServerDecisionGate = async (uid: string, now: Date): Promise<DecisionGateResult> => {
-  const userRef = admin.firestore().doc(`users/${uid}`);
-  return admin.firestore().runTransaction(async (tx) => {
+  const userRef = db.doc(`users/${uid}`);
+  return db.runTransaction(async (tx) => {
     const snap = await tx.get(userRef);
     const userData = snap.data();
     const entitlement = userData?.entitlement ?? {};
@@ -512,7 +516,7 @@ const checkAndConsumeServerDecisionGate = async (uid: string, now: Date): Promis
     const updatedTimestamps = [
       ...decisionTimestamps,
       now,
-    ].map((date) => admin.firestore.Timestamp.fromDate(date));
+    ].map((date) => Timestamp.fromDate(date));
 
     tx.set(
       userRef,
@@ -1000,14 +1004,13 @@ export const setDevEntitlementOverride = functions
       );
     }
 
-    await admin
-      .firestore()
+    await db
       .doc(`users/${context.auth.uid}`)
       .set(
         {
           entitlement: {
             devOverrideIsSubscribed: parsed.data.isSubscribed,
-            lastUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            lastUpdatedAt: FieldValue.serverTimestamp(),
           },
         },
         { merge: true }
@@ -1101,8 +1104,8 @@ export const resetDailyLimit = functions
     assertDevUidAllowed(context.auth.uid);
 
     const now = new Date();
-    const userRef = admin.firestore().doc(`users/${context.auth.uid}`);
-    await admin.firestore().runTransaction(async (tx) => {
+    const userRef = db.doc(`users/${context.auth.uid}`);
+    await db.runTransaction(async (tx) => {
       const snap = await tx.get(userRef);
       const data = snap.data();
       const decisions = data?.usage?.decisions ?? {};
@@ -1120,7 +1123,7 @@ export const resetDailyLimit = functions
           usage: {
             decisions: {
               decisionTimestamps: filteredTimestamps.map((timestamp) =>
-                admin.firestore.Timestamp.fromDate(timestamp)
+                Timestamp.fromDate(timestamp)
               ),
             },
           },
@@ -1141,8 +1144,8 @@ export const resetCooldown = functions
     }
     assertDevUidAllowed(context.auth.uid);
 
-    const userRef = admin.firestore().doc(`users/${context.auth.uid}`);
-    await admin.firestore().runTransaction(async (tx) => {
+    const userRef = db.doc(`users/${context.auth.uid}`);
+    await db.runTransaction(async (tx) => {
       tx.set(
         userRef,
         {
@@ -1176,10 +1179,10 @@ export const deleteMyAccount = functions
     }
 
     const uid = context.auth.uid;
-    const userRef = admin.firestore().doc(`users/${uid}`);
+    const userRef = db.doc(`users/${uid}`);
 
-    await admin.firestore().recursiveDelete(userRef);
-    await admin.auth().deleteUser(uid);
+    await db.recursiveDelete(userRef);
+    await getAuth().deleteUser(uid);
 
     return { ok: true };
   });
@@ -1241,11 +1244,11 @@ export const revenuecatWebhook = functions
 
     const expiresAt =
       typeof expirationAtMs === "number"
-        ? admin.firestore.Timestamp.fromMillis(expirationAtMs)
+        ? Timestamp.fromMillis(expirationAtMs)
         : null;
 
-    const userRef = admin.firestore().doc(`users/${appUserId}`);
-    const result = await admin.firestore().runTransaction(async (tx) => {
+    const userRef = db.doc(`users/${appUserId}`);
+    const result = await db.runTransaction(async (tx) => {
       const snap = await tx.get(userRef);
       const entitlement = snap.data()?.entitlement ?? {};
       const lastEventId =
@@ -1312,7 +1315,7 @@ export const revenuecatWebhook = functions
             expiresAt,
             lastEventId: eventId,
             lastEventTimestampMs: nextEventTimestampMs,
-            lastUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            lastUpdatedAt: FieldValue.serverTimestamp(),
           },
         },
         { merge: true }
