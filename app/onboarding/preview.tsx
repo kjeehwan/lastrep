@@ -155,13 +155,13 @@ export default function PreviewScreen() {
                 <View style={styles.sheetHandle} />
                 <Text style={styles.sheetTitle}>Optional health sync</Text>
                 <Text style={styles.sheetText}>
-                  Lastrep can read supported sleep and body composition data.
+                  On supported Android devices, Lastrep can read sleep, weight, body-fat, and lean-body-mass records that you permit.
                 </Text>
                 <Text style={styles.sheetText}>
-                  This helps show recovery and progress trends.
+                  We use them for recovery, sleep, and body-composition trends, and store imported summaries in your Lastrep account.
                 </Text>
                 <Text style={styles.sheetText}>
-                  This is optional, and you can connect it later in Profile.
+                  This is optional. You can connect later, disconnect in Profile, or revoke access in your connected health service.
                 </Text>
                 <View style={styles.sheetActions}>
                   <TouchableOpacity

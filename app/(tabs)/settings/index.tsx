@@ -8,6 +8,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { getUidPrefix, logAnalyticsEvent } from "../../../src/analytics/analytics";
 import { MANAGE_SUBSCRIPTION_URL } from "../../../src/config/billingConfig";
 import { auth } from "../../../src/config/firebaseConfig";
+import { PRIVACY_POLICY_URL, SUPPORT_EMAIL } from "../../../src/config/legalConfig";
 import { useEntitlement } from "../../../src/hooks/useEntitlement";
 import { showAppDialog } from "../../../src/ui/appDialog";
 import { getUserData } from "../../../src/userData";
@@ -62,7 +63,21 @@ export default function SettingsIndex() {
   };
 
   const contactSupport = () => {
-    Linking.openURL("mailto:lastrep.dev@gmail.com?subject=Support%20request");
+    Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=Support%20request`);
+  };
+
+  const openPrivacyPolicy = async () => {
+    try {
+      const canOpen = await Linking.canOpenURL(PRIVACY_POLICY_URL);
+      if (!canOpen) throw new Error("cannot_open_url");
+      await Linking.openURL(PRIVACY_POLICY_URL);
+    } catch {
+      showAppDialog({
+        title: "Couldn't open privacy policy",
+        message: "Please try again when you have an internet connection.",
+        buttons: [{ text: "OK", role: "cancel" }],
+      });
+    }
   };
 
   const handleGoBack = () => {
@@ -175,7 +190,9 @@ export default function SettingsIndex() {
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Account</Text>
           <View style={styles.row}>
-            <Ionicons name="person-circle-outline" size={28} color={ACCENT} />
+            <View style={styles.rowIcon}>
+              <Ionicons name="person-circle-outline" size={28} color={ACCENT} />
+            </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.itemText}>{nickname}</Text>
               {email ? <Text style={styles.subText}>{email}</Text> : null}
@@ -189,8 +206,21 @@ export default function SettingsIndex() {
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Support</Text>
           <Pressable style={styles.row} onPress={contactSupport}>
-            <Ionicons name="bug-outline" size={22} color={ACCENT} />
-            <Text style={[styles.itemText, { marginLeft: 10 }]}>Report a problem</Text>
+            <View style={styles.rowIcon}>
+              <Ionicons name="bug-outline" size={22} color={ACCENT} />
+            </View>
+            <Text style={styles.itemText}>Report a problem</Text>
+          </Pressable>
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Legal</Text>
+          <Pressable style={styles.row} onPress={openPrivacyPolicy}>
+            <View style={styles.rowIcon}>
+              <Ionicons name="document-text-outline" size={22} color={ACCENT} />
+            </View>
+            <Text style={styles.itemText}>Privacy policy</Text>
+            <Ionicons name="open-outline" size={18} color={MUTED} style={styles.rowTrailingIcon} />
           </Pressable>
         </View>
 
@@ -314,6 +344,8 @@ const styles = StyleSheet.create({
   },
   sectionTitle: { color: "#fff", fontSize: 15, fontWeight: "700", marginBottom: 6, letterSpacing: 0.2 },
   row: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 4 },
+  rowIcon: { width: 28, alignItems: "center" },
+  rowTrailingIcon: { marginLeft: "auto" },
   itemText: { color: "#fff", fontSize: 16, fontWeight: "600" },
   subText: { color: MUTED, fontSize: 13 },
   linkText: { color: ACCENT, fontWeight: "700" },
