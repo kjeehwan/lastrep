@@ -1,15 +1,20 @@
-name: Web Export Check
+name: Quality Checks
 
 on:
   pull_request:
   push:
     branches:
       - main
-      - master
-      - feature/**
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  web-export:
+  quality:
     runs-on: ubuntu-latest
     env:
       EXPO_PUBLIC_FIREBASE_API_KEY: test
@@ -39,6 +44,12 @@ jobs:
 
       - name: Prepare placeholder Google services config
         run: cp google-services.example.json google-services.json
+
+      - name: Run lint
+        run: npm run lint
+
+      - name: Run unit tests
+        run: npm test
 
       - name: Verify Expo web export
         run: npm run check:web-export
