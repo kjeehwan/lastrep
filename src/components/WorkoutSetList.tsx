@@ -13,6 +13,7 @@ type Props = {
   onToggleDone?: (event: NativeSyntheticEvent<{ index: number; done?: boolean }>) => void;
   onDeleteSet?: (event: NativeSyntheticEvent<{ index: number }>) => void;
   onSetLabelPress?: (event: NativeSyntheticEvent<{ index: number }>) => void;
+  onLastPress?: (event: NativeSyntheticEvent<{ index: number }>) => void;
 };
 
 export default function WorkoutSetList(_props: Props) {
