@@ -160,19 +160,17 @@ const resolveImagesForName = (name: string, entries: MappedEntry[]) => {
     return strictCandidates[0].imageUrls;
   }
 
-  let winner: MappedEntry | null = null;
-  let winnerScore = -1;
-  entries.forEach((entry) => {
-    const score = scoreMatch(name, entry);
-    if (score > winnerScore) {
-      winner = entry;
-      winnerScore = score;
-    }
-  });
+  const winner = entries.reduce<{ entry: MappedEntry | null; score: number }>(
+    (best, entry) => {
+      const score = scoreMatch(name, entry);
+      return score > best.score ? { entry, score } : best;
+    },
+    { entry: null, score: -1 }
+  );
 
   // Require at least token overlap before accepting fuzzy match.
-  if (!winner || winnerScore < 5) return [];
-  return winner.imageUrls;
+  if (!winner.entry || winner.score < 5) return [];
+  return winner.entry.imageUrls;
 };
 
 export const resolveFreeExerciseDbImagesForNames = async (names: string[]) => {

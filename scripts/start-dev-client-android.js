@@ -1,4 +1,4 @@
-const { spawn, spawnSync } = require("child_process");
+const { spawn } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 
@@ -20,18 +20,6 @@ const env = {
     ? `${localWatchmanBin};${process.env.PATH ?? ""}`
     : process.env.PATH,
 };
-
-// The dev client uses localhost. Map the phone's port 8081 to Metro on this PC.
-const adbReverse = spawnSync("adb", ["reverse", "tcp:8081", "tcp:8081"], {
-  stdio: "inherit",
-  env,
-});
-
-if (adbReverse.error || adbReverse.status !== 0) {
-  throw new Error(
-    "Could not map the Android device to Metro. Connect an authorized device by USB, then run the command again."
-  );
-}
 
 const args = [
   "start",
@@ -60,3 +48,23 @@ child.on("exit", (exitCode, signal) => {
   }
   process.exit(exitCode ?? 1);
 });
+
+// Start Metro before forwarding localhost. A dev client retrying an old bundle URL can
+// otherwise leave `adb reverse` waiting before Metro has bound port 8081.
+setTimeout(() => {
+  const adbReverse = spawn("adb", ["reverse", "tcp:8081", "tcp:8081"], {
+    stdio: "inherit",
+    env,
+  });
+  const timeout = setTimeout(() => {
+    adbReverse.kill();
+    console.warn("ADB port forwarding timed out. Reconnect and authorize the Android device, then run: adb reverse tcp:8081 tcp:8081");
+  }, 8000);
+
+  adbReverse.on("exit", (exitCode) => {
+    clearTimeout(timeout);
+    if (exitCode !== 0) {
+      console.warn("ADB port forwarding failed. Metro is still running; reconnect the Android device and run: adb reverse tcp:8081 tcp:8081");
+    }
+  });
+}, 1000);
