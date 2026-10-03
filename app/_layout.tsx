@@ -134,7 +134,7 @@ export default function RootLayout() {
         <Stack>{stackScreens}</Stack>
         <OfflineBanner />
         <AppDialogHost />
-        <StatusBar style="light" backgroundColor="#0d0d1a" />
+        <StatusBar style="light" />
       </ThemeProvider>
     </GestureHandlerRootView>
   );

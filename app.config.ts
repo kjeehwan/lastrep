@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 type AppVariant = "dev" | "prod";
+type ExpoPlugin = NonNullable<ExpoConfig["plugins"]>[number];
 
 const appJsonPath = path.join(__dirname, "app.base.json");
 const appJson = JSON.parse(fs.readFileSync(appJsonPath, "utf8")) as { expo: ExpoConfig };
@@ -79,7 +80,7 @@ const splashImage = isDevVariant
   ? "./assets/images/logo-splash-512-foreground-padded-dev.png"
   : "./assets/images/logo-splash-512-foreground-padded-v3.png";
 
-const mappedPlugins = (baseConfig.plugins ?? []).map((plugin) => {
+const mappedPlugins: ExpoPlugin[] = (baseConfig.plugins ?? []).map((plugin) => {
   if (Array.isArray(plugin) && plugin[0] === "expo-splash-screen") {
     return [
       "expo-splash-screen",
@@ -89,12 +90,12 @@ const mappedPlugins = (baseConfig.plugins ?? []).map((plugin) => {
         backgroundColor: "#0d0d1a",
         dark: { backgroundColor: "#0d0d1a" },
       },
-    ] as ExpoConfig["plugins"][number];
+    ] as ExpoPlugin;
   }
   return plugin;
 });
 
-const requiredPlugins = [
+const requiredPlugins: ExpoPlugin[] = [
   "expo-audio",
   "expo-asset",
   ["expo-dev-client", { toolsButton: false, launchMode: "launcher" }],
@@ -103,8 +104,8 @@ const requiredPlugins = [
   "expo-status-bar",
   "expo-web-browser",
   "./plugins/with-workout-native-overrides",
-] as const;
-let plugins = [...mappedPlugins];
+];
+let plugins: ExpoPlugin[] = [...mappedPlugins];
 for (const requiredPlugin of requiredPlugins) {
   const exists = plugins.some(
     (plugin) => plugin === requiredPlugin || (Array.isArray(plugin) && plugin[0] === requiredPlugin)
@@ -124,12 +125,10 @@ const config: ExpoConfig = {
     appVariant: variant,
   },
   plugins,
-  newArchEnabled: true,
   android: {
     ...baseConfig.android,
     package: androidPackage,
     googleServicesFile: resolvedGoogleServicesFile,
-    edgeToEdgeEnabled: true,
     adaptiveIcon: {
       ...(baseConfig.android?.adaptiveIcon ?? {}),
       foregroundImage: adaptiveForeground,

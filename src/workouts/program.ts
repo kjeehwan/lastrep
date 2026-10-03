@@ -131,8 +131,8 @@ export const normalizeProgram = (raw: unknown): WorkoutProgram | null => {
   const candidate = raw as Record<string, unknown>;
   const rawDays = Array.isArray(candidate.days) ? candidate.days : [];
   if (rawDays.length !== DAY_COUNT) return null;
-  const days: ProgramDay[] = rawDays
-    .map((day) => {
+  const days = rawDays
+    .map((day): ProgramDay | null => {
       const row = day as Record<string, unknown>;
       const dayNumber =
         typeof row.dayNumber === "number" ? Math.max(1, Math.min(DAY_COUNT, Math.round(row.dayNumber))) : null;

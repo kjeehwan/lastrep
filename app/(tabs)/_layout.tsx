@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
 import { onAuthStateChanged } from "firebase/auth";
 import React, { useEffect, useRef } from "react";
-import { TouchableOpacity } from "react-native";
+import { TouchableOpacity, type TouchableOpacityProps } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { auth } from "../../src/config/firebaseConfig";
 import { useOfflineStatus } from "../../src/hooks/useOfflineStatus";
@@ -95,7 +95,8 @@ export default function TabsLayout() {
         tabBarInactiveTintColor: "#888",
         tabBarActiveBackgroundColor: "transparent",
         tabBarInactiveBackgroundColor: "transparent",
-        tabBarButton: (props) => <TouchableOpacity {...props} activeOpacity={0.8} />,
+        // React Navigation permits nullable press handlers; TouchableOpacity does not.
+        tabBarButton: (props) => <TouchableOpacity {...(props as TouchableOpacityProps)} activeOpacity={0.8} />,
         tabBarIcon: ({ color, size }) => {
           const icons: Record<string, keyof typeof Ionicons.glyphMap> = {
             home: "home-outline",

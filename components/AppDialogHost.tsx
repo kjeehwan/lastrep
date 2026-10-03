@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { registerAppDialogPresenter, type AppDialogOptions } from "../src/ui/appDialog";
+import { registerAppDialogPresenter, type AppDialogButton, type AppDialogOptions } from "../src/ui/appDialog";
 
-const DEFAULT_BUTTONS = [{ text: "OK", role: "default" as const }];
+const DEFAULT_BUTTONS: AppDialogButton[] = [{ text: "OK", role: "default" }];
 
 export default function AppDialogHost() {
   const [dialog, setDialog] = useState<AppDialogOptions | null>(null);

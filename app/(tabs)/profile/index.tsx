@@ -557,8 +557,9 @@ export default function ProfileIndex() {
         if (data?.tdeeProfile?.sex === "female" || data?.tdeeProfile?.sex === "male") {
           setTdeeSex(data.tdeeProfile.sex);
         }
-        if (data?.tdeeProfile?.activity in TDEE_ACTIVITY_MULTIPLIERS) {
-          setTdeeActivity(data.tdeeProfile.activity as TdeeActivity);
+        const savedTdeeProfile = data?.tdeeProfile;
+        if (savedTdeeProfile?.activity in TDEE_ACTIVITY_MULTIPLIERS) {
+          setTdeeActivity(savedTdeeProfile.activity as TdeeActivity);
         }
         applyBodyCompositionState(compositionProfile, resolvedWeightUnit);
       } catch (e) {
@@ -1906,7 +1907,7 @@ export default function ProfileIndex() {
                   <Text style={styles.sheetSecondaryButtonText}>Not now</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.sheetPrimaryButton} onPress={handleAcceptHealthConsent}>
-                  <Text style={styles.sheetPrimaryButtonText}>Review permissions</Text>
+                  <Text style={styles.sheetPrimaryButtonText}>Continue</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -2105,6 +2106,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   secondaryButtonText: { color: "#fff", fontSize: 14, fontWeight: "600" },
+  disabled: { opacity: 0.45 },
   healthActionsRow: {
     flexDirection: "row",
     gap: 8,
