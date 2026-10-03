@@ -39,7 +39,6 @@ import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import { db } from "../../../src/config/firebaseConfig";
 import WorkoutGestureTextInput from "../../../src/components/WorkoutGestureTextInput";
-import WorkoutSetList from "../../../src/components/WorkoutSetList";
 import type { Decision } from "../../../src/types/decision";
 import { showAppAlert, showAppDialog } from "../../../src/ui/appDialog";
 import { isExpectedOfflineError } from "../../../src/utils/networkErrors";
@@ -68,6 +67,14 @@ import {
 } from "../../../src/workouts/exerciseProgression";
 import { selectRecommendedExercises } from "../../../src/workouts/recommendationExerciseSelection";
 import { getCalendarMatrix } from "../../../src/workouts/homeInsights";
+import { useWorkoutDraftPersistence } from "../../../src/workouts/workoutLog/useWorkoutDraftPersistence";
+import { useWorkoutElapsedTimer } from "../../../src/workouts/workoutLog/useWorkoutElapsedTimer";
+import { serializeWorkoutDraft } from "../../../src/workouts/workoutLog/workoutDraft";
+import { WorkoutModalShell } from "../../../src/workouts/workoutLog/WorkoutModalShell";
+import { WorkoutRecommendationSection } from "../../../src/workouts/workoutLog/WorkoutRecommendationSection";
+import { WorkoutRoutineSection } from "../../../src/workouts/workoutLog/WorkoutRoutineSection";
+import { WorkoutSessionCard } from "../../../src/workouts/workoutLog/WorkoutSessionCard";
+import { WorkoutNativeSetRows } from "../../../src/workouts/workoutLog/WorkoutNativeSetRows";
 
 type Unit = "kg" | "lbs" | "km" | "mi";
 type SetType = "warmup" | "normal" | "failure" | "drop";
@@ -358,8 +365,16 @@ export default function WorkoutLog() {
   >({});
   const [saving, setSaving] = useState(false);
   const [sessionTitle, setSessionTitle] = useState("");
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  const [workoutTimerRunning, setWorkoutTimerRunning] = useState(false);
+  const {
+    elapsedSeconds,
+    running: workoutTimerRunning,
+    setElapsedSeconds,
+    setRunning: setWorkoutTimerRunning,
+    start: startElapsedTimer,
+    pause: pauseElapsedTimer,
+    setDuration: setElapsedDuration,
+    reset: resetElapsedTimer,
+  } = useWorkoutElapsedTimer();
   const [sessionDateText, setSessionDateText] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(
@@ -436,9 +451,7 @@ export default function WorkoutLog() {
   const auth = getAuth();
   const [activeUid, setActiveUid] = useState<string | null>(auth.currentUser?.uid ?? null);
   const scrollNativeGesture = useMemo(() => Gesture.Native(), []);
-  const workoutStartedAtMsRef = useRef<number | null>(null);
   const draftSavedAtRef = useRef<Date | null>(null);
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const startupLoadTaskRef = useRef<{ cancel: () => void } | null>(null);
   const focusHydrationTaskRef = useRef<{ cancel: () => void } | null>(null);
   const focusRefreshTaskRef = useRef<{ cancel: () => void } | null>(null);
@@ -450,6 +463,27 @@ export default function WorkoutLog() {
   const gongPlayerRef = useRef<ReturnType<typeof createAudioPlayer> | null>(null);
   const restTimerSnapshotRef = useRef<Record<string, { remainingSec: number; running: boolean }>>({});
   const getDraftKey = useCallback((uid: string) => `${DRAFT_KEY_PREFIX}:${uid}`, []);
+  const workoutDraftPayload = useMemo(
+    () => ({
+      exercises,
+      exerciseUnits,
+      sessionTitle,
+      sessionDateText,
+      elapsedSeconds,
+      workoutTimerRunning,
+    }),
+    [exercises, exerciseUnits, sessionTitle, sessionDateText, elapsedSeconds, workoutTimerRunning]
+  );
+  const workoutDraftStorageKey = auth.currentUser?.uid ? getDraftKey(auth.currentUser.uid) : null;
+  const markWorkoutDraftSaved = useCallback(() => {
+    draftSavedAtRef.current = new Date();
+  }, []);
+  useWorkoutDraftPersistence({
+    draft: workoutDraftPayload,
+    storageKey: workoutDraftStorageKey,
+    onSaved: markWorkoutDraftSaved,
+    serialize: serializeWorkoutDraft,
+  });
   const handleGoBack = useCallback(() => {
     router.replace("/home");
   }, [router]);
@@ -1090,7 +1124,6 @@ export default function WorkoutLog() {
           setSessionDateText(toLocalDateKey(new Date()));
           setElapsedSeconds(0);
           setWorkoutTimerRunning(false);
-          workoutStartedAtMsRef.current = null;
           return;
         }
         if (raw) {
@@ -1167,7 +1200,6 @@ export default function WorkoutLog() {
               : 0
           );
           setWorkoutTimerRunning(false);
-          workoutStartedAtMsRef.current = null;
         }
       } catch (e) {
         console.log("Failed to load draft, clearing cache", e);
@@ -1189,7 +1221,15 @@ export default function WorkoutLog() {
     return () => {
       startupLoadTaskRef.current?.cancel();
     };
-  }, [auth.currentUser, loadPastWorkouts, loadRoutines, auth, getDraftKey]);
+  }, [
+    auth.currentUser,
+    loadPastWorkouts,
+    loadRoutines,
+    auth,
+    getDraftKey,
+    setElapsedSeconds,
+    setWorkoutTimerRunning,
+  ]);
 
   useEffect(() => {
     if (!routerParams.trainingPhase) return;
@@ -1288,48 +1328,6 @@ export default function WorkoutLog() {
       };
     }, [loadLatestDecision, loadFavoriteExercises, addExercise, activeUid, handleGoBack, sessionDateText])
   );
-
-  // Persist draft
-  useEffect(() => {
-    if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => {
-      const user = auth.currentUser;
-      if (!user) return;
-      AsyncStorage.setItem(
-        getDraftKey(user.uid),
-        JSON.stringify({
-          exercises,
-          exerciseUnits,
-          sessionTitle,
-          sessionDateText,
-          elapsedSeconds,
-          workoutTimerRunning,
-          draftSavedAt: Date.now(),
-        })
-      )
-        .then(() => {
-          draftSavedAtRef.current = new Date();
-        })
-        .catch((e) => console.log("Failed to save draft", e));
-    }, 400);
-    return () => {
-      if (saveTimer.current) clearTimeout(saveTimer.current);
-    };
-  }, [exercises, exerciseUnits, sessionTitle, sessionDateText, elapsedSeconds, workoutTimerRunning, auth, getDraftKey]);
-
-  // Elapsed timer
-  useEffect(() => {
-    if (!workoutTimerRunning) return;
-    if (workoutStartedAtMsRef.current == null) {
-      workoutStartedAtMsRef.current = Date.now() - elapsedSeconds * 1000;
-    }
-    const id = setInterval(() => {
-      const startMs = workoutStartedAtMsRef.current ?? Date.now();
-      const diff = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
-      setElapsedSeconds(diff);
-    }, 1000);
-    return () => clearInterval(id);
-  }, [workoutTimerRunning, elapsedSeconds]);
 
   useEffect(() => {
     if (!uiFeedback) return;
@@ -2015,8 +2013,7 @@ export default function WorkoutLog() {
   };
   const openDurationAdjustModal = () => {
     if (workoutTimerRunning) {
-      setWorkoutTimerRunning(false);
-      workoutStartedAtMsRef.current = null;
+      pauseElapsedTimer();
     }
     const hours = Math.floor(elapsedSeconds / 3600);
     const minutes = Math.floor((elapsedSeconds % 3600) / 60);
@@ -2026,8 +2023,7 @@ export default function WorkoutLog() {
   };
   const startWorkoutTimer = () => {
     if (workoutTimerRunning) return;
-    workoutStartedAtMsRef.current = Date.now() - elapsedSeconds * 1000;
-    setWorkoutTimerRunning(true);
+    startElapsedTimer();
   };
   const applyDurationAdjustment = () => {
     const parsedHours = Number(durationAdjustHoursText.trim());
@@ -2043,15 +2039,11 @@ export default function WorkoutLog() {
       return;
     }
     const nextSeconds = Math.max(0, Math.round(parsedHours) * 3600 + Math.round(parsedMinutes) * 60);
-    setElapsedSeconds(nextSeconds);
-    setWorkoutTimerRunning(false);
-    workoutStartedAtMsRef.current = null;
+    setElapsedDuration(nextSeconds);
     setShowDurationModal(false);
   };
   const resetDurationTimer = () => {
-    setElapsedSeconds(0);
-    setWorkoutTimerRunning(false);
-    workoutStartedAtMsRef.current = null;
+    resetElapsedTimer();
     setDurationAdjustHoursText("00");
     setDurationAdjustMinutesText("00");
   };
@@ -2200,7 +2192,6 @@ export default function WorkoutLog() {
         : 0
     );
     setWorkoutTimerRunning(false);
-    workoutStartedAtMsRef.current = null;
     setBaselineDate(workout.date);
     setExerciseUnits(() => {
       const next: Record<string, Unit> = {};
@@ -2251,7 +2242,6 @@ export default function WorkoutLog() {
     setSessionDateText(toLocalDateKey(new Date()));
     setElapsedSeconds(0);
     setWorkoutTimerRunning(false);
-    workoutStartedAtMsRef.current = null;
     setBaselineDate(null);
     setFollowedAnswer(null);
     setHelpfulAnswer(null);
@@ -2392,7 +2382,6 @@ export default function WorkoutLog() {
       setSessionDateText(toLocalDateKey(new Date()));
       setElapsedSeconds(0);
       setWorkoutTimerRunning(false);
-      workoutStartedAtMsRef.current = null;
       setRecommendationSummary([]);
       setLastAppliedRoutineId(null);
       setBaselineDate(null);
@@ -2473,7 +2462,6 @@ export default function WorkoutLog() {
     setSessionDateText(toLocalDateKey(new Date()));
     setElapsedSeconds(0);
     setWorkoutTimerRunning(false);
-    workoutStartedAtMsRef.current = null;
     setRoutineBuilderMode(true);
     setShowRoutineStartModal(false);
   };
@@ -2706,7 +2694,6 @@ export default function WorkoutLog() {
       setSessionDateText(toLocalDateKey(new Date()));
       setElapsedSeconds(0);
       setWorkoutTimerRunning(false);
-      workoutStartedAtMsRef.current = null;
       setLastAppliedRoutineId(options.deload ? null : routine.id);
       setUiFeedback(options.deload ? `Applied deload for "${routine.name}".` : `Applied "${routine.name}".`);
     } else {
@@ -2925,7 +2912,6 @@ export default function WorkoutLog() {
       setSessionDateText(toLocalDateKey(new Date()));
       setElapsedSeconds(0);
       setWorkoutTimerRunning(false);
-      workoutStartedAtMsRef.current = null;
       const plannedHardSetCount = recommendedExercises.reduce((sum, exercise) => sum + exercise.sets.length, 0);
       setRecommendationSummary([
         `${selectedFocus?.label ?? pickedTemplate.name} | ${selectedLength.title} | ${plannedHardSetCount} planned hard sets.`,
@@ -3046,49 +3032,25 @@ export default function WorkoutLog() {
             keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
             scrollEventThrottle={16}
           >
-      <View style={styles.card}>
-        <Text style={styles.sectionTitle}>Session</Text>
-        <TextInput
-          placeholder="Session title (optional)"
-          placeholderTextColor="#7a7a8c"
-          value={sessionTitle}
-          onChangeText={setSessionTitle}
-          style={styles.input}
-        />
-        <View style={styles.sessionButtonRow}>
-          <TouchableOpacity style={[styles.secondaryButton, styles.sessionActionButton]} onPress={openDatePicker}>
-            <Text style={styles.secondaryText}>
-              Date:{" "}
-              {parseSessionDate(sessionDateText)?.toLocaleDateString(undefined, {
-                month: "short",
-                day: "numeric",
-                year: "numeric",
-              }) ?? sessionDateText}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[workoutTimerRunning ? styles.primaryButton : styles.secondaryButton, styles.sessionActionButton]}
-            onPress={workoutTimerRunning ? openDurationAdjustModal : startWorkoutTimer}
-          >
-            <Text style={workoutTimerRunning ? styles.primaryText : styles.secondaryText}>
-              {workoutTimerRunning
-                ? formatElapsedTimer(elapsedSeconds)
-                : elapsedSeconds > 0
-                ? "Resume Workout"
-                : "Start Workout"}
-            </Text>
-          </TouchableOpacity>
-        </View>
-        <View style={styles.phaseRow}>
-          <Text style={styles.muted}>Training phase: {sessionPhase}</Text>
-          <TouchableOpacity
-            onPress={() => router.push({ pathname: "/profile", params: { from: "/(tabs)/workout/log" } })}
-            style={styles.phaseLink}
-          >
-            <Text style={styles.phaseLinkText}>Change</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+      <WorkoutSessionCard
+        styles={styles}
+        title={sessionTitle}
+        dateLabel={
+          parseSessionDate(sessionDateText)?.toLocaleDateString(undefined, {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+          }) ?? sessionDateText
+        }
+        elapsedLabel={formatElapsedTimer(elapsedSeconds)}
+        timerRunning={workoutTimerRunning}
+        timerStarted={elapsedSeconds > 0}
+        trainingPhase={sessionPhase}
+        onTitleChange={setSessionTitle}
+        onDatePress={openDatePicker}
+        onTimerPress={workoutTimerRunning ? openDurationAdjustModal : startWorkoutTimer}
+        onChangePhase={() => router.push({ pathname: "/profile", params: { from: "/(tabs)/workout/log" } })}
+      />
 
       {baselineDate ? (
         <View style={styles.baselineBanner}>
@@ -3105,85 +3067,26 @@ export default function WorkoutLog() {
         </View>
       ) : null}
 
-      <View style={styles.card}>
-        <Text style={styles.sectionTitle}>Routines</Text>
-        <Text style={styles.muted}>Reuse saved structures instead of rebuilding each session.</Text>
-        <View style={styles.routineActionRow}>
-          <TouchableOpacity
-            style={[styles.primaryButton, styles.routineActionButton, { marginTop: 0 }]}
-            onPress={beginCreateRoutine}
-          >
-            <Text style={styles.primaryText}>Create routine</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.secondaryButton, styles.routineActionButton]}
-            onPress={handleRepeatPastWorkoutPress}
-          >
-            <Text style={styles.secondaryText}>Repeat past workout</Text>
-          </TouchableOpacity>
-        </View>
-        <TouchableOpacity
-          style={[styles.secondaryButton, { marginTop: 10 }, routines.length === 0 && styles.disabled]}
-          onPress={() => setShowMyRoutinesModal(true)}
-          disabled={routines.length === 0}
-        >
-          <Text style={styles.secondaryText}>My routines</Text>
-        </TouchableOpacity>
-        {routines.length === 0 ? (
-          <Text style={[styles.muted, { marginTop: 8 }]}>
-            No routines yet. Tap Create routine to build your first one.
-          </Text>
-        ) : null}
+      <WorkoutRoutineSection
+        styles={styles}
+        routineCount={routines.length}
+        builderMode={routineBuilderMode}
+        onCreateRoutine={beginCreateRoutine}
+        onRepeatPastWorkout={handleRepeatPastWorkoutPress}
+        onViewRoutines={() => setShowMyRoutinesModal(true)}
+        onSaveRoutine={openCreateRoutineModal}
+        onExitBuilder={() => setRoutineBuilderMode(false)}
+      />
 
-        {routineBuilderMode ? (
-          <View style={styles.routineBuilderBanner}>
-            <Text style={styles.recommendationLine}>
-              Routine builder mode: use the workout editor below, then save.
-            </Text>
-            <View style={styles.routineActionRow}>
-              <TouchableOpacity
-                style={[styles.primaryButton, styles.routineActionButton, { marginTop: 0 }]}
-                onPress={openCreateRoutineModal}
-              >
-                <Text style={styles.primaryText}>Save routine</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.secondaryButton, styles.routineActionButton]}
-                onPress={() => setRoutineBuilderMode(false)}
-              >
-                <Text style={styles.secondaryText}>Exit builder</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        ) : null}
-      </View>
-
-      <View style={styles.card}>
-        <Text style={styles.sectionTitle}>Recommendation</Text>
-        <Text style={styles.muted}>Choose a focus, or let Lastrep choose from your context and recent history.</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.focusChipRow}>
-          {RECOMMENDATION_FOCUSES.map((focus) => (
-            <TouchableOpacity
-              key={focus.id}
-              style={[styles.answerChip, recommendationFocus === focus.id && styles.answerChipActive]}
-              onPress={() => setRecommendationFocus(focus.id)}
-            >
-              <Text style={[styles.answerText, recommendationFocus === focus.id && styles.answerTextActive]}>
-                {focus.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-        <TouchableOpacity
-          style={[styles.primaryButton, { marginTop: 10, opacity: recommending ? 0.7 : 1 }]}
-          onPress={() => setShowWorkoutLengthModal(true)}
-          disabled={recommending}
-        >
-          <Text style={styles.primaryText}>
-            {recommending ? "Building recommendation..." : "Recommend workout"}
-          </Text>
-        </TouchableOpacity>
-      </View>
+      <WorkoutRecommendationSection
+        styles={styles}
+        focuses={RECOMMENDATION_FOCUSES}
+        selectedFocus={recommendationFocus}
+        recommending={recommending}
+        summary={recommendationSummary}
+        onSelectFocus={setRecommendationFocus}
+        onOpenLengthPicker={() => setShowWorkoutLengthModal(true)}
+      />
 
       {uiFeedback ? (
         <View style={styles.feedbackBanner}>
@@ -3198,17 +3101,6 @@ export default function WorkoutLog() {
               <Text style={styles.feedbackBannerActionText}>Append instead</Text>
             </TouchableOpacity>
           ) : null}
-        </View>
-      ) : null}
-
-      {recommendationSummary.length > 0 ? (
-        <View style={styles.recommendationCard}>
-          <Text style={styles.sectionTitle}>Why this workout?</Text>
-          {recommendationSummary.map((line, index) => (
-            <Text key={`rec-line-${index}`} style={styles.recommendationLine}>
-              - {line}
-            </Text>
-          ))}
         </View>
       ) : null}
 
@@ -3427,57 +3319,37 @@ export default function WorkoutLog() {
               {ex.sets.length === 0 ? (
                 <Text style={styles.muted}>No sets yet.</Text>
               ) : Platform.OS === "android" && !isCardio ? (
-                <WorkoutSetList
-                  key={`native-set-list-${ex.id}-${ex.sets
+                <WorkoutNativeSetRows
+                  listKey={`native-set-list-${ex.id}-${ex.sets
                     .map((set, idx) => `${idx}:${getSetTypeMarker(set, idx)}`)
                     .join("|")}-${String(unit).toLowerCase()}-${weightLabel}-${repsLabel}-${rpeLabel}`}
                   style={{ height: Math.max(ex.sets.length, 1) * 52 }}
                   weightLabel={weightLabel}
                   repsLabel={repsLabel}
                   rpeLabel={isCardio ? rpeLabel : "6-10"}
-                  sets={ex.sets.map((set, idx) => ({
+                  rows={ex.sets.map((set, idx) => ({
                     marker: getSetTypeMarker(set, idx),
                     last: previousSets[idx] ? formatLastSetSummary(previousSets[idx]) : "-",
-                      weight: isCardio
-                        ? formatDistanceInput(set.distanceKm ?? null, unit)
-                        : set.weightText ?? formatWeightInput(set.weightKg, unit),
-                    reps: isCardio ? formatDurationInput(set.durationSec ?? null) : set.reps,
-                    rpe: isCardio ? String(set.zone || "") : set.rpe ?? "",
+                    weight: set.weightText ?? formatWeightInput(set.weightKg, unit),
+                    reps: set.reps,
+                    rpe: set.rpe ?? "",
                     done: set.done,
                   }))}
-                  onSetChange={({ nativeEvent }) => {
-                    const idx = nativeEvent.index;
-                    if (typeof idx !== "number" || idx < 0 || idx >= ex.sets.length) return;
-                    if (nativeEvent.field === "weight") {
-                      updateSetWeight(ex.id, idx, unit, nativeEvent.value ?? "");
+                  onChange={(index, field, value) => {
+                    if (field === "weight") {
+                      updateSetWeight(ex.id, index, unit, value);
                       return;
                     }
-                    if (nativeEvent.field === "reps") {
-                      updateSetReps(ex.id, idx, nativeEvent.value ?? "");
+                    if (field === "reps") {
+                      updateSetReps(ex.id, index, value);
                       return;
                     }
-                    updateSetRpe(ex.id, idx, nativeEvent.value ?? "");
+                    updateSetRpe(ex.id, index, value);
                   }}
-                  onToggleDone={({ nativeEvent }) => {
-                    const idx = nativeEvent.index;
-                    if (typeof idx !== "number" || idx < 0 || idx >= ex.sets.length) return;
-                    toggleSetDone(ex.id, idx);
-                  }}
-                  onDeleteSet={({ nativeEvent }) => {
-                    const idx = nativeEvent.index;
-                    if (typeof idx !== "number" || idx < 0 || idx >= ex.sets.length) return;
-                    removeSetWithUndo(ex.id, idx);
-                  }}
-                  onSetLabelPress={({ nativeEvent }) => {
-                    const idx = nativeEvent.index;
-                    if (typeof idx !== "number" || idx < 0 || idx >= ex.sets.length) return;
-                    openSetMenu(ex.id, idx);
-                  }}
-                  onLastPress={({ nativeEvent }) => {
-                    const idx = nativeEvent.index;
-                    if (typeof idx !== "number" || idx < 0 || idx >= ex.sets.length) return;
-                    copyLastSetToCurrent(ex.id, idx);
-                  }}
+                  onToggleDone={(index) => toggleSetDone(ex.id, index)}
+                  onDeleteSet={(index) => removeSetWithUndo(ex.id, index)}
+                  onSetLabelPress={(index) => openSetMenu(ex.id, index)}
+                  onLastPress={(index) => copyLastSetToCurrent(ex.id, index)}
                 />
               ) : (
                 ex.sets.map((s, idx) => (
@@ -4117,9 +3989,12 @@ export default function WorkoutLog() {
         </View>
       </Modal>
 
-      <Modal visible={showWorkoutLengthModal} transparent animationType="fade" onRequestClose={() => setShowWorkoutLengthModal(false)}>
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
+      <WorkoutModalShell
+        visible={showWorkoutLengthModal}
+        backdropStyle={styles.modalBackdrop}
+        cardStyle={styles.modalCard}
+        onRequestClose={() => setShowWorkoutLengthModal(false)}
+      >
             <Text style={styles.modalTitle}>Build workout</Text>
             <Text style={styles.modalText}>Choose the amount of work you want today.</Text>
             <View style={styles.recommendationLengthList}>
@@ -4152,9 +4027,7 @@ export default function WorkoutLog() {
             >
               <Text style={styles.secondaryText}>Cancel</Text>
             </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+      </WorkoutModalShell>
 
       <Modal visible={showDeloadConfirmModal} transparent animationType="fade">
         <View style={styles.modalBackdrop}>
