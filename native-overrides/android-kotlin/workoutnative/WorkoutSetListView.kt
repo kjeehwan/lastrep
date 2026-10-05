@@ -5,6 +5,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.RectF
+import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.text.Editable
 import android.text.InputType
@@ -16,6 +17,7 @@ import android.view.View
 import android.view.ViewConfiguration
 import android.view.ViewGroup
 import android.widget.LinearLayout
+import android.widget.FrameLayout
 import android.widget.TextView
 import androidx.appcompat.widget.AppCompatEditText
 import androidx.appcompat.widget.AppCompatTextView
@@ -39,6 +41,7 @@ data class WorkoutSetItem(
 private data class WorkoutSetRowBinding(
   val root: View,
   val setLabel: TextView,
+  val checkHitbox: FrameLayout,
   val check: AppCompatTextView,
   val last: TextView,
   val weight: AppCompatEditText,
@@ -46,9 +49,11 @@ private data class WorkoutSetRowBinding(
   val rpe: AppCompatEditText
 )
 
+private data class ActiveWorkoutSetEditor(val position: Int, val field: String)
+
 class WorkoutSetListView(context: Context) : LinearLayout(context) {
   private val recyclerView = RecyclerView(context)
-  private val adapter = WorkoutSetAdapter(::emitChange, ::emitToggleDone, ::emitSetLabelPress)
+  private val adapter = WorkoutSetAdapter(::emitChange, ::emitToggleDone, ::emitSetLabelPress, ::emitLastPress)
   private val deletePaint = Paint().apply {
     color = Color.parseColor("#D94848")
     style = Paint.Style.FILL
@@ -179,6 +184,15 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
       ?.receiveEvent(reactTagForEvents, "topSetLabelPress", payload)
   }
 
+  private fun emitLastPress(index: Int) {
+    if (reactTagForEvents == View.NO_ID) return
+    val payload = Arguments.createMap()
+    payload.putInt("index", index)
+    (context as? com.facebook.react.bridge.ReactContext)
+      ?.getJSModule(RCTEventEmitter::class.java)
+      ?.receiveEvent(reactTagForEvents, "topLastPress", payload)
+  }
+
   private fun dp(value: Float): Int =
     TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, value, resources.displayMetrics).toInt()
 
@@ -188,12 +202,14 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
   private inner class WorkoutSetAdapter(
     private val onChange: (Int, String, String) -> Unit,
     private val onToggleDone: (Int, Boolean) -> Unit,
-    private val onSetLabelPress: (Int) -> Unit
+    private val onSetLabelPress: (Int) -> Unit,
+    private val onLastPress: (Int) -> Unit
   ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
     private val items = mutableListOf<WorkoutSetItem>()
     private var weightHint: String = "Weight"
     private var repsHint: String = "Reps"
     private var rpeHint: String = "RPE"
+    private var activeEditor: ActiveWorkoutSetEditor? = null
 
     fun setItems(next: List<WorkoutSetItem>) {
       if (items.size == next.size) {
@@ -214,8 +230,13 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
         }
         if (changedIndices.isEmpty()) return
         changedIndices.forEach { idx -> items[idx] = next[idx] }
-        if (changedIndices.size <= 3) {
-          changedIndices.forEach { idx -> notifyItemChanged(idx) }
+        // The actively edited cell already contains the new text. Rebinding it after each
+        // JS state update can make RecyclerView transfer focus to the first input in the row.
+        val activePosition = activeEditor?.position
+        val indicesToRebind = changedIndices.filter { it != activePosition }
+        if (indicesToRebind.isEmpty()) return
+        if (activePosition != null || indicesToRebind.size <= 3) {
+          indicesToRebind.forEach { idx -> notifyItemChanged(idx) }
         } else {
           notifyDataSetChanged()
         }
@@ -247,6 +268,7 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
       val root = LinearLayout(context).apply {
         orientation = HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
+        descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
         layoutParams = RecyclerView.LayoutParams(
           RecyclerView.LayoutParams.MATCH_PARENT,
           RecyclerView.LayoutParams.WRAP_CONTENT
@@ -264,25 +286,39 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
       }
       root.addView(setLabel)
 
-      val check = AppCompatTextView(context).apply {
-        layoutParams = LayoutParams(dp(24f), dp(24f)).apply {
-          marginEnd = dp(6f)
+      val checkHitbox = FrameLayout(context).apply {
+        // Keep the visible checkbox compact while providing a reliable 40dp hit target.
+        layoutParams = LayoutParams(dp(40f), dp(40f)).apply {
+          marginEnd = dp(2f)
         }
+      }
+      val check = AppCompatTextView(context).apply {
+        layoutParams = FrameLayout.LayoutParams(dp(24f), dp(24f), Gravity.CENTER)
         gravity = Gravity.CENTER
         textSize = 12f
+        setTypeface(typeface, Typeface.BOLD)
         setPadding(dp(2f))
       }
-      root.addView(check)
+      checkHitbox.addView(check)
+      root.addView(checkHitbox)
 
       val last = TextView(context).apply {
         setTextColor(Color.parseColor("#AAB0CC"))
         textSize = 11f
         maxLines = 3
+        minHeight = dp(40f)
+        gravity = Gravity.CENTER_VERTICAL
+        isClickable = true
+        isFocusable = true
         setLineSpacing(0f, 1.05f)
       }
       root.addView(last, LayoutParams(dp(84f), LayoutParams.WRAP_CONTENT).apply { marginStart = dp(2f) })
 
-      val weight = createInput(context, "Weight", InputType.TYPE_CLASS_NUMBER)
+      val weight = createInput(
+        context,
+        "Weight",
+        InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
+      )
       val reps = createInput(context, "Reps", InputType.TYPE_CLASS_NUMBER)
       val rpe = createInput(
         context,
@@ -294,7 +330,7 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
       root.addView(reps, LayoutParams(0, dp(40f), 1f).apply { marginStart = dp(6f) })
       root.addView(rpe, LayoutParams(0, dp(40f), 0.8f).apply { marginStart = dp(6f) })
 
-      return WorkoutSetRowBinding(root, setLabel, check, last, weight, reps, rpe)
+      return WorkoutSetRowBinding(root, setLabel, checkHitbox, check, last, weight, reps, rpe)
     }
 
     private fun createInput(context: Context, hint: String, inputType: Int): AppCompatEditText {
@@ -313,34 +349,6 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
         includeFontPadding = false
         background = bg
         setPadding(dp(8f), 0, dp(8f), 0)
-        setTouchArbitration()
-      }
-    }
-
-    private fun AppCompatEditText.setTouchArbitration() {
-      val slop = ViewConfiguration.get(context).scaledTouchSlop
-      var startX = 0f
-      var startY = 0f
-      setOnTouchListener { v, event ->
-        when (event.actionMasked) {
-          MotionEvent.ACTION_DOWN -> {
-            startX = event.x
-            startY = event.y
-            v.parent?.requestDisallowInterceptTouchEvent(true)
-          }
-          MotionEvent.ACTION_MOVE -> {
-            val dx = abs(event.x - startX)
-            val dy = abs(event.y - startY)
-            if (dx > slop || dy > slop) {
-              v.parent?.requestDisallowInterceptTouchEvent(false)
-              return@setOnTouchListener false
-            }
-          }
-          MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-            v.parent?.requestDisallowInterceptTouchEvent(false)
-          }
-        }
-        false
       }
     }
 
@@ -351,6 +359,7 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
       private var rpeWatcher: TextWatcher? = null
       private var localDone: Boolean = false
       private var boundIndex: Int = -1
+      private val inputTouchStarts = mutableMapOf<String, Pair<Float, Float>>()
 
       fun bind(position: Int, item: WorkoutSetItem) {
         boundIndex = position
@@ -359,9 +368,12 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
           if (boundIndex >= 0) onSetLabelPress(boundIndex)
         }
         binding.last.text = item.last.ifBlank { "-" }
+        binding.last.setOnClickListener {
+          if (boundIndex >= 0) onLastPress(boundIndex)
+        }
         localDone = item.done
         applyCheckStyle(localDone)
-        binding.check.setOnClickListener {
+        binding.checkHitbox.setOnClickListener {
           localDone = !localDone
           applyCheckStyle(localDone)
           if (boundIndex >= 0) onToggleDone(boundIndex, localDone)
@@ -384,6 +396,10 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
         binding.reps.hint = repsHint
         binding.rpe.hint = rpeHint
 
+        bindFocusTracking(binding.weight, "weight")
+        bindFocusTracking(binding.reps, "reps")
+        bindFocusTracking(binding.rpe, "rpe")
+
         if (!binding.weight.isFocused) {
           binding.weight.setSelection((binding.weight.text?.length ?: 0).coerceAtLeast(0))
         }
@@ -401,6 +417,63 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
         binding.weight.addTextChangedListener(weightWatcher)
         binding.reps.addTextChangedListener(repsWatcher)
         binding.rpe.addTextChangedListener(rpeWatcher)
+
+        // React state updates can rebind this RecyclerView row while the user is tapping.
+        // Restore only the field that was explicitly touched, never the first input in the row.
+        val editor = activeEditor
+        if (editor?.position == position) {
+          val input = when (editor.field) {
+            "weight" -> binding.weight
+            "reps" -> binding.reps
+            else -> binding.rpe
+          }
+          input.post {
+            if (activeEditor == editor && !input.hasFocus()) {
+              input.requestFocus()
+              input.setSelection(input.text?.length ?: 0)
+            }
+          }
+        }
+      }
+
+      private fun bindFocusTracking(input: AppCompatEditText, field: String) {
+        input.setOnFocusChangeListener { _, hasFocus ->
+          if (hasFocus && boundIndex >= 0) {
+            activeEditor = ActiveWorkoutSetEditor(boundIndex, field)
+          } else if (!hasFocus && activeEditor == ActiveWorkoutSetEditor(boundIndex, field)) {
+            activeEditor = null
+          }
+        }
+        input.setOnTouchListener { view, event ->
+          if (event.actionMasked == MotionEvent.ACTION_DOWN && boundIndex >= 0) {
+            activeEditor = ActiveWorkoutSetEditor(boundIndex, field)
+            // Claim the exact field before RecyclerView can intercept the gesture.
+            view.isFocusableInTouchMode = true
+            view.requestFocus()
+          }
+          handleInputTouch(view, event, field)
+        }
+      }
+
+      private fun handleInputTouch(view: View, event: MotionEvent, field: String): Boolean {
+        val slop = ViewConfiguration.get(context).scaledTouchSlop.toFloat()
+        when (event.actionMasked) {
+          MotionEvent.ACTION_DOWN -> {
+            inputTouchStarts[field] = event.x to event.y
+            view.parent?.requestDisallowInterceptTouchEvent(true)
+          }
+          MotionEvent.ACTION_MOVE -> {
+            val start = inputTouchStarts[field] ?: return false
+            if (abs(event.x - start.first) > slop || abs(event.y - start.second) > slop) {
+              view.parent?.requestDisallowInterceptTouchEvent(false)
+            }
+          }
+          MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+            inputTouchStarts.remove(field)
+            view.parent?.requestDisallowInterceptTouchEvent(false)
+          }
+        }
+        return false
       }
 
       private fun applyCheckStyle(done: Boolean) {
@@ -428,4 +501,3 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
 
   }
 }
-
