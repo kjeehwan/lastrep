@@ -43,6 +43,61 @@ describe("exercise progression", () => {
     expect(result.sets).toBe(3);
   });
 
+  it("does not use an older stronger session to overprescribe reps after a recent maximal effort", () => {
+    const result = recommend({
+      phase: "Hypertrophy",
+      sessions: [
+        {
+          sets: [
+            { weightKg: 105, reps: "3", rpe: "" },
+            { weightKg: 105, reps: "3", rpe: "" },
+            { weightKg: 105, reps: "3", rpe: "10" },
+          ],
+        },
+        { sets: [{ weightKg: 120, reps: "8", rpe: "8" }] },
+      ],
+    });
+
+    expect(result.reps).toBe("8");
+    expect(result.weightKg).toBe(86.5);
+    expect(result.reason).toContain("Recent effort was very high");
+  });
+
+  it("does not use an older stronger session to create a large rep jump when RPE is missing", () => {
+    const result = recommend({
+      phase: "Hypertrophy",
+      sessions: [
+        { sets: [{ weightKg: 105, reps: "3", rpe: "" }] },
+        { sets: [{ weightKg: 120, reps: "8", rpe: "8" }] },
+      ],
+    });
+
+    expect(result.reps).toBe("8");
+    expect(result.weightKg).toBe(86.5);
+  });
+
+  it("never turns high fatigue plus a positive decision adjustment into a load increase", () => {
+    const result = recommend({
+      phase: "Hypertrophy",
+      decisionIntensityPct: 15,
+      highFatigue: true,
+      sessions: [
+        {
+          sets: [
+            { weightKg: 105, reps: "3", rpe: "10" },
+            { weightKg: 85, reps: "6", rpe: "6" },
+            { weightKg: 85, reps: "6", rpe: "8" },
+          ],
+        },
+        { sets: [{ weightKg: 120, reps: "8", rpe: "8" }] },
+      ],
+    });
+
+    expect(result.reps).toBe("8");
+    expect(result.weightKg).toBe(86.5);
+    expect(result.reason).toContain("Recent effort was very high");
+  });
+
   it("does not progress when estimated strength has materially declined", () => {
     const result = recommend({
       sessions: [

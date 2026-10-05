@@ -78,11 +78,20 @@ export const recommendExerciseProgression = (input: ExerciseProgressionInput): E
   const recentOneRepMaxes = sessionSets.slice(0, 3).map((sets) =>
     Math.max(...sets.map(estimatedOneRepMax))
   );
-  const baselineOneRepMax = median(recentOneRepMaxes) ?? estimatedOneRepMax(latestTopSet);
+  const latestOneRepMax = estimatedOneRepMax(latestTopSet);
+  const latestRpes = latestSets.flatMap((set) => (set.rpe == null ? [] : [set.rpe]));
+  const latestSessionRpe = median(latestRpes);
+  const latestPeakRpe = latestRpes.length ? Math.max(...latestRpes) : null;
+  const latestWasMaximal = latestPeakRpe != null && latestPeakRpe >= 9;
+  // The latest demonstrated performance is the ceiling when asking for more reps. Older,
+  // stronger sessions can inform a trend, but must not create an unsafe load-and-rep jump.
+  const raisesRepTarget = targetReps > latestTopSet.reps;
+  const baselineOneRepMax = latestWasMaximal || raisesRepTarget
+    ? Math.min(median(recentOneRepMaxes) ?? latestOneRepMax, latestOneRepMax)
+    : median(recentOneRepMaxes) ?? latestOneRepMax;
   const priorOneRepMax = median(recentOneRepMaxes.slice(1));
   const strengthIsDeclining =
-    priorOneRepMax != null && recentOneRepMaxes[0] < priorOneRepMax * 0.95;
-  const latestSessionRpe = median(latestSets.flatMap((set) => (set.rpe == null ? [] : [set.rpe])));
+    !latestWasMaximal && priorOneRepMax != null && recentOneRepMaxes[0] < priorOneRepMax * 0.95;
   const latestMatchesTarget = latestTopSet.reps === targetReps;
   let weightKg = latestMatchesTarget
     ? latestTopSet.weightKg
@@ -97,19 +106,28 @@ export const recommendExerciseProgression = (input: ExerciseProgressionInput): E
   if (strengthIsDeclining) {
     weightKg = roundToPlate(weightKg * 0.95);
     reasons.push("Recent estimated strength is down, so load was reduced.");
-  } else if (latestSessionRpe != null && latestSessionRpe <= 7 && input.decisionIntensityPct >= 0 && !input.highFatigue) {
+  } else if (
+    !latestWasMaximal &&
+    latestSessionRpe != null &&
+    latestSessionRpe <= 7 &&
+    input.decisionIntensityPct >= 0 &&
+    !input.highFatigue
+  ) {
     weightKg = roundToPlate(weightKg + 2.5);
     reasons.push("Recent effort was controlled, so a small load progression is appropriate.");
-  } else if (latestSessionRpe != null && latestSessionRpe >= 9) {
+  } else if (latestWasMaximal) {
     weightKg = roundToPlate(weightKg * 0.95);
-    reasons.push("Recent effort was very high, so load was reduced.");
+    reasons.push("Recent effort was very high, so the prescription stays below that current limit.");
   } else {
     reasons.push("Repeat a proven working prescription before progressing.");
   }
 
-  if (input.decisionIntensityPct < 0 || input.highFatigue) {
+  if (input.decisionIntensityPct < 0) {
     weightKg = roundToPlate(weightKg * Math.max(0.9, 1 + input.decisionIntensityPct / 100));
     reasons.push("Recovery signals call for a lighter load.");
+  } else if (input.highFatigue && !latestWasMaximal) {
+    weightKg = roundToPlate(weightKg * 0.95);
+    reasons.push("Recent workout fatigue calls for a lighter load.");
   } else if (input.dietPhase === "Cut") {
     reasons.push("The cut phase favors controlled loading.");
   }

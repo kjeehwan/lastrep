@@ -230,8 +230,13 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
         }
         if (changedIndices.isEmpty()) return
         changedIndices.forEach { idx -> items[idx] = next[idx] }
-        if (changedIndices.size <= 3) {
-          changedIndices.forEach { idx -> notifyItemChanged(idx) }
+        // The actively edited cell already contains the new text. Rebinding it after each
+        // JS state update can make RecyclerView transfer focus to the first input in the row.
+        val activePosition = activeEditor?.position
+        val indicesToRebind = changedIndices.filter { it != activePosition }
+        if (indicesToRebind.isEmpty()) return
+        if (activePosition != null || indicesToRebind.size <= 3) {
+          indicesToRebind.forEach { idx -> notifyItemChanged(idx) }
         } else {
           notifyDataSetChanged()
         }
