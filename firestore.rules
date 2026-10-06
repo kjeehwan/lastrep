@@ -26,6 +26,14 @@ service cloud.firestore {
       match /nutritionSavedMeals/{savedMealId} {
         allow read, create, update, delete: if isOwnUser(uid);
       }
+
+      match /workouts/{workoutId} {
+        allow read, create, update, delete: if isOwnUser(uid);
+      }
+
+      match /routines/{routineId} {
+        allow read, create, update, delete: if isOwnUser(uid);
+      }
     }
   }
 }

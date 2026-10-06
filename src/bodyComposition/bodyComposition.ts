@@ -40,8 +40,15 @@ export type AutoBodyCompositionSyncResult = "synced" | "skipped" | "failed";
 type BodyCompositionInput = {
   weightKg?: number | null;
   bodyFatPercent?: number | null;
-  muscleMassKg?: number | null;
+  skeletalMuscleMassKg?: number | null;
 };
+
+type BodyCompositionMetricKey =
+  | "weightKg"
+  | "bodyFatPercent"
+  | "leanBodyMassKg"
+  | "skeletalMuscleMassKg"
+  | "legacyMuscleMassKg";
 
 const loadHealthConnect = async (): Promise<HealthConnectModule> =>
   import("react-native-health-connect");
@@ -52,7 +59,9 @@ const bodyCompositionReadPermissions: Permission[] = [
   { accessType: "read", recordType: "LeanBodyMass" },
 ];
 
-const HISTORY_LIMIT = 60;
+// Keep roughly a year of daily weight entries without crowding out sparse body-fat scans.
+const HISTORY_LIMIT = 400;
+const BODY_COMPOSITION_SCHEMA_VERSION = 2;
 
 const getErrorMessage = (error: unknown): string =>
   (error as { message?: string })?.message?.trim() || "";
@@ -93,13 +102,21 @@ const compareHistoryEntries = (a: BodyCompositionHistoryEntry, b: BodyCompositio
 
 const normalizeMetricSnapshot = (
   value: unknown,
-  fallbackSource: BodyCompositionSource | null = null
+  fallbackSource: BodyCompositionSource | null = null,
+  legacyMetricKind: "skeletal" | "unknown" = "unknown"
 ): BodyCompositionMetricSnapshot => {
   const row = (value ?? {}) as Record<string, unknown>;
+  const legacyMuscleMassKg = normalizeNullableNumber(row.muscleMassKg, 500);
   return {
     weightKg: normalizeNullableNumber(row.weightKg, 500),
     bodyFatPercent: normalizeNullableNumber(row.bodyFatPercent, 100),
-    muscleMassKg: normalizeNullableNumber(row.muscleMassKg, 500),
+    leanBodyMassKg: normalizeNullableNumber(row.leanBodyMassKg, 500),
+    skeletalMuscleMassKg:
+      normalizeNullableNumber(row.skeletalMuscleMassKg, 500) ??
+      (legacyMetricKind === "skeletal" ? legacyMuscleMassKg : null),
+    legacyMuscleMassKg:
+      normalizeNullableNumber(row.legacyMuscleMassKg, 500) ??
+      (legacyMetricKind === "unknown" ? legacyMuscleMassKg : null),
     recordedAt: normalizeTimestamp(row.recordedAt),
     source: normalizeSource(row.source) ?? fallbackSource,
     originLabel: normalizeString(row.originLabel),
@@ -114,13 +131,20 @@ const normalizeHistory = (value: unknown): BodyCompositionHistoryEntry[] => {
     const source = normalizeSource(row.source);
     const recordedAt = normalizeTimestamp(row.recordedAt);
     if (!source || !recordedAt) continue;
+    const legacyMuscleMassKg = normalizeNullableNumber(row.muscleMassKg, 500);
     history.push({
       recordedAt,
       source,
       originLabel: normalizeString(row.originLabel),
       weightKg: normalizeNullableNumber(row.weightKg, 500),
       bodyFatPercent: normalizeNullableNumber(row.bodyFatPercent, 100),
-      muscleMassKg: normalizeNullableNumber(row.muscleMassKg, 500),
+      leanBodyMassKg: normalizeNullableNumber(row.leanBodyMassKg, 500),
+      skeletalMuscleMassKg:
+        normalizeNullableNumber(row.skeletalMuscleMassKg, 500) ??
+        (source === "manual" ? legacyMuscleMassKg : null),
+      legacyMuscleMassKg:
+        normalizeNullableNumber(row.legacyMuscleMassKg, 500) ??
+        (source === "health" ? legacyMuscleMassKg : null),
     });
   }
   return history
@@ -139,7 +163,7 @@ const inferOriginLabel = (originAppPackage: string | null): string | null => {
 const resolveLatestMetricSnapshot = (
   profile: BodyCompositionProfile
 ): BodyCompositionMetricSnapshot => {
-  const resolveFromSnapshots = (key: "weightKg" | "bodyFatPercent" | "muscleMassKg") => {
+  const resolveFromSnapshots = (key: BodyCompositionMetricKey) => {
     const candidates = [profile.manual, profile.synced]
       .filter(
         (snapshot): snapshot is BodyCompositionMetricSnapshot =>
@@ -168,7 +192,7 @@ const resolveLatestMetricSnapshot = (
     };
   };
 
-  const effectiveSourceFor = (key: "weightKg" | "bodyFatPercent" | "muscleMassKg") => {
+  const effectiveSourceFor = (key: BodyCompositionMetricKey) => {
     const latestHistoryEntry = profile.history.find((entry) => typeof entry[key] === "number");
     if (latestHistoryEntry) {
       return {
@@ -183,9 +207,11 @@ const resolveLatestMetricSnapshot = (
 
   const weight = effectiveSourceFor("weightKg");
   const bodyFat = effectiveSourceFor("bodyFatPercent");
-  const muscle = effectiveSourceFor("muscleMassKg");
+  const leanBodyMass = effectiveSourceFor("leanBodyMassKg");
+  const skeletalMuscleMass = effectiveSourceFor("skeletalMuscleMassKg");
+  const legacyMuscleMass = effectiveSourceFor("legacyMuscleMassKg");
   const latestMetric =
-    [weight, bodyFat, muscle]
+    [weight, bodyFat, leanBodyMass, skeletalMuscleMass, legacyMuscleMass]
       .filter(
         (
           value
@@ -201,7 +227,9 @@ const resolveLatestMetricSnapshot = (
   return {
     weightKg: weight.value,
     bodyFatPercent: bodyFat.value,
-    muscleMassKg: muscle.value,
+    leanBodyMassKg: leanBodyMass.value,
+    skeletalMuscleMassKg: skeletalMuscleMass.value,
+    legacyMuscleMassKg: legacyMuscleMass.value,
     recordedAt: latestMetric?.recordedAt ?? null,
     source: latestMetric?.source ?? null,
     originLabel: latestMetric?.originLabel ?? null,
@@ -212,7 +240,20 @@ const pushHistoryEntry = (
   history: BodyCompositionHistoryEntry[],
   entry: BodyCompositionHistoryEntry
 ): BodyCompositionHistoryEntry[] =>
-  [entry, ...history]
+  [
+    entry,
+    ...history.filter((candidate) => {
+      if (candidate.source !== entry.source) return true;
+      if (candidate.recordedAt?.toMillis() !== entry.recordedAt?.toMillis()) return true;
+      return (
+        candidate.weightKg !== entry.weightKg ||
+        candidate.bodyFatPercent !== entry.bodyFatPercent ||
+        candidate.leanBodyMassKg !== entry.leanBodyMassKg ||
+        candidate.skeletalMuscleMassKg !== entry.skeletalMuscleMassKg ||
+        candidate.legacyMuscleMassKg !== entry.legacyMuscleMassKg
+      );
+    }),
+  ]
     .sort(compareHistoryEntries)
     .slice(0, HISTORY_LIMIT);
 
@@ -222,8 +263,10 @@ export const buildBodyCompositionProfile = (
   history: BodyCompositionHistoryEntry[],
   lastSyncedAt: Timestamp | null,
   originAppPackage: string | null,
-  originLabel: string | null
+  originLabel: string | null,
+  schemaVersion = BODY_COMPOSITION_SCHEMA_VERSION
 ): BodyCompositionProfile => ({
+  schemaVersion,
   manual,
   synced,
   history,
@@ -238,12 +281,15 @@ export const getBodyCompositionProfile = async (
   const snapshot = await getDoc(doc(db, USERS_COLLECTION, uid));
   const data = snapshot.data()?.[USER_BODY_COMPOSITION_FIELD] as Record<string, unknown> | undefined;
   return buildBodyCompositionProfile(
-    normalizeMetricSnapshot(data?.[BODY_COMPOSITION_FIELDS.manual], "manual"),
-    normalizeMetricSnapshot(data?.[BODY_COMPOSITION_FIELDS.synced], "health"),
+    normalizeMetricSnapshot(data?.[BODY_COMPOSITION_FIELDS.manual], "manual", "skeletal"),
+    normalizeMetricSnapshot(data?.[BODY_COMPOSITION_FIELDS.synced], "health", "unknown"),
     normalizeHistory(data?.[BODY_COMPOSITION_FIELDS.history]),
     normalizeTimestamp(data?.[BODY_COMPOSITION_FIELDS.lastSyncedAt]),
     normalizeString(data?.[BODY_COMPOSITION_FIELDS.originAppPackage]),
-    normalizeString(data?.[BODY_COMPOSITION_FIELDS.originLabel])
+    normalizeString(data?.[BODY_COMPOSITION_FIELDS.originLabel]),
+    typeof data?.[BODY_COMPOSITION_FIELDS.schemaVersion] === "number"
+      ? Number(data[BODY_COMPOSITION_FIELDS.schemaVersion])
+      : 1
   );
 };
 
@@ -258,17 +304,19 @@ export const saveManualBodyCompositionEntry = async (
 ): Promise<void> => {
   const profile = await getBodyCompositionProfile(uid);
   const recordedAt = Timestamp.fromDate(now);
+  const hasWeight = Object.prototype.hasOwnProperty.call(input, "weightKg");
+  const hasBodyFat = Object.prototype.hasOwnProperty.call(input, "bodyFatPercent");
+  const hasSkeletalMuscle = Object.prototype.hasOwnProperty.call(input, "skeletalMuscleMassKg");
   const nextManual: BodyCompositionMetricSnapshot = {
-    weightKg:
-      typeof input.weightKg === "number" ? normalizeNullableNumber(input.weightKg, 500) : profile.manual.weightKg,
-    bodyFatPercent:
-      typeof input.bodyFatPercent === "number"
-        ? normalizeNullableNumber(input.bodyFatPercent, 100)
-        : profile.manual.bodyFatPercent,
-    muscleMassKg:
-      typeof input.muscleMassKg === "number"
-        ? normalizeNullableNumber(input.muscleMassKg, 500)
-        : profile.manual.muscleMassKg,
+    weightKg: hasWeight ? normalizeNullableNumber(input.weightKg, 500) : profile.manual.weightKg,
+    bodyFatPercent: hasBodyFat
+      ? normalizeNullableNumber(input.bodyFatPercent, 100)
+      : profile.manual.bodyFatPercent,
+    leanBodyMassKg: profile.manual.leanBodyMassKg,
+    skeletalMuscleMassKg: hasSkeletalMuscle
+      ? normalizeNullableNumber(input.skeletalMuscleMassKg, 500)
+      : profile.manual.skeletalMuscleMassKg,
+    legacyMuscleMassKg: profile.manual.legacyMuscleMassKg,
     recordedAt,
     source: "manual",
     originLabel: null,
@@ -277,15 +325,18 @@ export const saveManualBodyCompositionEntry = async (
     recordedAt,
     source: "manual",
     originLabel: null,
-    weightKg: nextManual.weightKg,
-    bodyFatPercent: nextManual.bodyFatPercent,
-    muscleMassKg: nextManual.muscleMassKg,
+    weightKg: hasWeight ? nextManual.weightKg : null,
+    bodyFatPercent: hasBodyFat ? nextManual.bodyFatPercent : null,
+    leanBodyMassKg: null,
+    skeletalMuscleMassKg: hasSkeletalMuscle ? nextManual.skeletalMuscleMassKg : null,
+    legacyMuscleMassKg: null,
   };
 
   await setDoc(
     doc(db, USERS_COLLECTION, uid),
     {
       [USER_BODY_COMPOSITION_FIELD]: {
+        [BODY_COMPOSITION_FIELDS.schemaVersion]: BODY_COMPOSITION_SCHEMA_VERSION,
         [BODY_COMPOSITION_FIELDS.manual]: nextManual,
         [BODY_COMPOSITION_FIELDS.history]: pushHistoryEntry(profile.history, historyEntry),
       },
@@ -419,7 +470,9 @@ export const syncBodyCompositionFromHealthConnect = async (
     const syncedSnapshot: BodyCompositionMetricSnapshot = {
       weightKg: weight.value,
       bodyFatPercent: bodyFat.value,
-      muscleMassKg: leanBodyMass.value,
+      leanBodyMassKg: leanBodyMass.value,
+      skeletalMuscleMassKg: null,
+      legacyMuscleMassKg: null,
       recordedAt: typeof recordedAtMs === "number" ? Timestamp.fromMillis(recordedAtMs) : syncedAt,
       source: "health",
       originLabel,
@@ -430,13 +483,16 @@ export const syncBodyCompositionFromHealthConnect = async (
       originLabel,
       weightKg: weight.value,
       bodyFatPercent: bodyFat.value,
-      muscleMassKg: leanBodyMass.value,
+      leanBodyMassKg: leanBodyMass.value,
+      skeletalMuscleMassKg: null,
+      legacyMuscleMassKg: null,
     };
 
     await setDoc(
       doc(db, USERS_COLLECTION, uid),
       {
         [USER_BODY_COMPOSITION_FIELD]: {
+          [BODY_COMPOSITION_FIELDS.schemaVersion]: BODY_COMPOSITION_SCHEMA_VERSION,
           [BODY_COMPOSITION_FIELDS.synced]: syncedSnapshot,
           [BODY_COMPOSITION_FIELDS.lastSyncedAt]: syncedAt,
           [BODY_COMPOSITION_FIELDS.originAppPackage]: originAppPackage,
@@ -470,16 +526,21 @@ export const syncBodyCompositionFromSamsungHealth = async (
 
     const weightKg = normalizeNullableNumber(latest.weightKg, 500);
     const bodyFatPercent = normalizeNullableNumber(latest.bodyFatPercent, 100);
-    const preferredMuscleKg =
+    const skeletalMuscleMassKg =
       normalizeNullableNumber(latest.skeletalMuscleMassKg, 500) ??
-      normalizeNullableNumber(latest.skeletalMuscleKg, 500) ??
-      normalizeNullableNumber(latest.muscleMassKg, 500) ??
-      normalizeNullableNumber(latest.muscleMassFieldKg, 500);
+      normalizeNullableNumber(latest.skeletalMuscleKg, 500);
+    const leanBodyMassKg = normalizeNullableNumber(latest.fatFreeMassKg, 500);
+    const legacyMuscleMassKg =
+      skeletalMuscleMassKg == null
+        ? normalizeNullableNumber(latest.muscleMassFieldKg ?? latest.muscleMassKg, 500)
+        : null;
 
     const hasAnyData =
       typeof weightKg === "number" ||
       typeof bodyFatPercent === "number" ||
-      typeof preferredMuscleKg === "number";
+      typeof leanBodyMassKg === "number" ||
+      typeof skeletalMuscleMassKg === "number" ||
+      typeof legacyMuscleMassKg === "number";
     if (!hasAnyData) return { status: "no_data" };
 
     const profile = await getBodyCompositionProfile(uid);
@@ -494,7 +555,9 @@ export const syncBodyCompositionFromSamsungHealth = async (
     const syncedSnapshot: BodyCompositionMetricSnapshot = {
       weightKg,
       bodyFatPercent,
-      muscleMassKg: preferredMuscleKg,
+      leanBodyMassKg,
+      skeletalMuscleMassKg,
+      legacyMuscleMassKg,
       recordedAt,
       source: "health",
       originLabel,
@@ -505,13 +568,16 @@ export const syncBodyCompositionFromSamsungHealth = async (
       originLabel,
       weightKg,
       bodyFatPercent,
-      muscleMassKg: preferredMuscleKg,
+      leanBodyMassKg,
+      skeletalMuscleMassKg,
+      legacyMuscleMassKg,
     };
 
     await setDoc(
       doc(db, USERS_COLLECTION, uid),
       {
         [USER_BODY_COMPOSITION_FIELD]: {
+          [BODY_COMPOSITION_FIELDS.schemaVersion]: BODY_COMPOSITION_SCHEMA_VERSION,
           [BODY_COMPOSITION_FIELDS.synced]: syncedSnapshot,
           [BODY_COMPOSITION_FIELDS.lastSyncedAt]: syncedAt,
           [BODY_COMPOSITION_FIELDS.originAppPackage]: originAppPackage,

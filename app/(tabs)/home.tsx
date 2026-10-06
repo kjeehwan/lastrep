@@ -36,8 +36,10 @@ import type { NormalizedDecisionError, ReasonCode } from "../../src/contracts";
 import { auth, db } from "../../src/config/firebaseConfig";
 import { useEntitlement } from "../../src/hooks/useEntitlement";
 import { useOfflineStatus } from "../../src/hooks/useOfflineStatus";
+import { hasHealthSyncConsent } from "../../src/health/healthSyncConsent";
 import {
   getCalorieTargetForDietPhase,
+  getMealsForDate,
   getNutritionProfile,
   getNutritionTrendReport,
   getTodayDecisionNutritionSummary,
@@ -53,6 +55,7 @@ import { getUserData } from "../../src/userData";
 import {
   getSleepProfile,
   getSleepSampleAgeHours,
+  hasHealthSleepPermission,
   isHealthSleepStale,
 } from "../../src/sleep/sleep";
 import { resolveDecisionSleepInput } from "../../src/sleep/resolveDecisionSleepInput";
@@ -134,6 +137,7 @@ const MONTH_LABELS = [
 type NutritionSnapshot = {
   averageCalories: number | null;
   consistencyScore: number | null;
+  todayCalories: number | null;
 };
 
 type SleepSnapshot = {
@@ -256,6 +260,7 @@ export default function Home() {
   const [nutritionSnapshot, setNutritionSnapshot] = useState<NutritionSnapshot>({
     averageCalories: null,
     consistencyScore: null,
+    todayCalories: null,
   });
   const [nutritionCalorieHistory, setNutritionCalorieHistory] = useState<ChartPoint[]>([]);
   const [nutritionAdherenceHistory, setNutritionAdherenceHistory] = useState<ChartPoint[]>([]);
@@ -273,6 +278,9 @@ export default function Home() {
   const [sorenessHistory, setSorenessHistory] = useState<ChartPoint[]>([]);
   const [fatigueHistory, setFatigueHistory] = useState<ChartPoint[]>([]);
   const [motivationHistory, setMotivationHistory] = useState<ChartPoint[]>([]);
+  const [homeContextLoaded, setHomeContextLoaded] = useState(false);
+  const [healthSyncStatusLoaded, setHealthSyncStatusLoaded] = useState(false);
+  const [healthSyncNeedsAttention, setHealthSyncNeedsAttention] = useState(false);
   const hasDeferredInitialInsightsRef = useRef(false);
   const homeInsightsRequestRef = useRef<Promise<void> | null>(null);
   const lastHomeInsightsLoadAtRef = useRef(0);
@@ -558,6 +566,7 @@ export default function Home() {
     let request: Promise<void> | null = null;
     request = (async () => {
       setWorkoutsLoading(true);
+      setHomeContextLoaded(false);
       setInsightsError(null);
       try {
         const workoutsRef = collection(db, "users", uid, "workouts");
@@ -600,10 +609,11 @@ export default function Home() {
         setWorkouts(parsedWorkouts);
 
         try {
-          const [profile, userData, sleepProfile] = await Promise.all([
+          const [profile, userData, sleepProfile, todayMeals] = await Promise.all([
             getNutritionProfile(uid),
             getUserData(uid),
             getSleepProfile(uid),
+            getMealsForDate(uid),
           ]);
           const userDietPhase =
             typeof userData?.dietPhase === "string" && isDietPhase(userData.dietPhase)
@@ -623,13 +633,16 @@ export default function Home() {
                   last7Days.reduce((sum, day) => sum + day.calories, 0) / last7Days.length
                 )
               : null;
-          setNutritionSnapshot({
-            averageCalories: averageCalories7d,
-            consistencyScore: nutritionTrends.consistencyScore ?? null,
-          });
           const byDate = new Map(
             nutritionTrends.dailyHistory.map((entry) => [entry.dateKey, entry.calories])
           );
+          setNutritionSnapshot({
+            averageCalories: averageCalories7d,
+            consistencyScore: nutritionTrends.consistencyScore ?? null,
+            todayCalories: Math.round(
+              todayMeals.reduce((sum, meal) => sum + meal.calories, 0)
+            ),
+          });
           const calorieHistory: ChartPoint[] = [];
           const start = new Date();
           start.setDate(start.getDate() - 29);
@@ -708,6 +721,7 @@ export default function Home() {
         );
       } finally {
         setWorkoutsLoading(false);
+        setHomeContextLoaded(true);
       }
     })();
     homeInsightsRequestRef.current = request;
@@ -735,6 +749,39 @@ export default function Home() {
       });
       return () => task.cancel();
     }, [loadHomeInsights])
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      if (Platform.OS !== "android" || !uid) {
+        setHealthSyncStatusLoaded(true);
+        setHealthSyncNeedsAttention(false);
+        return undefined;
+      }
+
+      let active = true;
+      const task = scheduleAfterInteractions(async () => {
+        try {
+          const [consentAccepted, sleepPermissionGranted] = await Promise.all([
+            hasHealthSyncConsent(uid),
+            hasHealthSleepPermission(),
+          ]);
+          if (!active) return;
+          setHealthSyncNeedsAttention(!consentAccepted || !sleepPermissionGranted);
+        } catch (error) {
+          if (!active) return;
+          console.log("Failed to check health sync status", error);
+          setHealthSyncNeedsAttention(true);
+        } finally {
+          if (active) setHealthSyncStatusLoaded(true);
+        }
+      });
+
+      return () => {
+        active = false;
+        task.cancel();
+      };
+    }, [uid])
   );
 
   useFocusEffect(
@@ -1527,6 +1574,53 @@ export default function Home() {
                 <Text style={styles.primaryText}>{loading ? "Working..." : "Get today's decision"}</Text>
               </TouchableOpacity>
             </View>
+            {homeContextLoaded &&
+            healthSyncStatusLoaded &&
+            (nutritionSnapshot.todayCalories === 0 || healthSyncNeedsAttention) ? (
+              <View style={styles.contextActions}>
+                <Text style={styles.contextActionsTitle}>Complete today&apos;s picture</Text>
+                {nutritionSnapshot.todayCalories === 0 ? (
+                  <TouchableOpacity
+                    style={styles.contextActionRow}
+                    onPress={() =>
+                      router.push({
+                        pathname: "/(tabs)/nutrition",
+                        params: { focusMeals: String(Date.now()) },
+                      } as Href)
+                    }
+                  >
+                    <View style={styles.contextActionIcon}>
+                      <Ionicons name="restaurant-outline" size={17} color="#fbbf24" />
+                    </View>
+                    <View style={styles.contextActionCopy}>
+                      <Text style={styles.contextActionLabel}>Log a meal</Text>
+                      <Text style={styles.contextActionHint}>No nutrition recorded today</Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={17} color="#737991" />
+                  </TouchableOpacity>
+                ) : null}
+                {healthSyncNeedsAttention ? (
+                  <TouchableOpacity
+                    style={styles.contextActionRow}
+                    onPress={() =>
+                      router.push({
+                        pathname: "/(tabs)/profile",
+                        params: { from: "/home", openHealth: String(Date.now()) },
+                      } as Href)
+                    }
+                  >
+                    <View style={styles.contextActionIcon}>
+                      <Ionicons name="heart-outline" size={17} color="#60a5fa" />
+                    </View>
+                    <View style={styles.contextActionCopy}>
+                      <Text style={styles.contextActionLabel}>Connect health data</Text>
+                      <Text style={styles.contextActionHint}>Sleep permission is not connected</Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={17} color="#737991" />
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+            ) : null}
             {gateError ? (
               <View style={styles.notice}>
                 <Text style={styles.noticeText}>
@@ -2495,6 +2589,26 @@ const styles = StyleSheet.create({
   inputActionButton: {
     flex: 1,
   },
+  contextActions: {
+    marginTop: 14,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "rgba(255,255,255,0.1)",
+    paddingTop: 12,
+    gap: 4,
+  },
+  contextActionsTitle: { color: "#8f95af", fontSize: 11, fontWeight: "800", textTransform: "uppercase", marginBottom: 2 },
+  contextActionRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 8 },
+  contextActionIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.06)",
+  },
+  contextActionCopy: { flex: 1 },
+  contextActionLabel: { color: "#fff", fontSize: 13, fontWeight: "800" },
+  contextActionHint: { color: "#858ba4", fontSize: 11, marginTop: 2 },
   primaryText: {
     color: "#fff",
     fontWeight: "700",

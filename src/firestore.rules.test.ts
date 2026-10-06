@@ -211,4 +211,28 @@ describeIfFirestoreEmulator("firestore entitlement rules", () => {
     );
     await assertSucceeds(deleteDoc(savedRef));
   });
+
+  it.each(["workouts", "routines"])(
+    "allows only the owner to manage %s",
+    async (subcollection) => {
+      const alice = testEnv.authenticatedContext("alice").firestore();
+      const aliceRef = doc(alice, USERS_COLLECTION, "alice", subcollection, "entry-1");
+
+      await assertSucceeds(
+        setDoc(aliceRef, {
+          name: "Owner entry",
+          updatedAt: Timestamp.now(),
+        })
+      );
+      await assertSucceeds(updateDoc(aliceRef, { name: "Updated owner entry" }));
+      await assertSucceeds(getDoc(aliceRef));
+
+      const bob = testEnv.authenticatedContext("bob").firestore();
+      await assertFails(
+        getDoc(doc(bob, USERS_COLLECTION, "alice", subcollection, "entry-1"))
+      );
+
+      await assertSucceeds(deleteDoc(aliceRef));
+    }
+  );
 });

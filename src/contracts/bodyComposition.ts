@@ -6,6 +6,7 @@ export const USER_BODY_COMPOSITION_PATH = `${USERS_COLLECTION}/{uid}/${USER_BODY
 export const BODY_COMPOSITION_SOURCES = ["manual", "health"] as const;
 
 export const BODY_COMPOSITION_FIELDS = {
+  schemaVersion: "schemaVersion",
   manual: "manual",
   synced: "synced",
   history: "history",
@@ -19,7 +20,9 @@ export type BodyCompositionSource = (typeof BODY_COMPOSITION_SOURCES)[number];
 export interface BodyCompositionMetricSnapshot {
   weightKg: number | null;
   bodyFatPercent: number | null;
-  muscleMassKg: number | null;
+  leanBodyMassKg: number | null;
+  skeletalMuscleMassKg: number | null;
+  legacyMuscleMassKg: number | null;
   recordedAt: Timestamp | null;
   source: BodyCompositionSource | null;
   originLabel: string | null;
@@ -31,10 +34,13 @@ export interface BodyCompositionHistoryEntry {
   originLabel: string | null;
   weightKg: number | null;
   bodyFatPercent: number | null;
-  muscleMassKg: number | null;
+  leanBodyMassKg: number | null;
+  skeletalMuscleMassKg: number | null;
+  legacyMuscleMassKg: number | null;
 }
 
 export interface BodyCompositionProfile {
+  schemaVersion: number;
   manual: BodyCompositionMetricSnapshot;
   synced: BodyCompositionMetricSnapshot;
   history: BodyCompositionHistoryEntry[];
