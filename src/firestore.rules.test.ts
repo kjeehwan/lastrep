@@ -13,6 +13,7 @@ import {
   ENTITLEMENT_DEV_OVERRIDE_POLICY,
   ENTITLEMENT_FIELDS,
   NUTRITION_MEALS_SUBCOLLECTION,
+  NUTRITION_SAVED_MEALS_SUBCOLLECTION,
   USER_ENTITLEMENT_FIELD,
   USERS_COLLECTION,
 } from "./contracts";
@@ -177,5 +178,37 @@ describeIfFirestoreEmulator("firestore entitlement rules", () => {
     await assertFails(
       getDoc(doc(db, USERS_COLLECTION, "alice", NUTRITION_MEALS_SUBCOLLECTION, "meal-1"))
     );
+  });
+
+  it("allows only the owner to manage saved meals", async () => {
+    const alice = testEnv.authenticatedContext("alice").firestore();
+    const savedRef = doc(
+      alice,
+      USERS_COLLECTION,
+      "alice",
+      NUTRITION_SAVED_MEALS_SUBCOLLECTION,
+      "saved-1"
+    );
+    const savedMeal = {
+      name: "Usual breakfast",
+      items: [{ name: "Oats", calories: 300 }],
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now(),
+    };
+    await assertSucceeds(setDoc(savedRef, savedMeal));
+
+    const bob = testEnv.authenticatedContext("bob").firestore();
+    await assertFails(
+      getDoc(
+        doc(
+          bob,
+          USERS_COLLECTION,
+          "alice",
+          NUTRITION_SAVED_MEALS_SUBCOLLECTION,
+          "saved-1"
+        )
+      )
+    );
+    await assertSucceeds(deleteDoc(savedRef));
   });
 });

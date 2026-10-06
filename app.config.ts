@@ -98,6 +98,7 @@ const mappedPlugins: ExpoPlugin[] = (baseConfig.plugins ?? []).map((plugin) => {
 const requiredPlugins: ExpoPlugin[] = [
   "expo-audio",
   "expo-asset",
+  ["expo-camera", { cameraPermission: "Allow Lastrep to scan food barcodes.", recordAudioAndroid: false }],
   ["expo-dev-client", { toolsButton: false, launchMode: "launcher" }],
   "expo-font",
   "expo-image",

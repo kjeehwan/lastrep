@@ -8,6 +8,7 @@ import {
 
 export type FoodItem = {
   id: string;
+  barcode?: string;
   name: string;
   aliases: string[];
   servingLabel: string;

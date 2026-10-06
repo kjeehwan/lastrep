@@ -22,6 +22,10 @@ service cloud.firestore {
       match /nutritionMeals/{mealId} {
         allow read, create, update, delete: if isOwnUser(uid);
       }
+
+      match /nutritionSavedMeals/{savedMealId} {
+        allow read, create, update, delete: if isOwnUser(uid);
+      }
     }
   }
 }

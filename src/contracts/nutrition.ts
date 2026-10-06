@@ -2,6 +2,7 @@ import type { Timestamp } from "firebase/firestore";
 import { USERS_COLLECTION } from "./entitlement";
 
 export const NUTRITION_MEALS_SUBCOLLECTION = "nutritionMeals" as const;
+export const NUTRITION_SAVED_MEALS_SUBCOLLECTION = "nutritionSavedMeals" as const;
 export const USER_NUTRITION_MEALS_PATH =
   `${USERS_COLLECTION}/{uid}/${NUTRITION_MEALS_SUBCOLLECTION}` as const;
 export const USER_NUTRITION_PROFILE_FIELD = "nutritionProfile" as const;
@@ -28,6 +29,7 @@ export const NUTRITION_PROFILE_FIELDS = {
 
 export interface NutritionMealSource {
   foodId?: string | null;
+  barcode?: string | null;
   servingLabel?: string | null;
   servingGrams?: number | null;
   caloriesPer100g?: number | null;
@@ -37,6 +39,25 @@ export interface NutritionMealSource {
   mode?: "grams" | "servings" | "calories" | null;
   value?: string | null;
 }
+
+export interface NutritionSavedMealItem {
+  name: string;
+  calories: number;
+  proteinGrams: number | null;
+  carbGrams: number | null;
+  fatGrams: number | null;
+  source: NutritionMealSource | null;
+}
+
+export interface NutritionSavedMeal {
+  id: string;
+  name: string;
+  items: NutritionSavedMealItem[];
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+export type NutritionSavedMealWrite = Omit<NutritionSavedMeal, "id">;
 
 export interface NutritionMeal {
   id: string;

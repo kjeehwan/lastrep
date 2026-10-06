@@ -1,13 +1,25 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
+import { CameraView, type BarcodeScanningResult, useCameraPermissions } from "expo-camera";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { onAuthStateChanged } from "firebase/auth";
 import { Timestamp } from "firebase/firestore";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { BackHandler, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  BackHandler,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { auth } from "@/src/config/firebaseConfig";
-import type { NutritionMeal } from "@/src/contracts";
+import type { NutritionMeal, NutritionSavedMeal } from "@/src/contracts";
 import type { FoodEntryMode, FoodItem } from "@/src/nutrition/foodDb";
 import {
   createMeal,
@@ -17,6 +29,14 @@ import {
   parseDateKey,
   updateMeal,
 } from "@/src/nutrition/meals";
+import { lookupFoodByBarcode } from "@/src/nutrition/barcode";
+import {
+  addSavedMealToDate,
+  deleteSavedMeal,
+  getSavedMeals,
+} from "@/src/nutrition/quickLog";
+import { showAppDialog } from "@/src/ui/appDialog";
+import { NutritionFactsPreview } from "@/src/nutrition/components/NutritionFactsPreview";
 
 type SelectionDraft = {
   key: string;
@@ -25,8 +45,14 @@ type SelectionDraft = {
   value: string;
 };
 
-type BrowseTab = "search" | "recent" | "favorites";
+type BrowseTab = "search" | "recent" | "favorites" | "saved";
 type FavoriteEntry = { food: FoodItem };
+type NutritionPreview = {
+  calories: number;
+  proteinGrams: number;
+  carbGrams: number | null;
+  fatGrams: number | null;
+};
 
 const ENTRY_MODES: FoodEntryMode[] = ["grams", "calories", "servings"];
 const FAVORITES_KEY_PREFIX = "nutrition-food-favorites:v1:";
@@ -120,10 +146,19 @@ export default function MealSearchScreen() {
   const [editorFood, setEditorFood] = useState<FoodItem | null>(null);
   const [editorKey, setEditorKey] = useState<string | null>(null);
   const [editorPreview, setEditorPreview] = useState("Enter a value");
+  const [editorNutrition, setEditorNutrition] = useState<NutritionPreview | null>(null);
   const [tab, setTab] = useState<BrowseTab>("search");
   const [recentMeals, setRecentMeals] = useState<NutritionMeal[]>([]);
   const [favorites, setFavorites] = useState<FavoriteEntry[]>([]);
   const [foodById, setFoodById] = useState<Record<string, FoodItem>>({});
+  const [savedMeals, setSavedMeals] = useState<NutritionSavedMeal[]>([]);
+  const [savedMealPendingId, setSavedMealPendingId] = useState<string | null>(null);
+  const [scannerVisible, setScannerVisible] = useState(false);
+  const [scannerBusy, setScannerBusy] = useState(false);
+  const [scannerMessage, setScannerMessage] = useState("");
+  const [manualBarcode, setManualBarcode] = useState("");
+  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
+  const scannerLockedRef = useRef(false);
 
   const favoriteKey = uid ? `${FAVORITES_KEY_PREFIX}${uid}` : null;
   const stagedItems = useMemo(() => Object.values(staged), [staged]);
@@ -174,6 +209,34 @@ export default function MealSearchScreen() {
         if (!cancelled) setRecentMeals(rows);
       } catch (error) {
         if (!cancelled) console.log("Failed to load recent meals", error);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [uid]);
+
+  const refreshSavedMeals = useCallback(async () => {
+    if (!uid) {
+      setSavedMeals([]);
+      return;
+    }
+    try {
+      setSavedMeals(await getSavedMeals(uid));
+    } catch (error) {
+      console.log("Failed to load saved meals", error);
+    }
+  }, [uid]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      if (!uid) return;
+      try {
+        const rows = await getSavedMeals(uid);
+        if (!cancelled) setSavedMeals(rows);
+      } catch (error) {
+        if (!cancelled) console.log("Failed to load saved meals", error);
       }
     })();
     return () => {
@@ -260,6 +323,7 @@ export default function MealSearchScreen() {
     void (async () => {
       if (!editorFood) {
         setEditorPreview("Enter a value");
+        setEditorNutrition(null);
         return;
       }
       const foodDb = await getFoodDb();
@@ -267,6 +331,7 @@ export default function MealSearchScreen() {
       if (cancelled) return;
       if (!converted) {
         setEditorPreview("Enter a value");
+        setEditorNutrition(null);
         return;
       }
       const servingInfo = normalizeServingInfo(editorFood.servingLabel, editorFood.servingGrams);
@@ -276,6 +341,12 @@ export default function MealSearchScreen() {
           servingInfo
         )}`
       );
+      setEditorNutrition({
+        calories: converted.calories,
+        proteinGrams: converted.proteinGrams,
+        carbGrams: converted.carbGrams,
+        fatGrams: converted.fatGrams,
+      });
     })();
     return () => {
       cancelled = true;
@@ -313,7 +384,7 @@ export default function MealSearchScreen() {
       return () => {
         sub.remove();
       };
-    }, [editorVisible])
+    }, [editorVisible, setEditorVisible])
   );
 
   const recentGroups = useMemo(() => {
@@ -404,6 +475,7 @@ export default function MealSearchScreen() {
 
     return {
       id: resolvedId,
+      barcode: src.barcode ?? dbFood?.barcode,
       name: meal.name,
       aliases: [],
       servingLabel: effectiveServingLabel,
@@ -513,6 +585,96 @@ export default function MealSearchScreen() {
     })();
   };
 
+  const lookupBarcode = async (barcode: string) => {
+    if (scannerLockedRef.current) return;
+    scannerLockedRef.current = true;
+    setScannerBusy(true);
+    setScannerMessage("Looking up product...");
+    try {
+      const food = await lookupFoodByBarcode(barcode);
+      if (!food) {
+          setScannerMessage("This barcode is not in our product database. Search by name or try another item.");
+        return;
+      }
+      setScannerVisible(false);
+      setScannerMessage("");
+      setManualBarcode("");
+      openEditor(`barcode:${food.barcode ?? food.id}`, food);
+    } catch (error) {
+      console.log("Barcode lookup failed", error);
+      setScannerMessage(
+        error instanceof Error && error.message === "invalid_barcode"
+          ? "Enter a valid 8-14 digit barcode."
+          : "Could not look up this barcode. Check your connection and try again."
+      );
+    } finally {
+      scannerLockedRef.current = false;
+      setScannerBusy(false);
+    }
+  };
+
+  const openScanner = async () => {
+    scannerLockedRef.current = false;
+    setScannerMessage("");
+    setManualBarcode("");
+    if (!cameraPermission?.granted) {
+      const result = await requestCameraPermission();
+      if (!result.granted) {
+        showAppDialog({
+          title: "Camera permission needed",
+          message: "Allow camera access to scan a food barcode. You can still enter it manually.",
+          buttons: [
+            { text: "Cancel", role: "cancel" },
+            { text: "Enter manually", onPress: () => setScannerVisible(true) },
+          ],
+        });
+        return;
+      }
+    }
+    setScannerVisible(true);
+  };
+
+  const handleBarcodeScanned = ({ data }: BarcodeScanningResult) => {
+    if (!scannerBusy) void lookupBarcode(data);
+  };
+
+  const handleAddSavedMeal = async (savedMeal: NutritionSavedMeal) => {
+    if (!uid || savedMealPendingId) return;
+    setSavedMealPendingId(savedMeal.id);
+    try {
+      await addSavedMealToDate(uid, savedMeal, section, selectedDate);
+      goToSection();
+    } catch (error) {
+      console.log("Failed to add saved meal", error);
+      showAppDialog({
+        title: "Could not add saved meal",
+        message: "Check your connection and try again.",
+        buttons: [{ text: "OK" }],
+      });
+    } finally {
+      setSavedMealPendingId(null);
+    }
+  };
+
+  const handleDeleteSavedMeal = (savedMeal: NutritionSavedMeal) => {
+    if (!uid) return;
+    showAppDialog({
+      title: "Delete saved meal",
+      message: `Delete ${savedMeal.name}? Logged meals will not be affected.`,
+      buttons: [
+        { text: "Cancel", role: "cancel" },
+        {
+          text: "Delete",
+          role: "destructive",
+          onPress: async () => {
+            await deleteSavedMeal(uid, savedMeal.id);
+            await refreshSavedMeals();
+          },
+        },
+      ],
+    });
+  };
+
   const commitStaged = async () => {
     if (!uid || submitting) return;
     const entries = Object.values(staged);
@@ -548,6 +710,7 @@ export default function MealSearchScreen() {
 
         const baseSource = {
           foodId: entry.food.id,
+          barcode: entry.food.barcode ?? null,
           servingLabel: entry.food.servingLabel,
           servingGrams: entry.food.servingGrams,
           caloriesPer100g: entry.food.caloriesPer100g,
@@ -702,6 +865,9 @@ export default function MealSearchScreen() {
             >
               <Ionicons name="search" size={16} color="#fff" />
             </TouchableOpacity>
+            <TouchableOpacity style={styles.searchIconBtn} onPress={() => void openScanner()}>
+              <Ionicons name="barcode-outline" size={18} color="#fff" />
+            </TouchableOpacity>
           </View>
 
           <View style={styles.tabRow}>
@@ -713,6 +879,9 @@ export default function MealSearchScreen() {
             </TouchableOpacity>
             <TouchableOpacity style={[styles.tabBtn, tab === "favorites" && styles.tabBtnActive]} onPress={() => setTab("favorites")}>
               <Text style={[styles.tabText, tab === "favorites" && styles.tabTextActive]}>Favorites</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.tabBtn, tab === "saved" && styles.tabBtnActive]} onPress={() => setTab("saved")}>
+              <Text style={[styles.tabText, tab === "saved" && styles.tabTextActive]}>Saved meals</Text>
             </TouchableOpacity>
           </View>
 
@@ -734,8 +903,8 @@ export default function MealSearchScreen() {
             </View>
           ) : null}
 
-          {!canSearch ? <Text style={styles.subText}>Type at least 2 characters.</Text> : null}
-          {searching ? <Text style={styles.subText}>Searching...</Text> : null}
+          {tab === "search" && !canSearch ? <Text style={styles.subText}>Type at least 2 characters or scan a barcode.</Text> : null}
+          {tab === "search" && searching ? <Text style={styles.subText}>Searching...</Text> : null}
           {!searching && tab === "search" && submittedQuery.trim().length >= 2 && searchResults.length === 0 ? (
             <Text style={styles.subText}>No results found.</Text>
           ) : null}
@@ -827,6 +996,40 @@ export default function MealSearchScreen() {
             <Text style={styles.subText}>No favorites yet. Tap the star on a food to save it here.</Text>
           ) : null}
 
+          {tab === "saved" &&
+            savedMeals.map((savedMeal) => {
+              const calories = savedMeal.items.reduce((sum, item) => sum + item.calories, 0);
+              return (
+                <View key={savedMeal.id} style={styles.savedMealRow}>
+                  <TouchableOpacity
+                    style={styles.searchBody}
+                    onPress={() => void handleAddSavedMeal(savedMeal)}
+                    disabled={savedMealPendingId != null}
+                  >
+                    <Text style={styles.searchTitle}>{savedMeal.name}</Text>
+                    <Text style={styles.subText}>
+                      {savedMeal.items.length} item{savedMeal.items.length === 1 ? "" : "s"} / {Math.round(calories)} kcal
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.savedAddBtn}
+                    onPress={() => void handleAddSavedMeal(savedMeal)}
+                    disabled={savedMealPendingId != null}
+                  >
+                    <Text style={styles.savedAddText}>
+                      {savedMealPendingId === savedMeal.id ? "Adding..." : "Add"}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.savedDeleteBtn} onPress={() => handleDeleteSavedMeal(savedMeal)}>
+                    <Ionicons name="trash-outline" size={17} color="#fda4af" />
+                  </TouchableOpacity>
+                </View>
+              );
+            })}
+          {tab === "saved" && savedMeals.length === 0 ? (
+            <Text style={styles.subText}>No saved meals yet. Save a logged meal from its meal section.</Text>
+          ) : null}
+
           <Text style={styles.subText}>{stagedCount} selected</Text>
         </View>
       </ScrollView>
@@ -865,6 +1068,15 @@ export default function MealSearchScreen() {
               placeholderTextColor="#7a7a8c"
             />
             {editorFood ? <Text style={styles.subText}>{editorPreview}</Text> : null}
+            {editorFood && editorNutrition ? (
+              <NutritionFactsPreview
+                calories={editorNutrition.calories}
+                proteinGrams={editorNutrition.proteinGrams}
+                carbGrams={editorNutrition.carbGrams}
+                fatGrams={editorNutrition.fatGrams}
+                reference={`Reference: ${normalizeServingInfo(editorFood.servingLabel, editorFood.servingGrams)} / ${Math.round(editorFood.servingGrams)}g`}
+              />
+            ) : null}
             <View style={styles.modalActions}>
               <TouchableOpacity style={styles.secondaryBtn} onPress={() => setEditorVisible(false)}>
                 <Text style={styles.secondaryBtnText}>Cancel</Text>
@@ -875,6 +1087,66 @@ export default function MealSearchScreen() {
             </View>
           </View>
         </View>
+      </Modal>
+
+      <Modal
+        visible={scannerVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setScannerVisible(false)}
+      >
+        <KeyboardAvoidingView
+          style={styles.modalBackdrop}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          keyboardVerticalOffset={Platform.OS === "android" ? 24 : 0}
+        >
+          <View style={styles.scannerCard}>
+            <View style={styles.scannerHeader}>
+              <View style={styles.searchBody}>
+                <Text style={styles.modalTitle}>Scan packaged food</Text>
+                <Text style={styles.subText}>Center an EAN or UPC barcode in the frame.</Text>
+              </View>
+              <TouchableOpacity style={styles.iconBtn} onPress={() => setScannerVisible(false)}>
+                <Ionicons name="close" size={20} color="#fff" />
+              </TouchableOpacity>
+            </View>
+            {cameraPermission?.granted ? (
+              <View style={styles.cameraFrame}>
+                <CameraView
+                  style={StyleSheet.absoluteFill}
+                  facing="back"
+                  barcodeScannerSettings={{ barcodeTypes: ["ean13", "ean8", "upc_a", "upc_e"] }}
+                  onBarcodeScanned={scannerBusy ? undefined : handleBarcodeScanned}
+                />
+                <View style={styles.scanGuide} />
+              </View>
+            ) : (
+              <View style={styles.permissionPanel}>
+                <Ionicons name="camera-outline" size={28} color="#cfd3f8" />
+                <Text style={styles.subText}>Camera access is off. Enter the barcode below.</Text>
+              </View>
+            )}
+            {scannerMessage ? <Text style={styles.scannerMessage}>{scannerMessage}</Text> : null}
+            <View style={styles.searchInlineRow}>
+              <TextInput
+                style={[styles.input, styles.searchInput]}
+                value={manualBarcode}
+                onChangeText={setManualBarcode}
+                keyboardType="number-pad"
+                placeholder="Enter barcode"
+                placeholderTextColor="#7a7a8c"
+                onSubmitEditing={() => void lookupBarcode(manualBarcode)}
+              />
+              <TouchableOpacity
+                style={[styles.primaryBtn, (!manualBarcode.trim() || scannerBusy) && styles.searchBtnDisabled]}
+                onPress={() => void lookupBarcode(manualBarcode)}
+                disabled={!manualBarcode.trim() || scannerBusy}
+              >
+                <Text style={styles.primaryBtnText}>Look up</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );
@@ -957,6 +1229,10 @@ const styles = StyleSheet.create({
   checkboxWrap: { padding: 2 },
   searchBody: { flex: 1, gap: 1 },
   searchTitle: { color: "#fff", fontSize: 14, fontWeight: "600" },
+  savedMealRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 9 },
+  savedAddBtn: { borderRadius: 9, backgroundColor: "#7b61ff", paddingHorizontal: 12, paddingVertical: 8 },
+  savedAddText: { color: "#fff", fontSize: 12, fontWeight: "800" },
+  savedDeleteBtn: { width: 34, height: 34, alignItems: "center", justifyContent: "center" },
   groupBlock: { gap: 4 },
   groupTitle: { color: "#e6e9ff", fontSize: 12, fontWeight: "700", marginTop: 6 },
   selectedBlock: {
@@ -1009,6 +1285,38 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 12,
   },
+  scannerCard: {
+    width: "100%",
+    maxWidth: 460,
+    borderRadius: 18,
+    backgroundColor: "#171727",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    padding: 16,
+    gap: 12,
+  },
+  scannerHeader: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
+  cameraFrame: { height: 250, borderRadius: 14, overflow: "hidden", backgroundColor: "#05050a" },
+  scanGuide: {
+    position: "absolute",
+    left: 28,
+    right: 28,
+    top: 86,
+    height: 78,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: "#f5b942",
+  },
+  permissionPanel: {
+    height: 130,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.05)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 16,
+    gap: 8,
+  },
+  scannerMessage: { color: "#f5c56f", fontSize: 12, lineHeight: 17 },
   modalTitle: { color: "#fff", fontSize: 16, fontWeight: "800" },
   rowWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   chip: {
