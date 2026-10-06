@@ -4,6 +4,7 @@ import { onAuthStateChanged } from "firebase/auth";
 import { Timestamp } from "firebase/firestore";
 import React, { useEffect, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
   Modal,
   ScrollView,
   StyleSheet,
@@ -26,6 +27,8 @@ import {
 import type { FoodEntryMode, FoodItem } from "@/src/nutrition/foodDb";
 import { showAppDialog } from "@/src/ui/appDialog";
 import { isExpectedOfflineError } from "@/src/utils/networkErrors";
+import { copyPreviousMealToDate, createSavedMeal } from "@/src/nutrition/quickLog";
+import { NutritionFactsPreview } from "@/src/nutrition/components/NutritionFactsPreview";
 
 const ENTRY_MODES: FoodEntryMode[] = ["grams", "calories", "servings"];
 
@@ -138,6 +141,9 @@ export default function MealSectionScreen() {
   const [manualProtein, setManualProtein] = useState("");
   const [manualCarbs, setManualCarbs] = useState("");
   const [manualFats, setManualFats] = useState("");
+  const [saveMealVisible, setSaveMealVisible] = useState(false);
+  const [savedMealName, setSavedMealName] = useState("");
+  const [quickActionPending, setQuickActionPending] = useState(false);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (user) => {
@@ -265,6 +271,72 @@ export default function MealSectionScreen() {
         },
       ],
     });
+  };
+
+  const handleCopyPrevious = () => {
+    if (!uid || quickActionPending) return;
+    showAppDialog({
+      title: `Copy previous ${section.toLowerCase()}?`,
+      message: `The nearest earlier ${section.toLowerCase()} will be added to ${selectedDateKey}.`,
+      buttons: [
+        { text: "Cancel", role: "cancel" },
+        {
+          text: "Copy",
+          onPress: async () => {
+            setQuickActionPending(true);
+            try {
+              const result = await copyPreviousMealToDate(uid, section, selectedDate);
+              showAppDialog({
+                title: result.copied > 0 ? "Meal copied" : "No previous meal",
+                message:
+                  result.copied > 0 && result.sourceDate
+                    ? `${result.copied} item${result.copied === 1 ? "" : "s"} copied from ${formatDateKey(result.sourceDate)}.`
+                    : `No earlier ${section.toLowerCase()} was found in the last 90 days.`,
+                buttons: [{ text: "OK" }],
+              });
+            } catch (error) {
+              console.log("Failed to copy previous meal", error);
+              showAppDialog({
+                title: "Could not copy meal",
+                message: "Check your connection and try again.",
+                buttons: [{ text: "OK" }],
+              });
+            } finally {
+              setQuickActionPending(false);
+            }
+          },
+        },
+      ],
+    });
+  };
+
+  const openSaveMeal = () => {
+    if (sectionMeals.length === 0) return;
+    setSavedMealName(`${section} meal`);
+    setSaveMealVisible(true);
+  };
+
+  const handleSaveMeal = async () => {
+    if (!uid || quickActionPending || !savedMealName.trim() || sectionMeals.length === 0) return;
+    setQuickActionPending(true);
+    try {
+      await createSavedMeal(uid, savedMealName, sectionMeals);
+      setSaveMealVisible(false);
+      showAppDialog({
+        title: "Meal saved",
+        message: "You can add it from Saved meals next time.",
+        buttons: [{ text: "OK" }],
+      });
+    } catch (error) {
+      console.log("Failed to save meal", error);
+      showAppDialog({
+        title: "Could not save meal",
+        message: "Check your connection and try again.",
+        buttons: [{ text: "OK" }],
+      });
+    } finally {
+      setQuickActionPending(false);
+    }
   };
 
   useEffect(() => {
@@ -424,6 +496,25 @@ export default function MealSectionScreen() {
 
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Foods</Text>
+          <View style={styles.quickActionRow}>
+            <TouchableOpacity
+              style={styles.quickActionBtn}
+              onPress={handleCopyPrevious}
+              disabled={quickActionPending}
+            >
+              <Ionicons name="copy-outline" size={15} color="#cfd3f8" />
+              <Text style={styles.quickActionText}>Copy previous</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.quickActionBtn, sectionMeals.length === 0 && styles.quickActionDisabled]}
+              onPress={openSaveMeal}
+              disabled={quickActionPending || sectionMeals.length === 0}
+            >
+              <Ionicons name="bookmark-outline" size={15} color="#cfd3f8" />
+              <Text style={styles.quickActionText}>Save meal</Text>
+            </TouchableOpacity>
+            {quickActionPending ? <ActivityIndicator size="small" color="#a99cff" /> : null}
+          </View>
           {sectionMeals.length === 0 ? <Text style={styles.subText}>No entries yet.</Text> : null}
           {sectionMeals.map((meal) => (
             <ReanimatedSwipeable
@@ -492,15 +583,16 @@ export default function MealSectionScreen() {
                 />
 
                 {editorPreview ? (
-                  <View style={styles.previewCard}>
-                    <Text style={styles.previewText}>
-                      {editorPreview.grams ?? 0}g / {editorPreview.calories} kcal /{" "}
-                      {normalizeServingInfo(
-                        editingMeal?.source?.servingLabel,
-                        Number(editingMeal?.source?.servingGrams ?? 0)
-                      )}
-                    </Text>
-                  </View>
+                  <NutritionFactsPreview
+                    calories={editorPreview.calories}
+                    proteinGrams={editorPreview.proteinGrams}
+                    carbGrams={editorPreview.carbGrams}
+                    fatGrams={editorPreview.fatGrams}
+                    reference={`${editorPreview.grams ?? 0}g / ${editorPreview.servings ?? 0} servings / ${normalizeServingInfo(
+                      editingMeal?.source?.servingLabel,
+                      Number(editingMeal?.source?.servingGrams ?? 0)
+                    )}`}
+                  />
                 ) : (
                   <Text style={styles.subText}>Enter a positive value.</Text>
                 )}
@@ -552,6 +644,12 @@ export default function MealSectionScreen() {
                     placeholderTextColor="#7a7a8c"
                   />
                 </View>
+                <NutritionFactsPreview
+                  calories={manualCalories.trim() ? Number(manualCalories) : null}
+                  proteinGrams={manualProtein.trim() ? Number(manualProtein) : null}
+                  carbGrams={manualCarbs.trim() ? Number(manualCarbs) : null}
+                  fatGrams={manualFats.trim() ? Number(manualFats) : null}
+                />
               </>
             )}
 
@@ -565,6 +663,45 @@ export default function MealSectionScreen() {
             </View>
           </View>
         </View>
+      </Modal>
+
+      <Modal
+        visible={saveMealVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSaveMealVisible(false)}
+      >
+        <TouchableOpacity
+          activeOpacity={1}
+          style={styles.modalBackdrop}
+          onPress={() => setSaveMealVisible(false)}
+        >
+          <TouchableOpacity activeOpacity={1} style={styles.modalCard} onPress={() => {}}>
+            <Text style={styles.modalTitle}>Save this meal</Text>
+            <Text style={styles.subText}>Save all {sectionMeals.length} items for one-tap logging later.</Text>
+            <TextInput
+              style={styles.input}
+              value={savedMealName}
+              onChangeText={setSavedMealName}
+              placeholder="Meal name"
+              placeholderTextColor="#7a7a8c"
+              autoFocus
+              maxLength={60}
+            />
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={styles.secondaryBtn} onPress={() => setSaveMealVisible(false)}>
+                <Text style={styles.secondaryBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.primaryBtn, !savedMealName.trim() && styles.quickActionDisabled]}
+                onPress={() => void handleSaveMeal()}
+                disabled={!savedMealName.trim() || quickActionPending}
+              >
+                <Text style={styles.primaryBtnText}>{quickActionPending ? "Saving..." : "Save meal"}</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
       </Modal>
     </SafeAreaView>
   );
@@ -621,6 +758,20 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.06)",
   },
   inlineAddBtnText: { color: "#fff", fontSize: 13, fontWeight: "700" },
+  quickActionRow: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
+  quickActionBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderRadius: 9,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+    backgroundColor: "rgba(255,255,255,0.04)",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  quickActionText: { color: "#cfd3f8", fontSize: 12, fontWeight: "700" },
+  quickActionDisabled: { opacity: 0.45 },
   compositionBar: {
     flexDirection: "row",
     height: 10,
@@ -671,15 +822,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   editRow: { gap: 6 },
-  previewCard: {
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    backgroundColor: "rgba(255,255,255,0.04)",
-    padding: 10,
-    gap: 4,
-  },
-  previewText: { color: "#fff", fontSize: 15, fontWeight: "700" },
   modalActions: { flexDirection: "row", justifyContent: "flex-end", gap: 10, marginTop: 4 },
   secondaryBtn: {
     borderWidth: 1,

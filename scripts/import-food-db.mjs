@@ -164,6 +164,7 @@ const fromOff = (row, idx) => {
   ];
   return {
     id: `off-${slugify(row?.code || row?.id || idx + 1)}`,
+    barcode: String(row?.code ?? "").trim() || undefined,
     name: String(row?.product_name ?? row?.product_name_en ?? "").trim(),
     aliases,
     servingLabel: servingLabelRaw || `${servingGrams} g`,
