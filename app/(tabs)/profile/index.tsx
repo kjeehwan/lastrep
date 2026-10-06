@@ -21,6 +21,7 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { auth } from "../../../src/config/firebaseConfig";
+import { BodyCompositionHistoryChart } from "../../../src/bodyComposition/BodyCompositionHistoryChart";
 import { useOfflineStatus } from "../../../src/hooks/useOfflineStatus";
 import {
   acceptHealthSyncConsent,
@@ -173,7 +174,7 @@ export default function ProfileIndex() {
   const router = useRouter();
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ from?: string }>();
+  const params = useLocalSearchParams<{ from?: string; openHealth?: string }>();
   const returnTo = typeof params.from === "string" && params.from.startsWith("/") ? params.from : null;
   const { isOffline } = useOfflineStatus();
   const [uid, setUid] = useState<string | null>(null);
@@ -208,13 +209,18 @@ export default function ProfileIndex() {
   const [healthConnectBodyPermissionGranted, setHealthConnectBodyPermissionGranted] = useState(false);
   const [samsungHealthIssue, setSamsungHealthIssue] = useState<string | null>(null);
   const [healthConsentAccepted, setHealthConsentAccepted] = useState(false);
+  const [healthConsentLoaded, setHealthConsentLoaded] = useState(false);
   const [healthConsentVisible, setHealthConsentVisible] = useState(false);
+  const openedHealthFromRouteRef = useRef<string | null>(null);
+  const profileScrollRef = useRef<ScrollView>(null);
+  const healthSyncYRef = useRef(0);
   const [saveFeedback, setSaveFeedback] = useState<string | null>(null);
   const [redirectTo, setRedirectTo] = useState<Href | null>(null);
   const [lastSleepSyncLabel, setLastSleepSyncLabel] = useState<string>("Not synced yet");
   const [savedSleepDataLabel, setSavedSleepDataLabel] = useState<string>("No saved data");
   const [photoActionMenuVisible, setPhotoActionMenuVisible] = useState(false);
   const [bodyHistoryExpanded, setBodyHistoryExpanded] = useState(false);
+
   const [weightUnit, setWeightUnit] = useState<WeightUnit>("kg");
   const [heightUnit, setHeightUnit] = useState<HeightUnit>("cm");
   const [energyUnit, setEnergyUnit] = useState<EnergyUnit>("kcal");
@@ -228,10 +234,13 @@ export default function ProfileIndex() {
   const [bodyCompositionProfile, setBodyCompositionProfile] = useState<BodyCompositionProfile | null>(null);
   const [bodyCompositionEffective, setBodyCompositionEffective] = useState<BodyCompositionMetricSnapshot>(
     getEffectiveBodyCompositionSnapshot({
+      schemaVersion: 2,
       manual: {
         weightKg: null,
         bodyFatPercent: null,
-        muscleMassKg: null,
+        leanBodyMassKg: null,
+        skeletalMuscleMassKg: null,
+        legacyMuscleMassKg: null,
         recordedAt: null,
         source: null,
         originLabel: null,
@@ -239,7 +248,9 @@ export default function ProfileIndex() {
       synced: {
         weightKg: null,
         bodyFatPercent: null,
-        muscleMassKg: null,
+        leanBodyMassKg: null,
+        skeletalMuscleMassKg: null,
+        legacyMuscleMassKg: null,
         recordedAt: null,
         source: null,
         originLabel: null,
@@ -251,6 +262,7 @@ export default function ProfileIndex() {
     })
   );
   const [initialSnapshot, setInitialSnapshot] = useState<string | null>(null);
+  const initialSnapshotRef = useRef<string | null>(null);
   const latestSnapshotRef = useRef("");
   const skipNextBlurPromptRef = useRef(false);
   const blurPromptOpenRef = useRef(false);
@@ -315,6 +327,10 @@ export default function ProfileIndex() {
     latestSnapshotRef.current = currentSnapshot;
   }, [currentSnapshot]);
 
+  useEffect(() => {
+    initialSnapshotRef.current = initialSnapshot;
+  }, [initialSnapshot]);
+
   const tdeeEstimateKcal = useMemo(() => {
     const displayedWeight = Number(bodyWeight.trim());
     const weightKg = Number.isFinite(displayedWeight) && displayedWeight > 0
@@ -352,7 +368,7 @@ export default function ProfileIndex() {
       setBodyCompositionEffective(effective);
       setBodyWeight(formatWeightForUnit(effective.weightKg, unit));
       setBodyFatPercent(formatPercent(effective.bodyFatPercent));
-      setMuscleMass(formatWeightForUnit(effective.muscleMassKg, unit));
+      setMuscleMass(formatWeightForUnit(effective.skeletalMuscleMassKg, unit));
     },
     []
   );
@@ -429,9 +445,14 @@ export default function ProfileIndex() {
   }, []);
 
   const refreshBodyComposition = useCallback(
-    async (userId: string, unit: WeightUnit) => {
+    async (userId: string, unit: WeightUnit, rebaseIfClean = false) => {
+      const shouldRebase =
+        rebaseIfClean && initialSnapshotRef.current === latestSnapshotRef.current;
       const profile = await getBodyCompositionProfile(userId);
       applyBodyCompositionState(profile, unit);
+      if (shouldRebase) {
+        scheduleAfterInteractions(() => setInitialSnapshot(latestSnapshotRef.current));
+      }
     },
     [applyBodyCompositionState]
   );
@@ -442,6 +463,7 @@ export default function ProfileIndex() {
         setRedirectTo("/auth/sign-in");
         return;
       }
+      setHealthConsentLoaded(false);
       setUid(user.uid);
       try {
         const [data, sleepProfile, compositionProfile] = await Promise.all([
@@ -583,6 +605,10 @@ export default function ProfileIndex() {
         }
       } catch (error) {
         console.log("Failed to load health sync consent state", error);
+      } finally {
+        if (!cancelled) {
+          setHealthConsentLoaded(true);
+        }
       }
     })();
     return () => {
@@ -608,7 +634,7 @@ export default function ProfileIndex() {
                   minIntervalMinutes: 60,
                 });
           if (bodyAutoSyncResult === "synced") {
-            await refreshBodyComposition(uid, weightUnit);
+            await refreshBodyComposition(uid, weightUnit, true);
           }
           const sleepProfile = await getSleepProfile(uid);
           setLastSleepSyncLabel(
@@ -789,6 +815,29 @@ export default function ProfileIndex() {
     })();
   };
 
+  useEffect(() => {
+    if (
+      loading ||
+      !healthConsentLoaded ||
+      typeof params.openHealth !== "string" ||
+      openedHealthFromRouteRef.current === params.openHealth
+    ) {
+      return;
+    }
+
+    openedHealthFromRouteRef.current = params.openHealth;
+    const task = scheduleAfterInteractions(() => {
+      profileScrollRef.current?.scrollTo({
+        y: Math.max(0, healthSyncYRef.current - 12),
+        animated: true,
+      });
+      if (!healthConsentAccepted) {
+        setHealthConsentVisible(true);
+      }
+    });
+    return task.cancel;
+  }, [healthConsentAccepted, healthConsentLoaded, loading, params.openHealth]);
+
   const clearHealthConsentAccepted = useCallback(async () => {
     if (!uid) return;
     try {
@@ -942,7 +991,7 @@ export default function ProfileIndex() {
         );
       }
       if (bodyResult.status === "success") {
-        await refreshBodyComposition(uid, weightUnit);
+        await refreshBodyComposition(uid, weightUnit, true);
       }
 
       const messages: string[] = [];
@@ -1117,7 +1166,7 @@ export default function ProfileIndex() {
       const bodyCompositionUpdates: {
         weightKg?: number | null;
         bodyFatPercent?: number | null;
-        muscleMassKg?: number | null;
+        skeletalMuscleMassKg?: number | null;
       } = {};
       const hasMetricChanged = (nextValue: number | null, currentValue: number | null) =>
         typeof nextValue === "number" &&
@@ -1130,8 +1179,8 @@ export default function ProfileIndex() {
       if (hasMetricChanged(parsedBodyFat, bodyCompositionEffective.bodyFatPercent)) {
         bodyCompositionUpdates.bodyFatPercent = parsedBodyFat;
       }
-      if (hasMetricChanged(nextMuscleMassKg, bodyCompositionEffective.muscleMassKg)) {
-        bodyCompositionUpdates.muscleMassKg = nextMuscleMassKg;
+      if (hasMetricChanged(nextMuscleMassKg, bodyCompositionEffective.skeletalMuscleMassKg)) {
+        bodyCompositionUpdates.skeletalMuscleMassKg = nextMuscleMassKg;
       }
       if (Object.keys(bodyCompositionUpdates).length > 0) {
         await saveManualBodyCompositionEntry(uid, bodyCompositionUpdates);
@@ -1187,7 +1236,7 @@ export default function ProfileIndex() {
     tdeeActivity,
     bodyCompositionEffective.weightKg,
     bodyCompositionEffective.bodyFatPercent,
-    bodyCompositionEffective.muscleMassKg,
+    bodyCompositionEffective.skeletalMuscleMassKg,
     buildSnapshot,
     refreshBodyComposition,
   ]);
@@ -1413,6 +1462,7 @@ export default function ProfileIndex() {
         <View style={styles.headerSpacer} />
       </View>
       <ScrollView
+        ref={profileScrollRef}
         style={styles.container}
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
@@ -1620,6 +1670,14 @@ export default function ProfileIndex() {
           </View>
           <Text style={styles.helperText}>Latest source: {latestBodyCompositionSource}</Text>
           <Text style={styles.helperText}>Last updated: {latestBodyCompositionLabel}</Text>
+          <Text style={styles.helperText}>
+            Lean body mass: {formatWeightForUnit(bodyCompositionEffective.leanBodyMassKg, weightUnit) || "-"} {weightUnit}
+          </Text>
+          {typeof bodyCompositionEffective.legacyMuscleMassKg === "number" ? (
+            <Text style={styles.helperText}>
+              Legacy muscle mass: {formatWeightForUnit(bodyCompositionEffective.legacyMuscleMassKg, weightUnit)} {weightUnit} (type unverified)
+            </Text>
+          ) : null}
           <View style={styles.targetRow}>
             <View style={styles.targetColumn}>
               <Text style={styles.targetLabel}>Weight ({weightUnit})</Text>
@@ -1644,7 +1702,7 @@ export default function ProfileIndex() {
               />
             </View>
             <View style={styles.targetColumn}>
-              <Text style={styles.targetLabel}>Skeletal muscle ({weightUnit})</Text>
+              <Text style={styles.targetLabel}>Skeletal muscle ({weightUnit}, manual)</Text>
               <TextInput
                 placeholder={weightUnit === "lbs" ? "88.2" : "40.0"}
                 placeholderTextColor="#7a7a8c"
@@ -1677,7 +1735,13 @@ export default function ProfileIndex() {
                     <Text style={styles.historyRowValues}>
                       {`W ${formatWeightForUnit(entry.weightKg, weightUnit) || "-"} ${weightUnit} | BF ${
                         formatPercent(entry.bodyFatPercent) || "-"
-                      }% | MM ${formatWeightForUnit(entry.muscleMassKg, weightUnit) || "-"} ${weightUnit}`}
+                      }% | LBM ${formatWeightForUnit(entry.leanBodyMassKg, weightUnit) || "-"} ${weightUnit} | SMM ${
+                        formatWeightForUnit(entry.skeletalMuscleMassKg, weightUnit) || "-"
+                      } ${weightUnit}${
+                        typeof entry.legacyMuscleMassKg === "number"
+                          ? ` | Legacy ${formatWeightForUnit(entry.legacyMuscleMassKg, weightUnit)} ${weightUnit}`
+                          : ""
+                      }`}
                     </Text>
                   </View>
                 ))}
@@ -1695,6 +1759,10 @@ export default function ProfileIndex() {
               </>
             )}
           </View>
+          <BodyCompositionHistoryChart
+            history={bodyCompositionHistory}
+            weightUnit={weightUnit}
+          />
         </View>
 
         <View style={styles.card}>
@@ -1806,7 +1874,12 @@ export default function ProfileIndex() {
           />
         </View>
 
-        <View style={styles.card}>
+        <View
+          style={styles.card}
+          onLayout={(event) => {
+            healthSyncYRef.current = event.nativeEvent.layout.y;
+          }}
+        >
           <Text style={styles.cardTitle}>Health sync</Text>
           <Text style={styles.healthSummaryText}>Sync supported sleep and body composition data.</Text>
           <View style={styles.healthStatusBlock}>

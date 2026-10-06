@@ -65,6 +65,7 @@ import {
   type ExercisePerformanceSession,
   type ProgressionPhase,
 } from "../../../src/workouts/exerciseProgression";
+import { buildExerciseProgressInsights } from "../../../src/workouts/exerciseProgressInsights";
 import { selectRecommendedExercises } from "../../../src/workouts/recommendationExerciseSelection";
 import { getCalendarMatrix } from "../../../src/workouts/homeInsights";
 import { useWorkoutDraftPersistence } from "../../../src/workouts/workoutLog/useWorkoutDraftPersistence";
@@ -75,6 +76,7 @@ import { WorkoutRecommendationSection } from "../../../src/workouts/workoutLog/W
 import { WorkoutRoutineSection } from "../../../src/workouts/workoutLog/WorkoutRoutineSection";
 import { WorkoutSessionCard } from "../../../src/workouts/workoutLog/WorkoutSessionCard";
 import { WorkoutNativeSetRows } from "../../../src/workouts/workoutLog/WorkoutNativeSetRows";
+import { ExerciseProgressSummary } from "../../../src/workouts/workoutLog/ExerciseProgressSummary";
 
 type Unit = "kg" | "lbs" | "km" | "mi";
 type SetType = "warmup" | "normal" | "failure" | "drop";
@@ -2737,6 +2739,24 @@ export default function WorkoutLog() {
       .sort((left, right) => right.date.getTime() - left.date.getTime());
   }, [historyExerciseName, pastWorkouts]);
 
+  const exerciseProgressInsights = useMemo(
+    () =>
+      buildExerciseProgressInsights(
+        exerciseHistory.map((entry) => ({ date: entry.date, sets: entry.sets }))
+      ),
+    [exerciseHistory]
+  );
+
+  const exerciseProgressByDate = useMemo(
+    () =>
+      new Map(
+        exerciseProgressInsights.sessions.map((session) => [session.date.getTime(), session])
+      ),
+    [exerciseProgressInsights.sessions]
+  );
+  const shouldShowStrengthProgress =
+    historyExerciseName != null && getExerciseMode(historyExerciseName) === "resistance";
+
   const handleRepeatPastWorkoutPress = () => {
     if (pastWorkouts.length === 0) {
       setUiFeedback("No previous workouts yet. Finish one workout to enable repeat.");
@@ -4060,11 +4080,19 @@ export default function WorkoutLog() {
             <Text style={styles.modalTitle}>{historyExerciseName ?? "Exercise"} history</Text>
             {exerciseHistory.length ? (
               <ScrollView style={styles.exerciseHistoryList}>
+                {shouldShowStrengthProgress ? (
+                  <ExerciseProgressSummary insights={exerciseProgressInsights} />
+                ) : null}
                 {exerciseHistory.map((entry, index) => (
                   <View key={`${entry.date.getTime()}-${entry.sets.length}-${index}`} style={styles.exerciseHistoryRow}>
-                    <Text style={styles.exerciseHistoryDate}>
-                      {entry.date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
-                    </Text>
+                    <View style={styles.exerciseHistoryDateRow}>
+                      <Text style={styles.exerciseHistoryDate}>
+                        {entry.date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+                      </Text>
+                      {exerciseProgressByDate.get(entry.date.getTime())?.isStrengthPr ? (
+                        <Text style={styles.exerciseHistoryPrBadge}>PR</Text>
+                      ) : null}
+                    </View>
                     <View style={styles.exerciseHistorySetList}>
                       {entry.sets.map((set, setIndex) => (
                         <Text key={`${entry.date.getTime()}-${index}-${setIndex}`} style={styles.exerciseHistorySets}>
@@ -5132,10 +5160,20 @@ const styles = StyleSheet.create({
   groupChipText: { color: "#d8daec", fontWeight: "700" },
   groupChipTextActive: { color: "#0d0d1a" },
   focusChipRow: { gap: 8, paddingTop: 10 },
-  exerciseHistoryList: { maxHeight: 320 },
+  exerciseHistoryList: { maxHeight: 460 },
   exerciseHistoryRow: { gap: 4, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "rgba(255,255,255,0.1)" },
   exerciseHistorySetList: { gap: 3 },
+  exerciseHistoryDateRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   exerciseHistoryDate: { color: "#cdd0e0", fontSize: 12, fontWeight: "700" },
+  exerciseHistoryPrBadge: {
+    color: "#1b1400",
+    backgroundColor: "#fbbf24",
+    borderRadius: 999,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    fontSize: 9,
+    fontWeight: "900",
+  },
   exerciseHistorySets: { color: "#fff", fontSize: 13, lineHeight: 19 },
   exerciseHeader: {
     flexDirection: "row",

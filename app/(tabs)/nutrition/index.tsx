@@ -91,7 +91,7 @@ const TimelineBarItem = React.memo(function TimelineBarItem({
 
 export default function NutritionIndex() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ date?: string }>();
+  const params = useLocalSearchParams<{ date?: string; focusMeals?: string }>();
   const [uid, setUid] = useState<string | null>(null);
   const [redirectTo, setRedirectTo] = useState<Href | null>(null);
   const [meals, setMeals] = useState<NutritionMeal[]>([]);
@@ -107,6 +107,9 @@ export default function NutritionIndex() {
   const [timelinePoints, setTimelinePoints] = useState<ChartPoint[]>([]);
   const [energyUnit, setEnergyUnit] = useState<EnergyUnit>("kcal");
   const timelineScrollRef = React.useRef<FlatList<ChartPoint> | null>(null);
+  const pageScrollRef = React.useRef<ScrollView | null>(null);
+  const logMealsYRef = React.useRef(0);
+  const handledMealFocusRef = React.useRef<string | null>(null);
   const refreshProfileTaskRef = React.useRef<{ cancel: () => void } | null>(null);
   const lastProfileRefreshAtRef = React.useRef(0);
   const [timelineShouldSnapToLatest, setTimelineShouldSnapToLatest] = useState(true);
@@ -116,6 +119,23 @@ export default function NutritionIndex() {
     const fromParams = typeof params.date === "string" ? params.date : "";
     return parseDateKey(fromParams) ? fromParams : formatDateKey(new Date());
   }, [params.date]);
+
+  useEffect(() => {
+    if (
+      typeof params.focusMeals !== "string" ||
+      handledMealFocusRef.current === params.focusMeals
+    ) {
+      return;
+    }
+    handledMealFocusRef.current = params.focusMeals;
+    const task = scheduleAfterInteractions(() => {
+      pageScrollRef.current?.scrollTo({
+        y: Math.max(0, logMealsYRef.current - 8),
+        animated: true,
+      });
+    });
+    return task.cancel;
+  }, [params.focusMeals]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -622,7 +642,7 @@ export default function NutritionIndex() {
         <Text style={styles.title}>Nutrition</Text>
         <View style={styles.headerSpacer} />
       </View>
-      <ScrollView contentContainerStyle={styles.content} style={styles.container}>
+      <ScrollView ref={pageScrollRef} contentContainerStyle={styles.content} style={styles.container}>
 
         <View style={styles.card}>
           <View style={styles.sectionHeaderRow}>
@@ -839,7 +859,12 @@ export default function NutritionIndex() {
           </View>
         </View>
 
-        <View style={styles.card}>
+        <View
+          style={styles.card}
+          onLayout={(event) => {
+            logMealsYRef.current = event.nativeEvent.layout.y;
+          }}
+        >
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionTitle}>Log meals</Text>
             <TouchableOpacity style={styles.addMealBtn} onPress={() => setAddMealVisible(true)}>
