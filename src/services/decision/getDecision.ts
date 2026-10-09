@@ -42,9 +42,13 @@ const heuristicDecision = (input: DecisionInputs): DecisionOutput => {
   let decision: Decision = "MAINTAIN";
   const explanation: string[] = [];
   let intensityPct: number | undefined;
+  let headline = "Train at a steady effort.";
+  let todayAction = "Follow the planned session without forcing additional weight, reps, or sets.";
 
   if (isLowSleep || isHighFatigue || isHighSoreness || shouldPullBackForNutrition) {
     decision = "PULL_BACK";
+    headline = "Reduce today's training stress.";
+    todayAction = "Reduce the load or working sets and avoid training to failure today.";
     explanation.push("Recovery signals are low today.");
     if (isLowSleep) explanation.push("Sleep is below 6 hours.");
     if (isHighFatigue || isHighSoreness) explanation.push("Fatigue or soreness is elevated.");
@@ -54,11 +58,14 @@ const heuristicDecision = (input: DecisionInputs): DecisionOutput => {
   } else if (isStrongRecovery) {
     if (isUnderTarget) {
       decision = "MAINTAIN";
+      headline = "Keep today's session steady.";
       explanation.push("Recovery looks solid overall.");
       explanation.push("Recent calorie intake has trailed your target, so keep the session steady.");
       if (dietPhase === "Cut") explanation.push("Given you're in a cut, keep increases conservative.");
     } else {
       decision = "PUSH";
+      headline = "You are ready to progress.";
+      todayAction = "Progress one variable conservatively while keeping the planned effort target.";
       explanation.push("Recovery looks solid.");
       explanation.push("Motivation is high with manageable fatigue.");
       if (isOnTarget) explanation.push("Completed-day nutrition has stayed on target.");
@@ -67,6 +74,12 @@ const heuristicDecision = (input: DecisionInputs): DecisionOutput => {
     }
   } else {
     decision = "MAINTAIN";
+    headline = input.plannedWorkout?.source === "none"
+      ? "Your readiness is mixed today."
+      : "Train at a steady effort.";
+    todayAction = input.plannedWorkout?.source === "none"
+      ? "Choose today's workout, then update this plan for session-specific guidance."
+      : todayAction;
     explanation.push("Keep a steady session today.");
     explanation.push("No strong signal to push or pull back.");
     if (isUnderTarget) explanation.push("Recent calorie intake has trailed your target.");
@@ -75,8 +88,8 @@ const heuristicDecision = (input: DecisionInputs): DecisionOutput => {
   }
 
   return intensityPct === undefined
-    ? { decision, explanation }
-    : { decision, explanation, adjustments: { intensityPct } };
+    ? { decision, headline, todayAction, explanation }
+    : { decision, headline, todayAction, explanation, adjustments: { intensityPct } };
 };
 
 const cloudDecision = async (input: DecisionInputs): Promise<DecisionOutput> => {

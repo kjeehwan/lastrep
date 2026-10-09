@@ -14,6 +14,18 @@ const recommend = (overrides: Partial<Parameters<typeof recommendExerciseProgres
   });
 
 describe("exercise progression", () => {
+  it("respects the barbell grid when recommending progression", () => {
+    const result = recommend({ sessions: [{ sets: [{ weightKg: 100, reps: "4", rpe: "7" }] }],
+      availableWeights: { mode: "regular", unit: "kg", minimum: 20, increment: 2 } });
+    expect(result.weightKg).toBe(102);
+  });
+
+  it("holds the load and increases reps when the next increment is too large", () => {
+    const result = recommend({ sessions: [{ sets: [{ weightKg: 100, reps: "4", rpe: "7" }] }],
+      availableWeights: { mode: "regular", unit: "kg", minimum: 20, increment: 5 } });
+    expect(result.weightKg).toBe(100);
+    expect(result.reps).toBe("5");
+  });
   it("keeps a demonstrated strength load and reps together", () => {
     const result = recommend();
     expect(result.weightKg).toBe(105);
