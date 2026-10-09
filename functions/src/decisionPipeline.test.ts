@@ -119,7 +119,7 @@ describe("decisionPipeline golden cases", () => {
     const parsed = parseAndSanitizeDecisionOutputText(
       toJson({
         decision: "PUSH",
-        explanation: ["Bullet 1", "Bullet 2"],
+        explanation: ["Recovery is solid.", "Fatigue is low."],
         adjustments: { intensityPct: 10 },
       })
     );
@@ -132,7 +132,7 @@ describe("decisionPipeline golden cases", () => {
     const parsed = parseAndSanitizeDecisionOutputText(
       toJson({
         decision: "PULL_BACK",
-        explanation: ["Bullet 1", "Bullet 2"],
+        explanation: ["Fatigue is elevated.", "Soreness is high."],
         adjustments: { intensityPct: -10 },
       })
     );
@@ -144,7 +144,7 @@ describe("decisionPipeline golden cases", () => {
   it("MAINTAIN strips adjustments and forbidden volumePct", () => {
     const parsed = sanitizeDecisionOutput({
       decision: "MAINTAIN",
-      explanation: ["Bullet 1", "Bullet 2"],
+      explanation: ["Recovery is stable.", "Sleep is adequate."],
       adjustments: { intensityPct: 20, volumePct: 20 },
     });
     expect(parsed.ok).toBe(true);
@@ -156,7 +156,7 @@ describe("decisionPipeline golden cases", () => {
   it("caps explanation bullets at 4", () => {
     const parsed = sanitizeDecisionOutput({
       decision: "PUSH",
-      explanation: ["One", "Two", "Three", "Four", "Five"],
+      explanation: ["One point.", "Two points.", "Three points.", "Four points.", "Five points."],
       adjustments: { intensityPct: 20 },
     });
     expect(parsed.ok).toBe(true);
@@ -164,33 +164,31 @@ describe("decisionPipeline golden cases", () => {
     expect(parsed.data.explanation.length).toBe(4);
   });
 
-  it("caps each bullet to 140 chars", () => {
-    const long = "x".repeat(200);
+  it("keeps only a complete sentence when a bullet exceeds 140 chars", () => {
+    const firstSentence = "Sleep and fatigue support normal training today.";
+    const long = `${firstSentence} ${"x".repeat(200)}`;
     const parsed = sanitizeDecisionOutput({
       decision: "PUSH",
-      explanation: [long, "Two"],
+      explanation: [long, "Motivation is high."],
       adjustments: { intensityPct: 20 },
     });
     expect(parsed.ok).toBe(true);
     if (!parsed.ok) return;
-    expect(parsed.data.explanation[0].length).toBeLessThanOrEqual(140);
+    expect(parsed.data.explanation[0]).toBe(firstSentence);
   });
 
-  it("truncates long bullets without trailing ellipsis", () => {
-    const long =
-      "Recovery is solid overall, and motivation is high, but this sentence is intentionally too long to fit the bullet limit cleanly.";
+  it("rejects an overlong bullet when no complete sentence fits", () => {
+    const long = `Recovery is solid overall but ${"x".repeat(180)}`;
     const parsed = sanitizeDecisionOutput({
       decision: "PUSH",
       explanation: [long, "Nutrition remains supportive."],
       adjustments: { intensityPct: 10 },
     });
-    expect(parsed.ok).toBe(true);
-    if (!parsed.ok) return;
-    expect(parsed.data.explanation[0].endsWith("...")).toBe(false);
+    expect(parsed).toEqual({ ok: false, reason: "incomplete_explanation" });
   });
 
-  it("caps total explanation chars to 600", () => {
-    const long = "x".repeat(200);
+  it("keeps total explanation text within 600 chars", () => {
+    const long = `${"x".repeat(130)}.`;
     const parsed = sanitizeDecisionOutput({
       decision: "PULL_BACK",
       explanation: [long, long, long, long],
@@ -205,10 +203,23 @@ describe("decisionPipeline golden cases", () => {
   it("rejects malformed output", () => {
     const parsed = sanitizeDecisionOutput({
       decision: "PUSH",
-      explanation: ["Only one bullet"],
+      explanation: ["Only one bullet."],
       adjustments: { intensityPct: 999 },
     });
     expect(parsed.ok).toBe(false);
+  });
+
+  it("rejects a short bullet that ends mid-sentence", () => {
+    const parsed = sanitizeDecisionOutput({
+      decision: "MAINTAIN",
+      explanation: [
+        "Recovery is otherwise stable.",
+        "Nutrition is supportive, but this factor is only a",
+      ],
+      adjustments: null,
+    });
+
+    expect(parsed).toEqual({ ok: false, reason: "incomplete_explanation" });
   });
 
   it("humanizes nutrition adherence enums in explanations", () => {

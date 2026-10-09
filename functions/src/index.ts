@@ -6,6 +6,7 @@ import { defineSecret } from "firebase-functions/params";
 import OpenAI from "openai";
 import { z } from "zod";
 import { hashDecisionInputs } from "./decisionHash";
+import { applyDecisionGuardrails } from "./decisionGuardrails";
 import { heuristicDecision } from "./decisionHeuristic";
 import { parseAndSanitizeDecisionOutputText, sanitizeDecisionOutput } from "./decisionPipeline";
 import type { DecisionInputs, DecisionOutput, DecisionPathUsed } from "./decisionTypes";
@@ -38,6 +39,69 @@ const decisionInputsSchema: z.ZodType<DecisionInputs> = z.object({
     .strict()
     .nullable()
     .optional(),
+  plannedWorkout: z
+    .object({
+      source: z.enum(["draft", "program", "rest_day", "none"]),
+      title: z.string().max(120).nullable(),
+      exerciseNames: z.array(z.string().min(1).max(100)).max(12),
+    })
+    .strict()
+    .nullable()
+    .optional(),
+  recentTraining: z
+    .object({
+      lastWorkoutHoursAgo: z.number().min(0).nullable(),
+      lastWorkoutTitle: z.string().max(120).nullable(),
+      workoutsLast7Days: z.number().int().min(0).max(30),
+      exercisePerformance: z
+        .array(
+          z
+            .object({
+              exerciseName: z.string().min(1).max(100),
+              sessions: z.number().int().min(0).max(3),
+              daysSinceLast: z.number().int().min(0).nullable(),
+              lastTopWeightKg: z.number().min(0).nullable(),
+              lastTopReps: z.number().int().min(0).nullable(),
+              lastAverageRpe: z.number().min(0).max(10).nullable(),
+              estimated1RmKg: z.number().min(0).nullable(),
+              trend: z.enum(["improving", "stable", "declining", "insufficient"]),
+            })
+            .strict()
+        )
+        .max(6),
+    })
+    .strict()
+    .nullable()
+    .optional(),
+  dailyContext: z
+    .object({
+      dateKey: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      pain: z
+        .object({
+          area: z.enum(["shoulder", "elbow", "wrist_hand", "upper_back", "lower_back", "hip", "knee", "ankle_foot", "other"]),
+          side: z.enum(["left", "right", "both", "not_applicable"]),
+          severity: z.enum(["mild", "moderate", "severe"]),
+          trigger: z.enum(["at_rest", "pressing", "pulling", "overhead", "squatting", "hinging", "running_impact", "other"]),
+          note: z.string().max(240).nullable(),
+          affectsPlannedWorkout: z.boolean(),
+        })
+        .strict()
+        .nullable(),
+      additionalActivity: z
+        .object({
+          type: z.enum(["long_walk_hike", "running", "cycling", "sport", "physical_work", "travel", "other"]),
+          timing: z.enum(["today", "yesterday", "two_days_ago"]),
+          effort: z.enum(["light", "moderate", "hard"]),
+          duration: z.enum(["under_1h", "1_to_2h", "over_2h"]),
+          overlapsPlannedWorkout: z.boolean(),
+        })
+        .strict()
+        .nullable(),
+      note: z.string().max(300).nullable(),
+    })
+    .strict()
+    .nullable()
+    .optional(),
 });
 
 const formatZodError = (error: z.ZodError) =>
@@ -46,7 +110,7 @@ const formatZodError = (error: z.ZodError) =>
 const OPENAI_API_KEY = defineSecret("OPENAI_API_KEY");
 const REVENUECAT_WEBHOOK_AUTH = defineSecret("REVENUECAT_WEBHOOK_AUTH");
 const DEV_UID_ALLOWLIST_SECRET = defineSecret("DEV_UID_ALLOWLIST");
-const DECISION_PROMPT_VERSION = "v6";
+const DECISION_PROMPT_VERSION = "v8";
 const OPENAI_DECISION_MODEL = "gpt-5-nano";
 const OPENAI_TIMEOUT_MS = 12000;
 const OPENAI_FIRST_ATTEMPT_MS = 8000;
@@ -87,12 +151,15 @@ const decisionOutputJsonSchema = {
     additionalProperties: false,
     properties: {
       decision: { type: "string", enum: ["PUSH", "MAINTAIN", "PULL_BACK"] },
+      headline: { type: "string", minLength: 12, maxLength: 100 },
+      todayAction: { type: "string", minLength: 12, maxLength: 180 },
       explanation: {
         type: "array",
         minItems: 2,
         maxItems: 3,
-        items: { type: "string", minLength: 12, maxLength: 140 },
+        items: { type: "string", minLength: 12, maxLength: 120 },
       },
+      caution: { anyOf: [{ type: "null" }, { type: "string", minLength: 12, maxLength: 180 }] },
       adjustments: {
         anyOf: [
           { type: "null" },
@@ -107,7 +174,7 @@ const decisionOutputJsonSchema = {
         ],
       },
     },
-    required: ["decision", "explanation", "adjustments"],
+    required: ["decision", "headline", "todayAction", "explanation", "caution", "adjustments"],
   },
 };
 
@@ -738,7 +805,7 @@ export const getDailyDecision = functions
               latencyMsOpenAI: 0,
               inputHashPrefix,
             });
-            return parsedCache.data;
+            return applyDecisionGuardrails(parsedCache.data, inputs);
           }
           fallbackReason = parsedCache.reason;
         }
@@ -758,31 +825,49 @@ export const getDailyDecision = functions
         inputHashPrefix,
         fallbackReason: "openai_disabled",
       });
-      return fallback;
+      return applyDecisionGuardrails(fallback, inputs);
     }
 
+    const promptInputs = {
+      ...inputs,
+      nutrition: inputs.nutrition
+        ? {
+            yesterdayCalories: inputs.nutrition.yesterdayCalories,
+            yesterdayAdherence: inputs.nutrition.yesterdayAdherence,
+            recentAdherence: inputs.nutrition.recentAdherence,
+            recentCompletedDaysTracked: inputs.nutrition.recentCompletedDaysTracked,
+          }
+        : null,
+    };
     const prompt = [
       "Return ONLY valid JSON matching the schema.",
       "Task: choose one decision: PUSH, MAINTAIN, PULL_BACK.",
-      "Base the decision on concrete factors: sleep, soreness, fatigue, motivation, and nutrition.",
+      "Base the decision on concrete factors: recovery, planned workout, recent comparable performance, optional daily context, and completed-day nutrition.",
       "Use weighted recovery emphasis aligned with app logic: sleep 30%, soreness 30%, fatigue 30%, motivation 10%.",
       "Recovery rule: very high soreness/fatigue should generally favor PULL_BACK unless other evidence is exceptionally strong.",
       "Readiness rule: strong recovery (good sleep, low soreness/fatigue, solid motivation) can justify PUSH.",
       "When signals are mixed without a clear edge, prefer MAINTAIN.",
       "If readiness is clearly strong (sleepHours >= 6, soreness <= 2, fatigue <= 2, motivation >= 7), prefer PUSH unless another risk is strong.",
       "Use sleep/fatigue/soreness/motivation as primary signals; nutrition is secondary.",
-      "Nutrition rule: do not over-penalize calories logged so far today.",
-      "Use yesterday/recent adherence for nutrition signal.",
+      "Nutrition rule: use only yesterday/recent completed-day adherence; never describe today's partial intake as below target.",
       "Use nutrition, trainingPhase, and dietPhase as tie-break/modifier context, not as sole drivers.",
-      "Explanation rules: 2-3 concise user-facing bullets, one point per bullet.",
-      "Each bullet must be a complete sentence with plain language.",
+      "Pain rule: relevant severe or movement-specific discomfort must not produce PUSH.",
+      "Activity rule: extra activity matters most when it overlaps with the planned workout.",
+      "Performance rule: compare only the same exercise; RPE 9-10 argues against adding load immediately.",
+      "If no workout is selected, keep the decision general and do not mention specific exercises.",
+      "Output a complete headline and one practical todayAction before the reasons.",
+      "The todayAction must say what to do with load, sets, effort, exercise selection, or recovery.",
+      "Explanation rules: 2-3 concise user-facing reasons, one concrete point per reason.",
+      "Each bullet must be one complete sentence under 110 characters, ending with punctuation.",
       "Do not use shorthand like slashes or clipped endings.",
       "Do not mention readiness score or scoring bands.",
       "Cite at least two concrete factors among sleep, soreness, fatigue, motivation.",
       "Mention nutrition in at most one bullet and only if material.",
       "If phase context materially affects the call, mention trainingPhase or dietPhase in one bullet.",
+      "Do not write filler such as 'contextualizes the decision'.",
+      "Set caution to null unless pain or another specific safety issue needs attention.",
       "Adjustments rule: MAINTAIN->null, PUSH->{10 or 20}, PULL_BACK->{-10 or -20}.",
-      `Inputs: ${JSON.stringify(inputs)}`,
+      `Inputs: ${JSON.stringify(promptInputs)}`,
     ].join("\n");
 
     const attemptOpenAI = async (timeoutMs: number, maxOutputTokens: number) => {
@@ -822,7 +907,7 @@ export const getDailyDecision = functions
             latencyMsOpenAI,
             inputHashPrefix,
           });
-          return parsed.data;
+          return applyDecisionGuardrails(parsed.data, inputs);
         }
         parseFailureReason = parsed.reason;
       }
@@ -841,7 +926,7 @@ export const getDailyDecision = functions
             latencyMsOpenAI,
             inputHashPrefix,
           });
-          return parsed.data;
+          return applyDecisionGuardrails(parsed.data, inputs);
         }
         parseFailureReason = parsed.reason;
       }
@@ -850,7 +935,11 @@ export const getDailyDecision = functions
         firstAttempt.response,
         parseFailureReason || undefined
       );
-      if (OPENAI_RETRY_ENABLED && fallbackReason === "incomplete:max_output_tokens") {
+      if (
+        OPENAI_RETRY_ENABLED &&
+        (fallbackReason === "incomplete:max_output_tokens" ||
+          fallbackReason === "incomplete_explanation")
+      ) {
         openAiRetried = true;
         const retryAttempt = await attemptOpenAI(
           OPENAI_RETRY_MS,
@@ -872,7 +961,7 @@ export const getDailyDecision = functions
                 latencyMsOpenAI,
                 inputHashPrefix,
               });
-              return parsed.data;
+              return applyDecisionGuardrails(parsed.data, inputs);
             }
             retryParseFailureReason = parsed.reason;
           }
@@ -890,7 +979,7 @@ export const getDailyDecision = functions
                 latencyMsOpenAI,
                 inputHashPrefix,
               });
-              return parsed.data;
+              return applyDecisionGuardrails(parsed.data, inputs);
             }
             retryParseFailureReason = parsed.reason;
           }
@@ -929,7 +1018,7 @@ export const getDailyDecision = functions
               latencyMsOpenAI,
               inputHashPrefix,
             });
-            return parsed.data;
+            return applyDecisionGuardrails(parsed.data, inputs);
           }
           parseFailureReason = parsed.reason;
         }
@@ -948,7 +1037,7 @@ export const getDailyDecision = functions
               latencyMsOpenAI,
               inputHashPrefix,
             });
-            return parsed.data;
+            return applyDecisionGuardrails(parsed.data, inputs);
           }
           parseFailureReason = parsed.reason;
         }
@@ -976,7 +1065,7 @@ export const getDailyDecision = functions
       inputHashPrefix,
       fallbackReason: fallbackReason || "openai_failed",
     });
-    return fallback;
+    return applyDecisionGuardrails(fallback, inputs);
   });
 
 export const setDevEntitlementOverride = functions

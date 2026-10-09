@@ -39,7 +39,17 @@ import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import { db } from "../../../src/config/firebaseConfig";
 import WorkoutGestureTextInput from "../../../src/components/WorkoutGestureTextInput";
-import type { Decision } from "../../../src/types/decision";
+import type { Decision, LastResultPayload } from "../../../src/types/decision";
+import { safeParseDecisionOutput } from "../../../src/services/decision/decisionValidation";
+import { AvailableWeightsModal } from "../../../src/workouts/workoutLog/AvailableWeightsModal";
+import { useAvailableWeights } from "../../../src/workouts/workoutLog/useAvailableWeights";
+import { weightPreferenceKey } from "../../../src/workouts/availableWeights";
+import { workoutGuidanceSignature, withAvailableWeights } from "../../../src/services/decision/workoutGuidance";
+import { applyTodayPlanToWorkoutDraft } from "../../../src/services/decision/todayPlanDraft";
+import { parseWorkoutDraftPlan, getDailyContextSummary } from "../../../src/services/decision/todayPlanContext";
+import { TodayPlanContextModal } from "../../../src/services/decision/TodayPlanContextModal";
+import { useWorkoutTodayPlan } from "../../../src/workouts/workoutLog/useWorkoutTodayPlan";
+import { WorkoutTodayPlan } from "../../../src/workouts/workoutLog/WorkoutTodayPlan";
 import { showAppAlert, showAppDialog } from "../../../src/ui/appDialog";
 import { isExpectedOfflineError } from "../../../src/utils/networkErrors";
 import { scheduleAfterInteractions } from "../../../src/utils/scheduleAfterInteractions";
@@ -351,6 +361,7 @@ export default function WorkoutLog() {
   const [exerciseImageMap, setExerciseImageMap] = useState<Record<string, string[]>>({});
   const [showExerciseActionsModal, setShowExerciseActionsModal] = useState(false);
   const [activeExerciseActionId, setActiveExerciseActionId] = useState<string | null>(null);
+  const [availableWeightsTarget, setAvailableWeightsTarget] = useState<{ name: string; unit: "kg" | "lbs" } | null>(null);
   const [undoDeletedSet, setUndoDeletedSet] = useState<{
     exerciseId: string;
     setIndex: number;
@@ -444,14 +455,26 @@ export default function WorkoutLog() {
     decision?: Decision;
     adjustments?: { intensityPct?: number };
   } | null>(null);
+  const [appliedGuidance, setAppliedGuidance] = useState<{
+    plan: LastResultPayload;
+    before: Exercise[];
+    after: Exercise[];
+    signature: string;
+  } | null>(null);
   const [activeSetMenu, setActiveSetMenu] = useState<{
     exerciseId: string;
     setIndex: number;
   } | null>(null);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
-  const routerParams = useLocalSearchParams<{ trainingPhase?: string; createRoutine?: string }>();
+  const routerParams = useLocalSearchParams<{
+    trainingPhase?: string;
+    createRoutine?: string;
+    todayPlanApplied?: string;
+    showTodayGuidance?: string;
+  }>();
   const auth = getAuth();
   const [activeUid, setActiveUid] = useState<string | null>(auth.currentUser?.uid ?? null);
+  const draftHydratedRef = useRef(false);
   const scrollNativeGesture = useMemo(() => Gesture.Native(), []);
   const draftSavedAtRef = useRef<Date | null>(null);
   const startupLoadTaskRef = useRef<{ cancel: () => void } | null>(null);
@@ -476,13 +499,25 @@ export default function WorkoutLog() {
     }),
     [exercises, exerciseUnits, sessionTitle, sessionDateText, elapsedSeconds, workoutTimerRunning]
   );
+  const availableWeightsPreferences = useAvailableWeights(activeUid);
+  const guidanceWorkout = useMemo(() => withAvailableWeights(parseWorkoutDraftPlan(serializeWorkoutDraft(workoutDraftPayload)), availableWeightsPreferences.values) ?? {
+    source: "none" as const, title: null, exerciseNames: [],
+  }, [workoutDraftPayload, availableWeightsPreferences.values]);
+  const todayPlan = useWorkoutTodayPlan(activeUid, guidanceWorkout);
+  const todayGuidance = todayPlan.plan;
+  const showTodayGuidance = todayPlan.visible;
+  const setShowTodayGuidance = todayPlan.setVisible;
+  const resetGuidance = todayPlan.reset;
+
   const workoutDraftStorageKey = auth.currentUser?.uid ? getDraftKey(auth.currentUser.uid) : null;
   const markWorkoutDraftSaved = useCallback(() => {
     draftSavedAtRef.current = new Date();
   }, []);
+  const canPersistWorkoutDraft = useCallback(() => draftHydratedRef.current, []);
   useWorkoutDraftPersistence({
     draft: workoutDraftPayload,
     storageKey: workoutDraftStorageKey,
+    canPersist: canPersistWorkoutDraft,
     onSaved: markWorkoutDraftSaved,
     serialize: serializeWorkoutDraft,
   });
@@ -505,9 +540,12 @@ export default function WorkoutLog() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setActiveUid(user?.uid ?? null);
+      setAppliedGuidance(null);
+      resetGuidance();
+      setAvailableWeightsTarget(null);
     });
     return unsubscribe;
-  }, [auth]);
+  }, [auth, resetGuidance]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1093,14 +1131,15 @@ export default function WorkoutLog() {
       const user = auth.currentUser;
       if (!user) return;
       const snap = await getDoc(doc(db, "users", user.uid));
-      if (!snap.exists()) return;
+      if (auth.currentUser?.uid !== user.uid) return;
+      if (!snap.exists()) { setLatestDecision(null); return; }
       const data: any = snap.data();
       const last = data?.usage?.decisions?.lastResult;
-      if (last?.result) {
-        setLatestDecision({
-          decision: last.result.decision,
-          adjustments: last.result.adjustments,
-        });
+      const result = safeParseDecisionOutput(last?.result);
+      if (result.success && last?.inputs && last?.createdAt instanceof Timestamp) {
+        setLatestDecision({ decision: result.data.decision, adjustments: result.data.adjustments });
+      } else {
+        setLatestDecision(null);
       }
     } catch (e) {
       if (!isExpectedOfflineError(e)) {
@@ -1110,6 +1149,7 @@ export default function WorkoutLog() {
   }, [auth]);
 
   useEffect(() => {
+    draftHydratedRef.current = false;
     const loadDraft = async () => {
       try {
         const user = auth.currentUser;
@@ -1213,6 +1253,8 @@ export default function WorkoutLog() {
         } catch {
           // no-op
         }
+      } finally {
+        draftHydratedRef.current = true;
       }
     };
     startupLoadTaskRef.current?.cancel();
@@ -1231,6 +1273,7 @@ export default function WorkoutLog() {
     getDraftKey,
     setElapsedSeconds,
     setWorkoutTimerRunning,
+    routerParams.todayPlanApplied,
   ]);
 
   useEffect(() => {
@@ -1314,12 +1357,13 @@ export default function WorkoutLog() {
       ) {
         setSessionDateText(todayKey);
       }
+      void loadLatestDecision();
       const shouldHydrateFocus = Date.now() - lastFocusHydrationAtRef.current >= 30_000;
       if (shouldHydrateFocus) {
         focusRefreshTaskRef.current?.cancel();
         focusRefreshTaskRef.current = scheduleAfterInteractions(async () => {
           lastFocusHydrationAtRef.current = Date.now();
-          await Promise.allSettled([loadLatestDecision(), loadFavoriteExercises()]);
+          await loadFavoriteExercises();
         });
       }
       return () => {
@@ -2878,6 +2922,7 @@ export default function WorkoutLog() {
           decisionIntensityPct: intensityPct,
           dietPhase: dietPhase === "Cut" || dietPhase === "Bulk" ? dietPhase : "Maintain",
           highFatigue,
+          availableWeights: availableWeightsPreferences.values[weightPreferenceKey(name)],
         });
         return {
           id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
@@ -2902,7 +2947,7 @@ export default function WorkoutLog() {
       setExerciseUnits(() => {
         const next: Record<string, Unit> = {};
         recommendedExercises.forEach((exercise) => {
-          next[exercise.id] = "kg";
+          next[exercise.id] = availableWeightsPreferences.values[weightPreferenceKey(exercise.name)]?.unit ?? "kg";
         });
         return next;
       });
@@ -3023,6 +3068,40 @@ export default function WorkoutLog() {
     return activeSetExercise.sets[activeSetMenu.setIndex] ?? null;
   }, [activeSetExercise, activeSetMenu]);
 
+  const currentGuidanceSignature = workoutGuidanceSignature(guidanceWorkout);
+  const guidanceApplied = Boolean(appliedGuidance && todayGuidance &&
+    appliedGuidance.plan.createdAt.isEqual(todayGuidance.createdAt) &&
+    appliedGuidance.signature === currentGuidanceSignature);
+  const guidanceStale = todayPlan.inputsChanged || Boolean(todayGuidance && (
+    toLocalDateKey(todayGuidance.createdAt.toDate()) !== toLocalDateKey(new Date()) ||
+    sessionDateText !== toLocalDateKey(new Date()) ||
+    (!guidanceApplied && workoutGuidanceSignature(todayGuidance.inputs.plannedWorkout) !== currentGuidanceSignature)
+  ));
+  const applyWorkoutGuidance = () => {
+    if (!auth.currentUser || !todayGuidance || todayPlan.busy || todayPlan.error || guidanceStale || guidanceApplied || saving) return;
+    try {
+      const applied = applyTodayPlanToWorkoutDraft(serializeWorkoutDraft(workoutDraftPayload), todayGuidance.result.exerciseAdjustments ?? []);
+      const next = JSON.parse(applied.raw).exercises as Exercise[];
+      if (!applied.changedExercises) {
+        showAppAlert("No changes applied", "The suggested changes do not affect any unfinished working sets.");
+        return;
+      }
+      setAppliedGuidance({
+        plan: todayGuidance,
+        before: exercises,
+        after: next,
+        signature: workoutGuidanceSignature(withAvailableWeights(parseWorkoutDraftPlan(applied.raw), availableWeightsPreferences.values)),
+      });
+      setExercises(next);
+      void AsyncStorage.setItem(getDraftKey(auth.currentUser!.uid), applied.raw)
+        .catch((error) => console.log("Failed to save applied workout guidance", error));
+      setShowTodayGuidance(false);
+    } catch (error) {
+      console.log("Failed to apply today's plan", error);
+      showAppAlert("Plan not applied", "Please try again.");
+    }
+  };
+
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <KeyboardAvoidingView
@@ -3071,6 +3150,40 @@ export default function WorkoutLog() {
         onTimerPress={workoutTimerRunning ? openDurationAdjustModal : startWorkoutTimer}
         onChangePhase={() => router.push({ pathname: "/profile", params: { from: "/(tabs)/workout/log" } })}
       />
+
+      {!routineBuilderMode && sessionDateText === toLocalDateKey(new Date()) ? (
+        <WorkoutTodayPlan
+          plan={todayGuidance}
+          busy={todayPlan.busy || !availableWeightsPreferences.loaded}
+          error={todayPlan.error}
+          recovery={todayPlan.recovery}
+          contextSummary={getDailyContextSummary(todayGuidance?.inputs.dailyContext ?? null)}
+          onRecoveryChange={todayPlan.changeRecovery}
+          onEditContext={() => { setShowTodayGuidance(false); todayPlan.setContextVisible(true); }}
+          visible={showTodayGuidance}
+          stale={guidanceStale}
+          applied={guidanceApplied}
+          canUndo={guidanceApplied && appliedGuidance?.after === exercises}
+          unitForExercise={(name) => {
+            const exercise = exercises.find((item) => normalizeExerciseName(item.name) === normalizeExerciseName(name));
+            return exercise && exerciseUnits[exercise.id] === "lbs" ? "lbs" : "kg";
+          }}
+          onOpen={() => { if (guidanceApplied && !guidanceStale) setShowTodayGuidance(true); else void todayPlan.review(); }}
+          onClose={() => setShowTodayGuidance(false)}
+          onApply={applyWorkoutGuidance}
+          onUndo={() => {
+            if (appliedGuidance?.after !== exercises) return;
+            setExercises(appliedGuidance.before);
+            if (auth.currentUser) {
+              void AsyncStorage.setItem(getDraftKey(auth.currentUser.uid), serializeWorkoutDraft({
+                ...workoutDraftPayload, exercises: appliedGuidance.before,
+              })).catch((error) => console.log("Failed to save guidance undo", error));
+            }
+            setAppliedGuidance(null);
+          }}
+          onUpdate={() => void todayPlan.review()}
+        />
+      ) : null}
 
       {baselineDate ? (
         <View style={styles.baselineBanner}>
@@ -3765,6 +3878,21 @@ export default function WorkoutLog() {
                     )}
                   </View>
                 </View>
+
+                {activeActionMode === "resistance" ? (
+                  <TouchableOpacity
+                    style={[styles.exerciseOptionRow, !availableWeightsPreferences.loaded && styles.disabled]}
+                    disabled={!availableWeightsPreferences.loaded}
+                    onPress={() => {
+                      if (!activeActionExercise) return;
+                      setAvailableWeightsTarget({ name: activeActionExercise.name, unit: activeActionUnit === "lbs" ? "lbs" : "kg" });
+                      closeExerciseActions();
+                    }}
+                  >
+                    <Ionicons name="options-outline" size={18} color="#cdd0e0" />
+                    <Text style={styles.exerciseOptionText}>{availableWeightsPreferences.loaded ? "Available weights" : availableWeightsPreferences.error ? "Weight settings unavailable" : "Loading weight settings..."}</Text>
+                  </TouchableOpacity>
+                ) : null}
 
                 <View style={styles.exerciseReorderRow}>
                   <Ionicons name="swap-vertical-outline" size={18} color="#cdd0e0" />
@@ -4732,6 +4860,25 @@ export default function WorkoutLog() {
         </GestureDetector>
         </View>
       </KeyboardAvoidingView>
+      {availableWeightsTarget ? (
+        <AvailableWeightsModal
+          key={`${activeUid}:${availableWeightsTarget.name}`}
+          name={availableWeightsTarget.name}
+          defaultUnit={availableWeightsTarget.unit}
+          settings={availableWeightsPreferences.values[weightPreferenceKey(availableWeightsTarget.name)] ?? null}
+          onClose={() => setAvailableWeightsTarget(null)}
+          onSave={(settings) => availableWeightsPreferences.save(availableWeightsTarget.name, settings)}
+        />
+      ) : null}
+      <TodayPlanContextModal
+        key={`${todayPlan.contextVisible}:${todayGuidance?.createdAt.toMillis() ?? 0}`}
+        visible={todayPlan.contextVisible}
+        context={todayGuidance?.inputs.dailyContext ?? null}
+        plan={guidanceWorkout}
+        saving={todayPlan.contextSaving}
+        onClose={() => { todayPlan.setContextVisible(false); setShowTodayGuidance(true); }}
+        onSave={(context) => void todayPlan.saveContext(context)}
+      />
     </SafeAreaView>
   );
 }

@@ -7,7 +7,6 @@ import { onAuthStateChanged } from "firebase/auth";
 import {
   addDoc,
   collection,
-  deleteField,
   deleteDoc,
   doc,
   getDocs,
@@ -15,9 +14,7 @@ import {
   onSnapshot,
   orderBy,
   query,
-  setDoc,
   Timestamp,
-  updateDoc,
   where,
 } from "firebase/firestore";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -32,17 +29,14 @@ import {
   TouchableWithoutFeedback,
   View,
 } from "react-native";
-import type { NormalizedDecisionError, ReasonCode } from "../../src/contracts";
 import { auth, db } from "../../src/config/firebaseConfig";
 import { useEntitlement } from "../../src/hooks/useEntitlement";
-import { useOfflineStatus } from "../../src/hooks/useOfflineStatus";
 import { hasHealthSyncConsent } from "../../src/health/healthSyncConsent";
 import {
   getCalorieTargetForDietPhase,
   getMealsForDate,
   getNutritionProfile,
   getNutritionTrendReport,
-  getTodayDecisionNutritionSummary,
 } from "../../src/nutrition/meals";
 import {
   BarChart,
@@ -54,14 +48,16 @@ import { showAppAlert, showAppDialog } from "../../src/ui/appDialog";
 import { getUserData } from "../../src/userData";
 import {
   getSleepProfile,
-  getSleepSampleAgeHours,
   hasHealthSleepPermission,
-  isHealthSleepStale,
 } from "../../src/sleep/sleep";
-import { resolveDecisionSleepInput } from "../../src/sleep/resolveDecisionSleepInput";
-import { getDecision, isNormalizedDecisionError } from "../../src/services/decision/getDecision";
-import { hashDecisionInputs } from "../../src/services/decision/inputHash";
-import type { DecisionInputs, DietPhase, LastResultPayload, TrainingPhase } from "../../src/types/decision";
+import {
+  parseWorkoutDraftPlan,
+} from "../../src/services/decision/todayPlanContext";
+import type {
+  DietPhase,
+  PlannedWorkoutSummary,
+  TrainingPhase,
+} from "../../src/types/decision";
 import { useNow } from "../../src/hooks/useNow";
 import { scheduleAfterInteractions } from "../../src/utils/scheduleAfterInteractions";
 import { isExpectedOfflineError } from "../../src/utils/networkErrors";
@@ -84,39 +80,13 @@ import {
 const HOME_INPUTS_KEY_PREFIX = "home-inputs-v1";
 const HOME_READINESS_HISTORY_KEY_PREFIX = "home-readiness-history-v1";
 const HOME_FIRST_TIME_BANNER_KEY_PREFIX = "home-first-time-banner-dismissed-v1";
+const WORKOUT_DRAFT_KEY_PREFIX = "workout-log-draft-v1";
 const TRAINING_PHASES: TrainingPhase[] = ["Hypertrophy", "Strength", "Power"];
 const DIET_PHASES: DietPhase[] = ["Cut", "Maintain", "Bulk"];
 
 const isTrainingPhase = (value: string): value is TrainingPhase =>
   TRAINING_PHASES.includes(value as TrainingPhase);
 const isDietPhase = (value: string): value is DietPhase => DIET_PHASES.includes(value as DietPhase);
-
-const formatDecisionLabel = (decision: string) => decision.replace("_", " ");
-const formatIntensityLabel = (value?: number) => {
-  if (value == null || value === 0) return "No change";
-  const sign = value > 0 ? "+" : "";
-  return `Intensity: ${sign}${value}%`;
-};
-
-const getReasonMessage = (reasonCode: ReasonCode): string => {
-  switch (reasonCode) {
-    case "FREE_WINDOW_EXHAUSTED":
-      return "Free window is exhausted.";
-    case "DAILY_LIMIT":
-      return "Daily limit reached.";
-    case "COOLDOWN_ACTIVE":
-      return "Please wait before requesting another decision.";
-    default:
-      return "Unable to get a decision right now.";
-  }
-};
-
-const formatCooldownMessage = (cooldownSeconds: number | null): string => {
-  if (cooldownSeconds == null) return "Please wait before requesting another decision.";
-  if (cooldownSeconds <= 0) return "Cooldown complete. Try again now.";
-  const minutes = Math.max(1, Math.ceil(cooldownSeconds / 60));
-  return `Try again in ${minutes} min.`;
-};
 
 const WEEKDAY_LABELS = ["S", "M", "T", "W", "T", "F", "S"] as const;
 const MONTH_LABELS = [
@@ -230,12 +200,8 @@ export default function Home() {
   const [dietPhase, setDietPhase] = useState<DietPhase>("Maintain");
   const [sleepTargetHours, setSleepTargetHours] = useState(7);
 
-  const [loading, setLoading] = useState(false);
-  const [gateError, setGateError] = useState<NormalizedDecisionError | null>(null);
-  const [cooldownSeconds, setCooldownSeconds] = useState<number | null>(null);
-  const [latestDecision, setLatestDecision] = useState<LastResultPayload | null>(null);
-  const [showAdjustHelp, setShowAdjustHelp] = useState(false);
   const [showAdjustInputsModal, setShowAdjustInputsModal] = useState(false);
+  const [workoutDraftPlan, setWorkoutDraftPlan] = useState<PlannedWorkoutSummary | null>(null);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showCalendarModal, setShowCalendarModal] = useState(false);
   const [showDayModal, setShowDayModal] = useState(false);
@@ -246,7 +212,6 @@ export default function Home() {
   const [truncateZeroDaysInCalories, setTruncateZeroDaysInCalories] = useState(false);
   const [hideZeroDaysInSleep, setHideZeroDaysInSleep] = useState(false);
   const [dashboardRange, setDashboardRange] = useState<ChartRange>(7);
-  const [lastTapAt, setLastTapAt] = useState(0);
   const [calendarMonth, setCalendarMonth] = useState(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
@@ -281,16 +246,17 @@ export default function Home() {
   const [homeContextLoaded, setHomeContextLoaded] = useState(false);
   const [healthSyncStatusLoaded, setHealthSyncStatusLoaded] = useState(false);
   const [healthSyncNeedsAttention, setHealthSyncNeedsAttention] = useState(false);
+  const recoveryInputsHydratedRef = useRef<string | null>(null);
   const hasDeferredInitialInsightsRef = useRef(false);
   const homeInsightsRequestRef = useRef<Promise<void> | null>(null);
   const lastHomeInsightsLoadAtRef = useRef(0);
 
   const entitlement = useEntitlement(authReady, uid);
-  const { isOffline } = useOfflineStatus();
   const nowMs = useNow(60_000);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (user) => {
+      recoveryInputsHydratedRef.current = null;
       setAuthReady(true);
       if (!user) {
         setUid(null);
@@ -298,7 +264,6 @@ export default function Home() {
         setProfilePhotoUri(null);
         setProfileDescription(null);
         setShowFirstTimeBanner(false);
-        setLatestDecision(null);
         setRedirectTo("/auth/sign-in");
         return;
       }
@@ -403,11 +368,6 @@ export default function Home() {
         if (typeof target === "number" && Number.isFinite(target) && target > 0 && target <= 24) {
           setSleepTargetHours(Math.round(target * 10) / 10);
         }
-
-        const lastResult = data?.usage?.decisions?.lastResult;
-        if (lastResult) {
-          setLatestDecision(lastResult as LastResultPayload);
-        }
       },
       (e) => {
         if (!isExpectedOfflineError(e)) {
@@ -419,32 +379,28 @@ export default function Home() {
     return unsubscribe;
   }, [uid]);
 
-  useEffect(() => {
-    const loadInputs = async () => {
-      if (!uid) return;
-      const key = `${HOME_INPUTS_KEY_PREFIX}:${uid}`;
+  useFocusEffect(useCallback(() => {
+    if (!uid) return undefined;
+    let active = true;
+    const task = scheduleAfterInteractions(async () => {
       try {
-        const raw = await AsyncStorage.getItem(key);
-        if (!raw) return;
-        const parsed = JSON.parse(raw);
-        if (typeof parsed.soreness === "number") setSoreness(parsed.soreness);
-        if (typeof parsed.fatigue === "number") setFatigue(parsed.fatigue);
-        if (typeof parsed.motivation === "number") setMotivation(parsed.motivation);
-      } catch (e) {
-        console.log("Failed to load home inputs, clearing cache", e);
-        try {
-          await AsyncStorage.removeItem(key);
-        } catch {
-          // no-op
-        }
+        const raw = await AsyncStorage.getItem(`${HOME_INPUTS_KEY_PREFIX}:${uid}`);
+        if (!active) return;
+        const parsed = raw ? JSON.parse(raw) : {};
+        recoveryInputsHydratedRef.current = uid;
+        setSoreness(typeof parsed.soreness === "number" ? parsed.soreness : 4);
+        setFatigue(typeof parsed.fatigue === "number" ? parsed.fatigue : 4);
+        setMotivation(typeof parsed.motivation === "number" ? parsed.motivation : 6);
+      } catch (error) {
+        console.log("Failed to load recovery inputs", error);
       }
-    };
-    void loadInputs();
-  }, [uid]);
+    });
+    return () => { active = false; task.cancel(); };
+  }, [uid]));
 
   useEffect(() => {
     const save = async () => {
-      if (!uid) return;
+      if (!uid || recoveryInputsHydratedRef.current !== uid) return;
       const key = `${HOME_INPUTS_KEY_PREFIX}:${uid}`;
       try {
         await AsyncStorage.setItem(
@@ -462,7 +418,8 @@ export default function Home() {
     void save();
   }, [uid, soreness, fatigue, motivation]);
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
+    let active = true;
     const loadReadinessHistory = async () => {
       if (!uid) return;
       const key = `${HOME_READINESS_HISTORY_KEY_PREFIX}:${uid}`;
@@ -478,6 +435,16 @@ export default function Home() {
       } catch (error) {
         console.log("Failed to load readiness history", error);
       }
+
+      if (!active) return;
+      try {
+        const inputsRaw = await AsyncStorage.getItem(`${HOME_INPUTS_KEY_PREFIX}:${uid}`);
+        if (!active) return;
+        const inputs = inputsRaw ? JSON.parse(inputsRaw) : null;
+        if (inputs && typeof inputs.soreness === "number" && typeof inputs.fatigue === "number" && typeof inputs.motivation === "number") {
+          parsedHistory[toDateKey(new Date())] = inputs;
+        }
+      } catch { /* Keep the recorded history if the current check-in cannot be read. */ }
 
       const pointsSoreness: ChartPoint[] = [];
       const pointsFatigue: ChartPoint[] = [];
@@ -512,12 +479,13 @@ export default function Home() {
       setFatigueHistory(pointsFatigue);
       setMotivationHistory(pointsMotivation);
     };
-    void loadReadinessHistory();
-  }, [uid]);
+    const task = scheduleAfterInteractions(loadReadinessHistory);
+    return () => { active = false; task.cancel(); };
+  }, [uid]));
 
   useEffect(() => {
     const saveReadinessHistory = async () => {
-      if (!uid) return;
+      if (!uid || recoveryInputsHydratedRef.current !== uid) return;
       const key = `${HOME_READINESS_HISTORY_KEY_PREFIX}:${uid}`;
       let parsedHistory: Record<string, ReadinessHistoryRecord> = {};
       try {
@@ -548,17 +516,6 @@ export default function Home() {
     };
     void saveReadinessHistory();
   }, [uid, soreness, fatigue, motivation]);
-
-  useEffect(() => {
-    if (cooldownSeconds == null || cooldownSeconds <= 0) return;
-    const timer = setInterval(() => {
-      setCooldownSeconds((previous) => {
-        if (previous == null) return previous;
-        return previous > 0 ? previous - 1 : 0;
-      });
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [cooldownSeconds]);
 
   const loadHomeInsights = useCallback(async () => {
     if (!uid) return;
@@ -705,6 +662,7 @@ export default function Home() {
             averageSleepHours: avgSleep,
             nightsCaptured: sleepValues.length,
           });
+
         } catch (contextError) {
           if (!isExpectedOfflineError(contextError)) {
             console.log("Failed to load nutrition/sleep insight context", contextError);
@@ -733,6 +691,25 @@ export default function Home() {
       }
     }
   }, [uid, dietPhase, energyUnit]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!uid) {
+        setWorkoutDraftPlan(null);
+        return undefined;
+      }
+      let active = true;
+      const task = scheduleAfterInteractions(async () => {
+        const rawDraft = await AsyncStorage.getItem(`${WORKOUT_DRAFT_KEY_PREFIX}:${uid}`).catch(() => null);
+        if (!active) return;
+        setWorkoutDraftPlan(parseWorkoutDraftPlan(rawDraft));
+      });
+      return () => {
+        active = false;
+        task.cancel();
+      };
+    }, [uid])
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -1272,23 +1249,6 @@ export default function Home() {
     }
   };
 
-  const shouldShowUpgradeCta =
-    gateError?.bucket === "business_gate" && entitlement.state === "inactive";
-
-  const handleOpenPaywallFromGate = () => {
-    if (gateError?.bucket !== "business_gate" || entitlement.state !== "inactive") return;
-
-    const paywallParams =
-      gateError.reasonCode === "COOLDOWN_ACTIVE"
-        ? { sourceScreen: "cooldown_gate", reasonCode: "cooldown_gate" }
-        : { sourceScreen: "home_gate", reasonCode: "decision_limit" };
-
-    router.push({
-      pathname: "/paywall",
-      params: paywallParams,
-    });
-  };
-
   const resolvePhaseForDate = <TPhase extends string>(
     date: Date,
     history: { phase: TPhase; startedAt: Timestamp }[],
@@ -1306,109 +1266,6 @@ export default function Home() {
       }
     }
     return selected;
-  };
-
-  const handleDecision = async () => {
-    if (!uid || loading) return;
-    const nowMs = Date.now();
-    if (nowMs - lastTapAt < 500) return;
-
-    setLastTapAt(nowMs);
-    if (isOffline) {
-      setGateError({
-        bucket: "other",
-        message: "You're offline. Connect to get today's decision.",
-      });
-      setCooldownSeconds(null);
-      return;
-    }
-    setLoading(true);
-    setGateError(null);
-    setCooldownSeconds(null);
-
-    try {
-        let nutrition: DecisionInputs["nutrition"] = null;
-        let effectiveSleepHours = sleepTargetHours;
-        let sleepSource: DecisionInputs["sleepSource"] = "manual";
-        let sleepSampleAgeHours: DecisionInputs["sleepSampleAgeHours"] = 0;
-        try {
-          nutrition = await getTodayDecisionNutritionSummary(uid, dietPhase);
-        } catch (nutritionError) {
-          if (!isExpectedOfflineError(nutritionError)) {
-            console.log("Failed to load nutrition summary", nutritionError);
-          }
-        }
-
-        try {
-          const sleepProfile = await getSleepProfile(uid);
-          const sampleAgeHours = getSleepSampleAgeHours(sleepProfile.sampleRecordedAt);
-          const stale = isHealthSleepStale(sleepProfile, new Date());
-          const resolvedSleep = resolveDecisionSleepInput(sleepTargetHours, {
-            source: sleepProfile.source,
-            latestSleepHours: sleepProfile.latestSleepHours,
-            sampleAgeHours: stale ? null : sampleAgeHours,
-          });
-          effectiveSleepHours = resolvedSleep.sleepHours;
-          sleepSource = resolvedSleep.sleepSource;
-          sleepSampleAgeHours = resolvedSleep.sleepSampleAgeHours;
-        } catch (sleepError) {
-          if (!isExpectedOfflineError(sleepError)) {
-            console.log("Failed to resolve sleep source", sleepError);
-          }
-        }
-
-      const inputs: DecisionInputs = {
-        sleepHours: effectiveSleepHours,
-        sleepSource,
-        sleepSampleAgeHours,
-        soreness,
-        fatigue,
-        motivation,
-        trainingPhase,
-        dietPhase,
-        nutrition,
-      };
-
-      const result = await getDecision(inputs);
-      const payload: LastResultPayload = {
-        createdAt: Timestamp.now(),
-        inputs,
-        result,
-      };
-      const inputHash = hashDecisionInputs(inputs);
-
-      const userRef = doc(db, "users", uid);
-      await setDoc(
-        userRef,
-        { usage: { decisions: { lastResult: payload, lastInputHash: inputHash } } },
-        { merge: true }
-        );
-        await updateDoc(userRef, {
-          "usage.decisions.lastResult.inputs.phase": deleteField(),
-          "usage.decisions.lastResult.inputs.nutrition.calorieTargetAdherence":
-            deleteField(),
-        });
-
-      setLatestDecision(payload);
-    } catch (error) {
-      if (isNormalizedDecisionError(error)) {
-        setGateError(error);
-        if (error.bucket === "business_gate" && error.reasonCode === "COOLDOWN_ACTIVE") {
-          if (typeof error.retryAfterSeconds === "number") {
-            setCooldownSeconds(error.retryAfterSeconds);
-          }
-        }
-        return;
-      }
-
-      console.log("Decision request failed", error);
-      setGateError({
-        bucket: "other",
-        message: "Something went wrong. Please try again.",
-      });
-    } finally {
-      setLoading(false);
-    }
   };
 
   if (redirectTo) return <Redirect href={redirectTo} />;
@@ -1525,55 +1382,15 @@ export default function Home() {
         ) : null}
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Today&apos;s Plan</Text>
-          <View style={styles.card}>
-            {latestDecision ? (
-              <>
-                <Text style={styles.decisionTitle}>{formatDecisionLabel(latestDecision.result.decision)}</Text>
-                <View style={styles.bulletList}>
-                  {latestDecision.result.explanation.map((line, index) => (
-                    <Text key={`${line}-${index}`} style={styles.bulletItem}>
-                      - {line}
-                    </Text>
-                  ))}
-                </View>
-                <View style={styles.adjustRow}>
-                  <Text style={styles.adjustText}>
-                    {formatIntensityLabel(latestDecision.result.adjustments?.intensityPct)}
-                  </Text>
-                  <TouchableOpacity
-                    onPress={() => setShowAdjustHelp((previous) => !previous)}
-                    style={styles.helpIcon}
-                    accessibilityLabel="What does intensity mean?"
-                  >
-                    <Ionicons name="help-circle-outline" size={18} color="#9aa1c3" />
-                  </TouchableOpacity>
-                </View>
-                {showAdjustHelp ? (
-                  <Text style={styles.helpText}>Intensity adjustment = change the weight on your sets.</Text>
-                ) : null}
-              </>
-            ) : (
-              <Text style={styles.cardText}>No decision yet.</Text>
-            )}
-            <Text style={styles.cardText}>
-              Soreness {soreness} - Fatigue {fatigue} - Motivation {motivation}
-            </Text>
-            <View style={styles.inputActionsRow}>
-              <TouchableOpacity
-                style={[styles.secondaryButtonWide, styles.inputActionButton]}
-                onPress={() => setShowAdjustInputsModal(true)}
-              >
-                <Text style={styles.secondaryButtonText}>Adjust inputs</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.primaryButtonWide, styles.inputActionButton, loading && styles.disabled]}
-                onPress={handleDecision}
-                disabled={loading}
-              >
-                <Text style={styles.primaryText}>{loading ? "Working..." : "Get today's decision"}</Text>
-              </TouchableOpacity>
+          <TouchableOpacity style={styles.card} onPress={() => void openWorkoutLog()} accessibilityRole="button">
+            <View style={styles.workoutShortcutRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.sectionTitle}>{workoutDraftPlan ? "Continue workout" : "Start workout"}</Text>
+                <Text style={styles.cardText}>{workoutDraftPlan?.title ?? "Choose a routine or build today's workout"}</Text>
+              </View>
+              <Ionicons name="arrow-forward" size={22} color="#fbbf24" />
             </View>
+          </TouchableOpacity>
             {homeContextLoaded &&
             healthSyncStatusLoaded &&
             (nutritionSnapshot.todayCalories === 0 || healthSyncNeedsAttention) ? (
@@ -1621,27 +1438,6 @@ export default function Home() {
                 ) : null}
               </View>
             ) : null}
-            {gateError ? (
-              <View style={styles.notice}>
-                <Text style={styles.noticeText}>
-                  {gateError.bucket === "business_gate"
-                    ? getReasonMessage(gateError.reasonCode)
-                    : gateError.message ?? "Unable to get a decision right now."}
-                </Text>
-                {gateError.bucket === "business_gate" && gateError.reasonCode === "COOLDOWN_ACTIVE" ? (
-                  <Text style={styles.noticeSub}>{formatCooldownMessage(cooldownSeconds)}</Text>
-                ) : null}
-                {gateError.bucket === "seatbelt" ? (
-                  <Text style={styles.noticeSub}>Too many requests. Try again shortly.</Text>
-                ) : null}
-                {shouldShowUpgradeCta ? (
-                  <TouchableOpacity style={styles.paywallButton} onPress={handleOpenPaywallFromGate}>
-                    <Text style={styles.paywallText}>Upgrade to Premium</Text>
-                  </TouchableOpacity>
-                ) : null}
-              </View>
-            ) : null}
-          </View>
         </View>
 
         <View style={styles.section}>
@@ -1662,6 +1458,7 @@ export default function Home() {
           <View style={styles.card}>
             <Text style={styles.metricValue}>{recoveryReadiness.score}%</Text>
             <Text style={styles.metricSub}>{recoveryReadiness.label} based on sleep, soreness, fatigue, motivation</Text>
+            <TouchableOpacity style={styles.todayPlanLinkButton} onPress={() => setShowAdjustInputsModal(true)}><Text style={styles.todayPlanLinkText}>Edit recovery check-in</Text></TouchableOpacity>
             <View style={[styles.metricRow, styles.metricRowWrap]}>
               <TouchableOpacity
                 style={[styles.metricChip, styles.metricChipCompact, styles.metricChipQuarter]}
@@ -2241,6 +2038,9 @@ export default function Home() {
           </View>
         </View>
       </Modal>
+
+
+
     </View>
   );
 }
@@ -2615,6 +2415,12 @@ const styles = StyleSheet.create({
   },
   disabled: { opacity: 0.6 },
   cardText: { color: "#aaa", fontSize: 15 },
+  stalePlanText: {
+    color: "#fbbf24",
+    fontSize: 13,
+    lineHeight: 18,
+    marginBottom: 10,
+  },
   notice: {
     backgroundColor: "rgba(255,255,255,0.08)",
     borderRadius: 12,
@@ -2631,9 +2437,80 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   paywallText: { color: "#fff", fontWeight: "700" },
+  workoutShortcutRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  todayPlanMetaCopy: { flex: 1 },
+  todayPlanMetaLabel: { color: "#858ba4", fontSize: 11, fontWeight: "800", textTransform: "uppercase" },
+  todayPlanMetaValue: { color: "#f2f3fb", fontSize: 15, fontWeight: "800", marginTop: 3 },
+  todayPlanLinkButton: {
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.22)",
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  todayPlanLinkText: { color: "#c9c0ff", fontSize: 12, fontWeight: "800" },
   decisionTitle: { color: "#fff", fontSize: 22, fontWeight: "800" },
+  decisionHeadline: { color: "#f4f5ff", fontSize: 17, lineHeight: 22, fontWeight: "800" },
+  decisionAction: { color: "#d8daec", fontSize: 14, lineHeight: 20 },
   bulletList: { gap: 6 },
-  bulletItem: { color: "#d8daec", fontSize: 14 },
+  bulletItem: { color: "#aeb2c8", fontSize: 13, lineHeight: 19 },
+  cautionBox: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    borderRadius: 12,
+    backgroundColor: "rgba(245,158,11,0.1)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(245,158,11,0.35)",
+    padding: 11,
+  },
+  cautionText: { color: "#fde68a", fontSize: 12, lineHeight: 17, flex: 1 },
+  exercisePlanList: {
+    gap: 9,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "rgba(255,255,255,0.1)",
+    paddingTop: 12,
+  },
+  exercisePlanTitle: { color: "#f2f3fb", fontSize: 13, fontWeight: "800" },
+  exercisePlanRow: {
+    borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.045)",
+    paddingHorizontal: 11,
+    paddingVertical: 10,
+    gap: 4,
+  },
+  exercisePlanHeader: { gap: 3 },
+  exercisePlanName: { color: "#f4f5ff", fontSize: 13, fontWeight: "800" },
+  exercisePlanPrescription: { color: "#9dd7bd", fontSize: 12, fontWeight: "800" },
+  exercisePlanPrescriptionWarning: { color: "#fbbf24" },
+  exercisePlanReason: { color: "#9aa1b8", fontSize: 11, lineHeight: 16 },
+  exercisePlanSharedReason: { color: "#b8bed2", fontSize: 12, lineHeight: 17 },
+  applyPlanButton: {
+    alignItems: "center",
+    borderRadius: 12,
+    backgroundColor: "#7b61ff",
+    paddingVertical: 11,
+    marginTop: 2,
+  },
+  applyPlanButtonText: { color: "#fff", fontSize: 13, fontWeight: "800" },
+  todayContextRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.045)",
+    paddingHorizontal: 11,
+    paddingVertical: 10,
+  },
+  todayContextIcon: { width: 28, height: 28, alignItems: "center", justifyContent: "center" },
+  todayContextCopy: { flex: 1 },
+  todayContextTitle: { color: "#f0f1fa", fontSize: 13, fontWeight: "800" },
+  todayContextSummary: { color: "#858ba4", fontSize: 11, lineHeight: 15, marginTop: 2 },
   adjustRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   adjustText: { color: "#9aa1c3", fontSize: 13 },
   helpIcon: { paddingHorizontal: 4, paddingVertical: 2 },

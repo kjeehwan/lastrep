@@ -1,3 +1,5 @@
+import { availableWeightAtOrBelow, type AvailableWeights } from "./availableWeights";
+
 export type ProgressionPhase = "Hypertrophy" | "Strength" | "Power";
 
 export type PerformanceSet = {
@@ -19,6 +21,7 @@ export type ExerciseProgressionInput = {
   decisionIntensityPct: number;
   dietPhase: "Cut" | "Maintain" | "Bulk";
   highFatigue: boolean;
+  availableWeights?: AvailableWeights;
 };
 
 export type ExerciseProgression = {
@@ -132,5 +135,20 @@ export const recommendExerciseProgression = (input: ExerciseProgressionInput): E
     reasons.push("The cut phase favors controlled loading.");
   }
 
-  return { weightKg, reps: String(targetReps), sets, reason: reasons.join(" ") };
+  let reps = targetReps;
+  if (input.availableWeights) {
+    const available = availableWeightAtOrBelow(weightKg, input.availableWeights);
+    if (weightKg > latestTopSet.weightKg && (available == null || available <= latestTopSet.weightKg)) {
+      weightKg = latestTopSet.weightKg;
+      reps += 1;
+      reasons.push("The next available weight is too large a jump, so add a rep instead.");
+    } else if (available != null && available >= latestTopSet.weightKg * 0.5) {
+      weightKg = available;
+    } else {
+      weightKg = latestTopSet.weightKg;
+      reps = Math.max(1, Math.min(targetReps, latestTopSet.reps - 1));
+      reasons.push("No suitable lighter weight is available, so reduce reps at the current load.");
+    }
+  }
+  return { weightKg, reps: String(reps), sets, reason: reasons.join(" ") };
 };

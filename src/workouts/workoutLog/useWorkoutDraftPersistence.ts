@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 type UseWorkoutDraftPersistenceOptions<TDraft> = {
   draft: TDraft;
   storageKey: string | null;
+  canPersist?: () => boolean;
   onSaved?: () => void;
   serialize?: (draft: TDraft) => string;
   delayMs?: number;
@@ -13,6 +14,7 @@ type UseWorkoutDraftPersistenceOptions<TDraft> = {
 export function useWorkoutDraftPersistence<TDraft>({
   draft,
   storageKey,
+  canPersist,
   onSaved,
   serialize = JSON.stringify,
   delayMs = 400,
@@ -24,6 +26,7 @@ export function useWorkoutDraftPersistence<TDraft>({
     if (!storageKey) return;
 
     saveTimerRef.current = setTimeout(() => {
+      if (canPersist && !canPersist()) return;
       AsyncStorage.setItem(storageKey, serialize(draft))
         .then(onSaved)
         .catch((error) => console.log("Failed to save workout draft", error));
@@ -32,5 +35,5 @@ export function useWorkoutDraftPersistence<TDraft>({
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     };
-  }, [delayMs, draft, onSaved, serialize, storageKey]);
+  }, [canPersist, delayMs, draft, onSaved, serialize, storageKey]);
 }
