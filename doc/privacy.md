@@ -1,6 +1,6 @@
 # Lastrep Privacy Policy
 
-**Effective Date:** October 7, 2026
+**Effective Date:** October 9, 2026
 
 Lastrep ("we", "our", or "us") operates the Lastrep mobile application.
 
@@ -9,13 +9,17 @@ Lastrep ("we", "our", or "us") operates the Lastrep mobile application.
 When you use Lastrep, we may collect and store:
 
 - Account information, including your email address, through Firebase Authentication.
-- Profile information you choose to provide, such as a nickname, description, and profile photo.
+- Profile information you choose to provide, such as a nickname and description. Profile photos are currently stored locally on your device; Lastrep does not currently upload the image to cloud storage. A reference to the local photo may be saved with your profile.
 - Fitness data you enter in Lastrep, including workouts, exercise history, nutrition entries, goals, body-composition entries, and recovery check-ins.
 - Optional daily context you choose to provide, such as pain or discomfort, the affected body area, severity, movement triggers, additional physical activity, and free-text notes.
 - Workout-planning and performance information, such as a selected routine, recent sets, repetitions, weight, volume, and perceived exertion.
 - Optional health data you choose to connect on Android: sleep sessions and duration, weight, body-fat percentage, and lean body mass when those records are available from your connected health service.
-- Subscription status information through RevenueCat.
-- Basic device and diagnostic information needed to operate, secure, and troubleshoot the app.
+- Purchase history and subscription information through RevenueCat and Google Play, such as purchased products and subscription status.
+- App usage and interaction information through Firebase Analytics, such as sessions, screen views, and subscription-related button actions and events.
+- Device and app identifiers, such as app-instance identifiers and, where available and enabled, Android advertising identifiers collected by Firebase Analytics.
+- Approximate location inferred by Firebase Analytics from masked IP addresses. Lastrep does not request GPS location permission for this analytics use.
+- Basic device and diagnostic information needed to operate, secure, and troubleshoot the app, such as request timing, errors, and limited health-sync metadata.
+- Product barcodes you scan or enter for nutrition lookups through Open Food Facts.
 
 Health data can be sensitive. Lastrep does not read optional health data until you choose to connect health sync and grant the required permissions.
 
@@ -28,6 +32,8 @@ We use this information to:
 - Generate in-app training and recovery insights, including Today's Plan, from relevant information in your account.
 - Adapt recommendations using factors such as your planned workout, recent performance, recovery check-in, nutrition summary, connected health summaries, and optional daily context.
 - Manage subscriptions and provide support.
+- Understand app usage and subscription flows through analytics and improve the user experience.
+- Look up nutrition information for products using their barcodes.
 - Improve app reliability, diagnose errors, and protect the service.
 
 We do not sell health data or use it for advertising or advertising-based profiling.
@@ -68,10 +74,11 @@ AI-generated recommendations may be inaccurate and are intended for general fitn
 
 Lastrep uses the following service providers to operate the app:
 
-- Firebase and Google Cloud for authentication, app data storage, and backend services.
+- Firebase and Google Cloud for authentication, app data storage, backend services, diagnostics, and Firebase Analytics.
 - OpenAI for generating certain training and recovery recommendations and explanations.
 - RevenueCat for subscription management.
 - Google Play for billing and app distribution.
+- Open Food Facts for product barcode lookups. The barcode is sent to its service, which also receives standard network information such as your IP address. Lastrep does not intentionally include your account details, health records, or camera images in these lookup requests.
 - Health Connect and connected health services only when you choose to grant Lastrep access.
 
 We disclose information to these providers only as needed to provide, secure, and support Lastrep. We do not sell personal or health data. Their handling of information is governed by their applicable terms and privacy policies.
@@ -82,6 +89,7 @@ We disclose information to these providers only as needed to provide, secure, an
 - You can use Lastrep without connecting Health Connect or another health service.
 - You can disconnect health sync to stop future reads and revoke permissions through your connected health service.
 - You can edit or delete supported records through the relevant Lastrep feature where that control is available.
+- You can request deletion of selected Lastrep data without deleting your account by emailing lastrep.dev@gmail.com with the subject "Data Deletion Request". Include your account email and the record types or date range you want deleted. We may need to verify your identity before processing the request; do not send your password.
 - You can delete your Lastrep account from Settings. Account deletion removes your authentication account and associated Lastrep data stored under that account.
 
 ## 7. Data Retention
@@ -90,11 +98,15 @@ Lastrep retains account and app data while your account is active and as needed 
 
 Disconnecting a health service stops future access by Lastrep but does not automatically delete information already imported and stored in your Lastrep account.
 
+Requests to delete selected records are processed as soon as reasonably possible after verification, subject to the limited retention described above. Deleting imported data in Lastrep does not delete the original records in your connected health service. If sync remains enabled, those records may be imported again. Deleting your Lastrep account does not automatically cancel a Google Play subscription; manage or cancel it through Google Play.
+
 Information sent to service providers may be retained according to their applicable terms and data-retention controls. OpenAI's default API abuse-monitoring logs may retain API inputs and outputs for up to 30 days unless a different retention control applies or longer retention is legally required.
 
 ## 8. Camera and Photos
 
-The app may request photo-library or camera access when you choose to add a profile photo. Lastrep does not use these permissions for background recording or surveillance.
+The app may request photo-library or camera access when you choose to add a profile photo, and camera access when you choose to scan a food barcode. Barcode recognition takes place on your device; the decoded barcode, not the camera image, is sent for the product lookup. You can enter a barcode manually without granting camera permission.
+
+Profile photos are currently stored locally and may be lost if you uninstall the app or clear its local data. Lastrep does not use camera or photo permissions for background recording or surveillance.
 
 ## 9. Data Security
 
