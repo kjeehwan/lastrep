@@ -1970,7 +1970,10 @@ export default function ProfileIndex() {
                   On supported Android devices, Lastrep can read sleep, weight, body-fat, and lean-body-mass records that you permit.
                 </Text>
                 <Text style={styles.sheetText}>
-                  We use them for recovery, sleep, and body-composition trends, and store imported summaries in your Lastrep account.
+                  We use them for recovery, sleep, and body-composition trends. Relevant summaries may also support AI-assisted training recommendations.
+                </Text>
+                <Text style={styles.sheetText}>
+                  Imported summaries are stored in your Lastrep account. Before the first AI-assisted plan, Lastrep separately explains what is sent to OpenAI and asks you to continue.
                 </Text>
                 <Text style={styles.sheetText}>
                   This is optional. You can disconnect in Profile or revoke access in your connected health service at any time.

@@ -22,6 +22,9 @@ export const hashDecisionInputs = (inputs: DecisionInputs): string => {
           recentCompletedDaysTracked: inputs.nutrition.recentCompletedDaysTracked,
         }
       : null,
+    plannedWorkout: inputs.plannedWorkout ?? null,
+    recentTraining: inputs.recentTraining ?? null,
+    dailyContext: inputs.dailyContext ?? null,
   };
   const json = JSON.stringify(normalized);
   return crypto.createHash("sha256").update(json).digest("hex");

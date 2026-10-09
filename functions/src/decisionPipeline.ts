@@ -12,7 +12,10 @@ const nutritionBulletPattern = /\b(nutrition|calorie|calories|protein|target|und
 const rawDecisionOutputSchema = z
   .object({
     decision: z.enum(["PUSH", "MAINTAIN", "PULL_BACK"]),
+    headline: z.string().optional(),
+    todayAction: z.string().optional(),
     explanation: z.array(z.string()),
+    caution: z.union([z.string(), z.null()]).optional(),
     adjustments: z
       .union([
         z
@@ -37,31 +40,29 @@ const adjustmentsSchema = z
 export const decisionOutputSchema: z.ZodType<DecisionOutput> = z
   .object({
     decision: z.enum(["PUSH", "MAINTAIN", "PULL_BACK"]),
+    headline: z.string().min(1).max(100).optional(),
+    todayAction: z.string().min(1).max(180).optional(),
     explanation: z.array(z.string()),
+    caution: z.string().min(1).max(180).optional(),
     adjustments: adjustmentsSchema.optional(),
   })
   .strict();
 
-const truncateBullet = (value: string, limit: number) => {
-  if (value.length <= limit) return value;
-  const sliced = value.slice(0, limit).trim();
+const sentenceEndingPattern = /[.!?]["')\]]?$/;
 
-  const sentenceEnd = Math.max(sliced.lastIndexOf(". "), sliced.lastIndexOf("! "), sliced.lastIndexOf("? "));
-  if (sentenceEnd >= Math.floor(limit * 0.6)) {
-    return sliced.slice(0, sentenceEnd + 1).trim();
+const preserveCompleteSentence = (value: string, limit: number): string | null => {
+  if (value.length <= limit) {
+    return sentenceEndingPattern.test(value) ? value : null;
   }
 
-  const clauseEnd = Math.max(sliced.lastIndexOf("; "), sliced.lastIndexOf(", "));
-  if (clauseEnd >= Math.floor(limit * 0.7)) {
-    return sliced.slice(0, clauseEnd).trim();
+  const withinLimit = value.slice(0, limit + 1);
+  let sentenceEnd = -1;
+  for (const match of withinLimit.matchAll(/[.!?]["')\]]?(?=\s|$)/g)) {
+    sentenceEnd = (match.index ?? -1) + match[0].length;
   }
 
-  const wordBoundary = sliced.lastIndexOf(" ");
-  if (wordBoundary >= Math.floor(limit * 0.75)) {
-    return sliced.slice(0, wordBoundary).trim();
-  }
-
-  return sliced;
+  if (sentenceEnd < 0) return null;
+  return withinLimit.slice(0, sentenceEnd).trim();
 };
 
 const humanizeExplanationText = (value: string) =>
@@ -84,28 +85,43 @@ const collapseNutritionBullets = (items: string[]) => {
 };
 
 const normalizeExplanation = (explanation: string[]) => {
-  const normalized = collapseNutritionBullets(
+  const humanized = collapseNutritionBullets(
     explanation
       .map((item) => humanizeExplanationText(item.trim()))
       .filter((item) => item.length > 0)
   )
     .filter((item) => item.length > 0)
-    .slice(0, MAX_BULLETS)
-    .map((item) => truncateBullet(item, MAX_BULLET_CHARS));
+    .slice(0, MAX_BULLETS);
+  const normalized: string[] = [];
 
-  let totalChars = normalized.reduce((sum, item) => sum + item.length, 0);
-  if (totalChars > MAX_TOTAL_CHARS) {
-    for (let i = normalized.length - 1; i >= 0 && totalChars > MAX_TOTAL_CHARS; i -= 1) {
-      const current = normalized[i];
-      const excess = totalChars - MAX_TOTAL_CHARS;
-      const nextLimit = Math.max(1, current.length - excess);
-      const next = truncateBullet(current, nextLimit);
-      normalized[i] = next;
-      totalChars = totalChars - current.length + next.length;
-    }
+  for (const item of humanized) {
+    const complete = preserveCompleteSentence(item, MAX_BULLET_CHARS);
+    if (!complete) return null;
+    normalized.push(complete);
   }
 
+  const totalChars = normalized.reduce((sum, item) => sum + item.length, 0);
+  if (totalChars > MAX_TOTAL_CHARS) return null;
+
   return normalized;
+};
+
+const defaultHeadline = (decision: DecisionOutput["decision"]) => {
+  if (decision === "PUSH") return "You are ready to progress.";
+  if (decision === "PULL_BACK") return "Reduce today's training stress.";
+  return "Train at a steady effort.";
+};
+
+const defaultAction = (decision: DecisionOutput["decision"]) => {
+  if (decision === "PUSH") return "Progress conservatively while keeping your prescribed form and effort targets.";
+  if (decision === "PULL_BACK") return "Reduce the load or working sets and avoid training to failure today.";
+  return "Follow the planned session without forcing additional weight, reps, or sets.";
+};
+
+const normalizeCompleteText = (value: string | null | undefined, limit: number) => {
+  if (!value) return null;
+  const normalized = humanizeExplanationText(value.trim());
+  return preserveCompleteSentence(normalized, limit);
 };
 
 export const sanitizeDecisionOutput = (
@@ -117,11 +133,17 @@ export const sanitizeDecisionOutput = (
   }
 
   const explanation = normalizeExplanation(parsedRaw.data.explanation);
+  if (!explanation) {
+    return { ok: false, reason: "incomplete_explanation" };
+  }
   if (explanation.length < MIN_BULLETS || explanation.length > MAX_BULLETS) {
     return { ok: false, reason: "invalid_explanation_count" };
   }
 
   const decision = parsedRaw.data.decision;
+  const headline = normalizeCompleteText(parsedRaw.data.headline, 100) ?? defaultHeadline(decision);
+  const todayAction = normalizeCompleteText(parsedRaw.data.todayAction, 180) ?? defaultAction(decision);
+  const caution = normalizeCompleteText(parsedRaw.data.caution, 180) ?? undefined;
   let adjustments: DecisionOutput["adjustments"];
   if (decision !== "MAINTAIN") {
     const maybeIntensity = parsedRaw.data.adjustments?.intensityPct;
@@ -130,9 +152,14 @@ export const sanitizeDecisionOutput = (
     }
   }
 
-  const candidate: DecisionOutput = adjustments
-    ? { decision, explanation, adjustments }
-    : { decision, explanation };
+  const candidate: DecisionOutput = {
+    decision,
+    headline,
+    todayAction,
+    explanation,
+    ...(caution ? { caution } : {}),
+    ...(adjustments ? { adjustments } : {}),
+  };
   const parsedFinal = decisionOutputSchema.safeParse(candidate);
   if (!parsedFinal.success) {
     return { ok: false, reason: "invalid_output" };
