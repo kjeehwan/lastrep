@@ -1,6 +1,6 @@
 # Lastrep Privacy Policy
 
-**Effective Date:** October 9, 2026
+**Effective Date:** October 12, 2026
 
 Lastrep ("we", "our", or "us") operates the Lastrep mobile application.
 
@@ -9,7 +9,7 @@ Lastrep ("we", "our", or "us") operates the Lastrep mobile application.
 When you use Lastrep, we may collect and store:
 
 - Account information, including your email address, through Firebase Authentication.
-- Profile information you choose to provide, such as a nickname and description. Profile photos are currently stored locally on your device; Lastrep does not currently upload the image to cloud storage. A reference to the local photo may be saved with your profile.
+- Profile information you choose to provide, such as a nickname, description, and profile photo. When you save a profile photo in a version supporting cloud photos, Lastrep uploads a resized image to private Firebase Cloud Storage and stores its reference with your account so it can appear across your signed-in devices.
 - Fitness data you enter in Lastrep, including workouts, exercise history, nutrition entries, goals, body-composition entries, and recovery check-ins.
 - Optional daily context you choose to provide, such as pain or discomfort, the affected body area, severity, movement triggers, additional physical activity, and free-text notes.
 - Workout-planning and performance information, such as a selected routine, recent sets, repetitions, weight, volume, and perceived exertion.
@@ -28,6 +28,7 @@ Health data can be sensitive. Lastrep does not read optional health data until y
 We use this information to:
 
 - Provide authentication and secure access to your account.
+- Display your optional profile photo on your Profile, Home, and related profile views, and restore cloud-backed photos across your signed-in installations.
 - Save and display your workout, nutrition, body-composition, sleep, and recovery history.
 - Generate in-app training and recovery insights, including Today's Plan, from relevant information in your account.
 - Adapt recommendations using factors such as your planned workout, recent performance, recovery check-in, nutrition summary, connected health summaries, and optional daily context.
@@ -74,7 +75,7 @@ AI-generated recommendations may be inaccurate and are intended for general fitn
 
 Lastrep uses the following service providers to operate the app:
 
-- Firebase and Google Cloud for authentication, app data storage, backend services, diagnostics, and Firebase Analytics.
+- Firebase and Google Cloud for authentication, app data and profile-photo storage, backend services, diagnostics, and Firebase Analytics.
 - OpenAI for generating certain training and recovery recommendations and explanations.
 - RevenueCat for subscription management.
 - Google Play for billing and app distribution.
@@ -85,6 +86,7 @@ We disclose information to these providers only as needed to provide, secure, an
 
 ## 6. Your Choices and Controls
 
+- Adding a profile photo is optional. In versions supporting cloud photos, choosing a photo creates a local preview; the photo is uploaded when you save your profile changes. Discarding unsaved changes keeps your previously saved photo, or the initials placeholder if no photo was saved. To remove a saved photo, choose Remove photo and save the change.
 - Providing pain, discomfort, additional-activity details, and daily notes is optional.
 - You can use Lastrep without connecting Health Connect or another health service.
 - You can disconnect health sync to stop future reads and revoke permissions through your connected health service.
@@ -106,7 +108,13 @@ Information sent to service providers may be retained according to their applica
 
 The app may request photo-library or camera access when you choose to add a profile photo, and camera access when you choose to scan a food barcode. Barcode recognition takes place on your device; the decoded barcode, not the camera image, is sent for the product lookup. You can enter a barcode manually without granting camera permission.
 
-Profile photos are currently stored locally and may be lost if you uninstall the app or clear its local data. Lastrep does not use camera or photo permissions for background recording or surveillance.
+In versions supporting cloud photos, Lastrep sends the selected image to its Firebase/Google Cloud backend when you save your profile changes. The backend resizes the image and removes unnecessary image metadata before saving the processed photo in private cloud storage linked to your account. Profile photos are not sent to OpenAI for recommendations.
+
+Access to a cloud-backed photo requires authentication to the owning account; photos are not published as public profile images. Saved photos can be restored after reinstalling Lastrep or signing in on another supported installation. Lastrep may cache photos locally for faster display and clears its account-specific photo cache when you sign out or delete your account. Uninstalling the app does not delete a cloud-backed photo from your account.
+
+Saving a replacement or removal deletes the previous photo from active cloud storage. Account deletion also includes cloud-backed profile photos. Temporary uploads that are not committed to your profile are cleaned up automatically. Limited backup or recovery copies may remain temporarily under the retention described in Section 7 and the storage provider's applicable policies. Removing a photo from Lastrep does not delete the original image from your device's photo library.
+
+Older app versions may store profile photos only locally; those images may be lost if you uninstall the app or clear its local data before saving them with a cloud-photo-capable version. Lastrep does not use camera or photo permissions for background recording or surveillance.
 
 ## 9. Data Security
 

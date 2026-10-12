@@ -6,11 +6,11 @@ service cloud.firestore {
     }
 
     function entitlementFieldMissingOnCreate() {
-      return !request.resource.data.keys().hasAny(["entitlement"]);
+      return !request.resource.data.keys().hasAny(["entitlement", "profilePhotoPath", "profilePhotoUpdatedAt", "profilePhotoDeletionStartedAt"]);
     }
 
     function entitlementFieldUnchanged() {
-      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(["entitlement"]);
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(["entitlement", "profilePhotoPath", "profilePhotoUpdatedAt", "profilePhotoDeletionStartedAt"]);
     }
 
     match /users/{uid} {

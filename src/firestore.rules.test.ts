@@ -70,6 +70,17 @@ describeIfFirestoreEmulator("firestore entitlement rules", () => {
     expect(ENTITLEMENT_DEV_OVERRIDE_POLICY).toBe("emulator_only");
   });
 
+  it("prevents clients from forging cloud-photo metadata or upload lifecycle records", async () => {
+    const db = testEnv.authenticatedContext("alice").firestore();
+    const profile = doc(db, "users", "alice");
+    await assertFails(setDoc(profile, { profilePhotoPath: "forged" }));
+    await assertSucceeds(setDoc(profile, { nickname: "Alice" }));
+    await assertFails(updateDoc(profile, { profilePhotoPath: "forged" }));
+    await assertFails(updateDoc(profile, { profilePhotoDeletionStartedAt: Timestamp.now() }));
+    await assertFails(setDoc(doc(db, "users", "alice", "profilePhotoUploads", "id"), { status: "staged" }));
+    await assertSucceeds(updateDoc(profile, { nickname: "Updated" }));
+  });
+
   it("fails when a client creates a user document with entitlement", async () => {
     const db = testEnv.authenticatedContext("alice").firestore();
 

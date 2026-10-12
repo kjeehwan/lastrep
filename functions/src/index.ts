@@ -1,6 +1,8 @@
 import { getApps, initializeApp } from "firebase-admin/app";
 import { FieldValue, getFirestore, Timestamp } from "firebase-admin/firestore";
 import { getAuth } from "firebase-admin/auth";
+import { deleteProfilePhotosForAccount } from "./profilePhotos";
+export { stageProfilePhoto, commitProfilePhoto, getProfilePhoto, discardProfilePhotoUpload, cleanupAbandonedProfilePhotos } from "./profilePhotos";
 import * as functions from "firebase-functions/v1";
 import { defineSecret } from "firebase-functions/params";
 import OpenAI from "openai";
@@ -1270,6 +1272,8 @@ export const deleteMyAccount = functions
     const uid = context.auth.uid;
     const userRef = db.doc(`users/${uid}`);
 
+    await userRef.set({ profilePhotoDeletionStartedAt: Timestamp.now() }, { merge: true });
+    await deleteProfilePhotosForAccount(uid);
     await db.recursiveDelete(userRef);
     await getAuth().deleteUser(uid);
 

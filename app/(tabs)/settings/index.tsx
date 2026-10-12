@@ -12,6 +12,7 @@ import { PRIVACY_POLICY_URL, SUPPORT_EMAIL } from "../../../src/config/legalConf
 import { useEntitlement } from "../../../src/hooks/useEntitlement";
 import { showAppDialog } from "../../../src/ui/appDialog";
 import { getUserData } from "../../../src/userData";
+import { clearProfilePhotoCache } from "../../../src/profile/profilePhotos";
 
 const ACCENT = "#7b61ff";
 const MUTED = "#a5acc1";
@@ -56,6 +57,7 @@ export default function SettingsIndex() {
   const handleSignOut = async () => {
     try {
       await signOut(auth);
+      if (uid) await clearProfilePhotoCache(uid).catch(() => undefined);
       router.replace("/auth/sign-in");
     } catch (e) {
       console.log("Sign out error", e);
@@ -160,6 +162,7 @@ export default function SettingsIndex() {
                 "deleteMyAccount"
               );
               await callable({ confirmDelete: true });
+              if (uid) await clearProfilePhotoCache(uid).catch(() => undefined);
               setDeleteFeedback("Account deleted.");
               router.replace("/auth/sign-in");
             } catch (e) {
