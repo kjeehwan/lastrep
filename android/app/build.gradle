@@ -168,7 +168,7 @@ android {
             def enableShrinkResources = findProperty('android.enableShrinkResourcesInReleaseBuilds') ?: 'false'
             shrinkResources enableShrinkResources.toBoolean()
             minifyEnabled enableMinifyInReleaseBuilds
-            proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
+            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
             def enablePngCrunchInRelease = findProperty('android.enablePngCrunchInReleaseBuilds') ?: 'true'
             crunchPngs enablePngCrunchInRelease.toBoolean()
         }
@@ -217,6 +217,12 @@ afterEvaluate {
             android.packagingOptions[prop] += it
         }
     }
+}
+
+// Lastrep uses Google Play billing, not Amazon. Amazon's consumer rules disable
+// R8 optimization globally in the current RevenueCat SDK.
+configurations.configureEach {
+    exclude group: "com.revenuecat.purchases", module: "purchases-store-amazon"
 }
 
 dependencies {
