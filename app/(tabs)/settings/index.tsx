@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Href, Redirect, useFocusEffect, useRouter } from "expo-router";
+import { Href, Redirect, useFocusEffect, useNavigation, useRouter } from "expo-router";
+import type { NavigationProp } from "@react-navigation/native";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { getFunctions, httpsCallable } from "firebase/functions";
 import React, { useCallback, useEffect, useRef, useState } from "react";
@@ -15,6 +16,7 @@ import { getUserData } from "../../../src/userData";
 import { clearProfilePhotoCache } from "../../../src/profile/profilePhotos";
 import { isDevBillingBuild } from "../../../src/billing/revenuecat";
 import { restoreAccountPurchases } from "../../../src/billing/restoreAccountPurchases";
+import { returnFromSettingsToHome } from "../../../src/navigation/settingsNavigation";
 
 const ACCENT = "#7b61ff";
 const MUTED = "#a5acc1";
@@ -22,6 +24,7 @@ const FUNCTIONS_REGION = "asia-northeast3";
 
 export default function SettingsIndex() {
   const router = useRouter();
+  const navigation = useNavigation<NavigationProp<{ home: undefined }>>();
   const [nickname, setNickname] = useState("You");
   const [email, setEmail] = useState<string | null>(null);
   const [redirectTo, setRedirectTo] = useState<Href | null>(null);
@@ -89,8 +92,8 @@ export default function SettingsIndex() {
   };
 
   const handleGoBack = useCallback(() => {
-    router.dismissTo("/(tabs)/home");
-  }, [router]);
+    returnFromSettingsToHome(navigation);
+  }, [navigation]);
 
   useFocusEffect(useCallback(() => {
     const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
