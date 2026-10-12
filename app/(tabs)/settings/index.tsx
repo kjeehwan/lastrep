@@ -1,9 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Href, Redirect, useRouter } from "expo-router";
+import { Href, Redirect, useFocusEffect, useRouter } from "expo-router";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { getFunctions, httpsCallable } from "firebase/functions";
-import React, { useEffect, useState } from "react";
-import { Linking, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { BackHandler, Linking, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { getUidPrefix, logAnalyticsEvent } from "../../../src/analytics/analytics";
 import { MANAGE_SUBSCRIPTION_URL } from "../../../src/config/billingConfig";
@@ -14,6 +14,7 @@ import { showAppDialog } from "../../../src/ui/appDialog";
 import { getUserData } from "../../../src/userData";
 import { clearProfilePhotoCache } from "../../../src/profile/profilePhotos";
 import { isDevBillingBuild } from "../../../src/billing/revenuecat";
+import { restoreAccountPurchases } from "../../../src/billing/restoreAccountPurchases";
 
 const ACCENT = "#7b61ff";
 const MUTED = "#a5acc1";
@@ -29,6 +30,9 @@ export default function SettingsIndex() {
   const [manageFallbackText, setManageFallbackText] = useState<string | null>(null);
   const [deleteFeedback, setDeleteFeedback] = useState<string | null>(null);
   const [deletingAccount, setDeletingAccount] = useState(false);
+  const [restoring, setRestoring] = useState(false);
+  const [restoreFeedback, setRestoreFeedback] = useState<string | null>(null);
+  const restoreInFlight = useRef(false);
   const entitlement = useEntitlement(authReady, uid);
   const devBillingBuild = __DEV__ || isDevBillingBuild();
 
@@ -84,8 +88,34 @@ export default function SettingsIndex() {
     }
   };
 
-  const handleGoBack = () => {
-    router.replace("/home");
+  const handleGoBack = useCallback(() => {
+    router.dismissTo("/(tabs)/home");
+  }, [router]);
+
+  useFocusEffect(useCallback(() => {
+    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+      handleGoBack();
+      return true;
+    });
+    return () => subscription.remove();
+  }, [handleGoBack]));
+
+  const handleRestorePurchases = async () => {
+    if (devBillingBuild || !uid || restoreInFlight.current) return;
+    restoreInFlight.current = true;
+    setRestoring(true);
+    setRestoreFeedback("Checking purchases with Google Play...");
+    try {
+      await restoreAccountPurchases(uid);
+      if (auth.currentUser?.uid !== uid) return;
+      setRestoreFeedback("Purchase check completed. Any active subscription will appear here once account verification finishes.");
+    } catch {
+      if (auth.currentUser?.uid !== uid) return;
+      setRestoreFeedback("Couldn't restore purchases. Check your connection and try again with the Google Play account used to subscribe.");
+    } finally {
+      restoreInFlight.current = false;
+      setRestoring(false);
+    }
   };
 
   const handleManageSubscription = async () => {
@@ -271,6 +301,16 @@ export default function SettingsIndex() {
           {!devBillingBuild && entitlement.state === "active" && manageFallbackText ? (
             <Text style={styles.subText}>{manageFallbackText}</Text>
           ) : null}
+          {!devBillingBuild && entitlement.state !== "loading" ? (
+            <TouchableOpacity
+              style={[styles.secondaryButton, restoring && styles.disabledButton]}
+              onPress={() => void handleRestorePurchases()}
+              disabled={restoring || !uid}
+            >
+              <Text style={styles.secondaryButtonText}>{restoring ? "Restoring..." : "Restore purchases"}</Text>
+            </TouchableOpacity>
+          ) : null}
+          {restoreFeedback ? <Text accessibilityLiveRegion="polite" style={styles.subText}>{restoreFeedback}</Text> : null}
         </View>
 
         <View style={styles.card}>
