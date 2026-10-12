@@ -1,10 +1,12 @@
 import { Ionicons } from "@expo/vector-icons";
 import Slider from "@react-native-community/slider";
-import { Image } from "expo-image";
+import { ProfilePhoto } from "../../../src/profile/ProfilePhoto";
+import { cloudPhotoPath, profilePhotoReference, snapshotWithPhoto } from "../../../src/profile/profilePhotoReference";
+import { stageProfilePhoto, commitProfilePhoto, discardProfilePhotoUpload } from "../../../src/profile/profilePhotos";
 import * as ImagePicker from "expo-image-picker";
 import { Href, Redirect, useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { onAuthStateChanged } from "firebase/auth";
-import { Timestamp } from "firebase/firestore";
+import { doc, setDoc, Timestamp } from "firebase/firestore";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   BackHandler,
@@ -20,7 +22,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import { auth } from "../../../src/config/firebaseConfig";
+import { auth, db } from "../../../src/config/firebaseConfig";
 import { BodyCompositionHistoryChart } from "../../../src/bodyComposition/BodyCompositionHistoryChart";
 import { useOfflineStatus } from "../../../src/hooks/useOfflineStatus";
 import {
@@ -63,7 +65,7 @@ import {
   syncSleepFromHealthConnect,
   type HealthConnectAvailability,
 } from "../../../src/sleep/sleep";
-import { getUserData, saveUserData } from "../../../src/userData";
+import { getUserData } from "../../../src/userData";
 import { scheduleAfterInteractions } from "../../../src/utils/scheduleAfterInteractions";
 
 const goals = [
@@ -183,6 +185,8 @@ export default function ProfileIndex() {
   const [nickname, setNickname] = useState("");
   const [profileDescription, setProfileDescription] = useState("");
   const [profilePhotoUri, setProfilePhotoUri] = useState("");
+  const [savingProfile, setSavingProfile] = useState(false);
+  const savingProfileRef = useRef(false);
   const [trainingPhase, setTrainingPhase] = useState<TrainingPhase>("Hypertrophy");
   const [dietPhase, setDietPhase] = useState<DietPhase>("Maintain");
   const [initialTrainingPhase, setInitialTrainingPhase] = useState<TrainingPhase>("Hypertrophy");
@@ -484,7 +488,7 @@ export default function ProfileIndex() {
         if (data?.goal) setGoal(data.goal);
         if (data?.nickname) setNickname(data.nickname);
         if (typeof data?.description === "string") setProfileDescription(data.description);
-        if (typeof data?.profilePhotoUri === "string") setProfilePhotoUri(data.profilePhotoUri);
+        setProfilePhotoUri(profilePhotoReference(data));
         if (isTrainingPhase(data?.trainingPhase)) {
           setTrainingPhase(data.trainingPhase);
           setInitialTrainingPhase(data.trainingPhase);
@@ -926,6 +930,10 @@ export default function ProfileIndex() {
       quality: 0.7,
     });
     if (result.canceled || !result.assets[0]?.uri) return;
+    if ((result.assets[0].fileSize ?? 0) > 6 * 1024 * 1024) {
+      showAppAlert("Photo too large", "Choose a photo smaller than 6 MB.");
+      return;
+    }
     setProfilePhotoUri(result.assets[0].uri);
   }, []);
 
@@ -1029,7 +1037,7 @@ export default function ProfileIndex() {
   }, [isOffline, refreshBodyComposition, refreshHealthConnectStatus, uid, weightUnit]);
 
   const save = useCallback(async (): Promise<boolean> => {
-    if (!uid) return false;
+    if (!uid || savingProfileRef.current) return false;
     setSaveFeedback(null);
     const fields = [
       { label: "Cut", value: cutCalories },
@@ -1102,12 +1110,22 @@ export default function ProfileIndex() {
       return false;
     }
 
+    let stagedPhotoPath: string | null = null;
+    let photoCommitted = false;
+    const previousPhoto = initialSnapshot ? (JSON.parse(initialSnapshot) as ProfileSnapshot).profilePhotoUri : "";
+    const needsPhotoCommit = !cloudPhotoPath(profilePhotoUri) && (!!profilePhotoUri || previousPhoto !== profilePhotoUri);
+    let savedPhotoReference = profilePhotoUri;
+    savingProfileRef.current = true;
+    setSavingProfile(true);
     try {
+      if (needsPhotoCommit && profilePhotoUri) {
+        setSaveFeedback("Uploading photo...");
+        stagedPhotoPath = await stageProfilePhoto(uid, profilePhotoUri);
+      }
       const profilePayload: Record<string, unknown> = {
         goal,
         nickname: nickname.trim(),
         description: profileDescription.trim(),
-        profilePhotoUri: profilePhotoUri.trim(),
         trainingPhase,
         dietPhase,
         weightUnit,
@@ -1152,11 +1170,11 @@ export default function ProfileIndex() {
         }
         profilePayload.dietPhaseHistory = nextDietHistory;
       }
-      await saveUserData(uid, profilePayload, true);
-      await saveUserData(
-        uid,
+      await setDoc(doc(db, "users", uid), profilePayload, { merge: true });
+      await setDoc(
+        doc(db, "users", uid),
         { sleepSettings: { targetHours: Math.round(parsedSleepTarget * 10) / 10 } },
-        true
+        { merge: true }
       );
       await saveNutritionProfile(
         uid,
@@ -1186,6 +1204,11 @@ export default function ProfileIndex() {
         await saveManualBodyCompositionEntry(uid, bodyCompositionUpdates);
         await refreshBodyComposition(uid, weightUnit);
       }
+      if (needsPhotoCommit) {
+        savedPhotoReference = await commitProfilePhoto(uid, stagedPhotoPath);
+        photoCommitted = true;
+        setProfilePhotoUri(savedPhotoReference);
+      }
       setInitialTrainingPhase(trainingPhase);
       setInitialDietPhase(dietPhase);
       setTrainingPhaseHistory(nextTrainingHistory);
@@ -1197,12 +1220,19 @@ export default function ProfileIndex() {
         dietPhase !== initialDietPhase ? (profilePayload.dietPhaseStartedAt as Timestamp) : currentDietPhaseStartedAt
       );
       setSaveFeedback("Changes saved.");
-      setInitialSnapshot(buildSnapshot());
+      setInitialSnapshot(snapshotWithPhoto(buildSnapshot(), savedPhotoReference));
       return true;
     } catch (error) {
+      if (stagedPhotoPath && !photoCommitted) {
+        await discardProfilePhotoUpload(uid, stagedPhotoPath).catch(() => undefined);
+      }
       console.log("Failed to save profile", error);
-      showAppAlert("Save failed", "Couldn't save your changes. Please try again.");
+      setSaveFeedback(null);
+      showAppAlert("Save failed", "Couldn't finish saving your changes. Your previous photo is kept if the new photo wasn't saved. Check your connection and try again.");
       return false;
+    } finally {
+      savingProfileRef.current = false;
+      setSavingProfile(false);
     }
   }, [
     uid,
@@ -1216,6 +1246,7 @@ export default function ProfileIndex() {
     nickname,
     profileDescription,
     profilePhotoUri,
+    initialSnapshot,
     trainingPhase,
     dietPhase,
     weightUnit,
@@ -1255,6 +1286,7 @@ export default function ProfileIndex() {
   }, [router, returnTo]);
 
   const attemptLeave = useCallback((destination?: Href | null) => {
+    if (savingProfileRef.current) return;
     if (!hasUnsavedChanges) {
       navigateBack(destination);
       return;
@@ -1295,6 +1327,7 @@ export default function ProfileIndex() {
   useEffect(() => {
     setProfileLeaveGuard({
       hasUnsavedChanges,
+      isSaving: () => savingProfileRef.current,
       save,
       discard: () => {
         if (initialSnapshot) {
@@ -1328,6 +1361,10 @@ export default function ProfileIndex() {
   useFocusEffect(
     useCallback(() => {
       const unsubBeforeRemove = navigation.addListener("beforeRemove", (event) => {
+        if (savingProfileRef.current) {
+          event.preventDefault();
+          return;
+        }
         if (!hasUnsavedChanges) return;
         if (skipNextBlurPromptRef.current) {
           skipNextBlurPromptRef.current = false;
@@ -1455,13 +1492,14 @@ export default function ProfileIndex() {
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={handleGoBack}>
+        <TouchableOpacity style={styles.backButton} onPress={handleGoBack} disabled={savingProfile}>
           <Ionicons name="chevron-back" size={22} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.title}>Profile</Text>
         <View style={styles.headerSpacer} />
       </View>
       <ScrollView
+        pointerEvents={savingProfile ? "none" : "auto"}
         ref={profileScrollRef}
         style={styles.container}
         contentContainerStyle={styles.scrollContent}
@@ -1472,7 +1510,7 @@ export default function ProfileIndex() {
           <View style={styles.identityRow}>
             <View style={styles.profilePhotoWrap}>
               {profilePhotoUri ? (
-                <Image source={{ uri: profilePhotoUri }} style={styles.profilePhoto} contentFit="cover" />
+                <ProfilePhoto uid={uid} reference={profilePhotoUri} initial={nickname.trim().charAt(0).toUpperCase() || "L"} style={styles.profilePhoto} contentFit="cover" />
               ) : (
                 <View style={[styles.profilePhoto, styles.profilePhotoPlaceholder]}>
                   <Ionicons name="person" size={28} color="#d8daec" />
@@ -1990,8 +2028,8 @@ export default function ProfileIndex() {
           </View>
         </Modal>
 
-        <TouchableOpacity style={styles.save} onPress={save}>
-          <Text style={styles.saveText}>Save Changes</Text>
+        <TouchableOpacity style={styles.save} onPress={save} disabled={savingProfile}>
+          <Text style={styles.saveText}>{savingProfile ? "Saving..." : "Save Changes"}</Text>
         </TouchableOpacity>
         {saveFeedback ? <Text style={styles.saveFeedback}>{saveFeedback}</Text> : null}
       </ScrollView>

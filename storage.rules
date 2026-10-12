@@ -1,0 +1,10 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Photos are served by authenticated callables, never public download URLs.
+    // Admin SDK access is validated by the functions and bypasses these rules.
+    match /{path=**} {
+      allow read, write: if false;
+    }
+  }
+}

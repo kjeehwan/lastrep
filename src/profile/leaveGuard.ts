@@ -1,5 +1,6 @@
 type ProfileLeaveGuardState = {
   hasUnsavedChanges: boolean;
+  isSaving?: () => boolean;
   save?: () => Promise<boolean>;
   discard?: () => void;
 };

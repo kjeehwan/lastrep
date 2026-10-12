@@ -1,7 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import Slider from "@react-native-community/slider";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Image } from "expo-image";
+import { ProfilePhoto } from "../../src/profile/ProfilePhoto";
+import { profilePhotoReference } from "../../src/profile/profilePhotoReference";
 import { Href, Redirect, useFocusEffect, useRouter } from "expo-router";
 import { onAuthStateChanged } from "firebase/auth";
 import {
@@ -301,7 +302,7 @@ export default function Home() {
       (snap) => {
         const data: any = snap.data();
         const nickname = typeof data?.nickname === "string" ? data.nickname.trim() : "";
-        const photoUri = typeof data?.profilePhotoUri === "string" ? data.profilePhotoUri.trim() : "";
+        const photoUri = profilePhotoReference(data);
         const description =
           typeof data?.description === "string" ? data.description.trim() : "";
         setUserNickname(nickname || null);
@@ -1312,7 +1313,7 @@ export default function Home() {
             onPress={() => setShowProfileModal(true)}
           >
             {profilePhotoUri ? (
-              <Image source={{ uri: profilePhotoUri }} style={styles.headerAvatar} contentFit="cover" />
+              <ProfilePhoto uid={uid} reference={profilePhotoUri} initial={(userNickname ?? "L").charAt(0).toUpperCase()} style={styles.headerAvatar} contentFit="cover" />
             ) : (
               <View style={[styles.headerAvatar, styles.headerAvatarPlaceholder]}>
                 <Text style={styles.headerAvatarInitial}>
@@ -1962,8 +1963,10 @@ export default function Home() {
             <TouchableWithoutFeedback onPress={() => {}}>
               <View style={styles.profileModalCard}>
                 {profilePhotoUri ? (
-                  <Image
-                    source={{ uri: profilePhotoUri }}
+                  <ProfilePhoto
+                    uid={uid}
+                    reference={profilePhotoUri}
+                    initial={(userNickname ?? "L").charAt(0).toUpperCase()}
                     style={styles.profileModalAvatar}
                     contentFit="cover"
                   />

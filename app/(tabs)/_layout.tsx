@@ -18,6 +18,10 @@ function createProfileTabLeaveListener(targetName: string) {
       const activeRoute = state.routes[state.index];
       if (activeRoute?.name !== "profile/index") return;
       const guard = getProfileLeaveGuard();
+      if (guard.isSaving?.()) {
+        event.preventDefault();
+        return;
+      }
       if (!guard.hasUnsavedChanges) return;
       event.preventDefault();
       showAppDialog({
