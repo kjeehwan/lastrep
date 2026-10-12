@@ -9,7 +9,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import OfflineBanner from '@/components/OfflineBanner';
 import AppDialogHost from '@/components/AppDialogHost';
 import { auth } from '@/src/config/firebaseConfig';
-import { initializeRevenueCat, syncRevenueCatIdentity } from '@/src/billing/revenuecat';
+import { initializeRevenueCat, isDevBillingBuild, syncRevenueCatIdentity } from '@/src/billing/revenuecat';
 import { logAnalyticsRuntimeDiagnostics } from '@/src/analytics/analytics';
 import { scheduleAfterInteractions } from '@/src/utils/scheduleAfterInteractions';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -96,10 +96,9 @@ export default function RootLayout() {
   }
 
   useEffect(() => {
-    if (__DEV__) {
-      void logAnalyticsRuntimeDiagnostics();
-      // Dev client builds are not used for real Play billing validation.
-      // Skip RevenueCat bootstrap to avoid noisy configuration errors.
+    if (__DEV__ || isDevBillingBuild()) {
+      if (__DEV__) void logAnalyticsRuntimeDiagnostics();
+      // Standalone dev releases also lack the production Play products.
       return;
     }
 

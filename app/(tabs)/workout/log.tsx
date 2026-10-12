@@ -35,6 +35,7 @@ import {
 import Slider from "@react-native-community/slider";
 import { Image } from "expo-image";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { AdaptiveModalCard } from "../../../src/ui/AdaptiveModalCard";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import { db } from "../../../src/config/firebaseConfig";
@@ -343,9 +344,9 @@ const formatTempoFromIndices = (indices: number[]) =>
 
 export default function WorkoutLog() {
   const router = useRouter();
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const isTabletLayout = width >= 600;
+  const isTabletLayout = Math.min(width, height) >= 600;
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [exerciseUnits, setExerciseUnits] = useState<Record<string, Unit>>({});
   const [favoriteExercises, setFavoriteExercises] = useState<string[]>([]);
@@ -3103,7 +3104,7 @@ export default function WorkoutLog() {
   };
 
   return (
-    <SafeAreaView style={styles.screen} edges={["top"]}>
+    <SafeAreaView style={styles.screen} edges={["top", "left", "right"]}>
       <KeyboardAvoidingView
         style={styles.keyboardAvoiding}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -3305,7 +3306,7 @@ export default function WorkoutLog() {
               </View>
               {replaceTarget === ex.id ? (
                 <View style={[styles.pickerCard, { marginTop: 10 }]}>
-                  <TextInput
+                  <TextInput disableFullscreenUI
                     placeholder="Search to replace"
                     placeholderTextColor="#7a7a8c"
                     value={replaceSearch}
@@ -3384,7 +3385,7 @@ export default function WorkoutLog() {
                 </View>
               ) : null}
               <View style={styles.exerciseMetaNotesSingle}>
-                <TextInput
+                <TextInput disableFullscreenUI
                   placeholder="Add notes"
                   placeholderTextColor="#7a7a8c"
                   value={ex.notes ?? ""}
@@ -3718,7 +3719,7 @@ export default function WorkoutLog() {
 
       <Modal visible={showRepeatPicker} transparent animationType="fade">
         <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
+          <AdaptiveModalCard style={styles.modalCard}>
             <Text style={styles.modalTitle}>Repeat a past workout</Text>
             <ScrollView style={{ maxHeight: 280 }}>
               {pastWorkouts.map((w) => (
@@ -3743,13 +3744,13 @@ export default function WorkoutLog() {
             >
               <Text style={styles.secondaryText}>Close</Text>
             </TouchableOpacity>
-          </View>
+          </AdaptiveModalCard>
         </View>
       </Modal>
 
       <Modal visible={showMyRoutinesModal} transparent animationType="fade">
         <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
+          <AdaptiveModalCard style={styles.modalCard}>
             <Text style={styles.modalTitle}>My routines</Text>
             {routines.length === 0 ? (
               <Text style={styles.modalText}>No routines saved yet.</Text>
@@ -3788,13 +3789,13 @@ export default function WorkoutLog() {
             >
               <Text style={styles.secondaryText}>Close</Text>
             </TouchableOpacity>
-          </View>
+          </AdaptiveModalCard>
         </View>
       </Modal>
 
       <Modal visible={showExerciseDemo} transparent animationType="fade">
         <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
+          <AdaptiveModalCard style={styles.modalCard}>
             <Text style={styles.modalTitle}>{activeDemoExercise?.name ?? "Exercise Demo"}</Text>
             {activeDemoImageUris.length ? (
               <View style={styles.demoImageRow}>
@@ -3832,7 +3833,7 @@ export default function WorkoutLog() {
             >
               <Text style={styles.secondaryText}>Close</Text>
             </TouchableOpacity>
-          </View>
+          </AdaptiveModalCard>
         </View>
       </Modal>
 
@@ -3840,7 +3841,7 @@ export default function WorkoutLog() {
         <TouchableWithoutFeedback onPress={closeExerciseActions}>
           <View style={styles.modalBackdrop}>
             <TouchableWithoutFeedback onPress={() => {}}>
-              <View style={styles.modalCard}>
+              <AdaptiveModalCard style={styles.modalCard}>
                 <Text style={styles.modalTitle}>
                   {activeActionExercise ? activeActionExercise.name : "Exercise Options"}
                 </Text>
@@ -3963,7 +3964,7 @@ export default function WorkoutLog() {
                   <Ionicons name="trash-outline" size={18} color="#ff7a7a" />
                   <Text style={[styles.exerciseOptionText, { color: "#ff7a7a" }]}>Delete exercise</Text>
                 </TouchableOpacity>
-              </View>
+              </AdaptiveModalCard>
             </TouchableWithoutFeedback>
           </View>
         </TouchableWithoutFeedback>
@@ -3971,7 +3972,7 @@ export default function WorkoutLog() {
 
       <Modal visible={showRestTimerModal} transparent animationType="fade">
         <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
+          <AdaptiveModalCard style={styles.modalCard}>
             <Text style={styles.modalTitle}>
               {activeRestExercise ? `${activeRestExercise.name} Rest Timer` : "Rest Timer"}
             </Text>
@@ -4004,7 +4005,7 @@ export default function WorkoutLog() {
               ))}
             </View>
             <View style={styles.restCustomRow}>
-              <TextInput
+              <TextInput disableFullscreenUI
                 placeholder="Custom (sec)"
                 placeholderTextColor="#7a7a8c"
                 keyboardType="numeric"
@@ -4066,13 +4067,13 @@ export default function WorkoutLog() {
                 <Text style={styles.primaryText}>{activeRestTimerState.running ? "Pause" : "Start"}</Text>
               </TouchableOpacity>
             </View>
-          </View>
+          </AdaptiveModalCard>
         </View>
       </Modal>
 
       <Modal visible={showRoutineStartModal} transparent animationType="fade">
         <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
+          <AdaptiveModalCard style={styles.modalCard}>
             <Text style={styles.modalTitle}>Create routine</Text>
             <Text style={styles.modalText}>
               Start with an empty editor or use your current workout draft.
@@ -4095,13 +4096,13 @@ export default function WorkoutLog() {
             >
               <Text style={styles.secondaryText}>Cancel</Text>
             </TouchableOpacity>
-          </View>
+          </AdaptiveModalCard>
         </View>
       </Modal>
 
       <Modal visible={showRoutineActionsModal} transparent animationType="fade">
         <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
+          <AdaptiveModalCard style={styles.modalCard}>
             <Text style={styles.modalTitle}>
               {selectedRoutine ? selectedRoutine.name : "Routine actions"}
             </Text>
@@ -4133,7 +4134,7 @@ export default function WorkoutLog() {
             >
               <Text style={styles.secondaryText}>Cancel</Text>
             </TouchableOpacity>
-          </View>
+          </AdaptiveModalCard>
         </View>
       </Modal>
 
@@ -4179,7 +4180,7 @@ export default function WorkoutLog() {
 
       <Modal visible={showDeloadConfirmModal} transparent animationType="fade">
         <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
+          <AdaptiveModalCard style={styles.modalCard}>
             <Text style={styles.modalTitle}>Apply deload?</Text>
             <Text style={styles.modalText}>
               This creates a lighter session with 15% less weight and about 40% fewer sets. Your saved routine will not be changed.
@@ -4198,13 +4199,13 @@ export default function WorkoutLog() {
                 <Text style={styles.primaryText}>Apply deload</Text>
               </TouchableOpacity>
             </View>
-          </View>
+          </AdaptiveModalCard>
         </View>
       </Modal>
 
       <Modal visible={showExerciseHistoryModal} transparent animationType="fade">
         <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
+          <AdaptiveModalCard style={styles.modalCard}>
             <Text style={styles.modalTitle}>{historyExerciseName ?? "Exercise"} history</Text>
             {exerciseHistory.length ? (
               <ScrollView style={styles.exerciseHistoryList}>
@@ -4240,13 +4241,13 @@ export default function WorkoutLog() {
             >
               <Text style={styles.secondaryText}>Close</Text>
             </TouchableOpacity>
-          </View>
+          </AdaptiveModalCard>
         </View>
       </Modal>
 
       <Modal visible={showRoutineDeleteModal} transparent animationType="fade">
         <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
+          <AdaptiveModalCard style={styles.modalCard}>
             <Text style={styles.modalTitle}>Delete this routine?</Text>
             <Text style={styles.modalText}>
               {selectedRoutine
@@ -4270,13 +4271,13 @@ export default function WorkoutLog() {
                 <Text style={styles.primaryText}>Delete</Text>
               </TouchableOpacity>
             </View>
-          </View>
+          </AdaptiveModalCard>
         </View>
       </Modal>
 
       <Modal visible={showWorkoutSavedModal} transparent animationType="fade">
         <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
+          <AdaptiveModalCard style={styles.modalCard}>
             <Text style={styles.modalTitle}>Workout saved</Text>
             <Text style={styles.modalText}>Your workout has been saved.</Text>
             <View style={styles.modalActions}>
@@ -4287,13 +4288,13 @@ export default function WorkoutLog() {
                 <Text style={styles.primaryText}>Continue</Text>
               </TouchableOpacity>
             </View>
-          </View>
+          </AdaptiveModalCard>
         </View>
       </Modal>
 
       <Modal visible={showRoutineUpdateAfterFinishModal} transparent animationType="fade">
         <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
+          <AdaptiveModalCard style={styles.modalCard}>
             <Text style={styles.modalTitle}>Update routine?</Text>
             <Text style={styles.modalText}>
               Use this workout&apos;s exercise order, sets, and weights as the new routine baseline? RPE is not saved to routines.
@@ -4312,13 +4313,13 @@ export default function WorkoutLog() {
                 <Text style={styles.primaryText}>Update routine</Text>
               </TouchableOpacity>
             </View>
-          </View>
+          </AdaptiveModalCard>
         </View>
       </Modal>
 
       <Modal visible={showRoutineUpdatedConfirmationModal} transparent animationType="fade">
         <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
+          <AdaptiveModalCard style={styles.modalCard}>
             <Text style={styles.modalTitle}>Routine updated</Text>
             <Text style={styles.modalText}>
               Your routine now uses this workout&apos;s exercise order, sets, and weights. RPE was not saved.
@@ -4331,15 +4332,15 @@ export default function WorkoutLog() {
                 <Text style={styles.primaryText}>Done</Text>
               </TouchableOpacity>
             </View>
-          </View>
+          </AdaptiveModalCard>
         </View>
       </Modal>
 
       <Modal visible={showRoutineNameModal} transparent animationType="fade">
         <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
+          <AdaptiveModalCard style={styles.modalCard}>
             <Text style={styles.modalTitle}>{editingRoutineId ? "Update routine" : "Save routine"}</Text>
-            <TextInput
+            <TextInput disableFullscreenUI
               placeholder="Routine name"
               placeholderTextColor="#7a7a8c"
               value={routineNameInput}
@@ -4366,13 +4367,13 @@ export default function WorkoutLog() {
                 <Text style={styles.primaryText}>{routineSaving ? "Saving..." : "Save"}</Text>
               </TouchableOpacity>
             </View>
-          </View>
+          </AdaptiveModalCard>
         </View>
       </Modal>
 
       <Modal visible={showDatePickerModal} transparent animationType="fade">
         <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
+          <AdaptiveModalCard style={styles.modalCard}>
             <View style={styles.calendarHeader}>
               <TouchableOpacity
                 style={styles.iconButton}
@@ -4444,17 +4445,17 @@ export default function WorkoutLog() {
             >
               <Text style={styles.secondaryText}>Close</Text>
             </TouchableOpacity>
-          </View>
+          </AdaptiveModalCard>
         </View>
       </Modal>
 
       <Modal visible={showDurationModal} transparent animationType="fade">
         <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
+          <AdaptiveModalCard style={styles.modalCard}>
             <Text style={styles.modalTitle}>Adjust duration</Text>
             <Text style={styles.modalText}>Set workout duration (hours and minutes).</Text>
             <View style={styles.durationFieldRow}>
-              <TextInput
+              <TextInput disableFullscreenUI
                 placeholder="00"
                 placeholderTextColor="#7a7a8c"
                 value={durationAdjustHoursText}
@@ -4464,7 +4465,7 @@ export default function WorkoutLog() {
                 style={styles.durationFieldInput}
               />
               <Text style={styles.durationFieldColon}>:</Text>
-              <TextInput
+              <TextInput disableFullscreenUI
                 placeholder="00"
                 placeholderTextColor="#7a7a8c"
                 value={durationAdjustMinutesText}
@@ -4498,16 +4499,16 @@ export default function WorkoutLog() {
                 <Text style={styles.primaryText}>Apply</Text>
               </TouchableOpacity>
             </View>
-          </View>
+          </AdaptiveModalCard>
         </View>
       </Modal>
 
       <Modal visible={showCardioTimeModal} transparent animationType="fade">
         <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
+          <AdaptiveModalCard style={styles.modalCard}>
             <Text style={styles.modalTitle}>Set Cardio Time</Text>
             <View style={styles.durationFieldRow}>
-              <TextInput
+              <TextInput disableFullscreenUI
                 placeholder="00"
                 placeholderTextColor="#7a7a8c"
                 value={cardioTimeHoursText}
@@ -4517,7 +4518,7 @@ export default function WorkoutLog() {
                 style={styles.durationFieldInput}
               />
               <Text style={styles.durationFieldColon}>:</Text>
-              <TextInput
+              <TextInput disableFullscreenUI
                 placeholder="00"
                 placeholderTextColor="#7a7a8c"
                 value={cardioTimeMinutesText}
@@ -4554,17 +4555,17 @@ export default function WorkoutLog() {
                 <Text style={styles.primaryText}>Apply</Text>
               </TouchableOpacity>
             </View>
-          </View>
+          </AdaptiveModalCard>
         </View>
       </Modal>
 
       <Modal visible={showCardioDistanceModal} transparent animationType="fade">
         <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
+          <AdaptiveModalCard style={styles.modalCard}>
             <Text style={styles.modalTitle}>Set Distance</Text>
             <Text style={styles.modalText}>Whole and decimal values.</Text>
             <View style={styles.durationFieldRow}>
-              <TextInput
+              <TextInput disableFullscreenUI
                 placeholder="0"
                 placeholderTextColor="#7a7a8c"
                 value={cardioDistanceWholeText}
@@ -4574,7 +4575,7 @@ export default function WorkoutLog() {
                 style={styles.durationFieldInput}
               />
               <Text style={styles.durationFieldColon}>.</Text>
-              <TextInput
+              <TextInput disableFullscreenUI
                 placeholder="00"
                 placeholderTextColor="#7a7a8c"
                 value={cardioDistanceDecimalText}
@@ -4618,13 +4619,13 @@ export default function WorkoutLog() {
                 <Text style={styles.primaryText}>Apply</Text>
               </TouchableOpacity>
             </View>
-          </View>
+          </AdaptiveModalCard>
         </View>
       </Modal>
 
       <Modal visible={showFinishModal} transparent animationType="fade">
         <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
+          <AdaptiveModalCard style={styles.modalCard}>
             <Text style={styles.modalTitle}>Quick questions</Text>
             <Text style={styles.modalText}>Followed recommendation?</Text>
             <View style={styles.answerRow}>
@@ -4666,7 +4667,7 @@ export default function WorkoutLog() {
             {showFinishTitleInput ? (
               <>
                 <Text style={[styles.modalText, { marginTop: 12 }]}>Optional session title</Text>
-                <TextInput
+                <TextInput disableFullscreenUI
                   placeholder="e.g., Upper body"
                   placeholderTextColor="#7a7a8c"
                   value={sessionTitle}
@@ -4694,13 +4695,13 @@ export default function WorkoutLog() {
                 <Text style={styles.primaryText}>{saving ? "Saving..." : "Save workout"}</Text>
               </TouchableOpacity>
             </View>
-          </View>
+          </AdaptiveModalCard>
         </View>
       </Modal>
 
       <Modal visible={showTempoEditorModal} transparent animationType="fade">
         <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
+          <AdaptiveModalCard style={styles.modalCard}>
             <Text style={styles.modalTitle}>Adjust Tempo</Text>
             <Text style={styles.modalText}>
               Eccentric - Hold - Concentric - Hold
@@ -4752,13 +4753,13 @@ export default function WorkoutLog() {
                 <Text style={styles.primaryText}>Save</Text>
               </TouchableOpacity>
             </View>
-          </View>
+          </AdaptiveModalCard>
         </View>
       </Modal>
 
       <Modal visible={showDiscardConfirmModal} transparent animationType="fade">
         <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
+          <AdaptiveModalCard style={styles.modalCard}>
             <Text style={styles.modalTitle}>Discard this workout?</Text>
             <Text style={styles.modalText}>
               This will clear your current workout draft. You can&apos;t undo it.
@@ -4777,13 +4778,13 @@ export default function WorkoutLog() {
                 <Text style={styles.primaryText}>Discard</Text>
               </TouchableOpacity>
             </View>
-          </View>
+          </AdaptiveModalCard>
         </View>
       </Modal>
 
       <Modal visible={Boolean(activeSetMenu)} transparent animationType="slide">
         <View style={[styles.sheetBackdrop, { paddingBottom: insets.bottom + 72 }]}>
-          <View style={styles.sheetCard}>
+          <AdaptiveModalCard style={styles.sheetCard}>
             <View style={styles.sheetTitleRow}>
               <Text style={styles.modalTitle}>Set options</Text>
               <TouchableOpacity
@@ -4852,7 +4853,7 @@ export default function WorkoutLog() {
             >
               <Text style={styles.secondaryText}>Close</Text>
             </TouchableOpacity>
-          </View>
+          </AdaptiveModalCard>
         </View>
       </Modal>
 
@@ -4888,8 +4889,8 @@ const styles = StyleSheet.create({
   keyboardAvoiding: { flex: 1 },
   container: { flex: 1, backgroundColor: "#0d0d1a" },
   scrollShell: { flex: 1 },
-  content: { padding: 20, paddingTop: 8, paddingBottom: 140 },
-  header: {
+  content: { width: "100%", maxWidth: 760, alignSelf: "center", padding: 20, paddingTop: 8, paddingBottom: 140 },
+  header: { width: "100%", maxWidth: 760, alignSelf: "center",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",

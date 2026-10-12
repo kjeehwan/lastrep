@@ -168,7 +168,7 @@ android {
             def enableShrinkResources = findProperty('android.enableShrinkResourcesInReleaseBuilds') ?: 'false'
             shrinkResources enableShrinkResources.toBoolean()
             minifyEnabled enableMinifyInReleaseBuilds
-            proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
+            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
             def enablePngCrunchInRelease = findProperty('android.enablePngCrunchInReleaseBuilds') ?: 'true'
             crunchPngs enablePngCrunchInRelease.toBoolean()
         }
@@ -219,10 +219,18 @@ afterEvaluate {
     }
 }
 
+// Lastrep uses Google Play billing, not Amazon. Amazon's consumer rules disable
+// R8 optimization globally in the current RevenueCat SDK.
+configurations.configureEach {
+    exclude group: "com.revenuecat.purchases", module: "purchases-store-amazon"
+}
+
 dependencies {
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
     implementation("androidx.recyclerview:recyclerview:1.3.2")
+    // Android 15-aware bottom sheets; retain the existing app theme.
+    implementation("com.google.android.material:material:1.14.0")
     implementation(files("libs/samsung-health-data-api-1.1.0.aar"))
 
     def isGifEnabled = (findProperty('expo.gif.enabled') ?: "") == "true";

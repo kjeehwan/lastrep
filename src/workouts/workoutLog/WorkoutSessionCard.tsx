@@ -47,7 +47,7 @@ export function WorkoutSessionCard({
   return (
     <View style={styles.card}>
       <Text style={styles.sectionTitle}>Session</Text>
-      <TextInput
+      <TextInput disableFullscreenUI
         placeholder="Session title (optional)"
         placeholderTextColor="#7a7a8c"
         value={title}

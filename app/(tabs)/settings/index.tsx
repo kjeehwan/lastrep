@@ -13,6 +13,7 @@ import { useEntitlement } from "../../../src/hooks/useEntitlement";
 import { showAppDialog } from "../../../src/ui/appDialog";
 import { getUserData } from "../../../src/userData";
 import { clearProfilePhotoCache } from "../../../src/profile/profilePhotos";
+import { isDevBillingBuild } from "../../../src/billing/revenuecat";
 
 const ACCENT = "#7b61ff";
 const MUTED = "#a5acc1";
@@ -29,6 +30,7 @@ export default function SettingsIndex() {
   const [deleteFeedback, setDeleteFeedback] = useState<string | null>(null);
   const [deletingAccount, setDeletingAccount] = useState(false);
   const entitlement = useEntitlement(authReady, uid);
+  const devBillingBuild = __DEV__ || isDevBillingBuild();
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (user) => {
@@ -180,8 +182,7 @@ export default function SettingsIndex() {
   if (redirectTo) return <Redirect href={redirectTo} />;
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
-      <ScrollView contentContainerStyle={styles.content} style={styles.container} bounces>
+    <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
         <View style={styles.header}>
           <TouchableOpacity style={styles.backButton} onPress={handleGoBack}>
             <Ionicons name="chevron-back" size={22} color="#fff" />
@@ -189,7 +190,7 @@ export default function SettingsIndex() {
           <Text style={styles.title}>Settings</Text>
           <View style={styles.headerSpacer} />
         </View>
-
+      <ScrollView contentContainerStyle={styles.content} style={styles.container} bounces>
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Account</Text>
           <View style={styles.row}>
@@ -231,6 +232,20 @@ export default function SettingsIndex() {
           <Text style={styles.sectionTitle}>Subscription</Text>
           {entitlement.state === "loading" ? (
             <Text style={styles.subText}>Checking subscription status...</Text>
+          ) : devBillingBuild ? (
+            <>
+              {entitlement.state === "active" ? (
+                <Text style={styles.itemText}>Premium access active</Text>
+              ) : null}
+              <Text style={styles.subText}>
+                Billing is unavailable in Lastrep Dev. Use the Play-installed app to test subscriptions.
+              </Text>
+              {entitlement.state === "active" ? (
+                <Text style={styles.subText}>
+                  Premium access does not necessarily mean you have a paid Google Play subscription.
+                </Text>
+              ) : null}
+            </>
           ) : entitlement.state === "active" ? (
             <>
               <TouchableOpacity style={styles.secondaryButton} onPress={handleManageSubscription}>
@@ -253,7 +268,7 @@ export default function SettingsIndex() {
               <Text style={styles.secondaryButtonText}>Upgrade to Premium</Text>
             </TouchableOpacity>
           )}
-          {entitlement.state === "active" && manageFallbackText ? (
+          {!devBillingBuild && entitlement.state === "active" && manageFallbackText ? (
             <Text style={styles.subText}>{manageFallbackText}</Text>
           ) : null}
         </View>
@@ -317,12 +332,14 @@ export default function SettingsIndex() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#0d0d1a" },
   container: { flex: 1, backgroundColor: "#0d0d1a" },
-  content: { padding: 20, paddingTop: 20, paddingBottom: 32, gap: 14 },
-  header: {
+  content: { width: "100%", maxWidth: 760, alignSelf: "center", padding: 20, paddingTop: 8, paddingBottom: 32, gap: 14 },
+  header: { width: "100%", maxWidth: 760, alignSelf: "center",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 12,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 8,
   },
   backButton: {
     width: 32,

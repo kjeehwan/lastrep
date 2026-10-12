@@ -634,7 +634,7 @@ export default function NutritionIndex() {
   if (redirectTo) return <Redirect href={redirectTo} />;
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
+    <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} onPress={handleGoBack}>
           <Ionicons name="chevron-back" size={22} color="#fff" />
@@ -960,8 +960,8 @@ export default function NutritionIndex() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#0d0d1a" },
   container: { flex: 1, backgroundColor: "#0d0d1a" },
-  content: { padding: 16, paddingTop: 12, paddingBottom: 140, gap: 12 },
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8, backgroundColor: "#0d0d1a" },
+  content: { width: "100%", maxWidth: 760, alignSelf: "center", padding: 16, paddingTop: 12, paddingBottom: 140, gap: 12 },
+  header: { width: "100%", maxWidth: 760, alignSelf: "center", flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8, backgroundColor: "#0d0d1a" },
   backButton: {
     width: 32, height: 32, borderRadius: 8, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.08)",
   },

@@ -31,6 +31,7 @@ import {
   View,
 } from "react-native";
 import { auth, db } from "../../src/config/firebaseConfig";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useEntitlement } from "../../src/hooks/useEntitlement";
 import { hasHealthSyncConsent } from "../../src/health/healthSyncConsent";
 import {
@@ -1293,7 +1294,7 @@ export default function Home() {
   const shouldShowFirstTimeBanner = showFirstTimeBanner && workouts.length === 0;
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={["top", "left", "right"]}>
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <View style={styles.headerTopRow}>
@@ -2044,7 +2045,7 @@ export default function Home() {
 
 
 
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -2053,9 +2054,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#0d0d1a",
     paddingHorizontal: 20,
-    paddingTop: 50,
+    paddingTop: 12,
   },
-  header: {
+  header: { width: "100%", maxWidth: 760, alignSelf: "center",
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
@@ -2130,7 +2131,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
   },
-  scrollContent: {
+  scrollContent: { width: "100%", maxWidth: 760, alignSelf: "center",
     paddingBottom: 120,
   },
   section: {

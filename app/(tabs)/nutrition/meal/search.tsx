@@ -826,7 +826,7 @@ export default function MealSearchScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
+    <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
       <View style={styles.header}>
         <TouchableOpacity style={styles.iconBtn} onPress={goToSection}>
           <Ionicons name="chevron-back" size={22} color="#fff" />

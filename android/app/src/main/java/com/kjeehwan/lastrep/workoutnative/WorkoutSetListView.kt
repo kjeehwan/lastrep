@@ -16,6 +16,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
 import android.view.ViewGroup
+import android.view.inputmethod.EditorInfo
 import android.widget.LinearLayout
 import android.widget.FrameLayout
 import android.widget.TextView
@@ -248,6 +249,7 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
     }
 
     fun setColumnLabels(weight: String, reps: String, rpe: String) {
+      if (weightHint == weight && repsHint == reps && rpeHint == rpe) return
       weightHint = weight
       repsHint = reps
       rpeHint = rpe
@@ -346,6 +348,7 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
         gravity = Gravity.CENTER
         setSingleLine(true)
         this.inputType = inputType
+        imeOptions = imeOptions or EditorInfo.IME_FLAG_NO_EXTRACT_UI or EditorInfo.IME_FLAG_NO_FULLSCREEN
         includeFontPadding = false
         background = bg
         setPadding(dp(8f), 0, dp(8f), 0)

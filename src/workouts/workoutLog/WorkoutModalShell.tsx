@@ -1,5 +1,7 @@
 import React, { type ReactNode } from "react";
-import { Modal, TouchableWithoutFeedback, View, type ViewStyle } from "react-native";
+import { Modal, TouchableWithoutFeedback, type ViewStyle } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { AdaptiveModalCard } from "../../ui/AdaptiveModalCard";
 
 type WorkoutModalShellProps = {
   visible: boolean;
@@ -19,16 +21,16 @@ export function WorkoutModalShell({
   onRequestClose,
   dismissOnBackdropPress = false,
 }: WorkoutModalShellProps) {
-  const card = <View style={cardStyle}>{children}</View>;
+  const card = <AdaptiveModalCard style={cardStyle}>{children}</AdaptiveModalCard>;
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onRequestClose}>
-      <View style={backdropStyle}>
+      <SafeAreaView style={backdropStyle}>
         {dismissOnBackdropPress && onRequestClose ? (
           <TouchableWithoutFeedback onPress={onRequestClose}>{card}</TouchableWithoutFeedback>
         ) : (
           card
         )}
-      </View>
+      </SafeAreaView>
     </Modal>
   );
 }
