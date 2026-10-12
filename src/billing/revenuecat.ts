@@ -39,16 +39,6 @@ const UID_PREFIX_LENGTH = 8;
 const IS_ANDROID = Platform.OS === "android";
 const DEV_ANDROID_PACKAGE_SUFFIX = ".dev";
 
-type ExpoConstantsModule = {
-  default?: {
-    expoConfig?: {
-      android?: {
-        package?: string;
-      };
-    };
-  };
-};
-
 let configured = false;
 let configurePromise: Promise<void> | null = null;
 let activeFirebaseUid: string | null = null;
@@ -65,8 +55,7 @@ function logBillingEvent(event: BillingLogEvent) {
 }
 
 function getAndroidPackageName(): string | undefined {
-  const constantsModule = Constants as unknown as ExpoConstantsModule;
-  return constantsModule.default?.expoConfig?.android?.package;
+  return Constants.expoConfig?.android?.package;
 }
 
 function isDevAndroidPackage(): boolean {
@@ -205,6 +194,7 @@ export function isExpectedDevBillingConfigurationError(error: unknown): boolean 
   const combined = `${code} ${message} ${debugMessage}`.toLowerCase();
 
   return (
+    combined.includes("dev_billing_unavailable") ||
     combined.includes("configurationerror") ||
     combined.includes("none of the products registered in the revenuecat dashboard") ||
     combined.includes("could be fetched from the play store") ||
@@ -278,6 +268,12 @@ async function runBillingOperation<T>(
 
 export async function configureRevenueCat(): Promise<void> {
   if (!IS_ANDROID) return;
+  if (isDevBillingBuild()) {
+    throw {
+      code: "dev_billing_unavailable",
+      message: "Billing is unavailable in Lastrep Dev. Use the Play-installed app to test subscriptions.",
+    } as BillingError;
+  }
   if (configured) return;
   if (configurePromise) return configurePromise;
 
@@ -402,12 +398,13 @@ export async function ensureRevenueCatLoggedIn(firebaseUid: string): Promise<voi
 
 // Backward-compatible alias used by existing app bootstrap.
 export async function initializeRevenueCat(): Promise<void> {
+  if (isDevBillingBuild()) return;
   await configureRevenueCat();
 }
 
 // Backward-compatible auth sync used by app bootstrap.
 export async function syncRevenueCatIdentity(firebaseUid: string | null): Promise<void> {
-  if (!IS_ANDROID) return;
+  if (!IS_ANDROID || isDevBillingBuild()) return;
   await configureRevenueCat();
 
   if (firebaseUid) {

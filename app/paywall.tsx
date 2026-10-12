@@ -571,7 +571,7 @@ export default function PaywallScreen() {
         </View>
       ) : null}
 
-      {entitlement.state === "inactive" ? (
+      {!devBillingBuild && entitlement.state === "inactive" ? (
         <>
           {packagesAvailable ? (
             <View style={styles.card}>
@@ -612,6 +612,7 @@ export default function PaywallScreen() {
         </Text>
       </TouchableOpacity>
 
+      {!devBillingBuild ? <>
       <TouchableOpacity style={styles.secondaryButton} onPress={handleManageSubscription}>
         <Text style={styles.secondaryButtonText}>Manage subscription</Text>
       </TouchableOpacity>
@@ -620,6 +621,7 @@ export default function PaywallScreen() {
       </Text>
 
       {manageFallbackText ? <Text style={styles.noticeSub}>{manageFallbackText}</Text> : null}
+      </> : null}
     </ScrollView>
   );
 }
