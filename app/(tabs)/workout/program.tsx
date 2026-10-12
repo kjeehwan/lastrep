@@ -231,14 +231,14 @@ export default function WorkoutProgramScreen() {
   if (redirectTo) return <Redirect href={redirectTo} />;
   if (loading) {
     return (
-      <SafeAreaView style={styles.screen} edges={["top"]}>
+      <SafeAreaView style={styles.screen} edges={["top", "left", "right"]}>
         <Text style={styles.muted}>Loading program...</Text>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={styles.screen} edges={["top"]}>
+    <SafeAreaView style={styles.screen} edges={["top", "left", "right"]}>
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
@@ -287,7 +287,7 @@ export default function WorkoutProgramScreen() {
               </Text>
               {day.type === "workout" ? (
                 <>
-                  <TextInput
+                  <TextInput disableFullscreenUI
                     placeholder={`Session title for Day ${day.dayNumber}`}
                     placeholderTextColor="#7a7a8c"
                     value={day.title}
@@ -383,7 +383,7 @@ export default function WorkoutProgramScreen() {
             <Text style={styles.modalTitle}>
               {exercisePickerDay ? `Day ${exercisePickerDay.dayNumber} exercises` : "Pick exercises"}
             </Text>
-            <TextInput
+            <TextInput disableFullscreenUI
               placeholder="Search exercises"
               placeholderTextColor="#7a7a8c"
               value={exerciseSearch}

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { registerAppDialogPresenter, type AppDialogButton, type AppDialogOptions } from "../src/ui/appDialog";
 
 const DEFAULT_BUTTONS: AppDialogButton[] = [{ text: "OK", role: "default" }];
@@ -23,8 +24,9 @@ export default function AppDialogHost() {
 
   return (
     <Modal transparent animationType="fade" visible={Boolean(dialog)} onRequestClose={() => setDialog(null)}>
-      <View style={styles.backdrop}>
+      <SafeAreaView style={styles.backdrop}>
         <View style={styles.card}>
+          <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ gap: 10 }}>
           <Text style={styles.title}>{dialog.title}</Text>
           {dialog.message ? <Text style={styles.message}>{dialog.message}</Text> : null}
           <View style={[styles.buttonRow, isVerticalLayout && styles.buttonColumn]}>
@@ -59,8 +61,9 @@ export default function AppDialogHost() {
               );
             })}
           </View>
+          </ScrollView>
         </View>
-      </View>
+      </SafeAreaView>
     </Modal>
   );
 }
@@ -76,6 +79,7 @@ const styles = StyleSheet.create({
   card: {
     width: "100%",
     maxWidth: 380,
+    maxHeight: "90%",
     borderRadius: 16,
     padding: 16,
     backgroundColor: "#121428",

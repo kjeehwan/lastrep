@@ -182,7 +182,7 @@ export default function SettingsIndex() {
   if (redirectTo) return <Redirect href={redirectTo} />;
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
+    <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
         <View style={styles.header}>
           <TouchableOpacity style={styles.backButton} onPress={handleGoBack}>
             <Ionicons name="chevron-back" size={22} color="#fff" />
@@ -332,7 +332,7 @@ export default function SettingsIndex() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#0d0d1a" },
   container: { flex: 1, backgroundColor: "#0d0d1a" },
-  content: { padding: 20, paddingTop: 8, paddingBottom: 32, gap: 14 },
+  content: { width: "100%", maxWidth: 760, alignSelf: "center", padding: 20, paddingTop: 8, paddingBottom: 32, gap: 14 },
   header: { width: "100%", maxWidth: 760, alignSelf: "center",
     flexDirection: "row",
     alignItems: "center",

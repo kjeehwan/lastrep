@@ -16,6 +16,7 @@ const WorkoutGestureTextInput = forwardRef<any, TextInputProps>(
     <NativeWorkoutGestureTextInput
       ref={ref}
       {...rest}
+      disableFullscreenUI
       onChange={(event: NativeSyntheticEvent<TextInputChangeEventData>) => {
         onChange?.(event);
         onChangeText?.(event.nativeEvent?.text ?? "");

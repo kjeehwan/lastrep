@@ -68,15 +68,15 @@ export function AvailableWeightsModal({ name, settings, defaultUnit, onClose, on
             {mode === "regular" ? (
               <>
                 <Text style={styles.label}>Starting weight ({unit})</Text>
-                <TextInput style={styles.input} value={minimum} onChangeText={setMinimum} keyboardType="decimal-pad" placeholder="e.g. 20" placeholderTextColor="#858ba4" accessibilityLabel={`Starting weight in ${unit}`} />
+                <TextInput disableFullscreenUI style={styles.input} value={minimum} onChangeText={setMinimum} keyboardType="decimal-pad" placeholder="e.g. 20" placeholderTextColor="#858ba4" accessibilityLabel={`Starting weight in ${unit}`} />
                 <Text style={styles.label}>Increment ({unit})</Text>
-                <TextInput style={styles.input} value={increment} onChangeText={setIncrement} keyboardType="decimal-pad" placeholder="e.g. 2 or 2.5" placeholderTextColor="#858ba4" accessibilityLabel={`Weight increment in ${unit}`} />
+                <TextInput disableFullscreenUI style={styles.input} value={increment} onChangeText={setIncrement} keyboardType="decimal-pad" placeholder="e.g. 2 or 2.5" placeholderTextColor="#858ba4" accessibilityLabel={`Weight increment in ${unit}`} />
                 <Text style={styles.hint}>For a barbell, use total weight including both sides. For dumbbells, use the weight of one dumbbell.</Text>
               </>
             ) : (
               <>
                 <Text style={styles.label}>Weights ({unit}), separated by commas</Text>
-                <TextInput style={[styles.input, styles.list]} value={values} onChangeText={setValues} multiline textAlignVertical="top" placeholder="10, 12, 14, 17.5, 20" placeholderTextColor="#858ba4" accessibilityLabel={`Available weights in ${unit}`} />
+                <TextInput disableFullscreenUI style={[styles.input, styles.list]} value={values} onChangeText={setValues} multiline textAlignVertical="top" placeholder="10, 12, 14, 17.5, 20" placeholderTextColor="#858ba4" accessibilityLabel={`Available weights in ${unit}`} />
               </>
             )}
             {error ? <Text style={styles.error}>{error}</Text> : null}

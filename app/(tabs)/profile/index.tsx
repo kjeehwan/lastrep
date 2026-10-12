@@ -19,6 +19,7 @@ import {
   TextInput,
   TouchableOpacity,
   TouchableWithoutFeedback,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
@@ -176,6 +177,7 @@ export default function ProfileIndex() {
   const router = useRouter();
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
   const params = useLocalSearchParams<{ from?: string; openHealth?: string }>();
   const returnTo = typeof params.from === "string" && params.from.startsWith("/") ? params.from : null;
   const { isOffline } = useOfflineStatus();
@@ -1483,14 +1485,14 @@ export default function ProfileIndex() {
   if (redirectTo) return <Redirect href={redirectTo} />;
   if (loading) {
     return (
-      <SafeAreaView style={styles.safe} edges={["top"]}>
+      <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
         <Text style={styles.loadingText}>Loading...</Text>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
+    <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} onPress={handleGoBack} disabled={savingProfile}>
           <Ionicons name="chevron-back" size={22} color="#fff" />
@@ -2001,9 +2003,18 @@ export default function ProfileIndex() {
             <TouchableWithoutFeedback onPress={() => setHealthConsentVisible(false)}>
               <View style={styles.sheetDismissArea} />
             </TouchableWithoutFeedback>
-            <View style={[styles.sheetCard, { paddingBottom: 28 + Math.max(insets.bottom, 8) }]}>
+            <View style={[styles.sheetCard, {
+              width: "100%",
+              maxWidth: 560,
+              alignSelf: "center",
+              maxHeight: windowHeight - insets.top - 16,
+              paddingBottom: 16 + Math.max(insets.bottom, 8),
+              paddingLeft: 20 + insets.left,
+              paddingRight: 20 + insets.right,
+            }]}>
               <View style={styles.sheetHandle} />
               <Text style={styles.sheetTitle}>Connect health data</Text>
+              <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ gap: 12 }}>
                 <Text style={styles.sheetText}>
                   On supported Android devices, Lastrep can read sleep, weight, body-fat, and lean-body-mass records that you permit.
                 </Text>
@@ -2016,6 +2027,7 @@ export default function ProfileIndex() {
                 <Text style={styles.sheetText}>
                   This is optional. You can disconnect in Profile or revoke access in your connected health service at any time.
                 </Text>
+              </ScrollView>
               <View style={styles.sheetActions}>
                 <TouchableOpacity style={styles.sheetSecondaryButton} onPress={() => setHealthConsentVisible(false)}>
                   <Text style={styles.sheetSecondaryButtonText}>Not now</Text>
@@ -2041,8 +2053,8 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#0d0d1a" },
   loadingText: { color: "#fff", padding: 20 },
   container: { flex: 1, backgroundColor: "#0d0d1a" },
-  scrollContent: { padding: 20, paddingTop: 8, paddingBottom: 100, gap: 10 },
-  header: {
+  scrollContent: { width: "100%", maxWidth: 760, alignSelf: "center", padding: 20, paddingTop: 8, paddingBottom: 100, gap: 10 },
+  header: { width: "100%", maxWidth: 760, alignSelf: "center",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",

@@ -4,7 +4,7 @@
     "slug": "lastrep",
     "owner": "kjeehwan",
     "version": "1.0.1",
-    "orientation": "portrait",
+    "orientation": "default",
     "icon": "./assets/images/logo-splash-512-appicon-v3.png",
     "scheme": "lastrep",
     "userInterfaceStyle": "automatic",

@@ -230,7 +230,7 @@ export default function AddExerciseScreen() {
         </View>
 
         <View style={styles.topControls}>
-          <TextInput
+          <TextInput disableFullscreenUI
             placeholder="Search exercises"
             placeholderTextColor="#7a7a8c"
             value={searchQuery}
@@ -306,7 +306,7 @@ export default function AddExerciseScreen() {
         />
 
         <View style={styles.customRow}>
-          <TextInput
+          <TextInput disableFullscreenUI
             placeholder="Custom exercise"
             placeholderTextColor="#7a7a8c"
             value={customExercise}

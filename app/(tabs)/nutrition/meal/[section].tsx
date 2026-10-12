@@ -453,7 +453,7 @@ export default function MealSectionScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
+    <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.iconBtn}
