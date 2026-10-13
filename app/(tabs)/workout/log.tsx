@@ -11,6 +11,7 @@ import {
   getDoc,
   getDocs,
   limit,
+  onSnapshot,
   orderBy,
   query,
   setDoc,
@@ -18,6 +19,7 @@ import {
 } from "firebase/firestore";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  AppState,
   BackHandler,
   Keyboard,
   Modal,
@@ -88,6 +90,8 @@ import { WorkoutRoutineSection } from "../../../src/workouts/workoutLog/WorkoutR
 import { WorkoutSessionCard } from "../../../src/workouts/workoutLog/WorkoutSessionCard";
 import { WorkoutNativeSetRows } from "../../../src/workouts/workoutLog/WorkoutNativeSetRows";
 import { ExerciseProgressSummary } from "../../../src/workouts/workoutLog/ExerciseProgressSummary";
+import { effortInputValue, effortLabel, effortToRpe, formatEffort, isValidWorkoutEffort, resolveEffortScale, type EffortInput, type EffortScale } from "../../../src/workouts/effortScale";
+import { advanceRest, pauseRest, startRest, type RestClock } from "../../../src/workouts/workoutLog/timerClock";
 
 type Unit = "kg" | "lbs" | "km" | "mi";
 type SetType = "warmup" | "normal" | "failure" | "drop";
@@ -113,6 +117,7 @@ type SetEntry = {
   weightText?: string;
   reps: string;
   rpe?: string;
+  effortInput?: EffortInput;
   distanceKm?: number | null;
   durationSec?: number | null;
   zone?: string;
@@ -348,6 +353,7 @@ export default function WorkoutLog() {
   const insets = useSafeAreaInsets();
   const isTabletLayout = Math.min(width, height) >= 600;
   const [exercises, setExercises] = useState<Exercise[]>([]);
+  const [effortScale, setEffortScale] = useState<EffortScale>("rpe");
   const [exerciseUnits, setExerciseUnits] = useState<Record<string, Unit>>({});
   const [favoriteExercises, setFavoriteExercises] = useState<string[]>([]);
   const [favoritesHydratedUid, setFavoritesHydratedUid] = useState<string | null>(null);
@@ -375,15 +381,15 @@ export default function WorkoutLog() {
   const [restPreferenceByExercise, setRestPreferenceByExercise] = useState<Record<string, number>>({});
   const [restCustomInputByExercise, setRestCustomInputByExercise] = useState<Record<string, string>>({});
   const [restTimerByExercise, setRestTimerByExercise] = useState<
-    Record<string, { remainingSec: number; running: boolean }>
+    Record<string, RestClock>
   >({});
   const [saving, setSaving] = useState(false);
   const [sessionTitle, setSessionTitle] = useState("");
   const {
     elapsedSeconds,
     running: workoutTimerRunning,
-    setElapsedSeconds,
-    setRunning: setWorkoutTimerRunning,
+    startedAtMs: workoutTimerStartedAtMs,
+    restore: restoreElapsedTimer,
     start: startElapsedTimer,
     pause: pauseElapsedTimer,
     setDuration: setElapsedDuration,
@@ -488,6 +494,7 @@ export default function WorkoutLog() {
   const lastSetToggleAtRef = useRef<Record<string, number>>({});
   const gongPlayerRef = useRef<ReturnType<typeof createAudioPlayer> | null>(null);
   const restTimerSnapshotRef = useRef<Record<string, { remainingSec: number; running: boolean }>>({});
+  const appliedRestPreferencesRef = useRef<Record<string, number>>({});
   const getDraftKey = useCallback((uid: string) => `${DRAFT_KEY_PREFIX}:${uid}`, []);
   const workoutDraftPayload = useMemo(
     () => ({
@@ -497,8 +504,10 @@ export default function WorkoutLog() {
       sessionDateText,
       elapsedSeconds,
       workoutTimerRunning,
+      workoutTimerStartedAtMs,
+      restTimerByExercise,
     }),
-    [exercises, exerciseUnits, sessionTitle, sessionDateText, elapsedSeconds, workoutTimerRunning]
+    [exercises, exerciseUnits, sessionTitle, sessionDateText, elapsedSeconds, workoutTimerRunning, workoutTimerStartedAtMs, restTimerByExercise]
   );
   const availableWeightsPreferences = useAvailableWeights(activeUid);
   const guidanceWorkout = useMemo(() => withAvailableWeights(parseWorkoutDraftPlan(serializeWorkoutDraft(workoutDraftPayload)), availableWeightsPreferences.values) ?? {
@@ -540,13 +549,26 @@ export default function WorkoutLog() {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
+      draftHydratedRef.current = false;
+      restTimerSnapshotRef.current = {};
       setActiveUid(user?.uid ?? null);
+      setEffortScale("rpe");
+      appliedRestPreferencesRef.current = {};
       setAppliedGuidance(null);
       resetGuidance();
       setAvailableWeightsTarget(null);
     });
     return unsubscribe;
   }, [auth, resetGuidance]);
+
+  useEffect(() => {
+    if (!activeUid) return;
+    return onSnapshot(doc(db, "users", activeUid), (snapshot) => {
+      setEffortScale(resolveEffortScale(snapshot.data()?.effortScale));
+    }, (error) => {
+      if (!isExpectedOfflineError(error)) console.log("Failed to load exercise effort preference", error);
+    });
+  }, [activeUid]);
 
   useEffect(() => {
     let cancelled = false;
@@ -882,13 +904,13 @@ export default function WorkoutLog() {
       }
       const weight = formatWeightInput(set.weightKg, unit) || "-";
       const reps = String(set.reps || "").trim() || "-";
-      const rpe = String(set.rpe || "").trim();
+      const effort = formatEffort(set.rpe, effortScale);
       if (set.weightKg == null || set.weightKg <= 0) {
-        return `${reps} reps${rpe ? ` @ RPE ${rpe}` : ""}`;
+        return `${reps} reps${effort}`;
       }
-      return `${weight} kg x ${reps}${rpe ? ` @ RPE ${rpe}` : ""}`;
+      return `${weight} kg x ${reps}${effort}`;
     },
-    []
+    [effortScale]
   );
 
   const searchMergedCatalog = useCallback(
@@ -1165,8 +1187,7 @@ export default function WorkoutLog() {
           setRestTimerByExercise({});
           setSessionTitle("");
           setSessionDateText(toLocalDateKey(new Date()));
-          setElapsedSeconds(0);
-          setWorkoutTimerRunning(false);
+          setElapsedDuration(0);
           return;
         }
         if (raw) {
@@ -1206,6 +1227,9 @@ export default function WorkoutLog() {
                       typeof set?.rpe === "number" || typeof set?.rpe === "string"
                         ? String(set.rpe)
                         : "",
+                    effortInput: set?.effortInput?.scale === "rpe" || set?.effortInput?.scale === "rir"
+                      ? { scale: set.effortInput.scale, value: String(set.effortInput.value ?? ""), canonicalRpe: String(set.effortInput.canonicalRpe ?? "") }
+                      : undefined,
                     distanceKm: typeof set?.distanceKm === "number" ? set.distanceKm : null,
                     durationSec: typeof set?.durationSec === "number" ? set.durationSec : null,
                     zone: typeof set?.zone === "string" ? set.zone : "",
@@ -1220,10 +1244,15 @@ export default function WorkoutLog() {
             }));
             setExercises(hydratedExercises);
             const initialRestPrefs: Record<string, number> = {};
-            const initialRestTimers: Record<string, { remainingSec: number; running: boolean }> = {};
+            const initialRestTimers: Record<string, RestClock> = {};
             hydratedExercises.forEach((exercise: Exercise) => {
               initialRestPrefs[exercise.id] = 90;
               initialRestTimers[exercise.id] = { remainingSec: 90, running: false };
+              const saved = parsed.restTimerByExercise?.[exercise.id];
+              if (saved && typeof saved.remainingSec === "number" && Number.isFinite(saved.remainingSec) && saved.remainingSec >= 0 && saved.remainingSec <= 900) {
+                const endsAtMs = typeof saved.endsAtMs === "number" && Number.isFinite(saved.endsAtMs) ? saved.endsAtMs : undefined;
+                initialRestTimers[exercise.id] = advanceRest({ remainingSec: saved.remainingSec, running: saved.running === true && endsAtMs != null, endsAtMs }, Date.now());
+              }
             });
             setRestPreferenceByExercise(initialRestPrefs);
             setRestCustomInputByExercise({});
@@ -1237,12 +1266,13 @@ export default function WorkoutLog() {
               !isSameDateKey(toLocalDateKey(savedAtDate), todayKey);
             setSessionDateText(shouldRefreshDraftDate ? todayKey : parsed.sessionDateText);
           }
-          setElapsedSeconds(
+          restoreElapsedTimer(
             typeof parsed.elapsedSeconds === "number" && Number.isFinite(parsed.elapsedSeconds)
               ? Math.max(0, Math.round(parsed.elapsedSeconds))
-              : 0
+              : 0,
+            parsed.workoutTimerRunning === true && typeof parsed.workoutTimerStartedAtMs === "number" && Number.isFinite(parsed.workoutTimerStartedAtMs) && parsed.workoutTimerStartedAtMs <= Date.now()
+              ? parsed.workoutTimerStartedAtMs : null
           );
-          setWorkoutTimerRunning(false);
         }
       } catch (e) {
         console.log("Failed to load draft, clearing cache", e);
@@ -1272,8 +1302,8 @@ export default function WorkoutLog() {
     loadRoutines,
     auth,
     getDraftKey,
-    setElapsedSeconds,
-    setWorkoutTimerRunning,
+    setElapsedDuration,
+    restoreElapsedTimer,
     routerParams.todayPlanApplied,
   ]);
 
@@ -1468,6 +1498,8 @@ export default function WorkoutLog() {
   useEffect(() => {
     if (!exercises.length) return;
     const task = scheduleAfterInteractions(() => {
+    const previousPreferences = appliedRestPreferencesRef.current;
+    appliedRestPreferencesRef.current = Object.fromEntries(exercises.map((exercise) => [exercise.id, restPreferenceByName[exercise.name.trim().toLowerCase()] ?? 90]));
     setRestPreferenceByExercise((prev) => {
       const next: Record<string, number> = {};
       exercises.forEach((exercise) => {
@@ -1486,8 +1518,8 @@ export default function WorkoutLog() {
           next[exercise.id] = { remainingSec: restSeconds, running: false };
           return;
         }
-        // Keep active countdowns, but align idle timers to the saved preference.
-        if (!current.running && current.remainingSec !== restSeconds) {
+        // Editing a set must not reset a paused or completed rest countdown.
+        if (!current.running && previousPreferences[exercise.id] != null && previousPreferences[exercise.id] !== restSeconds) {
           next[exercise.id] = { remainingSec: restSeconds, running: false };
         }
       });
@@ -1497,10 +1529,10 @@ export default function WorkoutLog() {
     return () => task.cancel();
   }, [exercises, restPreferenceByName]);
 
+  const hasRunningRestTimer = Object.values(restTimerByExercise).some((entry) => entry.running);
   useEffect(() => {
-    const hasRunningTimer = Object.values(restTimerByExercise).some((entry) => entry.running);
-    if (!hasRunningTimer) return;
-    const interval = setInterval(() => {
+    if (!hasRunningRestTimer) return;
+    const refresh = () => {
       setRestTimerByExercise((prev) => {
         let mutated = false;
         const next: typeof prev = {};
@@ -1509,15 +1541,19 @@ export default function WorkoutLog() {
             next[exerciseId] = timer;
             return;
           }
-          const remaining = Math.max(0, timer.remainingSec - 1);
-          if (remaining !== timer.remainingSec) mutated = true;
-          next[exerciseId] = { remainingSec: remaining, running: remaining > 0 };
+          const updated = advanceRest(timer, Date.now());
+          if (updated !== timer) mutated = true;
+          next[exerciseId] = updated;
         });
         return mutated ? next : prev;
       });
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [restTimerByExercise]);
+    };
+    const interval = setInterval(refresh, 1000);
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") refresh();
+    });
+    return () => { clearInterval(interval); subscription.remove(); };
+  }, [hasRunningRestTimer]);
 
   useEffect(() => {
     const previous = restTimerSnapshotRef.current;
@@ -1714,7 +1750,7 @@ export default function WorkoutLog() {
                 idx === setIndex
                   ? getExerciseMode(ex.name) === "cardio"
                     ? { ...s, zone: value }
-                    : { ...s, rpe: value }
+                    : { ...s, rpe: effortToRpe(value, effortScale), effortInput: { scale: effortScale, value, canonicalRpe: effortToRpe(value, effortScale) } }
                   : s
               ),
             }
@@ -1748,6 +1784,7 @@ export default function WorkoutLog() {
                       weightText: undefined,
                       reps: mode === "cardio" ? "" : String(previous.reps ?? ""),
                       rpe: mode === "cardio" ? "" : String(previous.rpe ?? ""),
+                      effortInput: undefined,
                       distanceKm: mode === "cardio" ? previous.distanceKm ?? null : null,
                       durationSec: mode === "cardio" ? previous.durationSec ?? null : null,
                       zone: mode === "cardio" ? String(previous.zone ?? "") : "",
@@ -2001,8 +2038,7 @@ export default function WorkoutLog() {
     const fallback = restPreferenceByExercise[exerciseId] ?? 90;
     setRestTimerByExercise((prev) => {
       const current = prev[exerciseId];
-      const initial = current && current.remainingSec > 0 ? current.remainingSec : fallback;
-      return { ...prev, [exerciseId]: { remainingSec: initial, running: true } };
+      return { ...prev, [exerciseId]: startRest(current, fallback, Date.now()) };
     });
   };
 
@@ -2010,7 +2046,7 @@ export default function WorkoutLog() {
     setRestTimerByExercise((prev) => {
       const current = prev[exerciseId];
       if (!current) return prev;
-      return { ...prev, [exerciseId]: { ...current, running: false } };
+      return { ...prev, [exerciseId]: pauseRest(current, Date.now()) };
     });
   };
 
@@ -2233,12 +2269,11 @@ export default function WorkoutLog() {
     setExercises(nextExercises);
     setSessionTitle(workout.title || "Workout");
     setSessionDateText(toLocalDateKey(workout.date));
-    setElapsedSeconds(
+    setElapsedDuration(
       typeof workout.durationMin === "number" && Number.isFinite(workout.durationMin)
         ? Math.max(0, Math.round(workout.durationMin * 60))
         : 0
     );
-    setWorkoutTimerRunning(false);
     setBaselineDate(workout.date);
     setExerciseUnits(() => {
       const next: Record<string, Unit> = {};
@@ -2287,8 +2322,7 @@ export default function WorkoutLog() {
     setRestTimerByExercise({});
     setSessionTitle("");
     setSessionDateText(toLocalDateKey(new Date()));
-    setElapsedSeconds(0);
-    setWorkoutTimerRunning(false);
+    setElapsedDuration(0);
     setBaselineDate(null);
     setFollowedAnswer(null);
     setHelpfulAnswer(null);
@@ -2365,15 +2399,10 @@ export default function WorkoutLog() {
 
       const invalidRpe = sanitizedExercises.find((exercise) =>
         exercise.mode !== "cardio" &&
-        exercise.sets.some((set) => {
-          const raw = String(set.rpe || "").trim();
-          if (!raw) return false;
-          const parsed = Number(raw);
-          return !Number.isFinite(parsed) || parsed < 1 || parsed > 10;
-        })
+        exercise.sets.some((set) => !isValidWorkoutEffort(set.rpe))
       );
       if (invalidRpe) {
-        showAppAlert("Invalid RPE", "RPE must be a number between 1 and 10.");
+        showAppAlert(`Invalid ${effortLabel(effortScale)}`, effortScale === "rir" ? "RIR must be a number between 0 and 4." : "RPE must be a number between 6 and 10.");
         setSaving(false);
         return;
       }
@@ -2427,8 +2456,7 @@ export default function WorkoutLog() {
       setRestTimerByExercise({});
       setSessionTitle("");
       setSessionDateText(toLocalDateKey(new Date()));
-      setElapsedSeconds(0);
-      setWorkoutTimerRunning(false);
+      setElapsedDuration(0);
       setRecommendationSummary([]);
       setLastAppliedRoutineId(null);
       setBaselineDate(null);
@@ -2507,8 +2535,7 @@ export default function WorkoutLog() {
     setRestTimerByExercise({});
     setSessionTitle("");
     setSessionDateText(toLocalDateKey(new Date()));
-    setElapsedSeconds(0);
-    setWorkoutTimerRunning(false);
+    setElapsedDuration(0);
     setRoutineBuilderMode(true);
     setShowRoutineStartModal(false);
   };
@@ -2739,8 +2766,7 @@ export default function WorkoutLog() {
     setSessionTitle(options.deload ? `${routine.name} (Deload)` : routine.name);
     if (mode === "replace") {
       setSessionDateText(toLocalDateKey(new Date()));
-      setElapsedSeconds(0);
-      setWorkoutTimerRunning(false);
+      setElapsedDuration(0);
       setLastAppliedRoutineId(options.deload ? null : routine.id);
       setUiFeedback(options.deload ? `Applied deload for "${routine.name}".` : `Applied "${routine.name}".`);
     } else {
@@ -2976,17 +3002,16 @@ export default function WorkoutLog() {
       });
       setSessionTitle(`${pickedTemplate.name} (Recommended)`);
       setSessionDateText(toLocalDateKey(new Date()));
-      setElapsedSeconds(0);
-      setWorkoutTimerRunning(false);
+      setElapsedDuration(0);
       const plannedHardSetCount = recommendedExercises.reduce((sum, exercise) => sum + exercise.sets.length, 0);
       setRecommendationSummary([
         `${selectedFocus?.label ?? pickedTemplate.name} | ${selectedLength.title} | ${plannedHardSetCount} planned hard sets.`,
         selection.addedRoles.length
           ? `Added ${selection.addedRoles.join(" and ")} coverage to complete the session.`
           : null,
-        `Sets, reps, and loads use your training phase, diet phase, latest performance, RPE, and today's decision. New exercises start without a load.`,
+        `Sets, reps, and loads use your training phase, diet phase, latest performance, effort ratings, and today's decision. New exercises start without a load.`,
         highFatigue
-          ? "Recent RPE was high, so volume and intensity were reduced from the selected plan."
+          ? "Recent effort was high, so volume and intensity were reduced from the selected plan."
           : null,
       ].filter((line): line is string => Boolean(line)));
       setUiFeedback("Recommended workout applied.");
@@ -3154,6 +3179,7 @@ export default function WorkoutLog() {
 
       {!routineBuilderMode && sessionDateText === toLocalDateKey(new Date()) ? (
         <WorkoutTodayPlan
+          effortScale={effortScale}
           plan={todayGuidance}
           busy={todayPlan.busy || !availableWeightsPreferences.loaded}
           error={todayPlan.error}
@@ -3256,7 +3282,7 @@ export default function WorkoutLog() {
             ? "lbs"
             : "Weight";
           const repsLabel = isCardio ? "Time" : "Reps";
-          const rpeLabel = isCardio ? "Zone" : "RPE";
+          const rpeLabel = isCardio ? "Zone" : effortLabel(effortScale);
           const previousSets = previousExerciseSetsByName.get(normalizeExerciseName(ex.name)) ?? [];
           const exerciseCatalogItem = findCatalogExercise(ex.name);
           const remoteDemoImages = exerciseImageMap[imageLookupKey(ex.name)] ?? [];
@@ -3460,13 +3486,13 @@ export default function WorkoutLog() {
                   style={{ height: Math.max(ex.sets.length, 1) * 52 }}
                   weightLabel={weightLabel}
                   repsLabel={repsLabel}
-                  rpeLabel={isCardio ? rpeLabel : "6-10"}
+                  rpeLabel={effortScale === "rir" ? "0-4" : "6-10"}
                   rows={ex.sets.map((set, idx) => ({
                     marker: getSetTypeMarker(set, idx),
                     last: previousSets[idx] ? formatLastSetSummary(previousSets[idx]) : "-",
                     weight: set.weightText ?? formatWeightInput(set.weightKg, unit),
                     reps: set.reps,
-                    rpe: set.rpe ?? "",
+                    rpe: effortInputValue(set, effortScale),
                     done: set.done,
                   }))}
                   onChange={(index, field, value) => {
@@ -3595,10 +3621,10 @@ export default function WorkoutLog() {
                                 ]}
                               />
                               <WorkoutGestureTextInput
-                                placeholder={isCardio ? rpeLabel : "6-10"}
+                                placeholder={effortScale === "rir" ? "0-4" : "6-10"}
                                 placeholderTextColor="#7a7a8c"
                                 keyboardType="decimal-pad"
-                                value={s.rpe ?? ""}
+                                value={effortInputValue(s, effortScale)}
                                 onChangeText={(v) => updateSetRpe(ex.id, idx, v)}
                                 selectTextOnFocus={false}
                                 style={[
@@ -4210,7 +4236,7 @@ export default function WorkoutLog() {
             {exerciseHistory.length ? (
               <ScrollView style={styles.exerciseHistoryList}>
                 {shouldShowStrengthProgress ? (
-                  <ExerciseProgressSummary insights={exerciseProgressInsights} />
+                  <ExerciseProgressSummary insights={exerciseProgressInsights} effortScale={effortScale} />
                 ) : null}
                 {exerciseHistory.map((entry, index) => (
                   <View key={`${entry.date.getTime()}-${entry.sets.length}-${index}`} style={styles.exerciseHistoryRow}>
@@ -4297,7 +4323,7 @@ export default function WorkoutLog() {
           <AdaptiveModalCard style={styles.modalCard}>
             <Text style={styles.modalTitle}>Update routine?</Text>
             <Text style={styles.modalText}>
-              Use this workout&apos;s exercise order, sets, and weights as the new routine baseline? RPE is not saved to routines.
+              Use this workout&apos;s exercise order, sets, and weights as the new routine baseline? Effort ratings are not saved to routines.
             </Text>
             <View style={styles.modalActions}>
               <TouchableOpacity
@@ -4322,7 +4348,7 @@ export default function WorkoutLog() {
           <AdaptiveModalCard style={styles.modalCard}>
             <Text style={styles.modalTitle}>Routine updated</Text>
             <Text style={styles.modalText}>
-              Your routine now uses this workout&apos;s exercise order, sets, and weights. RPE was not saved.
+              Your routine now uses this workout&apos;s exercise order, sets, and weights. Effort ratings were not saved.
             </Text>
             <View style={styles.modalActions}>
               <TouchableOpacity

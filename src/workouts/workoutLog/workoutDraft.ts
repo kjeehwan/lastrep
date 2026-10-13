@@ -1,3 +1,5 @@
+import type { RestClock } from "./timerClock";
+
 export type WorkoutDraftSnapshot<TExercises, TUnits> = {
   exercises: TExercises;
   exerciseUnits: TUnits;
@@ -5,6 +7,8 @@ export type WorkoutDraftSnapshot<TExercises, TUnits> = {
   sessionDateText: string;
   elapsedSeconds: number;
   workoutTimerRunning: boolean;
+  workoutTimerStartedAtMs?: number | null;
+  restTimerByExercise?: Record<string, RestClock>;
 };
 
 /** Keeps the on-device draft schema stable while persistence moves out of the screen. */

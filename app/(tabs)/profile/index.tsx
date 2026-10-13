@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { resolveEffortScale, type EffortScale } from "../../../src/workouts/effortScale";
 import Slider from "@react-native-community/slider";
 import { ProfilePhoto } from "../../../src/profile/ProfilePhoto";
 import { cloudPhotoPath, profilePhotoReference, snapshotWithPhoto } from "../../../src/profile/profilePhotoReference";
@@ -126,6 +127,7 @@ type ProfileSnapshot = {
   weightUnit: WeightUnit;
   heightUnit: HeightUnit;
   energyUnit: EnergyUnit;
+  effortScale: EffortScale;
   bodyWeight: string;
   bodyFatPercent: string;
   muscleMass: string;
@@ -229,6 +231,7 @@ export default function ProfileIndex() {
   const [weightUnit, setWeightUnit] = useState<WeightUnit>("kg");
   const [heightUnit, setHeightUnit] = useState<HeightUnit>("cm");
   const [energyUnit, setEnergyUnit] = useState<EnergyUnit>("kcal");
+  const [effortScale, setEffortScale] = useState<EffortScale>("rpe");
   const [bodyWeight, setBodyWeight] = useState("");
   const [bodyFatPercent, setBodyFatPercent] = useState("");
   const [muscleMass, setMuscleMass] = useState("");
@@ -291,6 +294,7 @@ export default function ProfileIndex() {
         weightUnit,
         heightUnit,
         energyUnit,
+        effortScale,
         bodyWeight: bodyWeight.trim(),
         bodyFatPercent: bodyFatPercent.trim(),
         muscleMass: muscleMass.trim(),
@@ -315,6 +319,7 @@ export default function ProfileIndex() {
       weightUnit,
       heightUnit,
       energyUnit,
+      effortScale,
       bodyWeight,
       bodyFatPercent,
       muscleMass,
@@ -396,6 +401,7 @@ export default function ProfileIndex() {
       if (isWeightUnit(parsed.weightUnit)) setWeightUnit(parsed.weightUnit);
       if (isHeightUnit(parsed.heightUnit)) setHeightUnit(parsed.heightUnit);
       if (isEnergyUnit(parsed.energyUnit)) setEnergyUnit(parsed.energyUnit);
+      setEffortScale(resolveEffortScale(parsed.effortScale));
       if (typeof parsed.bodyWeight === "string") setBodyWeight(parsed.bodyWeight);
       if (typeof parsed.bodyFatPercent === "string") setBodyFatPercent(parsed.bodyFatPercent);
       if (typeof parsed.muscleMass === "string") setMuscleMass(parsed.muscleMass);
@@ -573,6 +579,7 @@ export default function ProfileIndex() {
         }
         const resolvedWeightUnit = isWeightUnit(data?.weightUnit) ? data.weightUnit : "kg";
         if (isWeightUnit(data?.weightUnit)) setWeightUnit(data.weightUnit);
+        setEffortScale(resolveEffortScale(data?.effortScale));
         if (isHeightUnit(data?.heightUnit)) setHeightUnit(data.heightUnit);
         if (isEnergyUnit(data?.energyUnit)) setEnergyUnit(data.energyUnit);
         if (typeof data?.tdeeProfile?.age === "number" && Number.isFinite(data.tdeeProfile.age)) {
@@ -1132,6 +1139,7 @@ export default function ProfileIndex() {
         weightUnit,
         heightUnit,
         energyUnit,
+        effortScale,
         availabilityDays,
         availability: `${availabilityDays}`,
         tdeeProfile:
@@ -1251,6 +1259,7 @@ export default function ProfileIndex() {
     trainingPhase,
     dietPhase,
     weightUnit,
+    effortScale,
     heightUnit,
     availabilityDays,
     trainingPhaseHistory,
@@ -1659,6 +1668,21 @@ export default function ProfileIndex() {
 
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Units</Text>
+          <Text style={styles.targetLabel}>Exercise effort</Text>
+          <View style={styles.row}>
+            {(["rpe", "rir"] as EffortScale[]).map((scale) => (
+              <TouchableOpacity
+                key={scale}
+                onPress={() => setEffortScale(scale)}
+                style={[styles.chip, effortScale === scale && styles.chipActive]}
+                accessibilityRole="button"
+                accessibilityState={{ selected: effortScale === scale }}
+              >
+                <Text style={[styles.chipText, effortScale === scale && styles.chipTextActive]}>{scale.toUpperCase()}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <Text style={styles.helperText}>Applies to all resistance exercises. RPE rates effort; RIR estimates reps left. RPE 8 is approximately 2 RIR.</Text>
           <Text style={styles.targetLabel}>Weight</Text>
           <View style={styles.row}>
             {(["kg", "lbs"] as WeightUnit[]).map((unit) => (

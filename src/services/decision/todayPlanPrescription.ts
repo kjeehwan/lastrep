@@ -1,5 +1,6 @@
 import type { ExercisePlanAdjustment, ExercisePrescription, PlannedExerciseSummary } from "../../types/decision";
 import { applyTodayPlanToWorkoutDraft } from "./todayPlanDraft";
+import { rpeToEffort, type EffortScale } from "../../workouts/effortScale";
 
 type PreviewSet = { weightKg: number | null; reps: number | string | null; done: boolean; setType: string };
 
@@ -22,7 +23,7 @@ const groupedSetsText = (sets: PreviewSet[], unit: "kg" | "lbs") => {
   return groups.map((group) => prescriptionText(group, unit)).join(" + ");
 };
 
-export function exerciseAdjustmentText(item: ExercisePlanAdjustment, unit: "kg" | "lbs", exercise?: PlannedExerciseSummary) {
+export function exerciseAdjustmentText(item: ExercisePlanAdjustment, unit: "kg" | "lbs", exercise?: PlannedExerciseSummary, effortScale: EffortScale = "rpe") {
   if (item.action === "avoid") return "Skip or replace";
   if (exercise?.mode === "resistance" && exercise.sets.some((set) => !set.done && set.setType !== "warmup")) {
     // Preview the exact Apply transformation, including varied loads and removed sets.
@@ -40,6 +41,8 @@ export function exerciseAdjustmentText(item: ExercisePlanAdjustment, unit: "kg" 
   if (item.loadPct) parts.push(`Load ${item.loadPct > 0 ? "+" : ""}${Number(item.loadPct.toFixed(1))}%`);
   if (item.setDelta) parts.push(`${Math.abs(item.setDelta)} ${item.setDelta < 0 ? "fewer" : "more"} sets`);
   if (item.repsDelta) parts.push(`${item.repsDelta > 0 ? "+" : ""}${item.repsDelta} reps`);
-  if (item.targetRpe) parts.push(`Cap at RPE ${item.targetRpe}`);
+  if (item.targetRpe) parts.push(effortScale === "rir"
+    ? `Keep at least ${rpeToEffort(item.targetRpe, "rir")} RIR`
+    : `Cap at RPE ${item.targetRpe}`);
   return parts.join(" · ") || "As planned";
 }

@@ -2,9 +2,11 @@ import React, { memo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import Svg, { Circle, Line, Polyline } from "react-native-svg";
 import type { ExerciseProgressInsights } from "../exerciseProgressInsights";
+import { formatEffort, type EffortScale } from "../effortScale";
 
 type Props = {
   insights: ExerciseProgressInsights;
+  effortScale?: EffortScale;
 };
 
 const WIDTH = 320;
@@ -14,7 +16,7 @@ const PAD_Y = 12;
 
 const formatKg = (value: number) => `${Math.round(value * 10) / 10} kg`;
 
-export const ExerciseProgressSummary = memo(function ExerciseProgressSummary({ insights }: Props) {
+export const ExerciseProgressSummary = memo(function ExerciseProgressSummary({ insights, effortScale = "rpe" }: Props) {
   if (!insights.latest || !insights.best) {
     return (
       <View style={styles.emptyWrap}>
@@ -61,7 +63,7 @@ export const ExerciseProgressSummary = memo(function ExerciseProgressSummary({ i
       <View style={styles.latestRow}>
         <Text style={styles.latestText}>
           Latest top set: {formatKg(insights.latest.bestWeightKg)} × {insights.latest.bestSetReps}
-          {insights.latest.bestSetRpe ? ` @ RPE ${insights.latest.bestSetRpe}` : ""}
+          {formatEffort(insights.latest.bestSetRpe, effortScale)}
         </Text>
         {change != null ? (
           <Text style={[styles.changeText, change > 0 ? styles.changeUp : change < 0 ? styles.changeDown : null]}>
