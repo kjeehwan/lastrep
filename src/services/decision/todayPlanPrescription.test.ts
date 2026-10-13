@@ -13,6 +13,11 @@ const adjustment: ExercisePlanAdjustment = {
 };
 
 describe("per-set plan preview", () => {
+  it("expresses effort limits in the selected scale with the correct direction", () => {
+    const cap = { ...adjustment, loadPct: 0, plannedPrescription: undefined, recommendedPrescription: undefined };
+    expect(exerciseAdjustmentText(cap, "kg")).toBe("Cap at RPE 8");
+    expect(exerciseAdjustmentText(cap, "kg", undefined, "rir")).toBe("Keep at least 2 RIR");
+  });
   it("shows a top set and back-off sets separately instead of repeating the first load", () => {
     expect(exerciseAdjustmentText(adjustment, "kg", exercise)).toBe(
       "Current: 60 kg x 18 reps x 1 set + 50 kg x 18 reps x 2 sets\nSuggested: 54 kg x 18 reps x 1 set + 45 kg x 18 reps x 2 sets"

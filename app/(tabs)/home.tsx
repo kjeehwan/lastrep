@@ -6,6 +6,7 @@ import { profilePhotoReference } from "../../src/profile/profilePhotoReference";
 import { BodyCompositionHistoryChart } from "../../src/bodyComposition/BodyCompositionHistoryChart";
 import { normalizeBodyCompositionHistory } from "../../src/bodyComposition/normalizeBodyCompositionHistory";
 import { USER_BODY_COMPOSITION_FIELD, type BodyCompositionHistoryEntry } from "../../src/contracts/bodyComposition";
+import { formatEffort, resolveEffortScale, type EffortScale } from "../../src/workouts/effortScale";
 import { Href, Redirect, useFocusEffect, useRouter } from "expo-router";
 import { onAuthStateChanged } from "firebase/auth";
 import {
@@ -196,6 +197,7 @@ export default function Home() {
   const [bodyHistory, setBodyHistory] = useState<BodyCompositionHistoryEntry[]>([]);
   const [bodyHistoryLoaded, setBodyHistoryLoaded] = useState(false);
   const [bodyHistoryError, setBodyHistoryError] = useState(false);
+  const [effortScale, setEffortScale] = useState<EffortScale>("rpe");
   const [userNickname, setUserNickname] = useState<string | null>(null);
   const [profilePhotoUri, setProfilePhotoUri] = useState<string | null>(null);
   const [profileDescription, setProfileDescription] = useState<string | null>(null);
@@ -227,6 +229,7 @@ export default function Home() {
   const [selectedDateKey, setSelectedDateKey] = useState(() => toDateKey(new Date()));
   const [workoutsLoading, setWorkoutsLoading] = useState(false);
   const [workouts, setWorkouts] = useState<WorkoutSummary[]>([]);
+  const [workoutHistoryStatus, setWorkoutHistoryStatus] = useState<{ uid: string; hasWorkouts: boolean } | null>(null);
   const [workoutProgram, setWorkoutProgram] = useState<WorkoutProgram | null>(null);
   const [insightsError, setInsightsError] = useState<string | null>(null);
   const [seedLoading, setSeedLoading] = useState(false);
@@ -265,6 +268,8 @@ export default function Home() {
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (user) => {
       recoveryInputsHydratedRef.current = null;
+      setWorkoutHistoryStatus(null);
+      setShowFirstTimeBanner(false);
       setBodyHistory([]);
       setBodyHistoryLoaded(false);
       setBodyHistoryError(false);
@@ -314,6 +319,7 @@ export default function Home() {
         setBodyHistory(normalizeBodyCompositionHistory(data?.[USER_BODY_COMPOSITION_FIELD]?.history));
         setBodyHistoryLoaded(true);
         setBodyHistoryError(false);
+        setEffortScale(resolveEffortScale(data?.effortScale));
         const nickname = typeof data?.nickname === "string" ? data.nickname.trim() : "";
         const photoUri = profilePhotoReference(data);
         const description =
@@ -579,6 +585,9 @@ export default function Home() {
           });
         });
         setWorkouts(parsedWorkouts);
+        if (auth.currentUser?.uid === uid) {
+          setWorkoutHistoryStatus({ uid, hasWorkouts: !workoutsSnap.empty });
+        }
 
         try {
           const [profile, userData, sleepProfile, todayMeals] = await Promise.all([
@@ -684,6 +693,7 @@ export default function Home() {
           }
         }
       } catch (error) {
+        if (auth.currentUser?.uid === uid) setWorkoutHistoryStatus(null);
         if (!isExpectedOfflineError(error)) {
           console.log("Failed to load home insights", error);
         }
@@ -1304,7 +1314,7 @@ export default function Home() {
     router.push("/(tabs)/workout/log?createRoutine=1" as Href);
   };
 
-  const shouldShowFirstTimeBanner = showFirstTimeBanner && workouts.length === 0;
+  const shouldShowFirstTimeBanner = showFirstTimeBanner && workoutHistoryStatus?.uid === uid && !workoutHistoryStatus.hasWorkouts;
 
   return (
     <SafeAreaView style={styles.container} edges={["top", "left", "right"]}>
@@ -1368,16 +1378,16 @@ export default function Home() {
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {shouldShowFirstTimeBanner ? (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Get Started</Text>
             <View style={[styles.card, styles.firstTimeBannerCard]}>
               <View style={styles.firstTimeBannerHeader}>
-                <Text style={[styles.cardText, styles.firstTimeBannerText]}>
-                  Set up your first routine or jump into your first workout.
-                </Text>
-                <TouchableOpacity onPress={() => void dismissFirstTimeBanner()} style={styles.firstTimeDismiss}>
+                <Text style={styles.cardHeading}>Get Started</Text>
+                <TouchableOpacity onPress={() => void dismissFirstTimeBanner()} style={styles.firstTimeDismiss} accessibilityLabel="Dismiss Get Started" accessibilityRole="button">
                   <Ionicons name="close" size={16} color="#cfd3eb" />
                 </TouchableOpacity>
               </View>
+              <Text style={[styles.cardText, styles.firstTimeBannerText]}>
+                Set up your first routine or jump into your first workout.
+              </Text>
               <View style={styles.firstTimeActions}>
                 <TouchableOpacity
                   style={[styles.secondaryButtonWide, styles.firstTimeActionButton]}
@@ -1965,7 +1975,7 @@ export default function Home() {
                                 }${set.zone ? ` · Zone ${set.zone}` : ""}`
                               : `${typeof set.weightKg === "number" ? `${Math.round(convertKgToUnit(set.weightKg, weightUnit) * 10) / 10} ${weightUnit}` : "-"} x ${
                                   set.reps || "-"
-                                }${typeof set.rpe === "number" ? ` - RPE ${set.rpe}` : ""}`}
+                                }${formatEffort(set.rpe, effortScale)}`}
                           </Text>
                         ))}
                       </View>
@@ -2202,8 +2212,6 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   firstTimeBannerText: {
-    flex: 1,
-    maxWidth: "82%",
     lineHeight: 20,
     marginTop: 1,
   },

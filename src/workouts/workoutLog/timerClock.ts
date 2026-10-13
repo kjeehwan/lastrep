@@ -1,0 +1,31 @@
+export type ElapsedClock = { elapsedSeconds: number; startedAtMs: number | null };
+export type RestClock = { remainingSec: number; running: boolean; endsAtMs?: number };
+
+export function elapsedAt(clock: ElapsedClock, nowMs: number): number {
+  return clock.startedAtMs == null ? clock.elapsedSeconds : Math.max(0, Math.floor((nowMs - clock.startedAtMs) / 1000));
+}
+
+export function startElapsed(clock: ElapsedClock, nowMs: number): ElapsedClock {
+  return clock.startedAtMs == null ? { ...clock, startedAtMs: nowMs - clock.elapsedSeconds * 1000 } : clock;
+}
+
+export function pauseElapsed(clock: ElapsedClock, nowMs: number): ElapsedClock {
+  return { elapsedSeconds: elapsedAt(clock, nowMs), startedAtMs: null };
+}
+
+export function advanceRest(clock: RestClock, nowMs: number): RestClock {
+  if (!clock.running || clock.endsAtMs == null) return clock;
+  const remainingSec = Math.max(0, Math.ceil((clock.endsAtMs - nowMs) / 1000));
+  if (remainingSec === clock.remainingSec) return clock;
+  return { remainingSec, running: remainingSec > 0, ...(remainingSec > 0 ? { endsAtMs: clock.endsAtMs } : {}) };
+}
+
+export function startRest(clock: RestClock | undefined, fallback: number, nowMs: number): RestClock {
+  if (clock?.running) return advanceRest(clock, nowMs);
+  const remainingSec = clock && clock.remainingSec > 0 ? clock.remainingSec : fallback;
+  return { remainingSec, running: true, endsAtMs: nowMs + remainingSec * 1000 };
+}
+
+export function pauseRest(clock: RestClock, nowMs: number): RestClock {
+  return { remainingSec: advanceRest(clock, nowMs).remainingSec, running: false };
+}

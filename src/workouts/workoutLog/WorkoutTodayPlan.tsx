@@ -6,6 +6,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-nati
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { ExercisePlanAdjustment, LastResultPayload } from "../../types/decision";
 import { exerciseAdjustmentText } from "../../services/decision/todayPlanPrescription";
+import type { EffortScale } from "../effortScale";
 
 type Props = {
   plan: LastResultPayload | null;
@@ -20,6 +21,7 @@ type Props = {
   applied: boolean;
   canUndo: boolean;
   unitForExercise: (name: string) => "kg" | "lbs";
+  effortScale?: EffortScale;
   onOpen: () => void;
   onClose: () => void;
   onApply: () => void;
@@ -80,7 +82,7 @@ export function WorkoutTodayPlan(props: Props) {
                   {items.map((item, index) => (
                     <View key={`${item.exerciseName}-${index}`} style={styles.exercise}>
                       <Text style={styles.exerciseName}>{item.exerciseName}</Text>
-                      <Text style={[styles.prescription, item.action === "avoid" && styles.warning]}>{exerciseAdjustmentText(item, props.unitForExercise(item.exerciseName), props.plan?.inputs.plannedWorkout?.exercises?.find((exercise) => exercise.name.trim().toLowerCase() === item.exerciseName.trim().toLowerCase()))}</Text>
+                      <Text style={[styles.prescription, item.action === "avoid" && styles.warning]}>{exerciseAdjustmentText(item, props.unitForExercise(item.exerciseName), props.plan?.inputs.plannedWorkout?.exercises?.find((exercise) => exercise.name.trim().toLowerCase() === item.exerciseName.trim().toLowerCase()), props.effortScale)}</Text>
                     </View>
                   ))}
                   {showWhy ? <Text style={styles.reason}>{items.length > 1 ? reason.replace(/^This movement overlaps/i, "These movements overlap") : reason}</Text> : null}

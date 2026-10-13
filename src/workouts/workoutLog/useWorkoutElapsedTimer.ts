@@ -1,45 +1,49 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { AppState } from "react-native";
+import { elapsedAt, pauseElapsed, startElapsed, type ElapsedClock } from "./timerClock";
 
 export function useWorkoutElapsedTimer(initialElapsedSeconds = 0, initiallyRunning = false) {
   const [elapsedSeconds, setElapsedSeconds] = useState(initialElapsedSeconds);
-  const [running, setRunning] = useState(initiallyRunning);
-  const startedAtMsRef = useRef<number | null>(null);
+  const [startedAtMs, setStartedAtMs] = useState(() => initiallyRunning ? Date.now() - initialElapsedSeconds * 1000 : null);
+  const clockRef = useRef<ElapsedClock>({ elapsedSeconds: initialElapsedSeconds, startedAtMs });
+  const running = startedAtMs != null;
+  const refresh = useCallback(() => setElapsedSeconds(elapsedAt(clockRef.current, Date.now())), []);
 
   useEffect(() => {
     if (!running) return;
-    if (startedAtMsRef.current == null) {
-      startedAtMsRef.current = Date.now() - elapsedSeconds * 1000;
-    }
-    const interval = setInterval(() => {
-      const startedAtMs = startedAtMsRef.current ?? Date.now();
-      setElapsedSeconds(Math.max(0, Math.floor((Date.now() - startedAtMs) / 1000)));
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [elapsedSeconds, running]);
+    const interval = setInterval(refresh, 1000);
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") refresh();
+    });
+    return () => { clearInterval(interval); subscription.remove(); };
+  }, [refresh, running]);
 
   const start = useCallback(() => {
-    startedAtMsRef.current = Date.now() - elapsedSeconds * 1000;
-    setRunning(true);
-  }, [elapsedSeconds]);
+    clockRef.current = startElapsed(clockRef.current, Date.now());
+    setStartedAtMs(clockRef.current.startedAtMs);
+    refresh();
+  }, [refresh]);
 
   const pause = useCallback(() => {
-    setRunning(false);
-    startedAtMsRef.current = null;
-  }, []);
+    clockRef.current = pauseElapsed(clockRef.current, Date.now());
+    setStartedAtMs(null);
+    refresh();
+  }, [refresh]);
 
-  const setDuration = useCallback((nextElapsedSeconds: number) => {
-    setElapsedSeconds(Math.max(0, nextElapsedSeconds));
-    setRunning(false);
-    startedAtMsRef.current = null;
-  }, []);
+  const restore = useCallback((seconds: number, anchor: number | null = null) => {
+    clockRef.current = { elapsedSeconds: Math.max(0, seconds), startedAtMs: anchor };
+    setStartedAtMs(anchor);
+    refresh();
+  }, [refresh]);
+  const setDuration = useCallback((seconds: number) => restore(seconds), [restore]);
 
   const reset = useCallback(() => setDuration(0), [setDuration]);
 
   return {
     elapsedSeconds,
     running,
-    setElapsedSeconds,
-    setRunning,
+    startedAtMs,
+    restore,
     start,
     pause,
     setDuration,
