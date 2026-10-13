@@ -4,7 +4,7 @@ import * as SplashScreen from "expo-splash-screen";
 import { onAuthStateChanged } from "firebase/auth";
 import React, { useEffect } from "react";
 import { StyleSheet, View } from "react-native";
-import LastRepLogo from "@/components/LastRepLogo";
+import LastrepLogo from "@/components/LastrepLogo";
 import { auth } from "../../src/config/firebaseConfig";
 import { getUserData } from "../../src/userData";
 
@@ -71,7 +71,7 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
-      <LastRepLogo />
+      <LastrepLogo />
     </View>
   );
 }

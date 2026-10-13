@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import LastrepLogo from "../../components/LastrepLogo";
 import Slider from "@react-native-community/slider";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ProfilePhoto } from "../../src/profile/ProfilePhoto";
@@ -1321,7 +1322,7 @@ export default function Home() {
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <View style={styles.headerTopRow}>
-            <Text style={styles.greeting}>lastrep</Text>
+            <LastrepLogo variant="header" />
             <View style={styles.iconContainer}>
               <TouchableOpacity onPress={() => setShowCalendarModal(true)}>
                 <Ionicons name="calendar-outline" size={26} color="#fff" />
@@ -2122,11 +2123,6 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 24,
     fontWeight: "800",
-  },
-  greeting: {
-    color: "#ccc",
-    fontSize: 18,
-    fontWeight: "700",
   },
   userName: {
     color: "#fff",

@@ -16,7 +16,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import LastRepLogo from "../../components/LastRepLogo"; // Static logo component
+import LastrepLogo from "../../components/LastrepLogo"; // Static logo component
 import { auth } from "../../src/config/firebaseConfig";
 import { buildDefaultUserDoc, getDecisionUsage, getUserData, saveUserData } from "../../src/userData";
 
@@ -150,7 +150,7 @@ export default function SignIn() {
 
   return (
     <View style={styles.container}>
-      <LastRepLogo />
+      <LastrepLogo />
 
       <TextInput
         style={styles.input}
