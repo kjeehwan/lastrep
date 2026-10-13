@@ -100,13 +100,6 @@
     "decode-uri-component": "$decode-uri-component"
   },
   "expo": {
-    "install": {
-      "exclude": [
-        "@react-navigation/native",
-        "@react-navigation/bottom-tabs",
-        "@react-navigation/native-stack"
-      ]
-    },
     "doctor": {
       "appConfigFieldsNotSyncedCheck": {
         "enabled": false

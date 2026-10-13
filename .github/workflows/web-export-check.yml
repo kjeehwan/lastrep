@@ -57,6 +57,9 @@ jobs:
       - name: Run lint
         run: npm run lint
 
+      - name: Verify tracked Android configuration
+        run: npm run verify:android-native
+
       - name: Run unit tests
         run: npm test
 

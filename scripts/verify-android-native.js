@@ -74,6 +74,14 @@ if (!buildGradle.includes('implementation("androidx.recyclerview:recyclerview:1.
   ok("RecyclerView dependency present");
 }
 
+try {
+  const errors = require("./check-android-config").verifyAndroidConfig(projectRoot);
+  for (const error of errors) fail(error);
+  if (errors.length === 0) ok("Dev/prod Expo and tracked Android configuration checks passed");
+} catch (error) {
+  fail(`Android configuration verification could not complete: ${error.message}`);
+}
+
 if (process.exitCode && process.exitCode !== 0) {
   console.error("Android native verification failed.");
   process.exit(process.exitCode);
