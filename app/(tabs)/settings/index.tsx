@@ -3,7 +3,7 @@ import { Href, Redirect, useFocusEffect, useNavigation, useRouter } from "expo-r
 import type { NavigationProp } from "@react-navigation/native";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { getFunctions, httpsCallable } from "firebase/functions";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { BackHandler, Linking, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { getUidPrefix, logAnalyticsEvent } from "../../../src/analytics/analytics";
@@ -15,7 +15,7 @@ import { showAppDialog } from "../../../src/ui/appDialog";
 import { getUserData } from "../../../src/userData";
 import { clearProfilePhotoCache } from "../../../src/profile/profilePhotos";
 import { isDevBillingBuild } from "../../../src/billing/revenuecat";
-import { restoreAccountPurchases } from "../../../src/billing/restoreAccountPurchases";
+import { usePurchaseRestore } from "../../../src/billing/usePurchaseRestore";
 import { returnFromSettingsToHome } from "../../../src/navigation/settingsNavigation";
 
 const ACCENT = "#7b61ff";
@@ -33,11 +33,9 @@ export default function SettingsIndex() {
   const [manageFallbackText, setManageFallbackText] = useState<string | null>(null);
   const [deleteFeedback, setDeleteFeedback] = useState<string | null>(null);
   const [deletingAccount, setDeletingAccount] = useState(false);
-  const [restoring, setRestoring] = useState(false);
-  const [restoreFeedback, setRestoreFeedback] = useState<string | null>(null);
-  const restoreInFlight = useRef(false);
   const entitlement = useEntitlement(authReady, uid);
   const devBillingBuild = __DEV__ || isDevBillingBuild();
+  const { restore: handleRestorePurchases, restoring, feedback: restoreFeedback } = usePurchaseRestore(uid, devBillingBuild, { sourceScreen: "settings" });
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (user) => {
@@ -102,24 +100,6 @@ export default function SettingsIndex() {
     });
     return () => subscription.remove();
   }, [handleGoBack]));
-
-  const handleRestorePurchases = async () => {
-    if (devBillingBuild || !uid || restoreInFlight.current) return;
-    restoreInFlight.current = true;
-    setRestoring(true);
-    setRestoreFeedback("Checking purchases with Google Play...");
-    try {
-      await restoreAccountPurchases(uid);
-      if (auth.currentUser?.uid !== uid) return;
-      setRestoreFeedback("Purchase check completed. Any active subscription will appear here once account verification finishes.");
-    } catch {
-      if (auth.currentUser?.uid !== uid) return;
-      setRestoreFeedback("Couldn't restore purchases. Check your connection and try again with the Google Play account used to subscribe.");
-    } finally {
-      restoreInFlight.current = false;
-      setRestoring(false);
-    }
-  };
 
   const handleManageSubscription = async () => {
     void logAnalyticsEvent("manage_subscription_tapped", {

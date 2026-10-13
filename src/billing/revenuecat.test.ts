@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   configure: vi.fn(),
   setLogLevel: vi.fn(),
   setLogHandler: vi.fn(),
+  restore: vi.fn(),
 }));
 
 vi.mock("react-native", () => ({ Platform: { OS: "android" } }));
@@ -14,6 +15,7 @@ vi.mock("react-native-purchases", () => ({
     configure: mocks.configure,
     setLogLevel: mocks.setLogLevel,
     setLogHandler: mocks.setLogHandler,
+    restorePurchases: mocks.restore,
   },
   LOG_LEVEL: { INFO: "INFO", WARN: "WARN", ERROR: "ERROR" },
 }));
@@ -56,5 +58,14 @@ describe("RevenueCat build isolation", () => {
     await billing.configureRevenueCat();
     expect(mocks.configure).toHaveBeenCalledExactlyOnceWith({ apiKey: "test-key" });
     expect(mocks.setLogHandler).toHaveBeenCalledOnce();
+  });
+  it("preserves the store response for restore outcome evaluation", async () => {
+    mocks.constants.expoConfig.android.package = "com.kjeehwan.lastrep";
+    const info = { entitlements: { active: {} }, activeSubscriptions: [] };
+    mocks.restore.mockResolvedValue(info);
+    const billing = await import("./revenuecat");
+    const result = await billing.restorePurchases();
+    expect(result.status).toBe("RESTORED");
+    if (result.status === "RESTORED") expect(result.customerInfo).toBe(info);
   });
 });
