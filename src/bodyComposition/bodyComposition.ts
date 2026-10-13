@@ -1,3 +1,4 @@
+import { BODY_COMPOSITION_HISTORY_LIMIT, compareHistoryEntries, normalizeBodyCompositionHistory } from "./normalizeBodyCompositionHistory";
 import { Platform } from "react-native";
 import { doc, getDoc, setDoc, Timestamp } from "firebase/firestore";
 import type { Permission } from "react-native-health-connect";
@@ -60,7 +61,7 @@ const bodyCompositionReadPermissions: Permission[] = [
 ];
 
 // Keep roughly a year of daily weight entries without crowding out sparse body-fat scans.
-const HISTORY_LIMIT = 400;
+const HISTORY_LIMIT = BODY_COMPOSITION_HISTORY_LIMIT;
 const BODY_COMPOSITION_SCHEMA_VERSION = 2;
 
 const getErrorMessage = (error: unknown): string =>
@@ -93,13 +94,6 @@ const normalizeSource = (value: unknown): BodyCompositionSource | null =>
 const normalizeString = (value: unknown): string | null =>
   typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 
-const compareHistoryEntries = (a: BodyCompositionHistoryEntry, b: BodyCompositionHistoryEntry) => {
-  const timeDiff = (b.recordedAt?.toMillis() ?? 0) - (a.recordedAt?.toMillis() ?? 0);
-  if (timeDiff !== 0) return timeDiff;
-  if (a.source === b.source) return 0;
-  return a.source === "manual" ? -1 : 1;
-};
-
 const normalizeMetricSnapshot = (
   value: unknown,
   fallbackSource: BodyCompositionSource | null = null,
@@ -121,35 +115,6 @@ const normalizeMetricSnapshot = (
     source: normalizeSource(row.source) ?? fallbackSource,
     originLabel: normalizeString(row.originLabel),
   };
-};
-
-const normalizeHistory = (value: unknown): BodyCompositionHistoryEntry[] => {
-  if (!Array.isArray(value)) return [];
-  const history: BodyCompositionHistoryEntry[] = [];
-  for (const item of value) {
-    const row = item as Record<string, unknown>;
-    const source = normalizeSource(row.source);
-    const recordedAt = normalizeTimestamp(row.recordedAt);
-    if (!source || !recordedAt) continue;
-    const legacyMuscleMassKg = normalizeNullableNumber(row.muscleMassKg, 500);
-    history.push({
-      recordedAt,
-      source,
-      originLabel: normalizeString(row.originLabel),
-      weightKg: normalizeNullableNumber(row.weightKg, 500),
-      bodyFatPercent: normalizeNullableNumber(row.bodyFatPercent, 100),
-      leanBodyMassKg: normalizeNullableNumber(row.leanBodyMassKg, 500),
-      skeletalMuscleMassKg:
-        normalizeNullableNumber(row.skeletalMuscleMassKg, 500) ??
-        (source === "manual" ? legacyMuscleMassKg : null),
-      legacyMuscleMassKg:
-        normalizeNullableNumber(row.legacyMuscleMassKg, 500) ??
-        (source === "health" ? legacyMuscleMassKg : null),
-    });
-  }
-  return history
-    .sort(compareHistoryEntries)
-    .slice(0, HISTORY_LIMIT);
 };
 
 const inferOriginLabel = (originAppPackage: string | null): string | null => {
@@ -283,7 +248,7 @@ export const getBodyCompositionProfile = async (
   return buildBodyCompositionProfile(
     normalizeMetricSnapshot(data?.[BODY_COMPOSITION_FIELDS.manual], "manual", "skeletal"),
     normalizeMetricSnapshot(data?.[BODY_COMPOSITION_FIELDS.synced], "health", "unknown"),
-    normalizeHistory(data?.[BODY_COMPOSITION_FIELDS.history]),
+    normalizeBodyCompositionHistory(data?.[BODY_COMPOSITION_FIELDS.history]),
     normalizeTimestamp(data?.[BODY_COMPOSITION_FIELDS.lastSyncedAt]),
     normalizeString(data?.[BODY_COMPOSITION_FIELDS.originAppPackage]),
     normalizeString(data?.[BODY_COMPOSITION_FIELDS.originLabel]),

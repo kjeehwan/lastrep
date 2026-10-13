@@ -24,7 +24,6 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { auth, db } from "../../../src/config/firebaseConfig";
-import { BodyCompositionHistoryChart } from "../../../src/bodyComposition/BodyCompositionHistoryChart";
 import { useOfflineStatus } from "../../../src/hooks/useOfflineStatus";
 import {
   acceptHealthSyncConsent,
@@ -1799,10 +1798,6 @@ export default function ProfileIndex() {
               </>
             )}
           </View>
-          <BodyCompositionHistoryChart
-            history={bodyCompositionHistory}
-            weightUnit={weightUnit}
-          />
         </View>
 
         <View style={styles.card}>
