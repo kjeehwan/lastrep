@@ -6,6 +6,7 @@
 - The app sends at most 6 MB of image bytes to an authenticated callable, never a public upload URL.
 - The backend validates image decoding, restricts pixel count, auto-orients, crops/resizes to at most 512 x 512, strips metadata, and encodes JPEG.
 - Uploads are limited to 12 attempts per account per hour. Images are private, under `users/{uid}/profile-photos/{uuid}.jpg`.
+- The production bucket enforces public access prevention and uniform bucket-level access. Photo access uses IAM rather than object ACLs; clients still use authenticated callables, not direct Storage access.
 - The Storage write supplies the computed CRC32C in object metadata and enables CRC32C validation. Downloads also validate CRC32C.
 - Profile saves stage the upload, save other profile fields, then commit the photo reference in a backend transaction. A failed staged save leaves the previous active photo intact. Other profile fields are not a cross-service atomic transaction and may already have saved if a later operation fails.
 - Photo references are server-managed `profilePhotoPath` and `profilePhotoUpdatedAt`. Legacy `profilePhotoUri` is cleared when a cloud photo is committed or removed.
@@ -15,9 +16,10 @@
 
 ## Deployment prerequisites
 
-Read-only checks on October 12, 2026 confirmed that `lastrep-ebac5.firebasestorage.app` exists in `ASIA-NORTHEAST3`, billing is enabled, and bucket IAM has no `allUsers`/`allAuthenticatedUsers` bindings. Uniform bucket-level access is disabled; the upload function explicitly uses a private object ACL in this mode. No production configuration was changed by these checks.
+Read-only checks on October 12, 2026 confirmed that `lastrep-ebac5.firebasestorage.app` exists in `ASIA-NORTHEAST3`, billing is enabled, and bucket IAM has no `allUsers`/`allAuthenticatedUsers` bindings. At that time uniform bucket-level access was disabled, and uploads explicitly used a private object ACL. On October 13, 2026 the bucket was migrated to uniform access with public access prevention enforced, as recorded below.
 
 1. Confirm Firebase Storage is initialized for `lastrep-ebac5` and billing is enabled. Verify the default bucket matches `EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET` (`lastrep-ebac5.firebasestorage.app` in this workspace). Do not create a public bucket or grant `allUsers`/`allAuthenticatedUsers` object access. The runtime service account needs access to this bucket.
+   Keep public access prevention enforced and uniform access enabled. All deployed photo functions currently use `lastrep-ebac5@appspot.gserviceaccount.com`, which has bucket-scoped `roles/storage.objectUser` for object creation, reading, listing, and deletion. Its existing project Editor access provides bucket metadata access required by uploads; if that project role is reduced later, preserve `storage.buckets.get` separately. Do not assume object ownership or object ACLs provide runtime access.
 2. Review existing Storage rules and Firestore indexes in the console before deployment. The checked-in Storage rules deny all client access because every photo operation goes through the backend. Do not overwrite unrelated production Storage rules or delete unrelated indexes without reviewing them.
 3. Deploy the new rules/index and only the affected functions:
 
@@ -66,3 +68,21 @@ Before distributing this version, publish the updated privacy policy and declare
 - The connected Android dev app opened and Home/Profile rendered without observed runtime errors. No personal photo was selected or saved, no account was switched on the phone, and no app was reinstalled. Device Save/Discard, cache/offline behavior, and reinstall restoration remain to be checked.
 - Subsequent device checks passed: Discard restored the initials placeholder, Save displayed the photo on Home and Profile, and the photo persisted after restarting. Lastrep Dev was then uninstalled/reinstalled and its local data cleared; the user confirmed the saved photo returned after signing in again. Production's version and installation timestamp were unchanged. Device offline/failed-save behavior has not been checked.
 - The user published the updated Notion privacy policy and submitted the Photos Data safety disclosure for Google Play review. Review approval is not yet confirmed.
+
+## Checksum follow-up verification - October 13, 2026
+
+- Read-only bucket listing succeeded. The existing photo object (13,173 bytes) has stored CRC32C metadata.
+- Downloading that exact object generation through the Storage API returned HTTP 403 with the existing Firebase CLI identity. Independent comparison of the stored CRC32C with downloaded bytes remains blocked; metadata presence alone does not prove a match.
+- Cloud Monitoring returned HTTP 404 (descriptor not found) for `storage.googleapis.com/api/object_checksummed_write_count`. This metric could not be used to verify checksum write counts in this project at the time of the check.
+- No bucket permissions, objects, or app/account data were changed. Complete the independent comparison using an identity already authorized to read the object, or after an explicitly approved access change. Previous live application upload/download validation remains the available end-to-end evidence.
+- Subsequently, the user granted the Firebase CLI account bucket-scoped Storage Object Viewer access. A read-only verification downloaded the existing JPEG into memory, pinned to its listed object generation. Its 13,173-byte size and independently calculated CRC32C both matched Storage metadata. No photo was written to disk, and no cloud objects or account data were modified. This completes the independent stored-object checksum comparison for that photo; it does not establish checksum coverage for all future writes. The temporary role can now be removed.
+- After verification, removed the temporary unconditional bucket-level `roles/storage.objectViewer` grant for `user:kjeehwan@gmail.com` at the user's request. Read-back confirmed that the grant was absent and all other bucket IAM bindings were preserved.
+
+## Bucket access hardening - October 13, 2026
+
+- Verified the deployed service account for upload, commit, download, discard, scheduled cleanup, and account deletion before migration.
+- Added bucket-scoped `roles/storage.objectUser` for that runtime account, preserving all existing bucket IAM bindings. No project-wide roles were added or removed.
+- Enabled `iamConfiguration.uniformBucketLevelAccess.enabled` and set `iamConfiguration.publicAccessPrevention` to `enforced`, using a metageneration precondition. Read-back confirmed both settings and no public IAM principals. Uniform access becomes locked on January 11, 2027 after 90 consecutive days; reversing it before then is subject to Google's requirements.
+- Live deployed-function checks passed using two disposable accounts and synthetic JPEGs: upload/commit/download with independently matching CRC32C, public and unauthenticated access rejection, cross-account rejection, discard preserving the active photo, replacement/removal deleting the previous live objects, and account deletion cleaning up remaining live objects. Both disposable accounts were deleted. Existing users and photos were not modified.
+- Added a regression test asserting that uniform-access uploads omit `predefinedAcl` and retain CRC32C validation. All 13 backend photo tests and the backend TypeScript build passed.
+- The existing deployed backend already supports uniform access; no function deployment or mobile/AAB rebuild was needed. Live API tests do not replace a device UI smoke test, but no mobile code changed in this migration.
