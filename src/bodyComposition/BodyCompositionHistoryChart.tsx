@@ -13,6 +13,7 @@ type WeightUnit = "kg" | "lbs";
 type Props = {
   history: BodyCompositionHistoryEntry[];
   weightUnit: WeightUnit;
+  standalone?: boolean;
 };
 
 const METRICS: { key: BodyCompositionMetric; label: string }[] = [
@@ -49,6 +50,7 @@ const formatAxisDate = (timestamp: number, previousTimestamp?: number) => {
 export const BodyCompositionHistoryChart = memo(function BodyCompositionHistoryChart({
   history,
   weightUnit,
+  standalone = false,
 }: Props) {
   const [metric, setMetric] = useState<BodyCompositionMetric>("weight");
   const points = useMemo(() => getBodyCompositionHistoryPoints(history, metric), [history, metric]);
@@ -96,8 +98,8 @@ export const BodyCompositionHistoryChart = memo(function BodyCompositionHistoryC
   const legacyPresent = hasLegacyMuscleMassHistory(history);
 
   return (
-    <View style={styles.wrap}>
-      <Text style={styles.heading}>Progress</Text>
+    <View style={!standalone && styles.wrap}>
+      {!standalone ? <Text style={styles.heading}>Progress</Text> : null}
       <View style={styles.metricRow}>
         {METRICS.map((option) => (
           <Pressable
@@ -124,6 +126,7 @@ export const BodyCompositionHistoryChart = memo(function BodyCompositionHistoryC
       {nodes.length ? (
         <View style={styles.chartWrap}>
           <ScrollView
+            key={metric}
             ref={chartScrollRef}
             horizontal
             showsHorizontalScrollIndicator={false}

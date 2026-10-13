@@ -3,6 +3,9 @@ import Slider from "@react-native-community/slider";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ProfilePhoto } from "../../src/profile/ProfilePhoto";
 import { profilePhotoReference } from "../../src/profile/profilePhotoReference";
+import { BodyCompositionHistoryChart } from "../../src/bodyComposition/BodyCompositionHistoryChart";
+import { normalizeBodyCompositionHistory } from "../../src/bodyComposition/normalizeBodyCompositionHistory";
+import { USER_BODY_COMPOSITION_FIELD, type BodyCompositionHistoryEntry } from "../../src/contracts/bodyComposition";
 import { Href, Redirect, useFocusEffect, useRouter } from "expo-router";
 import { onAuthStateChanged } from "firebase/auth";
 import {
@@ -190,6 +193,9 @@ export default function Home() {
   const [redirectTo, setRedirectTo] = useState<Href | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [uid, setUid] = useState<string | null>(null);
+  const [bodyHistory, setBodyHistory] = useState<BodyCompositionHistoryEntry[]>([]);
+  const [bodyHistoryLoaded, setBodyHistoryLoaded] = useState(false);
+  const [bodyHistoryError, setBodyHistoryError] = useState(false);
   const [userNickname, setUserNickname] = useState<string | null>(null);
   const [profilePhotoUri, setProfilePhotoUri] = useState<string | null>(null);
   const [profileDescription, setProfileDescription] = useState<string | null>(null);
@@ -259,6 +265,9 @@ export default function Home() {
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (user) => {
       recoveryInputsHydratedRef.current = null;
+      setBodyHistory([]);
+      setBodyHistoryLoaded(false);
+      setBodyHistoryError(false);
       setAuthReady(true);
       if (!user) {
         setUid(null);
@@ -302,6 +311,9 @@ export default function Home() {
       doc(db, "users", uid),
       (snap) => {
         const data: any = snap.data();
+        setBodyHistory(normalizeBodyCompositionHistory(data?.[USER_BODY_COMPOSITION_FIELD]?.history));
+        setBodyHistoryLoaded(true);
+        setBodyHistoryError(false);
         const nickname = typeof data?.nickname === "string" ? data.nickname.trim() : "";
         const photoUri = profilePhotoReference(data);
         const description =
@@ -372,6 +384,7 @@ export default function Home() {
         }
       },
       (e) => {
+        setBodyHistoryError(true);
         if (!isExpectedOfflineError(e)) {
           console.log("Failed to subscribe user profile", e);
         }
@@ -1396,8 +1409,8 @@ export default function Home() {
             {homeContextLoaded &&
             healthSyncStatusLoaded &&
             (nutritionSnapshot.todayCalories === 0 || healthSyncNeedsAttention) ? (
-              <View style={styles.contextActions}>
-                <Text style={styles.contextActionsTitle}>Complete today&apos;s picture</Text>
+              <View style={[styles.card, styles.contextActions]}>
+                <Text style={styles.cardHeading}>Complete today&apos;s picture</Text>
                 {nutritionSnapshot.todayCalories === 0 ? (
                   <TouchableOpacity
                     style={styles.contextActionRow}
@@ -1443,21 +1456,35 @@ export default function Home() {
         </View>
 
         <View style={styles.section}>
-          <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>Readiness</Text>
-            <TouchableOpacity
-              style={styles.snapshotInfoBtn}
-              onPress={() =>
-                showAppAlert(
-                  "Recovery readiness",
-                  "Score weights:\n- Sleep: 30%\n- Soreness: 30%\n- Fatigue: 30%\n- Motivation: 10%\n\nNotes:\n- Soreness/Fatigue are inverted (lower is better).\n\nLabels:\n- Ready: >= 75\n- Neutral: 50-74\n- Recover: < 50"
-                )
-              }
-            >
-              <Ionicons name="information-circle-outline" size={16} color="#cdd1ea" />
-            </TouchableOpacity>
-          </View>
           <View style={styles.card}>
+            <Text style={styles.cardHeading}>Progress</Text>
+            {bodyHistoryError ? (
+              <Text style={styles.noticeSub}>Couldn&apos;t refresh progress. Please try again when connected.</Text>
+            ) : null}
+            {bodyHistoryLoaded ? (
+              <BodyCompositionHistoryChart key={uid} history={bodyHistory} weightUnit={weightUnit} standalone />
+            ) : !bodyHistoryError ? (
+              <Text style={styles.noticeSub}>Loading measurements...</Text>
+            ) : null}
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <View style={styles.card}>
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.cardHeading}>Readiness</Text>
+              <TouchableOpacity
+                style={styles.snapshotInfoBtn}
+                onPress={() =>
+                  showAppAlert(
+                    "Recovery readiness",
+                    "Score weights:\n- Sleep: 30%\n- Soreness: 30%\n- Fatigue: 30%\n- Motivation: 10%\n\nNotes:\n- Soreness/Fatigue are inverted (lower is better).\n\nLabels:\n- Ready: >= 75\n- Neutral: 50-74\n- Recover: < 50"
+                  )
+                }
+              >
+                <Ionicons name="information-circle-outline" size={16} color="#cdd1ea" />
+              </TouchableOpacity>
+            </View>
             <Text style={styles.metricValue}>{recoveryReadiness.score}%</Text>
             <Text style={styles.metricSub}>{recoveryReadiness.label} based on sleep, soreness, fatigue, motivation</Text>
             <TouchableOpacity style={styles.todayPlanLinkButton} onPress={() => setShowAdjustInputsModal(true)}><Text style={styles.todayPlanLinkText}>Edit recovery check-in</Text></TouchableOpacity>
@@ -1497,16 +1524,16 @@ export default function Home() {
         </View>
 
         <View style={styles.section}>
-          <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>Weekly Trends</Text>
-            <TouchableOpacity
-              style={styles.snapshotInfoBtn}
-              onPress={() => showAppAlert("Snapshot change", "Each change is compared against the previous week.")}
-            >
-              <Ionicons name="information-circle-outline" size={16} color="#cdd1ea" />
-            </TouchableOpacity>
-          </View>
           <View style={styles.card}>
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.cardHeading}>Weekly Trends</Text>
+              <TouchableOpacity
+                style={styles.snapshotInfoBtn}
+                onPress={() => showAppAlert("Snapshot change", "Each change is compared against the previous week.")}
+              >
+                <Ionicons name="information-circle-outline" size={16} color="#cdd1ea" />
+              </TouchableOpacity>
+            </View>
             <View style={styles.metricRow}>
               <TouchableOpacity style={styles.metricChip} onPress={() => setActiveDashboardMetric("workouts")}>
                 <Text style={styles.metricLabelTitle}>Workouts</Text>
@@ -2147,14 +2174,15 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    gap: 10,
   },
+  cardHeading: { color: "#fff", fontSize: 20, fontWeight: "800", flexShrink: 1 },
   snapshotInfoBtn: {
     width: 24,
     height: 24,
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 10,
   },
   card: {
     backgroundColor: "rgba(255,255,255,0.05)",
@@ -2395,12 +2423,7 @@ const styles = StyleSheet.create({
   },
   contextActions: {
     marginTop: 14,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: "rgba(255,255,255,0.1)",
-    paddingTop: 12,
-    gap: 4,
   },
-  contextActionsTitle: { color: "#8f95af", fontSize: 11, fontWeight: "800", textTransform: "uppercase", marginBottom: 2 },
   contextActionRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 8 },
   contextActionIcon: {
     width: 32,
