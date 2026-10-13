@@ -87,6 +87,14 @@ describe("private cloud photo backend", () => {
       await expect(call(fn, {}, {})).rejects.toMatchObject({ code: "unauthenticated" });
     }
   });
+  it("omits object ACLs when uniform bucket-level access is enabled", async () => {
+    vi.spyOn(fake.bucket, "getMetadata").mockResolvedValueOnce([
+      { iamConfiguration: { uniformBucketLevelAccess: { enabled: true } } },
+    ]);
+    await stage();
+    expect(fake.writes[0].options).not.toHaveProperty("predefinedAcl");
+    expect(fake.writes[0].options.validation).toBe("crc32c");
+  });
   it("normalizes to a small JPEG without EXIF and provides the correct CRC32C", async () => {
     await stage();
     const upload = fake.writes[0];
