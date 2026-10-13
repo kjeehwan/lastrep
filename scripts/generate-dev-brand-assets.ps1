@@ -1,3 +1,4 @@
+$ErrorActionPreference = "Stop"
 Add-Type -AssemblyName System.Drawing
 
 $root = Resolve-Path (Join-Path $PSScriptRoot "..")
@@ -79,9 +80,11 @@ function New-RedVariantBitmap([System.Drawing.Bitmap]$source) {
         continue
       }
 
-      $newH = 358.0
-      $newS = [Math]::Max(0.55, $hsv.S * 0.92)
-      $newV = [Math]::Min(1.0, $hsv.V * 1.01)
+      # Map the production blue-to-purple hue variation to orange-to-red.
+      # Preserve saturation, brightness, alpha and pixel positions exactly.
+      $newH = [Math]::Max(0.0, [Math]::Min(35.0, 35.0 - ($hsv.H - 220.0) * 0.875))
+      $newS = $hsv.S
+      $newV = $hsv.V
       $rgb = HsvToRgb $newH $newS $newV
       $bmp.SetPixel($x, $y, [System.Drawing.Color]::FromArgb($px.A, $rgb.R, $rgb.G, $rgb.B))
     }
@@ -111,4 +114,23 @@ Save-Png $splashOut $splashOutPath
 $splashIn.Dispose()
 $splashOut.Dispose()
 
-Write-Output "Generated dev branding assets from prod style."
+# Native folders are tracked, so update the dev flavor resources as well.
+# Use the matching production resource to preserve its dimensions and layout.
+$devResDir = Join-Path $root "android/app/src/dev/res"
+$prodResDir = Join-Path $root "android/app/src/main/res"
+foreach ($file in Get-ChildItem -LiteralPath $devResDir -Recurse -Filter *.png) {
+  if ($file.BaseName -notmatch '^(ic_launcher|ic_launcher_foreground|ic_launcher_round|splashscreen_logo)$') { continue }
+  $relativePath = $file.FullName.Substring($devResDir.Length + 1)
+  $sourcePath = Join-Path $prodResDir $relativePath
+  if (-not (Test-Path -LiteralPath $sourcePath)) {
+    $sourcePath = [System.IO.Path]::ChangeExtension($sourcePath, ".webp")
+  }
+  if (-not (Test-Path -LiteralPath $sourcePath)) { throw "Missing production branding resource: $relativePath" }
+  $source = [System.Drawing.Bitmap]::FromFile($sourcePath)
+  try {
+    $output = New-RedVariantBitmap $source
+    try { Save-Png $output $file.FullName } finally { $output.Dispose() }
+  } finally { $source.Dispose() }
+}
+
+Write-Output "Generated orange-red gradient dev assets and native resources from production geometry."

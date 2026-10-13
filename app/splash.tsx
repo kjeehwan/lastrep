@@ -2,7 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import React, { useEffect } from "react";
 import { StyleSheet, View } from "react-native";
-import LastRepLogo from "../components/LastRepLogo"; // Your animated logo component
+import LastrepLogo from "../components/LastrepLogo"; // Your animated logo component
 
 export default function SplashScreen() {
   const router = useRouter();
@@ -34,7 +34,7 @@ export default function SplashScreen() {
 
   return (
     <View style={styles.container}>
-      <LastRepLogo /> {/* Your animated logo */}
+      <LastrepLogo /> {/* Your animated logo */}
     </View>
   );
 }

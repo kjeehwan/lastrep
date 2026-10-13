@@ -10,7 +10,7 @@ import {
 } from "firebase/auth";
 import React, { useEffect, useState } from "react";
 import { StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
-import LastRepLogo from "../../components/LastRepLogo"; // Static logo component
+import LastrepLogo from "../../components/LastrepLogo"; // Static logo component
 import { auth } from "../../src/config/firebaseConfig";
 import { buildDefaultUserDoc, getDecisionUsage, getUserData, saveUserData } from "../../src/userData";
 
@@ -135,7 +135,7 @@ export default function SignUp() {
   return (
     <View style={styles.container}>
       {/* Static logo at the top */}
-      <LastRepLogo />
+      <LastrepLogo />
 
       <TextInput
         style={styles.input}

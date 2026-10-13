@@ -22,7 +22,7 @@ Simple illustrations can also make the flow feel more dynamic and less "form-bas
 
 ## 5. Welcome Message:
 
-The Welcome Screen can be shortened slightly by keeping the text succinct and straightforward. For example, "Welcome to LastRep" with a tagline like "Your coach and guide to fitness!" can be just as effective, cutting out excess words.
+The Welcome Screen can be shortened slightly by keeping the text succinct and straightforward. For example, "Welcome to Lastrep" with a tagline like "Your coach and guide to fitness!" can be just as effective, cutting out excess words.
 
 A progressive animation (like a smooth fade-in) on the "Let’s Go" button would make it feel more interactive.
 

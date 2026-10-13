@@ -2,7 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import React, { useEffect } from "react";
 import { StyleSheet, View } from "react-native";
-import LastRepLogo from "../../components/LastRepLogo";
+import LastrepLogo from "../../components/LastrepLogo";
 
 const ONBOARDING_COMPLETE_KEY = "onboardingComplete";
 
@@ -34,7 +34,7 @@ export default function SplashAfterPreview() {
 
   return (
     <View style={styles.container}>
-      <LastRepLogo />
+      <LastrepLogo />
     </View>
   );
 }
