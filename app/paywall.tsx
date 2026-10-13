@@ -15,7 +15,6 @@ import { auth } from "../src/config/firebaseConfig";
 import type {
   PaywallAnalyticsContext,
   PurchaseResult,
-  RestoreResult,
 } from "../src/contracts";
 import {
   normalizePaywallReasonCode,
@@ -31,24 +30,17 @@ import {
   isDevBillingBuild,
   isExpectedDevBillingConfigurationError,
   purchasePackage,
-  restorePurchases,
   syncRevenueCatPurchases,
 } from "../src/billing/revenuecat";
 
+import { usePurchaseRestore } from "../src/billing/usePurchaseRestore";
+
 type ScreenState = "idle" | "loading" | "success" | "error";
-type PendingEntitlementAction = "purchase" | "restore" | null;
+type PendingEntitlementAction = "purchase" | null;
 
 type PurchaseAttempt = {
   packageParams: Record<string, string | number | boolean | undefined>;
   startedAtMs: number;
-  waitingForActivation: boolean;
-  terminalLogged: boolean;
-};
-
-type RestoreAttempt = {
-  baseParams: Record<string, string | number | boolean | undefined>;
-  startedAtMs: number;
-  timeoutId: ReturnType<typeof setTimeout> | null;
   waitingForActivation: boolean;
   terminalLogged: boolean;
 };
@@ -152,6 +144,7 @@ export default function PaywallScreen() {
   const devBillingBuild = __DEV__ || isDevBillingBuild();
 
   const entitlement = useEntitlement(authReady, uid);
+  const purchaseRestore = usePurchaseRestore(uid, devBillingBuild, { sourceScreen, reasonCode });
   const currentOffering = useMemo(() => getDefaultOffering(offerings), [offerings]);
   const packages = useMemo(() => getSortedPackages(offerings), [offerings]);
   const packagesAvailable = packages.length > 0;
@@ -159,7 +152,6 @@ export default function PaywallScreen() {
   const paywallViewedLoggedRef = useRef(false);
   const paywallOpenedAtRef = useRef<number | null>(null);
   const purchaseAttemptRef = useRef<PurchaseAttempt | null>(null);
-  const restoreAttemptRef = useRef<RestoreAttempt | null>(null);
   const activationHintTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mountedRef = useRef(false);
 
@@ -277,19 +269,6 @@ export default function PaywallScreen() {
       });
     }
 
-    const restoreAttempt = restoreAttemptRef.current;
-    if (restoreAttempt?.waitingForActivation && !restoreAttempt.terminalLogged) {
-      restoreAttempt.terminalLogged = true;
-      if (restoreAttempt.timeoutId) {
-        clearTimeout(restoreAttempt.timeoutId);
-      }
-      restoreAttemptRef.current = null;
-      void logAnalyticsEvent("restore_completed", {
-        ...restoreAttempt.baseParams,
-        latency_ms: now - restoreAttempt.startedAtMs,
-      });
-    }
-
     if (activationHintTimeoutRef.current) {
       clearTimeout(activationHintTimeoutRef.current);
       activationHintTimeoutRef.current = null;
@@ -309,9 +288,6 @@ export default function PaywallScreen() {
       if (activationHintTimeoutRef.current) {
         clearTimeout(activationHintTimeoutRef.current);
       }
-      if (restoreAttemptRef.current?.timeoutId) {
-        clearTimeout(restoreAttemptRef.current.timeoutId);
-      }
     };
   }, []);
 
@@ -323,7 +299,10 @@ export default function PaywallScreen() {
     identityReady &&
     !offeringsLoading &&
     screenState !== "loading" &&
-    pendingEntitlementAction === null;
+    pendingEntitlementAction === null &&
+    !purchaseRestore.restoring;
+  const canRestore = authReady && !!uid && !devBillingBuild &&
+    screenState !== "loading" && pendingEntitlementAction === null && !purchaseRestore.restoring;
 
   const handlePurchase = async (selectedPackage: PurchasesPackage, eventTimestampMs: number) => {
     if (devBillingBuild) {
@@ -403,93 +382,6 @@ export default function PaywallScreen() {
       await syncRevenueCatPurchases();
     } catch (error) {
       console.log("Purchase sync failed", error);
-    }
-  };
-
-  const handleRestore = async (eventTimestampMs: number) => {
-    if (devBillingBuild) {
-      setFeedback("Restore is disabled in Lastrep Dev. Open the Play-installed app.");
-      return;
-    }
-    if (!uid || !canInteract) return;
-    if (entitlement.state === "active") {
-      setScreenState("idle");
-      setPendingEntitlementAction(null);
-      setShowActivationDelayHint(false);
-      setFeedback("You already have active premium.");
-      return;
-    }
-
-    setScreenState("loading");
-    setFeedback("Checking for previous purchases...");
-    setPendingEntitlementAction(null);
-
-    const restoreStartedAt = Math.round(eventTimestampMs);
-    const restoreParams = {
-      ...getCommonAnalyticsParams(sourceScreen, reasonCode, entitlement.state, uid),
-    };
-
-    restoreAttemptRef.current = {
-      baseParams: restoreParams,
-      startedAtMs: restoreStartedAt,
-      timeoutId: null,
-      waitingForActivation: false,
-      terminalLogged: false,
-    };
-
-    logBillingLifecycleEvent("restore_attempted", restoreParams);
-    void logAnalyticsEvent("restore_started", restoreParams);
-
-    const result: RestoreResult = await restorePurchases();
-    logBillingLifecycleEvent("restore_result", {
-      ...restoreParams,
-      result_status: result.status.toLowerCase(),
-      error_code: result.status === "ERROR" ? result.errorCode : undefined,
-    });
-    if (result.status === "ERROR") {
-      void logAnalyticsEvent("restore_failed", {
-        ...restoreParams,
-        error_code: result.errorCode,
-      });
-      restoreAttemptRef.current = null;
-      setScreenState("error");
-      setFeedback("Restore failed. Please try again.");
-      return;
-    }
-
-    const timeoutId = setTimeout(() => {
-      const currentAttempt = restoreAttemptRef.current;
-      if (!currentAttempt || currentAttempt.terminalLogged || !currentAttempt.waitingForActivation) {
-        return;
-      }
-
-      currentAttempt.terminalLogged = true;
-      restoreAttemptRef.current = null;
-      void logAnalyticsEvent("restore_failed", currentAttempt.baseParams);
-      setPendingEntitlementAction(null);
-      setShowActivationDelayHint(false);
-      setScreenState("idle");
-      setFeedback(
-        "We couldn't confirm an active subscription yet. If you recently subscribed, wait a moment and reopen the app, or try Restore again."
-      );
-    }, 30000);
-
-    restoreAttemptRef.current = {
-      baseParams: restoreParams,
-      startedAtMs: restoreStartedAt,
-      timeoutId,
-      waitingForActivation: true,
-      terminalLogged: false,
-    };
-
-    setScreenState("success");
-    setPendingEntitlementAction("restore");
-    setShowActivationDelayHint(false);
-    setFeedback("Checking for previous purchases...");
-    try {
-      await syncRevenueCatPurchases();
-    } catch (error) {
-      console.log("Restore sync failed", error);
     }
   };
 
@@ -602,15 +494,17 @@ export default function PaywallScreen() {
         </>
       ) : null}
 
-      <TouchableOpacity
-        style={[styles.secondaryButton, !canInteract && styles.disabled]}
-        onPress={(event: GestureResponderEvent) => void handleRestore(event.nativeEvent.timestamp)}
-        disabled={!canInteract}
+      {!devBillingBuild ? <TouchableOpacity
+        style={[styles.secondaryButton, !canRestore && styles.disabled]}
+        onPress={() => void purchaseRestore.restore()}
+        disabled={!canRestore}
       >
         <Text style={styles.secondaryButtonText}>
-          {screenState === "loading" ? "Working..." : "Restore purchases"}
+          {purchaseRestore.restoring ? "Restoring..." : "Restore purchases"}
         </Text>
-      </TouchableOpacity>
+      </TouchableOpacity> : null}
+
+      {purchaseRestore.feedback ? <Text accessibilityLiveRegion="polite" style={styles.noticeSub}>{purchaseRestore.feedback}</Text> : null}
 
       {!devBillingBuild ? <>
       <TouchableOpacity style={styles.secondaryButton} onPress={handleManageSubscription}>

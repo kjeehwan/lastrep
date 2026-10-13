@@ -463,14 +463,14 @@ export async function restorePurchases(): Promise<RestoreResult> {
   await configureRevenueCat();
   const startedAt = Date.now();
   try {
-    await Purchases.restorePurchases();
+    const customerInfo = await Purchases.restorePurchases();
     logBillingEvent({
       op: "restorePurchases",
       ok: true,
       latencyMs: Date.now() - startedAt,
       uidPrefix: toUidPrefix(activeFirebaseUid),
     });
-    return { status: "RESTORED" };
+    return { status: "RESTORED", customerInfo };
   } catch (error) {
     const normalized = toBillingError(error);
     logBillingEvent({
