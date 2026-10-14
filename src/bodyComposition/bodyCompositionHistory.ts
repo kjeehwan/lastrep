@@ -28,16 +28,18 @@ export const getBodyCompositionHistoryPoints = (
   history: BodyCompositionHistoryEntry[],
   metric: BodyCompositionMetric
 ): BodyCompositionHistoryPoint[] => {
-  const byTimestamp = new Map<number, BodyCompositionHistoryPoint>();
+  const byDay = new Map<string, BodyCompositionHistoryPoint>();
 
   for (const entry of history) {
     const recordedAtMs = entry.recordedAt?.toMillis() ?? null;
     const value = metricValue(entry, metric);
     if (recordedAtMs == null || typeof value !== "number" || !Number.isFinite(value)) continue;
 
-    const existing = byTimestamp.get(recordedAtMs);
-    if (!existing || (entry.source === "manual" && existing.source !== "manual")) {
-      byTimestamp.set(recordedAtMs, {
+    const date = new Date(recordedAtMs);
+    const dayKey = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+    const existing = byDay.get(dayKey);
+    if (!existing || recordedAtMs > existing.recordedAtMs || (recordedAtMs === existing.recordedAtMs && entry.source === "manual" && existing.source !== "manual")) {
+      byDay.set(dayKey, {
         key: `${metric}-${recordedAtMs}`,
         recordedAtMs,
         value,
@@ -47,13 +49,10 @@ export const getBodyCompositionHistoryPoints = (
     }
   }
 
-  const sorted = [...byTimestamp.values()].sort(
+  return [...byDay.values()].sort(
     (left, right) => left.recordedAtMs - right.recordedAtMs
   );
 
-  // Older records stored a full snapshot even when only one metric changed. Collapsing
-  // consecutive identical values avoids presenting carried-forward values as measurements.
-  return sorted.filter((point, index) => index === 0 || sorted[index - 1].value !== point.value);
 };
 
 export const hasLegacyMuscleMassHistory = (history: BodyCompositionHistoryEntry[]): boolean =>

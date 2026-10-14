@@ -1,9 +1,9 @@
+import { AdaptiveModalCard } from "../../ui/AdaptiveModalCard";
 import React, { useState } from "react";
 import {
   KeyboardAvoidingView,
   Modal,
   Platform,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -133,16 +133,16 @@ export function TodayPlanContextModal({ visible, context, plan, saving, onClose,
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <KeyboardAvoidingView
         style={styles.overlay}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
         <TouchableWithoutFeedback onPress={onClose}>
           <View style={styles.dismissArea} />
         </TouchableWithoutFeedback>
-        <View style={[styles.sheet, { paddingBottom: 20 + Math.max(insets.bottom, 8) }]}>
+        <AdaptiveModalCard contentSized style={[styles.sheet, { paddingBottom: 20 + Math.max(insets.bottom, 8) }]}>
           <View style={styles.handle} />
           <Text style={styles.title}>Today&apos;s context</Text>
           <Text style={styles.intro}>Add only what may affect today&apos;s training. Everything here is optional.</Text>
-          <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+          <View style={styles.content}>
             <View style={styles.sectionHeader}>
               <View style={styles.sectionCopy}>
                 <Text style={styles.sectionTitle}>Pain or discomfort</Text>
@@ -218,7 +218,7 @@ export function TodayPlanContextModal({ visible, context, plan, saving, onClose,
               maxLength={300}
               multiline
             />
-          </ScrollView>
+          </View>
           <View style={styles.actions}>
             <TouchableOpacity style={styles.secondaryButton} onPress={onClose} disabled={saving}>
               <Text style={styles.secondaryText}>Cancel</Text>
@@ -227,7 +227,7 @@ export function TodayPlanContextModal({ visible, context, plan, saving, onClose,
               <Text style={styles.primaryText}>{saving ? "Saving..." : "Save context"}</Text>
             </TouchableOpacity>
           </View>
-        </View>
+        </AdaptiveModalCard>
       </KeyboardAvoidingView>
     </Modal>
   );
@@ -237,6 +237,7 @@ const styles = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.62)", justifyContent: "flex-end" },
   dismissArea: { flex: 1 },
   sheet: {
+    width: "100%",
     maxHeight: "88%",
     backgroundColor: "#171727",
     borderTopLeftRadius: 24,

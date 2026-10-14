@@ -2,6 +2,7 @@ import React, { type ReactNode } from "react";
 import { Modal, TouchableWithoutFeedback, type ViewStyle } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { AdaptiveModalCard } from "../../ui/AdaptiveModalCard";
+import { KeyboardAwareModalFrame } from "../../ui/KeyboardAwareModalFrame";
 
 type WorkoutModalShellProps = {
   visible: boolean;
@@ -24,6 +25,7 @@ export function WorkoutModalShell({
   const card = <AdaptiveModalCard style={cardStyle}>{children}</AdaptiveModalCard>;
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onRequestClose}>
+      <KeyboardAwareModalFrame>
       <SafeAreaView style={backdropStyle}>
         {dismissOnBackdropPress && onRequestClose ? (
           <TouchableWithoutFeedback onPress={onRequestClose}>{card}</TouchableWithoutFeedback>
@@ -31,6 +33,7 @@ export function WorkoutModalShell({
           card
         )}
       </SafeAreaView>
+      </KeyboardAwareModalFrame>
     </Modal>
   );
 }

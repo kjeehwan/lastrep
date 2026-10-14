@@ -10,9 +10,9 @@ export const compareHistoryEntries = (a: BodyCompositionHistoryEntry, b: BodyCom
   return a.source === "manual" ? -1 : 1;
 };
 
-const numberOrNull = (value: unknown, max: number): number | null =>
+const numberOrNull = (value: unknown, max: number, preservePrecision = false): number | null =>
   typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= max
-    ? Math.round(value * 10) / 10
+    ? preservePrecision ? value : Math.round(value * 10) / 10
     : null;
 
 // Shared by Profile reads and Home's existing account subscription; no native health imports.
@@ -29,7 +29,7 @@ export const normalizeBodyCompositionHistory = (value: unknown): BodyComposition
       recordedAt: row.recordedAt,
       source,
       originLabel: typeof row.originLabel === "string" ? row.originLabel.trim() || null : null,
-      weightKg: numberOrNull(row.weightKg, 500),
+      weightKg: numberOrNull(row.weightKg, 500, true),
       bodyFatPercent: numberOrNull(row.bodyFatPercent, 100),
       leanBodyMassKg: numberOrNull(row.leanBodyMassKg, 500),
       skeletalMuscleMassKg: numberOrNull(row.skeletalMuscleMassKg, 500) ?? (source === "manual" ? legacy : null),

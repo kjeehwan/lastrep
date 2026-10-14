@@ -7,7 +7,7 @@ import { stageProfilePhoto, commitProfilePhoto, discardProfilePhotoUpload } from
 import * as ImagePicker from "expo-image-picker";
 import { Href, Redirect, useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { onAuthStateChanged } from "firebase/auth";
-import { doc, setDoc, Timestamp } from "firebase/firestore";
+import { doc, onSnapshot, setDoc, Timestamp } from "firebase/firestore";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   BackHandler,
@@ -25,6 +25,8 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { auth, db } from "../../../src/config/firebaseConfig";
+import { phaseWeek, saveUserPhases } from "../../../src/profile/phaseState";
+import { useNow } from "../../../src/hooks/useNow";
 import { useOfflineStatus } from "../../../src/hooks/useOfflineStatus";
 import {
   acceptHealthSyncConsent,
@@ -97,15 +99,7 @@ const mapLegacyAvailabilityToDays = (value: unknown): number | null => {
   return null;
 };
 
-type TrainingPhaseHistoryEntry = {
-  phase: TrainingPhase;
-  startedAt: Timestamp;
-};
 
-type DietPhaseHistoryEntry = {
-  phase: DietPhase;
-  startedAt: Timestamp;
-};
 type WeightUnit = "kg" | "lbs";
 type HeightUnit = "cm" | "ft/in";
 type EnergyUnit = "kcal" | "kJ";
@@ -157,7 +151,7 @@ const convertWeightUnitToKg = (value: number, unit: WeightUnit): number =>
   unit === "lbs" ? value * LBS_TO_KG : value;
 const formatWeightForUnit = (valueKg: number | null, unit: WeightUnit): string =>
   typeof valueKg === "number" && Number.isFinite(valueKg)
-    ? `${Math.round(convertKgToWeightUnit(valueKg, unit) * 10) / 10}`
+    ? `${Math.round(convertKgToWeightUnit(valueKg, unit) * 100) / 100}`
     : "";
 const formatPercent = (value: number | null): string =>
   typeof value === "number" && Number.isFinite(value) ? `${Math.round(value * 10) / 10}` : "";
@@ -194,12 +188,11 @@ export default function ProfileIndex() {
   const [dietPhase, setDietPhase] = useState<DietPhase>("Maintain");
   const [initialTrainingPhase, setInitialTrainingPhase] = useState<TrainingPhase>("Hypertrophy");
   const [initialDietPhase, setInitialDietPhase] = useState<DietPhase>("Maintain");
-  const [trainingPhaseHistory, setTrainingPhaseHistory] = useState<TrainingPhaseHistoryEntry[]>([]);
-  const [dietPhaseHistory, setDietPhaseHistory] = useState<DietPhaseHistoryEntry[]>([]);
   const [currentTrainingPhaseStartedAt, setCurrentTrainingPhaseStartedAt] = useState<Timestamp | null>(
     null
   );
   const [currentDietPhaseStartedAt, setCurrentDietPhaseStartedAt] = useState<Timestamp | null>(null);
+  const phaseNowMs = useNow();
   const [cutCalories, setCutCalories] = useState("");
   const [maintainCalories, setMaintainCalories] = useState("");
   const [bulkCalories, setBulkCalories] = useState("");
@@ -329,6 +322,36 @@ export default function ProfileIndex() {
       tdeeActivity,
     ]
   );
+
+  useEffect(() => {
+    if (!uid) return;
+    return onSnapshot(doc(db, 'users', uid), (snap) => {
+      const data = snap.data();
+      if (!data || !initialSnapshotRef.current || !latestSnapshotRef.current) return;
+      const baseline = JSON.parse(initialSnapshotRef.current) as ProfileSnapshot;
+      const local = JSON.parse(latestSnapshotRef.current) as ProfileSnapshot;
+      let changed = false;
+      if (isTrainingPhase(data.trainingPhase) && local.trainingPhase === baseline.trainingPhase && data.trainingPhase !== baseline.trainingPhase) {
+        setTrainingPhase(data.trainingPhase);
+        setInitialTrainingPhase(data.trainingPhase);
+        baseline.trainingPhase = data.trainingPhase;
+        changed = true;
+      }
+      if (isDietPhase(data.dietPhase) && local.dietPhase === baseline.dietPhase && data.dietPhase !== baseline.dietPhase) {
+        setDietPhase(data.dietPhase);
+        setInitialDietPhase(data.dietPhase);
+        baseline.dietPhase = data.dietPhase;
+        changed = true;
+      }
+      setCurrentTrainingPhaseStartedAt(data.trainingPhaseStartedAt instanceof Timestamp ? data.trainingPhaseStartedAt : null);
+      setCurrentDietPhaseStartedAt(data.dietPhaseStartedAt instanceof Timestamp ? data.dietPhaseStartedAt : null);
+      if (changed) {
+        const next = JSON.stringify(baseline);
+        initialSnapshotRef.current = next;
+        setInitialSnapshot(next);
+      }
+    }, (error) => console.log('Could not refresh phases', error));
+  }, [uid]);
 
   const currentSnapshot = useMemo(() => buildSnapshot(), [buildSnapshot]);
   const hasUnsavedChanges = initialSnapshot != null && currentSnapshot !== initialSnapshot;
@@ -510,42 +533,6 @@ export default function ProfileIndex() {
         setCurrentDietPhaseStartedAt(
           data?.dietPhaseStartedAt instanceof Timestamp ? data.dietPhaseStartedAt : null
         );
-        const rawTrainingHistory = Array.isArray(data?.trainingPhaseHistory)
-          ? data.trainingPhaseHistory
-          : [];
-        const rawDietHistory = Array.isArray(data?.dietPhaseHistory) ? data.dietPhaseHistory : [];
-        const parsedTrainingHistory = rawTrainingHistory
-          .map((entry: any) => ({
-            phase: isTrainingPhase(entry?.phase) ? entry.phase : null,
-            startedAt: entry?.startedAt instanceof Timestamp ? entry.startedAt : null,
-          }))
-          .filter(
-            (
-              entry: {
-                phase: TrainingPhase | null;
-                startedAt: Timestamp | null;
-              }
-            ): entry is TrainingPhaseHistoryEntry =>
-              entry.phase != null && entry.startedAt != null
-          )
-          .sort((a, b) => a.startedAt.toMillis() - b.startedAt.toMillis());
-        const parsedDietHistory = rawDietHistory
-          .map((entry: any) => ({
-            phase: isDietPhase(entry?.phase) ? entry.phase : null,
-            startedAt: entry?.startedAt instanceof Timestamp ? entry.startedAt : null,
-          }))
-          .filter(
-            (
-              entry: {
-                phase: DietPhase | null;
-                startedAt: Timestamp | null;
-              }
-            ): entry is DietPhaseHistoryEntry =>
-              entry.phase != null && entry.startedAt != null
-          )
-          .sort((a, b) => a.startedAt.toMillis() - b.startedAt.toMillis());
-        setTrainingPhaseHistory(parsedTrainingHistory);
-        setDietPhaseHistory(parsedDietHistory);
         const calorieTargets = normalizeCalorieTargets(
           data?.nutritionProfile?.calorieTargetsByDietPhase
         );
@@ -917,7 +904,7 @@ export default function ProfileIndex() {
       const parsed = Number(trimmed);
       if (!Number.isFinite(parsed)) return raw;
       const kgValue = convertWeightUnitToKg(parsed, weightUnit);
-      return `${Math.round(convertKgToWeightUnit(kgValue, nextUnit) * 10) / 10}`;
+      return `${Math.round(convertKgToWeightUnit(kgValue, nextUnit) * 100) / 100}`;
     };
     setBodyWeight((previous) => convertText(previous));
     setMuscleMass((previous) => convertText(previous));
@@ -1094,7 +1081,7 @@ export default function ProfileIndex() {
         showAppAlert("Invalid body composition", `${label} must be a positive number or blank.`);
         return Number.NaN;
       }
-      return Math.round(parsed * 10) / 10;
+      return label === "Body weight" ? parsed : Math.round(parsed * 10) / 10;
     };
     const parsedWeight = parseOptionalBodyMetric(bodyWeight, "Body weight");
     if (Number.isNaN(parsedWeight)) return false;
@@ -1134,8 +1121,6 @@ export default function ProfileIndex() {
         goal,
         nickname: nickname.trim(),
         description: profileDescription.trim(),
-        trainingPhase,
-        dietPhase,
         weightUnit,
         heightUnit,
         energyUnit,
@@ -1147,39 +1132,11 @@ export default function ProfileIndex() {
             ? { age: Math.round(parsedTdeeAge), heightCm: Math.round(parsedTdeeHeightCm * 10) / 10, sex: tdeeSex, activity: tdeeActivity }
             : null,
       };
-      let nextTrainingHistory = trainingPhaseHistory;
-      let nextDietHistory = dietPhaseHistory;
-      if (trainingPhase !== initialTrainingPhase) {
-        const now = Timestamp.now();
-        profilePayload.trainingPhaseStartedAt = now;
-        if (trainingPhaseHistory.length === 0) {
-          const baselineStartedAt =
-            currentTrainingPhaseStartedAt ?? Timestamp.fromMillis(Math.max(0, now.toMillis() - 1));
-          nextTrainingHistory = [
-            { phase: initialTrainingPhase, startedAt: baselineStartedAt },
-            { phase: trainingPhase, startedAt: now },
-          ];
-        } else {
-          nextTrainingHistory = [...trainingPhaseHistory, { phase: trainingPhase, startedAt: now }];
-        }
-        profilePayload.trainingPhaseHistory = nextTrainingHistory;
-      }
-      if (dietPhase !== initialDietPhase) {
-        const now = Timestamp.now();
-        profilePayload.dietPhaseStartedAt = now;
-        if (dietPhaseHistory.length === 0) {
-          const baselineStartedAt =
-            currentDietPhaseStartedAt ?? Timestamp.fromMillis(Math.max(0, now.toMillis() - 1));
-          nextDietHistory = [
-            { phase: initialDietPhase, startedAt: baselineStartedAt },
-            { phase: dietPhase, startedAt: now },
-          ];
-        } else {
-          nextDietHistory = [...dietPhaseHistory, { phase: dietPhase, startedAt: now }];
-        }
-        profilePayload.dietPhaseHistory = nextDietHistory;
-      }
-      await setDoc(doc(db, "users", uid), profilePayload, { merge: true });
+      const phaseChanges = {
+        ...(trainingPhase !== initialTrainingPhase ? { trainingPhase } : {}),
+        ...(dietPhase !== initialDietPhase ? { dietPhase } : {}),
+      };
+      const savedPhases = await saveUserPhases(uid, phaseChanges, profilePayload);
       await setDoc(
         doc(db, "users", uid),
         { sleepSettings: { targetHours: Math.round(parsedSleepTarget * 10) / 10 } },
@@ -1220,13 +1177,11 @@ export default function ProfileIndex() {
       }
       setInitialTrainingPhase(trainingPhase);
       setInitialDietPhase(dietPhase);
-      setTrainingPhaseHistory(nextTrainingHistory);
-      setDietPhaseHistory(nextDietHistory);
       setCurrentTrainingPhaseStartedAt(
-        trainingPhase !== initialTrainingPhase ? (profilePayload.trainingPhaseStartedAt as Timestamp) : currentTrainingPhaseStartedAt
+        savedPhases.trainingPhaseStartedAt instanceof Timestamp ? savedPhases.trainingPhaseStartedAt : null
       );
       setCurrentDietPhaseStartedAt(
-        dietPhase !== initialDietPhase ? (profilePayload.dietPhaseStartedAt as Timestamp) : currentDietPhaseStartedAt
+        savedPhases.dietPhaseStartedAt instanceof Timestamp ? savedPhases.dietPhaseStartedAt : null
       );
       setSaveFeedback("Changes saved.");
       setInitialSnapshot(snapshotWithPhoto(buildSnapshot(), savedPhotoReference));
@@ -1262,12 +1217,8 @@ export default function ProfileIndex() {
     effortScale,
     heightUnit,
     availabilityDays,
-    trainingPhaseHistory,
-    dietPhaseHistory,
     initialTrainingPhase,
     initialDietPhase,
-    currentTrainingPhaseStartedAt,
-    currentDietPhaseStartedAt,
     bodyWeight,
     bodyFatPercent,
     muscleMass,
@@ -1599,6 +1550,7 @@ export default function ProfileIndex() {
 
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Training phase</Text>
+          <Text style={styles.helperText}>{trainingPhase !== initialTrainingPhase ? "Week 1 starts when saved" : currentTrainingPhaseStartedAt ? `Week ${phaseWeek(currentTrainingPhaseStartedAt.toMillis(), phaseNowMs)}` : "Start date not recorded"}</Text>
           <View style={styles.row}>
             {TRAINING_PHASES.map((phase) => (
               <TouchableOpacity
@@ -1616,6 +1568,7 @@ export default function ProfileIndex() {
 
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Diet phase</Text>
+          <Text style={styles.helperText}>{dietPhase !== initialDietPhase ? "Week 1 starts when saved" : currentDietPhaseStartedAt ? `Week ${phaseWeek(currentDietPhaseStartedAt.toMillis(), phaseNowMs)}` : "Start date not recorded"}</Text>
           <View style={styles.row}>
             {DIET_PHASES.map((phase) => (
               <TouchableOpacity

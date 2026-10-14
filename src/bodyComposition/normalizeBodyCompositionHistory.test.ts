@@ -24,6 +24,6 @@ describe("shared body history normalization", () => {
     })));
     expect(history).toHaveLength(400);
     expect(history[0].recordedAt?.toMillis()).toBe(404);
-    expect(history[0]).toMatchObject({ weightKg: 80.3, bodyFatPercent: null, leanBodyMassKg: null, skeletalMuscleMassKg: null });
+    expect(history[0]).toMatchObject({ weightKg: 80.26, bodyFatPercent: null, leanBodyMassKg: null, skeletalMuscleMassKg: null });
   });
 });

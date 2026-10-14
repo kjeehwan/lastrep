@@ -6,7 +6,9 @@ import {
   getBodyCompositionHistoryPoints,
   hasLegacyMuscleMassHistory,
   type BodyCompositionMetric,
+  type BodyCompositionHistoryPoint,
 } from "./bodyCompositionHistory";
+import { measurementText } from "./measurementEditing";
 
 type WeightUnit = "kg" | "lbs";
 
@@ -14,6 +16,9 @@ type Props = {
   history: BodyCompositionHistoryEntry[];
   weightUnit: WeightUnit;
   standalone?: boolean;
+  initialMetric?: BodyCompositionMetric;
+  initialRecordedAtMs?: number;
+  onSelectionChange?: (point: BodyCompositionHistoryPoint | null) => void;
 };
 
 const METRICS: { key: BodyCompositionMetric; label: string }[] = [
@@ -51,19 +56,24 @@ export const BodyCompositionHistoryChart = memo(function BodyCompositionHistoryC
   history,
   weightUnit,
   standalone = false,
+  initialMetric = "weight",
+  initialRecordedAtMs,
+  onSelectionChange,
 }: Props) {
-  const [metric, setMetric] = useState<BodyCompositionMetric>("weight");
+  const [metric, setMetric] = useState<BodyCompositionMetric>(initialMetric);
   const points = useMemo(() => getBodyCompositionHistoryPoints(history, metric), [history, metric]);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const chartScrollRef = useRef<ScrollView>(null);
 
   useEffect(() => {
-    setSelectedKey(points.at(-1)?.key ?? null);
-  }, [points]);
+    setSelectedKey(points.find((point) => point.recordedAtMs === initialRecordedAtMs)?.key ?? points.at(-1)?.key ?? null);
+  }, [points, initialRecordedAtMs]);
 
   const selected = points.find((point) => point.key === selectedKey) ?? points.at(-1) ?? null;
+  useEffect(() => { onSelectionChange?.(selected); }, [selected, onSelectionChange]);
   const isPercent = metric === "bodyFat";
   const displayValue = (value: number) => {
+    if (metric === "weight") return `${measurementText(value, "weightKg", weightUnit)} ${weightUnit}`;
     const converted = isPercent || weightUnit === "kg" ? value : value * KG_TO_LBS;
     return `${Math.round(converted * 10) / 10}${isPercent ? "%" : ` ${weightUnit}`}`;
   };
@@ -131,7 +141,11 @@ export const BodyCompositionHistoryChart = memo(function BodyCompositionHistoryC
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.chartScrollContent}
-            onContentSizeChange={() => chartScrollRef.current?.scrollToEnd({ animated: false })}
+            onContentSizeChange={() => {
+              const index = points.findIndex((point) => point.recordedAtMs === initialRecordedAtMs);
+              if (index >= 0) chartScrollRef.current?.scrollTo({ x: Math.max(0, index * POINT_SPACING - WIDTH / 2), animated: false });
+              else chartScrollRef.current?.scrollToEnd({ animated: false });
+            }}
           >
             <View style={{ width: chartWidth }}>
               <Svg width={chartWidth} height={HEIGHT} style={styles.chart}>

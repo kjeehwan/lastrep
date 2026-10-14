@@ -1,3 +1,4 @@
+import { KeyboardAwareModalFrame } from "../../../src/ui/KeyboardAwareModalFrame";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createAudioPlayer } from "expo-audio";
@@ -93,6 +94,7 @@ import { ExerciseProgressSummary } from "../../../src/workouts/workoutLog/Exerci
 import { effortInputValue, effortLabel, effortToRpe, formatEffort, isValidWorkoutEffort, resolveEffortScale, type EffortInput, type EffortScale } from "../../../src/workouts/effortScale";
 import { advanceRest, pauseRest, startRest, type RestClock } from "../../../src/workouts/workoutLog/timerClock";
 import { freshSetEffort } from "../../../src/workouts/workoutLog/freshSetEffort";
+import { applyCardioZone, resolveCardioZone, toggleCardioChoice } from "../../../src/workouts/workoutLog/cardioZone";
 
 type Unit = "kg" | "lbs" | "km" | "mi";
 type SetType = "warmup" | "normal" | "failure" | "drop";
@@ -772,7 +774,7 @@ export default function WorkoutLog() {
         id,
         name: trimmed,
         notes: "",
-        tempo: mode === "cardio" ? "" : undefined,
+        tempo: mode === "cardio" ? String(previousSets.find((set) => set.zone)?.zone || "") : undefined,
         cardioSessionType: undefined,
         cardioEffortLevel: undefined,
         sets,
@@ -877,10 +879,7 @@ export default function WorkoutLog() {
     [findCatalogExercise]
   );
   const getExerciseZone = useCallback((exercise: Exercise) => {
-    const explicit = String(exercise.tempo || "").trim();
-    if (explicit) return explicit;
-    const firstSetZone = exercise.sets.find((set) => String(set.zone || "").trim())?.zone;
-    return String(firstSetZone || "").trim();
+    return resolveCardioZone(exercise);
   }, []);
   const formatLastSetSummary = useCallback(
     (set: {
@@ -1647,7 +1646,7 @@ export default function WorkoutLog() {
                   rpe: "",
                   distanceKm: null,
                   durationSec: null,
-                  zone: "",
+                  zone: getExerciseMode(ex.name) === "cardio" ? getExerciseZone(ex) : "",
                   setType: "normal",
                   done: false,
                 },
@@ -1837,13 +1836,13 @@ export default function WorkoutLog() {
     exerciseId: string,
     value: "steady" | "intervals" | "sprint" | "recovery"
   ) => {
-    setExercises((prev) => prev.map((ex) => (ex.id === exerciseId ? { ...ex, cardioSessionType: value } : ex)));
+    setExercises((prev) => prev.map((ex) => (ex.id === exerciseId ? { ...ex, cardioSessionType: toggleCardioChoice(ex.cardioSessionType, value) } : ex)));
   };
   const updateCardioEffortLevel = (
     exerciseId: string,
     value: "easy" | "moderate" | "hard" | "max"
   ) => {
-    setExercises((prev) => prev.map((ex) => (ex.id === exerciseId ? { ...ex, cardioEffortLevel: value } : ex)));
+    setExercises((prev) => prev.map((ex) => (ex.id === exerciseId ? { ...ex, cardioEffortLevel: toggleCardioChoice(ex.cardioEffortLevel, value) } : ex)));
   };
   const openCardioTimeModal = (exerciseId: string, setIndex: number, currentSec: number | null | undefined) => {
     const sec = Math.max(0, currentSec ?? 0);
@@ -3647,6 +3646,16 @@ export default function WorkoutLog() {
               {isCardio ? (
                 <>
                   <View style={styles.cardioMetaRow}>
+                    <Text style={styles.cardioMetaLabel}>Heart-rate zone</Text>
+                    <View style={styles.answerRow}>
+                      {["1", "2", "3", "4", "5"].map((zone) => (
+                        <TouchableOpacity key={`cardio-zone-${ex.id}-${zone}`} accessibilityRole="button" accessibilityLabel={`Zone ${zone}`} accessibilityState={{ selected: getExerciseZone(ex) === zone }} style={[styles.answerChip, getExerciseZone(ex) === zone && styles.answerChipActive]} onPress={() => setExercises((previous) => previous.map((exercise) => exercise.id === ex.id ? applyCardioZone(exercise, getExerciseZone(exercise) === zone ? "" : zone) : exercise))}>
+                          <Text style={[styles.answerText, getExerciseZone(ex) === zone && styles.answerTextActive]}>{`Zone ${zone}`}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                  <View style={styles.cardioMetaRow}>
                     <Text style={styles.cardioMetaLabel}>Session Type</Text>
                     <View style={styles.answerRow}>
                       {CARDIO_SESSION_TYPES.map((option) => (
@@ -3998,7 +4007,7 @@ export default function WorkoutLog() {
       </Modal>
 
       <Modal visible={showRestTimerModal} transparent animationType="fade">
-        <View style={styles.modalBackdrop}>
+        <KeyboardAwareModalFrame style={styles.modalBackdrop}>
           <AdaptiveModalCard style={styles.modalCard}>
             <Text style={styles.modalTitle}>
               {activeRestExercise ? `${activeRestExercise.name} Rest Timer` : "Rest Timer"}
@@ -4095,7 +4104,7 @@ export default function WorkoutLog() {
               </TouchableOpacity>
             </View>
           </AdaptiveModalCard>
-        </View>
+        </KeyboardAwareModalFrame>
       </Modal>
 
       <Modal visible={showRoutineStartModal} transparent animationType="fade">
@@ -4364,7 +4373,7 @@ export default function WorkoutLog() {
       </Modal>
 
       <Modal visible={showRoutineNameModal} transparent animationType="fade">
-        <View style={styles.modalBackdrop}>
+        <KeyboardAwareModalFrame style={styles.modalBackdrop}>
           <AdaptiveModalCard style={styles.modalCard}>
             <Text style={styles.modalTitle}>{editingRoutineId ? "Update routine" : "Save routine"}</Text>
             <TextInput disableFullscreenUI
@@ -4395,7 +4404,7 @@ export default function WorkoutLog() {
               </TouchableOpacity>
             </View>
           </AdaptiveModalCard>
-        </View>
+        </KeyboardAwareModalFrame>
       </Modal>
 
       <Modal visible={showDatePickerModal} transparent animationType="fade">
@@ -4477,7 +4486,7 @@ export default function WorkoutLog() {
       </Modal>
 
       <Modal visible={showDurationModal} transparent animationType="fade">
-        <View style={styles.modalBackdrop}>
+        <KeyboardAwareModalFrame style={styles.modalBackdrop}>
           <AdaptiveModalCard style={styles.modalCard}>
             <Text style={styles.modalTitle}>Adjust duration</Text>
             <Text style={styles.modalText}>Set workout duration (hours and minutes).</Text>
@@ -4527,11 +4536,11 @@ export default function WorkoutLog() {
               </TouchableOpacity>
             </View>
           </AdaptiveModalCard>
-        </View>
+        </KeyboardAwareModalFrame>
       </Modal>
 
       <Modal visible={showCardioTimeModal} transparent animationType="fade">
-        <View style={styles.modalBackdrop}>
+        <KeyboardAwareModalFrame style={styles.modalBackdrop}>
           <AdaptiveModalCard style={styles.modalCard}>
             <Text style={styles.modalTitle}>Set Cardio Time</Text>
             <View style={styles.durationFieldRow}>
@@ -4583,11 +4592,11 @@ export default function WorkoutLog() {
               </TouchableOpacity>
             </View>
           </AdaptiveModalCard>
-        </View>
+        </KeyboardAwareModalFrame>
       </Modal>
 
       <Modal visible={showCardioDistanceModal} transparent animationType="fade">
-        <View style={styles.modalBackdrop}>
+        <KeyboardAwareModalFrame style={styles.modalBackdrop}>
           <AdaptiveModalCard style={styles.modalCard}>
             <Text style={styles.modalTitle}>Set Distance</Text>
             <Text style={styles.modalText}>Whole and decimal values.</Text>
@@ -4647,11 +4656,11 @@ export default function WorkoutLog() {
               </TouchableOpacity>
             </View>
           </AdaptiveModalCard>
-        </View>
+        </KeyboardAwareModalFrame>
       </Modal>
 
       <Modal visible={showFinishModal} transparent animationType="fade">
-        <View style={styles.modalBackdrop}>
+        <KeyboardAwareModalFrame style={styles.modalBackdrop}>
           <AdaptiveModalCard style={styles.modalCard}>
             <Text style={styles.modalTitle}>Quick questions</Text>
             <Text style={styles.modalText}>Followed recommendation?</Text>
@@ -4723,7 +4732,7 @@ export default function WorkoutLog() {
               </TouchableOpacity>
             </View>
           </AdaptiveModalCard>
-        </View>
+        </KeyboardAwareModalFrame>
       </Modal>
 
       <Modal visible={showTempoEditorModal} transparent animationType="fade">
