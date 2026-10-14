@@ -3,13 +3,16 @@ import { ScrollView, StyleSheet, View, useWindowDimensions, type ScrollViewProps
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 /** Keeps dialog content reachable in short landscape and resized windows. */
-export function AdaptiveModalCard({ children, style }: {
+export function AdaptiveModalCard({ children, style, contentSized = false }: {
   children: ReactNode;
   style?: StyleProp<ViewStyle>;
+  contentSized?: boolean;
 }) {
   const { height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const availableHeight = Math.max(120, height - insets.top - insets.bottom - 32);
+  const windowHeight = Math.max(120, height - insets.top - insets.bottom - 32);
+  const requestedHeight = StyleSheet.flatten(style)?.maxHeight;
+  const availableHeight = Math.min(windowHeight, contentSized && typeof requestedHeight === "number" ? requestedHeight : Infinity);
   const existingWidth = StyleSheet.flatten(style)?.maxWidth;
   const maxWidth = Math.min(typeof existingWidth === "number" ? existingWidth : Infinity, 560);
   const content = React.Children.map(children, (child) => {
@@ -29,7 +32,7 @@ export function AdaptiveModalCard({ children, style }: {
   });
   return (
     <View style={[style, { maxHeight: availableHeight, maxWidth, alignSelf: "center" }]}>
-      <ScrollView keyboardShouldPersistTaps="handled" nestedScrollEnabled style={{ flexShrink: 1 }}>
+      <ScrollView keyboardShouldPersistTaps="handled" nestedScrollEnabled style={{ flexShrink: 1, ...(contentSized ? { flexGrow: 0 } : {}) }}>
         {content}
       </ScrollView>
     </View>
