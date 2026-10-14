@@ -14,7 +14,6 @@ import {
   DEFAULT_CALORIE_TARGETS_BY_DIET_PHASE,
   formatDateKey,
   getCalorieTargetForDietPhase,
-  getNutritionProfile,
   getNutritionTrendReport,
   getRecentMeals,
   groupMealsByLocalDay,
@@ -29,10 +28,9 @@ import {
 } from "@/src/components/charts/TrendCharts";
 import type { DietPhase } from "@/src/types/decision";
 import { isExpectedOfflineError } from "@/src/utils/networkErrors";
-import { getUserData } from "@/src/userData";
+import { nutritionProfileContext } from "@/src/nutrition/profileContext";
 import { scheduleAfterInteractions } from "@/src/utils/scheduleAfterInteractions";
 
-const DIET_PHASES: DietPhase[] = ["Cut", "Maintain", "Bulk"];
 const DEFAULT_SECTIONS = ["Breakfast", "Snack 1", "Lunch", "Snack 2", "Dinner", "Snack 3"];
 const RECOMMENDED_MACRO_RATIO = { protein: 0.3, carbs: 0.45, fats: 0.25 };
 const MUTED = "#a5acc1";
@@ -41,13 +39,8 @@ const WARNING = "#fbbf24";
 const DANGER = "#f87171";
 type EnergyUnit = "kcal" | "kJ";
 const KCAL_TO_KJ = 4.184;
-const isEnergyUnit = (value: unknown): value is EnergyUnit => value === "kcal" || value === "kJ";
 const toEnergyUnit = (valueKcal: number, unit: EnergyUnit): number =>
   unit === "kJ" ? valueKcal * KCAL_TO_KJ : valueKcal;
-
-function isDietPhase(value: string): value is DietPhase {
-  return DIET_PHASES.includes(value as DietPhase);
-}
 
 type TimelineBarItemProps = {
   point: ChartPoint;
@@ -98,6 +91,7 @@ export default function NutritionIndex() {
   const [redirectTo, setRedirectTo] = useState<Href | null>(null);
   const [meals, setMeals] = useState<NutritionMeal[]>([]);
   const [loadingMeals, setLoadingMeals] = useState(true);
+
   const [currentDietPhase, setCurrentDietPhase] = useState<DietPhase>("Maintain");
   const [calorieTargets, setCalorieTargets] = useState(DEFAULT_CALORIE_TARGETS_BY_DIET_PHASE);
   const [proteinTargetGrams, setProteinTargetGrams] = useState<number | null>(null);
@@ -112,8 +106,6 @@ export default function NutritionIndex() {
   const pageScrollRef = React.useRef<ScrollView | null>(null);
   const logMealsYRef = React.useRef(0);
   const handledMealFocusRef = React.useRef<string | null>(null);
-  const refreshProfileTaskRef = React.useRef<{ cancel: () => void } | null>(null);
-  const lastProfileRefreshAtRef = React.useRef(0);
   const [timelineShouldSnapToLatest, setTimelineShouldSnapToLatest] = useState(true);
   const [timelineWindowStart, setTimelineWindowStart] = useState(0);
   const [timelineViewportWidthMeasured, setTimelineViewportWidthMeasured] = useState<number>(0);
@@ -152,24 +144,6 @@ export default function NutritionIndex() {
       setRedirectTo(null);
     });
     return unsubscribe;
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    const warm = async () => {
-      try {
-        const foodDb = await import("@/src/nutrition/foodDb");
-        await foodDb.prewarmFoodSearch();
-      } catch (error) {
-        if (!cancelled) {
-          console.log("Nutrition search prewarm failed", error);
-        }
-      }
-    };
-    void warm();
-    return () => {
-      cancelled = true;
-    };
   }, []);
 
   const calorieTarget = useMemo(
@@ -256,54 +230,32 @@ export default function NutritionIndex() {
     };
   }, [uid, energyUnit, meals]);
 
-  const refreshProfileContext = useCallback(async () => {
-    if (!uid) return;
-    try {
-      const [profile, userData] = await Promise.all([getNutritionProfile(uid), getUserData(uid)]);
-      setCalorieTargets(profile.calorieTargetsByDietPhase);
-      setProteinTargetGrams(profile.proteinTargetGrams ?? null);
-      if (profile.mealSections?.length) setMealSectionsOrder(profile.mealSections);
-      const nextDietPhase = userData?.dietPhase;
-      const nextEnergyUnit = userData?.energyUnit;
-      setEnergyUnit(isEnergyUnit(nextEnergyUnit) ? nextEnergyUnit : "kcal");
-      setCurrentDietPhase(
-        typeof nextDietPhase === "string" && isDietPhase(nextDietPhase) ? nextDietPhase : "Maintain"
-      );
-    } catch (error) {
-      if (!isExpectedOfflineError(error)) {
-        console.log("Failed to load profile context", error);
-      }
-    }
-  }, [uid]);
-
-  useFocusEffect(
-    useCallback(() => {
-      setTimelineShouldSnapToLatest(true);
-      if (uid && Date.now() - lastProfileRefreshAtRef.current >= 30_000) {
-        refreshProfileTaskRef.current?.cancel();
-        refreshProfileTaskRef.current = scheduleAfterInteractions(async () => {
-          lastProfileRefreshAtRef.current = Date.now();
-          await refreshProfileContext();
-        });
-      }
-      const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
-        router.replace("/home");
-        return true;
-      });
-      return () => {
-        refreshProfileTaskRef.current?.cancel();
-        subscription.remove();
-      };
-    }, [uid, refreshProfileContext, router])
-  );
+  useFocusEffect(useCallback(() => {
+    setTimelineShouldSnapToLatest(true);
+    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+      router.replace("/home");
+      return true;
+    });
+    return () => subscription.remove();
+  }, [router]));
 
   useEffect(() => {
-    if (!uid) return undefined;
-    const unsub = onSnapshot(doc(db, "users", uid), () => {
-      void refreshProfileContext();
+    if (!uid) return;
+    let previousSignature: string | null = null;
+    return onSnapshot(doc(db, "users", uid), (snapshot) => {
+      const context = nutritionProfileContext(snapshot.data());
+      const signature = JSON.stringify(context);
+      if (signature === previousSignature) return;
+      previousSignature = signature;
+      setCalorieTargets(context.calorieTargets);
+      setProteinTargetGrams(context.proteinTargetGrams);
+      setMealSectionsOrder(context.mealSections?.length ? context.mealSections : DEFAULT_SECTIONS);
+      setCurrentDietPhase(context.dietPhase);
+      setEnergyUnit(context.energyUnit);
+    }, (error) => {
+      if (!isExpectedOfflineError(error)) console.log("Failed to load nutrition profile context", error);
     });
-    return unsub;
-  }, [uid, refreshProfileContext]);
+  }, [uid]);
 
   const totals = useMemo(() => computeNutritionTotals(meals), [meals]);
   const sections = useMemo(() => {

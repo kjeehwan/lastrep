@@ -11,7 +11,6 @@ import AppDialogHost from '@/components/AppDialogHost';
 import { auth } from '@/src/config/firebaseConfig';
 import { initializeRevenueCat, isDevBillingBuild, syncRevenueCatIdentity } from '@/src/billing/revenuecat';
 import { logAnalyticsRuntimeDiagnostics } from '@/src/analytics/analytics';
-import { scheduleAfterInteractions } from '@/src/utils/scheduleAfterInteractions';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export const unstable_settings = {
@@ -55,26 +54,6 @@ export default function RootLayout() {
     ]);
   }, []);
 
-  useEffect(() => {
-    if (__DEV__) return;
-    let cancelled = false;
-    const task = scheduleAfterInteractions(() => {
-      const warmNutritionSearch = async () => {
-        try {
-          const foodDb = await import('@/src/nutrition/foodDb');
-          if (cancelled) return;
-          await foodDb.prewarmFoodSearch();
-        } catch {
-          // Best-effort warmup only.
-        }
-      };
-      void warmNutritionSearch();
-    });
-    return () => {
-      cancelled = true;
-      task.cancel();
-    };
-  }, []);
 
   const stackScreens = [
     <Stack.Screen key="tabs" name="(tabs)" options={{ headerShown: false }} />,
