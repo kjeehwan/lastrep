@@ -46,7 +46,7 @@ describe("body composition history", () => {
     expect(getBodyCompositionHistoryPoints(history, "skeletalMuscleMass").map((point) => point.value)).toEqual([38]);
   });
 
-  it("does not treat carried-forward legacy values as new measurements", () => {
+  it("keeps recorded days visible even when their values are unchanged", () => {
     const points = getBodyCompositionHistoryPoints(
       [
         entry("2026-01-01T00:00:00Z", { bodyFatPercent: 18, source: "manual" }),
@@ -56,7 +56,30 @@ describe("body composition history", () => {
       "bodyFat"
     );
 
-    expect(points.map((point) => point.value)).toEqual([18, 17]);
+    expect(points.map((point) => point.value)).toEqual([18, 18, 17]);
+  });
+
+  it("keeps only the latest local-day measurement for each metric without changing history", () => {
+    const history = [
+      entry("2026-10-14T08:00:00", { weightKg: 80.15, bodyFatPercent: 18, source: "manual" }),
+      entry("2026-10-14T18:00:00", { weightKg: 80.25 }),
+      entry("2026-10-15T08:00:00", { weightKg: 80.25 }),
+    ];
+    const points = getBodyCompositionHistoryPoints(history, "weight");
+    expect(points.map((point) => point.value)).toEqual([80.25, 80.25]);
+    expect(points[0].recordedAtMs).toBe(history[1].recordedAt!.toMillis());
+    expect(getBodyCompositionHistoryPoints(history, "bodyFat")[0].recordedAtMs).toBe(history[0].recordedAt!.toMillis());
+    expect(history).toHaveLength(3);
+  });
+  it("prefers corrections only at equal timestamps and separates local midnight", () => {
+    const history = [
+      entry("2026-10-14T23:59:00", { weightKg: 80.15 }),
+      entry("2026-10-14T23:59:00", { weightKg: 80.25, source: "manual" }),
+      entry("2026-10-15T00:01:00", { weightKg: 79.95 }),
+    ];
+    const points = getBodyCompositionHistoryPoints(history.reverse(), "weight");
+    expect(points.map((point) => point.value)).toEqual([80.25, 79.95]);
+    expect(points[0].source).toBe("manual");
   });
 
   it("detects unclassified legacy muscle values", () => {

@@ -16,6 +16,18 @@ const chestPlan: PlannedWorkoutSummary = {
 };
 
 describe("today plan context", () => {
+  it("produces the same prescriptions without timer and persistence-only fields", () => {
+    const now = new Date(2026, 9, 7, 12);
+    const prescriptions = {
+      sessionDateText: "2026-10-07", sessionTitle: "Chest", draftSavedAt: now.getTime(),
+      exercises: [{ name: "Bench Press", sets: [{ weightKg: 60, reps: "8", done: false, setType: "normal" }] }],
+    };
+    const fullDraft = { ...prescriptions, exerciseUnits: { bench: "lbs" }, elapsedSeconds: 90,
+      workoutTimerRunning: true, workoutTimerStartedAtMs: now.getTime() - 90000,
+      restTimerByExercise: { bench: { remainingSec: 30, running: true } } };
+    expect(parseWorkoutDraftPlan(JSON.stringify(prescriptions), now))
+      .toEqual(parseWorkoutDraftPlan(JSON.stringify(fullDraft), now));
+  });
   it("reads a current workout draft", () => {
     const now = new Date(2026, 9, 7, 12);
     const result = parseWorkoutDraftPlan(

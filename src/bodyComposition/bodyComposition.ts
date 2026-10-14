@@ -1,6 +1,7 @@
 import { BODY_COMPOSITION_HISTORY_LIMIT, compareHistoryEntries, normalizeBodyCompositionHistory } from "./normalizeBodyCompositionHistory";
 import { Platform } from "react-native";
-import { doc, getDoc, setDoc, Timestamp } from "firebase/firestore";
+import { doc, getDoc, runTransaction, setDoc, Timestamp } from "firebase/firestore";
+import { deleteMeasurementHistory, editMeasurementHistory, snapshotAfterMeasurementDeletion } from "./measurementEditing";
 import type { Permission } from "react-native-health-connect";
 import { db } from "../config/firebaseConfig";
 import { hasHealthSyncConsent } from "../health/healthSyncConsent";
@@ -41,6 +42,7 @@ export type AutoBodyCompositionSyncResult = "synced" | "skipped" | "failed";
 type BodyCompositionInput = {
   weightKg?: number | null;
   bodyFatPercent?: number | null;
+  leanBodyMassKg?: number | null;
   skeletalMuscleMassKg?: number | null;
 };
 
@@ -76,11 +78,11 @@ export const getSamsungHealthAccessIssueMessage = (error: unknown): string | nul
   return `Samsung Health error: ${message}`;
 };
 
-const normalizeNullableNumber = (value: unknown, max?: number): number | null => {
+const normalizeNullableNumber = (value: unknown, max?: number, preservePrecision = false): number | null => {
   if (typeof value !== "number" || !Number.isFinite(value)) return null;
   if (value < 0) return null;
   if (typeof max === "number" && value > max) return null;
-  return Math.round(value * 10) / 10;
+  return preservePrecision ? value : Math.round(value * 10) / 10;
 };
 
 const normalizeTimestamp = (value: unknown): Timestamp | null =>
@@ -102,7 +104,7 @@ const normalizeMetricSnapshot = (
   const row = (value ?? {}) as Record<string, unknown>;
   const legacyMuscleMassKg = normalizeNullableNumber(row.muscleMassKg, 500);
   return {
-    weightKg: normalizeNullableNumber(row.weightKg, 500),
+    weightKg: normalizeNullableNumber(row.weightKg, 500, true),
     bodyFatPercent: normalizeNullableNumber(row.bodyFatPercent, 100),
     leanBodyMassKg: normalizeNullableNumber(row.leanBodyMassKg, 500),
     skeletalMuscleMassKg:
@@ -271,13 +273,14 @@ export const saveManualBodyCompositionEntry = async (
   const recordedAt = Timestamp.fromDate(now);
   const hasWeight = Object.prototype.hasOwnProperty.call(input, "weightKg");
   const hasBodyFat = Object.prototype.hasOwnProperty.call(input, "bodyFatPercent");
+  const hasLeanBodyMass = Object.prototype.hasOwnProperty.call(input, "leanBodyMassKg");
   const hasSkeletalMuscle = Object.prototype.hasOwnProperty.call(input, "skeletalMuscleMassKg");
   const nextManual: BodyCompositionMetricSnapshot = {
-    weightKg: hasWeight ? normalizeNullableNumber(input.weightKg, 500) : profile.manual.weightKg,
+    weightKg: hasWeight ? normalizeNullableNumber(input.weightKg, 500, true) : profile.manual.weightKg,
     bodyFatPercent: hasBodyFat
       ? normalizeNullableNumber(input.bodyFatPercent, 100)
       : profile.manual.bodyFatPercent,
-    leanBodyMassKg: profile.manual.leanBodyMassKg,
+    leanBodyMassKg: hasLeanBodyMass ? normalizeNullableNumber(input.leanBodyMassKg, 500) : profile.manual.leanBodyMassKg,
     skeletalMuscleMassKg: hasSkeletalMuscle
       ? normalizeNullableNumber(input.skeletalMuscleMassKg, 500)
       : profile.manual.skeletalMuscleMassKg,
@@ -292,7 +295,7 @@ export const saveManualBodyCompositionEntry = async (
     originLabel: null,
     weightKg: hasWeight ? nextManual.weightKg : null,
     bodyFatPercent: hasBodyFat ? nextManual.bodyFatPercent : null,
-    leanBodyMassKg: null,
+    leanBodyMassKg: hasLeanBodyMass ? nextManual.leanBodyMassKg : null,
     skeletalMuscleMassKg: hasSkeletalMuscle ? nextManual.skeletalMuscleMassKg : null,
     legacyMuscleMassKg: null,
   };
@@ -308,6 +311,29 @@ export const saveManualBodyCompositionEntry = async (
     },
     { merge: true }
   );
+};
+
+export const editBodyCompositionEntry = async (uid: string, original: BodyCompositionHistoryEntry, changes: Record<string, number>) => {
+  await runTransaction(db, async (transaction) => {
+    const ref = doc(db, USERS_COLLECTION, uid);
+    const data = (await transaction.get(ref)).data()?.[USER_BODY_COMPOSITION_FIELD] || {};
+    const history = editMeasurementHistory(normalizeBodyCompositionHistory(data.history), original, changes);
+    const patch: Record<string, unknown> = { history: history.slice(0, HISTORY_LIMIT) };
+    if (original.source === "manual" && data.manual?.recordedAt?.toMillis() === original.recordedAt?.toMillis()) patch.manual = { ...data.manual, ...changes };
+    transaction.set(ref, { [USER_BODY_COMPOSITION_FIELD]: patch }, { merge: true });
+  });
+};
+
+export const deleteBodyCompositionEntry = async (uid: string, original: BodyCompositionHistoryEntry) => {
+  await runTransaction(db, async (transaction) => {
+    const ref = doc(db, USERS_COLLECTION, uid);
+    const data = (await transaction.get(ref)).data()?.[USER_BODY_COMPOSITION_FIELD] || {};
+    const history = deleteMeasurementHistory(normalizeBodyCompositionHistory(data.history), original);
+    const snapshotKey = original.source === "manual" ? "manual" : "synced";
+    // Prevent fallback snapshots from making a deleted metric reappear.
+    const snapshot = snapshotAfterMeasurementDeletion(data[snapshotKey] || {}, history, original);
+    transaction.set(ref, { [USER_BODY_COMPOSITION_FIELD]: { history, [snapshotKey]: snapshot } }, { merge: true });
+  });
 };
 
 export const hasHealthBodyCompositionPermission = async (): Promise<boolean> => {
@@ -408,7 +434,7 @@ export const syncBodyCompositionFromHealthConnect = async (
 
     const [weight, bodyFat, leanBodyMass] = await Promise.all([
       readLatestMetric(healthConnect, "Weight", (record) =>
-        normalizeNullableNumber((record.weight as { inKilograms?: number } | undefined)?.inKilograms, 500)
+        normalizeNullableNumber((record.weight as { inKilograms?: number } | undefined)?.inKilograms, 500, true)
       ),
       readLatestMetric(healthConnect, "BodyFat", (record) =>
         normalizeNullableNumber(record.percentage, 100)
@@ -489,7 +515,7 @@ export const syncBodyCompositionFromSamsungHealth = async (
     const latest = await readLatestSamsungHealthBodyComposition();
     if (!latest) return { status: "no_data" };
 
-    const weightKg = normalizeNullableNumber(latest.weightKg, 500);
+    const weightKg = normalizeNullableNumber(latest.weightKg, 500, true);
     const bodyFatPercent = normalizeNullableNumber(latest.bodyFatPercent, 100);
     const skeletalMuscleMassKg =
       normalizeNullableNumber(latest.skeletalMuscleMassKg, 500) ??

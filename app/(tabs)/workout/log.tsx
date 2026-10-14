@@ -1,7 +1,10 @@
+import { useEventCallbacks } from "../../../src/hooks/useEventCallbacks";
+import { KeyboardAwareModalFrame } from "../../../src/ui/KeyboardAwareModalFrame";
 import { Ionicons } from "@expo/vector-icons";
+import { useNow } from "../../../src/hooks/useNow";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createAudioPlayer } from "expo-audio";
-import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect, useIsFocused, useLocalSearchParams, useRouter } from "expo-router";
 import { getAuth, onAuthStateChanged } from "firebase/auth";
 import {
   addDoc,
@@ -56,6 +59,7 @@ import { WorkoutTodayPlan } from "../../../src/workouts/workoutLog/WorkoutTodayP
 import { showAppAlert, showAppDialog } from "../../../src/ui/appDialog";
 import { isExpectedOfflineError } from "../../../src/utils/networkErrors";
 import { scheduleAfterInteractions } from "../../../src/utils/scheduleAfterInteractions";
+import { scheduleAfterPaint } from "../../../src/utils/scheduleAfterPaint";
 import { popPendingExerciseSelection } from "../../../src/workouts/addExerciseBridge";
 import { loadFreeExerciseDbCatalog } from "../../../src/workouts/freeExerciseDbCatalog";
 import { resolveFreeExerciseDbImagesForNames } from "../../../src/workouts/freeExerciseDbImages";
@@ -91,8 +95,10 @@ import { WorkoutSessionCard } from "../../../src/workouts/workoutLog/WorkoutSess
 import { WorkoutNativeSetRows } from "../../../src/workouts/workoutLog/WorkoutNativeSetRows";
 import { ExerciseProgressSummary } from "../../../src/workouts/workoutLog/ExerciseProgressSummary";
 import { effortInputValue, effortLabel, effortToRpe, formatEffort, isValidWorkoutEffort, resolveEffortScale, type EffortInput, type EffortScale } from "../../../src/workouts/effortScale";
-import { advanceRest, pauseRest, startRest, type RestClock } from "../../../src/workouts/workoutLog/timerClock";
+import { advanceRest, nextRestDeadlineDelay, pauseRest, startRest, type RestClock } from "../../../src/workouts/workoutLog/timerClock";
+import { RestTimerText } from "../../../src/workouts/workoutLog/TimerText";
 import { freshSetEffort } from "../../../src/workouts/workoutLog/freshSetEffort";
+import { applyCardioZone, resolveCardioZone, toggleCardioChoice } from "../../../src/workouts/workoutLog/cardioZone";
 
 type Unit = "kg" | "lbs" | "km" | "mi";
 type SetType = "warmup" | "normal" | "failure" | "drop";
@@ -348,8 +354,62 @@ const formatTempoFromIndices = (indices: number[]) =>
     .map((index) => TEMPO_TOKENS[Math.max(0, Math.min(TEMPO_TOKENS.length - 1, index))])
     .join("-");
 
+const formatWeightInput = (weightKg: number | null, targetUnit: Unit) => {
+  if (weightKg === null || Number.isNaN(weightKg)) return "";
+  const val = targetUnit === "kg" ? weightKg : weightKg * 2.20462;
+  return `${Math.round(val * 10) / 10}`;
+};
+
+const normalizeExerciseName = (value: string) => value.trim().toLowerCase();
+const exerciseNameCollator = new Intl.Collator();
+function indexPreviousExerciseSets(pastWorkouts: PastWorkout[]) {
+  const map = new Map<string, PastWorkout["exercises"][number]["sets"]>();
+  for (const workout of pastWorkouts) {
+    for (const exercise of workout.exercises) {
+      const key = normalizeExerciseName(exercise.name);
+      if (!key || map.has(key)) continue;
+      map.set(key, exercise.sets ?? []);
+    }
+  }
+  return map;
+}
+
+const getSetTypeMarker = (set: SetEntry, index: number) => {
+  const type = toSetType(set.setType);
+  if (type === "warmup") return "W";
+  if (type === "failure") return "F";
+  if (type === "drop") return "D";
+  return `${index + 1}`;
+};
+
+const formatDistanceInput = (distanceKm: number | null, unit: Unit) => {
+  if (distanceKm == null || Number.isNaN(distanceKm)) return "";
+  const value = unit === "mi" ? distanceKm / 1.60934 : distanceKm;
+  return `${Math.round(value * 100) / 100}`;
+};
+
+const formatDurationHoursMinutes = (durationSec: number | null) => {
+  if (durationSec == null || Number.isNaN(durationSec)) return "";
+  const totalMinutes = Math.floor(durationSec / 60);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+};
+
+const formatDurationInput = (durationSec: number | null) => {
+  if (durationSec == null || Number.isNaN(durationSec)) return "";
+  const minutes = Math.floor(durationSec / 60);
+  const seconds = durationSec % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+};
+
+const imageLookupKey = (exerciseName: string) => exerciseName.trim().toLowerCase();
+
 export default function WorkoutLog() {
   const router = useRouter();
+
+  const isFocused = useIsFocused();
+  const guidanceNowMs = useNow(60_000, isFocused);
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const isTabletLayout = Math.min(width, height) >= 600;
@@ -388,6 +448,7 @@ export default function WorkoutLog() {
   const [sessionTitle, setSessionTitle] = useState("");
   const {
     elapsedSeconds,
+    getElapsedSeconds,
     running: workoutTimerRunning,
     startedAtMs: workoutTimerStartedAtMs,
     restore: restoreElapsedTimer,
@@ -395,7 +456,7 @@ export default function WorkoutLog() {
     pause: pauseElapsedTimer,
     setDuration: setElapsedDuration,
     reset: resetElapsedTimer,
-  } = useWorkoutElapsedTimer();
+  } = useWorkoutElapsedTimer(0, false, isFocused, null);
   const [sessionDateText, setSessionDateText] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(
@@ -423,6 +484,7 @@ export default function WorkoutLog() {
   const [sessionPhase, setSessionPhase] = useState("Hypertrophy");
   const [recentExercises, setRecentExercises] = useState<string[]>([]);
   const [pastWorkouts, setPastWorkouts] = useState<PastWorkout[]>([]);
+  const previousExerciseSetsByName = useMemo(() => indexPreviousExerciseSets(pastWorkouts), [pastWorkouts]);
   const [routines, setRoutines] = useState<Routine[]>([]);
   const [showRepeatPicker, setShowRepeatPicker] = useState(false);
   const [showMyRoutinesModal, setShowMyRoutinesModal] = useState(false);
@@ -511,9 +573,12 @@ export default function WorkoutLog() {
     [exercises, exerciseUnits, sessionTitle, sessionDateText, elapsedSeconds, workoutTimerRunning, workoutTimerStartedAtMs, restTimerByExercise]
   );
   const availableWeightsPreferences = useAvailableWeights(activeUid);
-  const guidanceWorkout = useMemo(() => withAvailableWeights(parseWorkoutDraftPlan(serializeWorkoutDraft(workoutDraftPayload)), availableWeightsPreferences.values) ?? {
+  // Guidance depends on prescriptions, not per-second timer display updates.
+  const guidanceWorkout = useMemo(() => withAvailableWeights(parseWorkoutDraftPlan(JSON.stringify({
+    exercises, sessionTitle, sessionDateText, draftSavedAt: guidanceNowMs,
+  }), new Date(guidanceNowMs)), availableWeightsPreferences.values) ?? {
     source: "none" as const, title: null, exerciseNames: [],
-  }, [workoutDraftPayload, availableWeightsPreferences.values]);
+  }, [exercises, sessionTitle, sessionDateText, guidanceNowMs, availableWeightsPreferences.values]);
   const todayPlan = useWorkoutTodayPlan(activeUid, guidanceWorkout);
   const todayGuidance = todayPlan.plan;
   const showTodayGuidance = todayPlan.visible;
@@ -614,11 +679,6 @@ export default function WorkoutLog() {
     return from === "kg" ? value * 2.20462 : value * 0.453592;
   };
 
-  const formatWeightInput = (weightKg: number | null, targetUnit: Unit) => {
-    if (weightKg === null || Number.isNaN(weightKg)) return "";
-    const val = targetUnit === "kg" ? weightKg : weightKg * 2.20462;
-    return `${Math.round(val * 10) / 10}`;
-  };
 
   const formatDecisionLabel = (decision?: Decision) =>
     decision ? decision.replace("_", " ") : "";
@@ -642,14 +702,7 @@ export default function WorkoutLog() {
   };
 
   const getAdjustmentOptions = () => [-20, -10, 0, 10, 20];
-  const normalizeExerciseName = (value: string) => value.trim().toLowerCase();
-  const getSetTypeMarker = (set: SetEntry, index: number) => {
-    const type = toSetType(set.setType);
-    if (type === "warmup") return "W";
-    if (type === "failure") return "F";
-    if (type === "drop") return "D";
-    return `${index + 1}`;
-  };
+
   const parseSessionDate = (raw: string): Date | null => {
     const trimmed = raw.trim();
     const match = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
@@ -667,11 +720,6 @@ export default function WorkoutLog() {
     }
     return date;
   };
-  const formatElapsedTimer = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${String(secs).padStart(2, "0")}`;
-  };
   const parseDistanceKm = (raw: string, unit: Unit): number | null => {
     const trimmed = raw.trim();
     if (!trimmed) return null;
@@ -681,11 +729,7 @@ export default function WorkoutLog() {
     if (unit === "mi") return parsed * 1.60934;
     return parsed;
   };
-  const formatDistanceInput = (distanceKm: number | null, unit: Unit) => {
-    if (distanceKm == null || Number.isNaN(distanceKm)) return "";
-    const value = unit === "mi" ? distanceKm / 1.60934 : distanceKm;
-    return `${Math.round(value * 100) / 100}`;
-  };
+
   const parseDurationSecFromInput = (raw: string): number | null => {
     const trimmed = raw.trim();
     if (!trimmed) return null;
@@ -700,19 +744,7 @@ export default function WorkoutLog() {
     if (!Number.isFinite(parsed) || parsed < 0) return null;
     return Math.round(parsed);
   };
-  const formatDurationHoursMinutes = (durationSec: number | null) => {
-    if (durationSec == null || Number.isNaN(durationSec)) return "";
-    const totalMinutes = Math.floor(durationSec / 60);
-    const hours = Math.floor(totalMinutes / 60);
-    const minutes = totalMinutes % 60;
-    return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
-  };
-  const formatDurationInput = (durationSec: number | null) => {
-    if (durationSec == null || Number.isNaN(durationSec)) return "";
-    const minutes = Math.floor(durationSec / 60);
-    const seconds = durationSec % 60;
-    return `${minutes}:${String(seconds).padStart(2, "0")}`;
-  };
+
 
   const getSavedRestPreference = useCallback(
     (exerciseName: string) => {
@@ -722,7 +754,6 @@ export default function WorkoutLog() {
     [restPreferenceByName]
   );
 
-  const imageLookupKey = (exerciseName: string) => exerciseName.trim().toLowerCase();
   const getExerciseModeByName = useCallback(
     (exerciseName: string): ExerciseMode => {
       const key = exerciseName.trim().toLowerCase();
@@ -733,7 +764,6 @@ export default function WorkoutLog() {
     },
     [freeDbCatalog]
   );
-
 
   const buildExerciseDraft = useCallback(
     (name: string, id: string): Exercise => {
@@ -772,7 +802,7 @@ export default function WorkoutLog() {
         id,
         name: trimmed,
         notes: "",
-        tempo: mode === "cardio" ? "" : undefined,
+        tempo: mode === "cardio" ? String(previousSets.find((set) => set.zone)?.zone || "") : undefined,
         cardioSessionType: undefined,
         cardioEffortLevel: undefined,
         sets,
@@ -861,7 +891,7 @@ export default function WorkoutLog() {
     });
 
     (Object.keys(groups) as (keyof typeof groups)[]).forEach((key) => {
-      groups[key].sort((a, b) => a.item.name.localeCompare(b.item.name));
+      groups[key].sort((a, b) => exerciseNameCollator.compare(a.item.name, b.item.name));
     });
 
     return { byName, groups };
@@ -877,10 +907,7 @@ export default function WorkoutLog() {
     [findCatalogExercise]
   );
   const getExerciseZone = useCallback((exercise: Exercise) => {
-    const explicit = String(exercise.tempo || "").trim();
-    if (explicit) return explicit;
-    const firstSetZone = exercise.sets.find((set) => String(set.zone || "").trim())?.zone;
-    return String(firstSetZone || "").trim();
+    return resolveCardioZone(exercise);
   }, []);
   const formatLastSetSummary = useCallback(
     (set: {
@@ -991,6 +1018,7 @@ export default function WorkoutLog() {
   );
 
   const replacementOptions = useMemo(() => {
+    if (!replaceTarget) return [];
     const targetExercise = exercises.find((exercise) => exercise.id === replaceTarget);
     if (targetExercise) {
       const targetCatalog = findCatalogExercise(targetExercise.name);
@@ -1289,12 +1317,17 @@ export default function WorkoutLog() {
         draftHydratedRef.current = true;
       }
     };
+    let active = true;
     startupLoadTaskRef.current?.cancel();
     startupLoadTaskRef.current = scheduleAfterInteractions(async () => {
       await loadDraft();
-      await Promise.allSettled([loadPastWorkouts(), loadRoutines()]);
+      if (!active) return;
+      startupLoadTaskRef.current = scheduleAfterPaint(async () => {
+        await Promise.allSettled([loadPastWorkouts(), loadRoutines()]);
+      });
     });
     return () => {
+      active = false;
       startupLoadTaskRef.current?.cancel();
     };
   }, [
@@ -1362,6 +1395,8 @@ export default function WorkoutLog() {
     }
   }, [activeUid]);
 
+  const pendingSelectionActions = useEventCallbacks({ addExercise });
+
   useFocusEffect(
     useCallback(() => {
       let active = true;
@@ -1373,7 +1408,7 @@ export default function WorkoutLog() {
       focusHydrationTaskRef.current = scheduleAfterInteractions(async () => {
         const pendingExerciseNames = await popPendingExerciseSelection(activeUid);
         if (!active || pendingExerciseNames.length === 0) return;
-        pendingExerciseNames.forEach(addExercise);
+        pendingExerciseNames.forEach(pendingSelectionActions.addExercise);
         setUiFeedback(
           pendingExerciseNames.length === 1
             ? `Added ${pendingExerciseNames[0]}.`
@@ -1389,7 +1424,7 @@ export default function WorkoutLog() {
       ) {
         setSessionDateText(todayKey);
       }
-      void loadLatestDecision();
+      const decisionReadTask = scheduleAfterPaint(loadLatestDecision);
       const shouldHydrateFocus = Date.now() - lastFocusHydrationAtRef.current >= 30_000;
       if (shouldHydrateFocus) {
         focusRefreshTaskRef.current?.cancel();
@@ -1400,11 +1435,12 @@ export default function WorkoutLog() {
       }
       return () => {
         active = false;
+        decisionReadTask.cancel();
         focusHydrationTaskRef.current?.cancel();
         focusRefreshTaskRef.current?.cancel();
         subscription.remove();
       };
-    }, [loadLatestDecision, loadFavoriteExercises, addExercise, activeUid, handleGoBack, sessionDateText])
+    }, [loadLatestDecision, loadFavoriteExercises, pendingSelectionActions, activeUid, handleGoBack, sessionDateText])
   );
 
   useEffect(() => {
@@ -1530,9 +1566,9 @@ export default function WorkoutLog() {
     return () => task.cancel();
   }, [exercises, restPreferenceByName]);
 
-  const hasRunningRestTimer = Object.values(restTimerByExercise).some((entry) => entry.running);
   useEffect(() => {
-    if (!hasRunningRestTimer) return;
+    const delay = nextRestDeadlineDelay(restTimerByExercise, Date.now());
+    if (delay === null) return;
     const refresh = () => {
       setRestTimerByExercise((prev) => {
         let mutated = false;
@@ -1549,12 +1585,12 @@ export default function WorkoutLog() {
         return mutated ? next : prev;
       });
     };
-    const interval = setInterval(refresh, 1000);
+    const deadline = setTimeout(refresh, delay);
     const subscription = AppState.addEventListener("change", (state) => {
       if (state === "active") refresh();
     });
-    return () => { clearInterval(interval); subscription.remove(); };
-  }, [hasRunningRestTimer]);
+    return () => { clearTimeout(deadline); subscription.remove(); };
+  }, [restTimerByExercise]);
 
   useEffect(() => {
     const previous = restTimerSnapshotRef.current;
@@ -1647,7 +1683,7 @@ export default function WorkoutLog() {
                   rpe: "",
                   distanceKm: null,
                   durationSec: null,
-                  zone: "",
+                  zone: getExerciseMode(ex.name) === "cardio" ? getExerciseZone(ex) : "",
                   setType: "normal",
                   done: false,
                 },
@@ -1692,7 +1728,6 @@ export default function WorkoutLog() {
     resetRestTimer(exerciseId);
     delete lastCompletedSetByExerciseRef.current[exerciseId];
   };
-
 
   const updateSetWeight = (exerciseId: string, setIndex: number, unit: Unit, value: string) => {
     setExercises((prev) =>
@@ -1837,13 +1872,13 @@ export default function WorkoutLog() {
     exerciseId: string,
     value: "steady" | "intervals" | "sprint" | "recovery"
   ) => {
-    setExercises((prev) => prev.map((ex) => (ex.id === exerciseId ? { ...ex, cardioSessionType: value } : ex)));
+    setExercises((prev) => prev.map((ex) => (ex.id === exerciseId ? { ...ex, cardioSessionType: toggleCardioChoice(ex.cardioSessionType, value) } : ex)));
   };
   const updateCardioEffortLevel = (
     exerciseId: string,
     value: "easy" | "moderate" | "hard" | "max"
   ) => {
-    setExercises((prev) => prev.map((ex) => (ex.id === exerciseId ? { ...ex, cardioEffortLevel: value } : ex)));
+    setExercises((prev) => prev.map((ex) => (ex.id === exerciseId ? { ...ex, cardioEffortLevel: toggleCardioChoice(ex.cardioEffortLevel, value) } : ex)));
   };
   const openCardioTimeModal = (exerciseId: string, setIndex: number, currentSec: number | null | undefined) => {
     const sec = Math.max(0, currentSec ?? 0);
@@ -2089,18 +2124,18 @@ export default function WorkoutLog() {
     updateExerciseTempo(activeTempoExerciseId, formatTempoFromIndices(tempoDraftIndices));
     closeTempoEditor();
   };
-  const elapsedMinutes = Math.floor(elapsedSeconds / 60);
   const openDatePicker = () => {
     const parsed = parseSessionDate(sessionDateText) ?? new Date();
     setDatePickerMonth(new Date(parsed.getFullYear(), parsed.getMonth(), 1));
     setShowDatePickerModal(true);
   };
   const openDurationAdjustModal = () => {
+    const currentSeconds = getElapsedSeconds();
     if (workoutTimerRunning) {
       pauseElapsedTimer();
     }
-    const hours = Math.floor(elapsedSeconds / 3600);
-    const minutes = Math.floor((elapsedSeconds % 3600) / 60);
+    const hours = Math.floor(currentSeconds / 3600);
+    const minutes = Math.floor((currentSeconds % 3600) / 60);
     setDurationAdjustHoursText(String(hours).padStart(2, "0"));
     setDurationAdjustMinutesText(String(minutes).padStart(2, "0"));
     setShowDurationModal(true);
@@ -2166,7 +2201,6 @@ export default function WorkoutLog() {
     );
     closeSetMenu();
   };
-
 
   const replaceExercise = (exerciseId: string, newName: string) => {
     const trimmed = newName.trim();
@@ -2418,7 +2452,7 @@ export default function WorkoutLog() {
       const payload = {
         title: sessionTitle || "Workout",
         date: Timestamp.fromDate(parsedSessionDate),
-        durationMin: elapsedMinutes,
+        durationMin: Math.floor(getElapsedSeconds() / 60),
         trainingPhase: sessionPhase,
         exercises: sanitizedExercises.map((ex) => ({
           name: ex.name,
@@ -3053,8 +3087,6 @@ export default function WorkoutLog() {
   const activeRestTimerState = activeRestTimerExerciseId
     ? restTimerByExercise[activeRestTimerExerciseId] ?? { remainingSec: activeRestPreference, running: false }
     : { remainingSec: activeRestPreference, running: false };
-  const activeRestDisplayMin = Math.floor(activeRestTimerState.remainingSec / 60);
-  const activeRestDisplaySec = `${activeRestTimerState.remainingSec % 60}`.padStart(2, "0");
   const activeActionExercise = useMemo(
     () =>
       activeExerciseActionId
@@ -3075,17 +3107,6 @@ export default function WorkoutLog() {
   const activeActionIndex = activeExerciseActionId
     ? exercises.findIndex((exercise) => exercise.id === activeExerciseActionId)
     : -1;
-  const previousExerciseSetsByName = useMemo(() => {
-    const map = new Map<string, PastWorkout["exercises"][number]["sets"]>();
-    for (const workout of pastWorkouts) {
-      for (const exercise of workout.exercises) {
-        const key = normalizeExerciseName(exercise.name);
-        if (!key || map.has(key)) continue;
-        map.set(key, exercise.sets ?? []);
-      }
-    }
-    return map;
-  }, [pastWorkouts]);
   const activeSetExercise = useMemo(() => {
     if (!activeSetMenu) return null;
     return exercises.find((exercise) => exercise.id === activeSetMenu.exerciseId) ?? null;
@@ -3095,7 +3116,7 @@ export default function WorkoutLog() {
     return activeSetExercise.sets[activeSetMenu.setIndex] ?? null;
   }, [activeSetExercise, activeSetMenu]);
 
-  const currentGuidanceSignature = workoutGuidanceSignature(guidanceWorkout);
+  const currentGuidanceSignature = useMemo(() => workoutGuidanceSignature(guidanceWorkout), [guidanceWorkout]);
   const guidanceApplied = Boolean(appliedGuidance && todayGuidance &&
     appliedGuidance.plan.createdAt.isEqual(todayGuidance.createdAt) &&
     appliedGuidance.signature === currentGuidanceSignature);
@@ -3128,6 +3149,470 @@ export default function WorkoutLog() {
       showAppAlert("Plan not applied", "Please try again.");
     }
   };
+
+  const cardActions = useEventCallbacks({ openExerciseDemo, openExerciseHistory, openExerciseActions, setReplaceSearch, setReplaceGroup, replaceExercise, updateExerciseNotes, openTempoEditor, openRestTimerModal, updateSetWeight, updateSetReps, updateSetRpe, toggleSetDone, removeSetWithUndo, openSetMenu, copyLastSetToCurrent, openCardioTimeModal, openCardioDistanceModal, setExercises, updateCardioSessionType, updateCardioEffortLevel, addEmptySet, duplicateLastSet, undoRemoveSet });
+  // Cache unchanged card JSX so navigation and background context updates don't rebuild every row.
+  const exerciseCards = useMemo(() => exercises.map((ex) => {
+          const unit = exerciseUnits[ex.id] || "kg";
+          const mode = getExerciseMode(ex.name);
+          const isCardio = mode === "cardio";
+          const usesNativeSetRows = Platform.OS === "android" && !isCardio;
+          const weightLabel = isCardio
+            ? "Distance"
+            : unit === "kg"
+            ? "kg"
+            : unit === "lbs"
+            ? "lbs"
+            : "Weight";
+          const repsLabel = isCardio ? "Time" : "Reps";
+          const rpeLabel = isCardio ? "Zone" : effortLabel(effortScale);
+          const previousSets = previousExerciseSetsByName.get(normalizeExerciseName(ex.name)) ?? [];
+          const exerciseCatalogItem = findCatalogExercise(ex.name);
+          const remoteDemoImages = exerciseImageMap[imageLookupKey(ex.name)] ?? [];
+          const demoThumbnailUri = remoteDemoImages[0] ?? null;
+          const demoThumbnail = exerciseCatalogItem?.demoImages?.[0] ?? null;
+          const restTimer = restTimerByExercise[ex.id] ?? { remainingSec: 90, running: false };
+          return (
+            <View key={ex.id} style={styles.card}>
+              <View style={styles.exerciseHeader}>
+                {exerciseCatalogItem ? (
+                  <TouchableOpacity
+                    style={styles.exerciseDemoThumbButton}
+                    onPress={() => cardActions.openExerciseDemo(ex.name)}
+                    accessibilityLabel={`Open ${ex.name} demo`}
+                  >
+                    {demoThumbnailUri ? (
+                      <Image source={demoThumbnailUri} style={styles.exerciseDemoThumbImage} contentFit="cover" />
+                    ) : demoThumbnail ? (
+                      <Image source={demoThumbnail} style={styles.exerciseDemoThumbImage} contentFit="cover" />
+                    ) : (
+                      <View style={styles.exerciseDemoThumbFallback}>
+                        <Ionicons name="images-outline" size={18} color="#cdd0e0" />
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                ) : (
+                  <View style={styles.exerciseDemoThumbButton} accessibilityLabel="No demo available for this custom exercise">
+                    <View style={styles.exerciseDemoThumbFallback}>
+                      <Ionicons name="images-outline" size={18} color="#cdd0e0" />
+                    </View>
+                  </View>
+                )}
+                <TouchableOpacity
+                  style={styles.exerciseNameButton}
+                  onPress={() => cardActions.openExerciseHistory(ex.name)}
+                  accessibilityLabel={`View ${ex.name} history`}
+                >
+                  <Text style={styles.exerciseName} numberOfLines={1} ellipsizeMode="tail">
+                    {ex.name}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.iconButton} onPress={() => cardActions.openExerciseActions(ex.id)}>
+                  <Ionicons name="ellipsis-horizontal" size={18} color="#cdd0e0" />
+                </TouchableOpacity>
+              </View>
+              {replaceTarget === ex.id ? (
+                <View style={[styles.pickerCard, { marginTop: 10 }]}>
+                  <TextInput disableFullscreenUI
+                    placeholder="Search to replace"
+                    placeholderTextColor="#7a7a8c"
+                    value={replaceSearch}
+                    onChangeText={cardActions.setReplaceSearch}
+                    style={[styles.input, { marginBottom: 8 }]}
+                  />
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.groupChips}
+                  >
+                    <TouchableOpacity
+                      style={[styles.groupChip, replaceGroup === "all" && styles.groupChipActive]}
+                      onPress={() => cardActions.setReplaceGroup("all")}
+                    >
+                      <Text
+                        style={[
+                          styles.groupChipText,
+                          replaceGroup === "all" && styles.groupChipTextActive,
+                        ]}
+                      >
+                        All
+                      </Text>
+                    </TouchableOpacity>
+                    {EXERCISE_GROUPS.map((g) => (
+                      <TouchableOpacity
+                        key={g.key}
+                        style={[
+                          styles.groupChip,
+                          replaceGroup === g.key && styles.groupChipActive,
+                        ]}
+                        onPress={() => cardActions.setReplaceGroup(g.key)}
+                      >
+                        <Text
+                          style={[
+                            styles.groupChipText,
+                            replaceGroup === g.key && styles.groupChipTextActive,
+                          ]}
+                        >
+                          {g.label}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                  <ScrollView
+                    style={{ maxHeight: 180 }}
+                    nestedScrollEnabled
+                    bounces={false}
+                    overScrollMode="never"
+                    keyboardShouldPersistTaps="handled"
+                    scrollEventThrottle={16}
+                  >
+                    {replacementOptions.map((item) => (
+                      <TouchableOpacity
+                        key={`${item.id}-${ex.id}`}
+                        style={styles.pickerRow}
+                        onPress={() => cardActions.replaceExercise(ex.id, item.name)}
+                      >
+                        <Ionicons name="swap-horizontal-outline" size={18} color="#7b61ff" />
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.pickerText}>{item.name}</Text>
+                          <Text style={styles.muted}>
+                            {item.primaryMuscles.slice(0, 2).join(", ")} | {item.equipment.slice(0, 2).join(", ")}
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+                    ))}
+                    {replacementOptions.length === 0 ? (
+                      <Text style={styles.replacementEmptyText}>
+                        {exerciseCatalogItem
+                          ? "No matching alternatives. Try another search or body part."
+                          : "Custom exercises do not have automatic alternatives. Search for the exercise you want instead."}
+                      </Text>
+                    ) : null}
+                  </ScrollView>
+                </View>
+              ) : null}
+              <View style={styles.exerciseMetaNotesSingle}>
+                <TextInput disableFullscreenUI
+                  placeholder="Add notes"
+                  placeholderTextColor="#7a7a8c"
+                  value={ex.notes ?? ""}
+                  onChangeText={(v) => cardActions.updateExerciseNotes(ex.id, v)}
+                  style={[styles.input, styles.metaInput]}
+                />
+              </View>
+              {!isCardio ? (
+                <View style={styles.inlineTipRow}>
+                  <TouchableOpacity
+                    style={styles.restTimerInlineButton}
+                    onPress={() => cardActions.openTempoEditor(ex.id, ex.tempo)}
+                  >
+                    <Ionicons name="speedometer-outline" size={14} color="#cdd0e0" />
+                    <Text style={styles.restTimerInlineText}>
+                      Tempo {(ex.tempo ?? "").trim() || DEFAULT_TEMPO}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.restTimerInlineButton}
+                    onPress={() => cardActions.openRestTimerModal(ex.id)}
+                  >
+                    <Ionicons name="timer-outline" size={14} color="#cdd0e0" />
+                    <RestTimerText style={styles.restTimerInlineText} clock={restTimer} prefix="Rest " />
+                  </TouchableOpacity>
+                </View>
+              ) : null}
+              <View
+                style={[
+                  styles.setHeaderRow,
+                  isTabletLayout && styles.setHeaderRowTablet,
+                  usesNativeSetRows && styles.nativeSetHeaderRow,
+                ]}
+              >
+                {!isCardio ? <Text style={[styles.setHeaderText, styles.setHeaderSet]}>Set</Text> : null}
+                <Text
+                  style={[
+                    styles.setHeaderText,
+                    styles.setHeaderCheck,
+                    isCardio && styles.cardioSetHeaderCheck,
+                    usesNativeSetRows && styles.nativeSetHeaderCheck,
+                  ]}
+                >
+                  {"\u2713"}
+                </Text>
+                <Text style={[styles.setHeaderText, styles.setHeaderLast, usesNativeSetRows && styles.nativeSetHeaderLast]}>
+                  Last
+                </Text>
+                <View style={[styles.setHeaderInputsGroup, usesNativeSetRows && styles.nativeSetHeaderInputsGroup]}>
+                  <Text style={[styles.setHeaderText, styles.setColReps, usesNativeSetRows && styles.nativeSetHeaderInput]}>
+                    {isCardio ? "Time" : weightLabel}
+                  </Text>
+                  <Text style={[styles.setHeaderText, styles.setColWeight, usesNativeSetRows && styles.nativeSetHeaderInput]}>
+                    {isCardio ? String(unit).toLowerCase() : repsLabel}
+                  </Text>
+                  {!isCardio ? (
+                    <Text style={[styles.setHeaderText, styles.setColRpe, usesNativeSetRows && styles.nativeSetHeaderInput]}>
+                      {rpeLabel}
+                    </Text>
+                  ) : null}
+                </View>
+              </View>
+              {ex.sets.length === 0 ? (
+                <Text style={styles.muted}>No sets yet.</Text>
+              ) : Platform.OS === "android" && !isCardio ? (
+                <WorkoutNativeSetRows
+                  listKey={`native-set-list-${ex.id}-${ex.sets
+                    .map((set, idx) => `${idx}:${getSetTypeMarker(set, idx)}`)
+                    .join("|")}-${String(unit).toLowerCase()}-${weightLabel}-${repsLabel}-${rpeLabel}`}
+                  style={{ height: Math.max(ex.sets.length, 1) * 52 }}
+                  weightLabel={weightLabel}
+                  repsLabel={repsLabel}
+                  rpeLabel={effortScale === "rir" ? "0-4" : "6-10"}
+                  rows={ex.sets.map((set, idx) => ({
+                    marker: getSetTypeMarker(set, idx),
+                    last: previousSets[idx] ? formatLastSetSummary(previousSets[idx]) : "-",
+                    weight: set.weightText ?? formatWeightInput(set.weightKg, unit),
+                    reps: set.reps,
+                    rpe: effortInputValue(set, effortScale),
+                    done: set.done,
+                  }))}
+                  onChange={(index, field, value) => {
+                    if (field === "weight") {
+                      cardActions.updateSetWeight(ex.id, index, unit, value);
+                      return;
+                    }
+                    if (field === "reps") {
+                      cardActions.updateSetReps(ex.id, index, value);
+                      return;
+                    }
+                    cardActions.updateSetRpe(ex.id, index, value);
+                  }}
+                  onToggleDone={(index) => cardActions.toggleSetDone(ex.id, index)}
+                  onDeleteSet={(index) => cardActions.removeSetWithUndo(ex.id, index)}
+                  onSetLabelPress={(index) => cardActions.openSetMenu(ex.id, index)}
+                  onLastPress={(index) => cardActions.copyLastSetToCurrent(ex.id, index)}
+                />
+              ) : (
+                ex.sets.map((s, idx) => (
+                  <ReanimatedSwipeable
+                    key={`${ex.id}-set-${idx}`}
+                    simultaneousWithExternalGesture={scrollNativeGesture}
+                    friction={1.2}
+                    rightThreshold={12}
+                    overshootRight={false}
+                    dragOffsetFromLeftEdge={24}
+                    dragOffsetFromRightEdge={24}
+                    renderRightActions={() => (
+                      <View style={styles.swipeDeleteContainer}>
+                        <TouchableOpacity
+                          style={styles.swipeDeleteButton}
+                          onPress={() => cardActions.removeSetWithUndo(ex.id, idx)}
+                        >
+                          <Ionicons name="trash-outline" size={16} color="#fff" />
+                          <Text style={styles.swipeDeleteText}>Delete</Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
+                  >
+                    <View style={styles.setContainer}>
+                      <View style={[styles.setInlineRow, isTabletLayout && styles.setInlineRowTablet]}>
+                        {!isCardio ? (
+                          <TouchableOpacity
+                            onPress={() => cardActions.openSetMenu(ex.id, idx)}
+                            style={styles.setLabelButton}
+                            accessibilityLabel={`Adjust set ${idx + 1} intensity`}
+                          >
+                            <Text style={[styles.setLabel, isTabletLayout && styles.setLabelTablet]}>
+                              {getSetTypeMarker(s, idx)}
+                            </Text>
+                          </TouchableOpacity>
+                        ) : null}
+                        <TouchableOpacity
+                          style={[styles.checkboxInline, styles.checkboxHitbox]}
+                          onPress={() => cardActions.toggleSetDone(ex.id, idx)}
+                          activeOpacity={0.8}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        >
+                          <View style={[styles.checkbox, s.done && styles.checkboxChecked]}>
+                            {s.done ? <Text style={styles.cardioCheckboxMark}>✓</Text> : null}
+                          </View>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.lastSetButton}
+                          onPress={() => cardActions.copyLastSetToCurrent(ex.id, idx)}
+                          disabled={!previousSets[idx]}
+                          accessibilityLabel={`Copy previous values into set ${idx + 1}`}
+                        >
+                          <Text style={styles.lastSetText}>
+                          {previousSets[idx] ? formatLastSetSummary(previousSets[idx]) : "-"}
+                          </Text>
+                        </TouchableOpacity>
+                        <View style={[styles.setInputsGroup, isTabletLayout && styles.setInputsGroupTablet]}>
+                          {isCardio ? (
+                            <>
+                              <TouchableOpacity
+                                style={[styles.input, styles.setInput, styles.setInputCompact, styles.setColReps]}
+                                onPress={() => cardActions.openCardioTimeModal(ex.id, idx, s.durationSec)}
+                              >
+                                <Text style={styles.cardioTapValue}>
+                                  {formatDurationHoursMinutes(s.durationSec ?? null) || "hh:mm"}
+                                </Text>
+                              </TouchableOpacity>
+                              <TouchableOpacity
+                                style={[styles.input, styles.setInput, styles.setInputCompact, styles.setColWeight]}
+                                onPress={() => cardActions.openCardioDistanceModal(ex.id, idx, s.distanceKm ?? null, unit)}
+                              >
+                                <Text style={styles.cardioTapValue}>
+                                  {formatDistanceInput(s.distanceKm ?? null, unit) || String(unit)}
+                                </Text>
+                              </TouchableOpacity>
+                            </>
+                          ) : (
+                            <>
+                              <WorkoutGestureTextInput
+                                placeholder={weightLabel}
+                                placeholderTextColor="#7a7a8c"
+                                keyboardType="decimal-pad"
+                                value={s.weightText ?? formatWeightInput(s.weightKg, unit)}
+                                onChangeText={(v) => cardActions.updateSetWeight(ex.id, idx, unit, v)}
+                                selectTextOnFocus={false}
+                                style={[
+                                  styles.input,
+                                  styles.setInput,
+                                  styles.setInputCompact,
+                                  styles.setColWeight,
+                                  isTabletLayout && styles.setInputTablet,
+                                ]}
+                              />
+                              <WorkoutGestureTextInput
+                                placeholder={repsLabel}
+                                placeholderTextColor="#7a7a8c"
+                                keyboardType="numeric"
+                                value={s.reps}
+                                onChangeText={(v) => cardActions.updateSetReps(ex.id, idx, v)}
+                                selectTextOnFocus={false}
+                                style={[
+                                  styles.input,
+                                  styles.setInput,
+                                  styles.setInputCompact,
+                                  styles.setColReps,
+                                  isTabletLayout && styles.setInputTablet,
+                                  styles.setInputReps,
+                                  isTabletLayout && styles.setInputRepsTablet,
+                                ]}
+                              />
+                              <WorkoutGestureTextInput
+                                placeholder={effortScale === "rir" ? "0-4" : "6-10"}
+                                placeholderTextColor="#7a7a8c"
+                                keyboardType="decimal-pad"
+                                value={effortInputValue(s, effortScale)}
+                                onChangeText={(v) => cardActions.updateSetRpe(ex.id, idx, v)}
+                                selectTextOnFocus={false}
+                                style={[
+                                  styles.input,
+                                  styles.setInput,
+                                  styles.setInputCompact,
+                                  styles.setColRpe,
+                                  isTabletLayout && styles.setInputTablet,
+                                ]}
+                              />
+                            </>
+                          )}
+                        </View>
+                      </View>
+                    </View>
+                  </ReanimatedSwipeable>
+                ))
+              )}
+              {isCardio ? (
+                <>
+                  <View style={styles.cardioMetaRow}>
+                    <Text style={styles.cardioMetaLabel}>Heart-rate zone</Text>
+                    <View style={styles.answerRow}>
+                      {["1", "2", "3", "4", "5"].map((zone) => (
+                        <TouchableOpacity key={`cardio-zone-${ex.id}-${zone}`} accessibilityRole="button" accessibilityLabel={`Zone ${zone}`} accessibilityState={{ selected: getExerciseZone(ex) === zone }} style={[styles.answerChip, getExerciseZone(ex) === zone && styles.answerChipActive]} onPress={() => cardActions.setExercises((previous) => previous.map((exercise) => exercise.id === ex.id ? applyCardioZone(exercise, getExerciseZone(exercise) === zone ? "" : zone) : exercise))}>
+                          <Text style={[styles.answerText, getExerciseZone(ex) === zone && styles.answerTextActive]}>{`Zone ${zone}`}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                  <View style={styles.cardioMetaRow}>
+                    <Text style={styles.cardioMetaLabel}>Session Type</Text>
+                    <View style={styles.answerRow}>
+                      {CARDIO_SESSION_TYPES.map((option) => (
+                        <TouchableOpacity
+                          key={`cardio-session-${ex.id}-${option.value}`}
+                          style={[
+                            styles.answerChip,
+                            ex.cardioSessionType === option.value && styles.answerChipActive,
+                          ]}
+                          onPress={() => cardActions.updateCardioSessionType(ex.id, option.value)}
+                        >
+                          <Text
+                            style={[
+                              styles.answerText,
+                              ex.cardioSessionType === option.value && styles.answerTextActive,
+                            ]}
+                          >
+                            {option.label}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                  <View style={styles.cardioMetaRow}>
+                    <Text style={styles.cardioMetaLabel}>Effort Level</Text>
+                    <View style={styles.answerRow}>
+                      {CARDIO_EFFORT_LEVELS.map((option) => (
+                        <TouchableOpacity
+                          key={`cardio-effort-${ex.id}-${option.value}`}
+                          style={[
+                            styles.answerChip,
+                            ex.cardioEffortLevel === option.value && styles.answerChipActive,
+                          ]}
+                          onPress={() => cardActions.updateCardioEffortLevel(ex.id, option.value)}
+                        >
+                          <Text
+                            style={[
+                              styles.answerText,
+                              ex.cardioEffortLevel === option.value && styles.answerTextActive,
+                            ]}
+                          >
+                            {option.label}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                </>
+              ) : null}
+              <View style={styles.setActionsRow}>
+                <TouchableOpacity
+                  style={[styles.primaryButton, styles.setActionButton]}
+                  onPress={() => cardActions.addEmptySet(ex.id)}
+                >
+                  <Text style={styles.primaryText}>Add set</Text>
+                </TouchableOpacity>
+                {ex.sets.length > 0 ? (
+                  <TouchableOpacity
+                    style={[styles.secondaryButton, styles.setActionButton]}
+                    onPress={() => cardActions.duplicateLastSet(ex.id)}
+                  >
+                    <Text style={styles.secondaryText}>Duplicate last set</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <View style={styles.setActionButton} />
+                )}
+              </View>
+              {undoDeletedSet?.exerciseId === ex.id ? (
+                <View style={styles.inlineUndoBanner}>
+                  <Text style={styles.inlineUndoBannerText}>Set deleted</Text>
+                  <TouchableOpacity onPress={cardActions.undoRemoveSet} style={styles.inlineUndoBannerAction}>
+                    <Text style={styles.inlineUndoBannerActionText}>Undo</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : null}
+            </View>
+          );
+        }), [exercises, exerciseUnits, getExerciseMode, effortScale, previousExerciseSetsByName, findCatalogExercise, exerciseImageMap, restTimerByExercise, replaceTarget, replaceSearch, replaceGroup, replacementOptions, isTabletLayout, formatLastSetSummary, scrollNativeGesture, getExerciseZone, undoDeletedSet, cardActions]);
 
   return (
     <SafeAreaView style={styles.screen} edges={["top", "left", "right"]}>
@@ -3168,7 +3653,8 @@ export default function WorkoutLog() {
             year: "numeric",
           }) ?? sessionDateText
         }
-        elapsedLabel={formatElapsedTimer(elapsedSeconds)}
+        elapsedSeconds={elapsedSeconds}
+        startedAtMs={workoutTimerStartedAtMs}
         timerRunning={workoutTimerRunning}
         timerStarted={elapsedSeconds > 0}
         trainingPhase={sessionPhase}
@@ -3270,461 +3756,7 @@ export default function WorkoutLog() {
           <Text style={styles.muted}>No exercises added yet.</Text>
         </View>
       ) : (
-        exercises.map((ex) => {
-          const unit = exerciseUnits[ex.id] || "kg";
-          const mode = getExerciseMode(ex.name);
-          const isCardio = mode === "cardio";
-          const usesNativeSetRows = Platform.OS === "android" && !isCardio;
-          const weightLabel = isCardio
-            ? "Distance"
-            : unit === "kg"
-            ? "kg"
-            : unit === "lbs"
-            ? "lbs"
-            : "Weight";
-          const repsLabel = isCardio ? "Time" : "Reps";
-          const rpeLabel = isCardio ? "Zone" : effortLabel(effortScale);
-          const previousSets = previousExerciseSetsByName.get(normalizeExerciseName(ex.name)) ?? [];
-          const exerciseCatalogItem = findCatalogExercise(ex.name);
-          const remoteDemoImages = exerciseImageMap[imageLookupKey(ex.name)] ?? [];
-          const demoThumbnailUri = remoteDemoImages[0] ?? null;
-          const demoThumbnail = exerciseCatalogItem?.demoImages?.[0] ?? null;
-          const restTimer = restTimerByExercise[ex.id] ?? { remainingSec: 90, running: false };
-          const restDisplayMin = Math.floor(restTimer.remainingSec / 60);
-          const restDisplaySec = `${restTimer.remainingSec % 60}`.padStart(2, "0");
-          return (
-            <View key={ex.id} style={styles.card}>
-              <View style={styles.exerciseHeader}>
-                {exerciseCatalogItem ? (
-                  <TouchableOpacity
-                    style={styles.exerciseDemoThumbButton}
-                    onPress={() => openExerciseDemo(ex.name)}
-                    accessibilityLabel={`Open ${ex.name} demo`}
-                  >
-                    {demoThumbnailUri ? (
-                      <Image source={demoThumbnailUri} style={styles.exerciseDemoThumbImage} contentFit="cover" />
-                    ) : demoThumbnail ? (
-                      <Image source={demoThumbnail} style={styles.exerciseDemoThumbImage} contentFit="cover" />
-                    ) : (
-                      <View style={styles.exerciseDemoThumbFallback}>
-                        <Ionicons name="images-outline" size={18} color="#cdd0e0" />
-                      </View>
-                    )}
-                  </TouchableOpacity>
-                ) : (
-                  <View style={styles.exerciseDemoThumbButton} accessibilityLabel="No demo available for this custom exercise">
-                    <View style={styles.exerciseDemoThumbFallback}>
-                      <Ionicons name="images-outline" size={18} color="#cdd0e0" />
-                    </View>
-                  </View>
-                )}
-                <TouchableOpacity
-                  style={styles.exerciseNameButton}
-                  onPress={() => openExerciseHistory(ex.name)}
-                  accessibilityLabel={`View ${ex.name} history`}
-                >
-                  <Text style={styles.exerciseName} numberOfLines={1} ellipsizeMode="tail">
-                    {ex.name}
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.iconButton} onPress={() => openExerciseActions(ex.id)}>
-                  <Ionicons name="ellipsis-horizontal" size={18} color="#cdd0e0" />
-                </TouchableOpacity>
-              </View>
-              {replaceTarget === ex.id ? (
-                <View style={[styles.pickerCard, { marginTop: 10 }]}>
-                  <TextInput disableFullscreenUI
-                    placeholder="Search to replace"
-                    placeholderTextColor="#7a7a8c"
-                    value={replaceSearch}
-                    onChangeText={setReplaceSearch}
-                    style={[styles.input, { marginBottom: 8 }]}
-                  />
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.groupChips}
-                  >
-                    <TouchableOpacity
-                      style={[styles.groupChip, replaceGroup === "all" && styles.groupChipActive]}
-                      onPress={() => setReplaceGroup("all")}
-                    >
-                      <Text
-                        style={[
-                          styles.groupChipText,
-                          replaceGroup === "all" && styles.groupChipTextActive,
-                        ]}
-                      >
-                        All
-                      </Text>
-                    </TouchableOpacity>
-                    {EXERCISE_GROUPS.map((g) => (
-                      <TouchableOpacity
-                        key={g.key}
-                        style={[
-                          styles.groupChip,
-                          replaceGroup === g.key && styles.groupChipActive,
-                        ]}
-                        onPress={() => setReplaceGroup(g.key)}
-                      >
-                        <Text
-                          style={[
-                            styles.groupChipText,
-                            replaceGroup === g.key && styles.groupChipTextActive,
-                          ]}
-                        >
-                          {g.label}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                  <ScrollView
-                    style={{ maxHeight: 180 }}
-                    nestedScrollEnabled
-                    bounces={false}
-                    overScrollMode="never"
-                    keyboardShouldPersistTaps="handled"
-                    scrollEventThrottle={16}
-                  >
-                    {replacementOptions.map((item) => (
-                      <TouchableOpacity
-                        key={`${item.id}-${ex.id}`}
-                        style={styles.pickerRow}
-                        onPress={() => replaceExercise(ex.id, item.name)}
-                      >
-                        <Ionicons name="swap-horizontal-outline" size={18} color="#7b61ff" />
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.pickerText}>{item.name}</Text>
-                          <Text style={styles.muted}>
-                            {item.primaryMuscles.slice(0, 2).join(", ")} | {item.equipment.slice(0, 2).join(", ")}
-                          </Text>
-                        </View>
-                      </TouchableOpacity>
-                    ))}
-                    {replacementOptions.length === 0 ? (
-                      <Text style={styles.replacementEmptyText}>
-                        {exerciseCatalogItem
-                          ? "No matching alternatives. Try another search or body part."
-                          : "Custom exercises do not have automatic alternatives. Search for the exercise you want instead."}
-                      </Text>
-                    ) : null}
-                  </ScrollView>
-                </View>
-              ) : null}
-              <View style={styles.exerciseMetaNotesSingle}>
-                <TextInput disableFullscreenUI
-                  placeholder="Add notes"
-                  placeholderTextColor="#7a7a8c"
-                  value={ex.notes ?? ""}
-                  onChangeText={(v) => updateExerciseNotes(ex.id, v)}
-                  style={[styles.input, styles.metaInput]}
-                />
-              </View>
-              {!isCardio ? (
-                <View style={styles.inlineTipRow}>
-                  <TouchableOpacity
-                    style={styles.restTimerInlineButton}
-                    onPress={() => openTempoEditor(ex.id, ex.tempo)}
-                  >
-                    <Ionicons name="speedometer-outline" size={14} color="#cdd0e0" />
-                    <Text style={styles.restTimerInlineText}>
-                      Tempo {(ex.tempo ?? "").trim() || DEFAULT_TEMPO}
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.restTimerInlineButton}
-                    onPress={() => openRestTimerModal(ex.id)}
-                  >
-                    <Ionicons name="timer-outline" size={14} color="#cdd0e0" />
-                    <Text style={styles.restTimerInlineText}>
-                      Rest {restDisplayMin}:{restDisplaySec}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              ) : null}
-              <View
-                style={[
-                  styles.setHeaderRow,
-                  isTabletLayout && styles.setHeaderRowTablet,
-                  usesNativeSetRows && styles.nativeSetHeaderRow,
-                ]}
-              >
-                {!isCardio ? <Text style={[styles.setHeaderText, styles.setHeaderSet]}>Set</Text> : null}
-                <Text
-                  style={[
-                    styles.setHeaderText,
-                    styles.setHeaderCheck,
-                    isCardio && styles.cardioSetHeaderCheck,
-                    usesNativeSetRows && styles.nativeSetHeaderCheck,
-                  ]}
-                >
-                  {"\u2713"}
-                </Text>
-                <Text style={[styles.setHeaderText, styles.setHeaderLast, usesNativeSetRows && styles.nativeSetHeaderLast]}>
-                  Last
-                </Text>
-                <View style={[styles.setHeaderInputsGroup, usesNativeSetRows && styles.nativeSetHeaderInputsGroup]}>
-                  <Text style={[styles.setHeaderText, styles.setColReps, usesNativeSetRows && styles.nativeSetHeaderInput]}>
-                    {isCardio ? "Time" : weightLabel}
-                  </Text>
-                  <Text style={[styles.setHeaderText, styles.setColWeight, usesNativeSetRows && styles.nativeSetHeaderInput]}>
-                    {isCardio ? String(unit).toLowerCase() : repsLabel}
-                  </Text>
-                  {!isCardio ? (
-                    <Text style={[styles.setHeaderText, styles.setColRpe, usesNativeSetRows && styles.nativeSetHeaderInput]}>
-                      {rpeLabel}
-                    </Text>
-                  ) : null}
-                </View>
-              </View>
-              {ex.sets.length === 0 ? (
-                <Text style={styles.muted}>No sets yet.</Text>
-              ) : Platform.OS === "android" && !isCardio ? (
-                <WorkoutNativeSetRows
-                  listKey={`native-set-list-${ex.id}-${ex.sets
-                    .map((set, idx) => `${idx}:${getSetTypeMarker(set, idx)}`)
-                    .join("|")}-${String(unit).toLowerCase()}-${weightLabel}-${repsLabel}-${rpeLabel}`}
-                  style={{ height: Math.max(ex.sets.length, 1) * 52 }}
-                  weightLabel={weightLabel}
-                  repsLabel={repsLabel}
-                  rpeLabel={effortScale === "rir" ? "0-4" : "6-10"}
-                  rows={ex.sets.map((set, idx) => ({
-                    marker: getSetTypeMarker(set, idx),
-                    last: previousSets[idx] ? formatLastSetSummary(previousSets[idx]) : "-",
-                    weight: set.weightText ?? formatWeightInput(set.weightKg, unit),
-                    reps: set.reps,
-                    rpe: effortInputValue(set, effortScale),
-                    done: set.done,
-                  }))}
-                  onChange={(index, field, value) => {
-                    if (field === "weight") {
-                      updateSetWeight(ex.id, index, unit, value);
-                      return;
-                    }
-                    if (field === "reps") {
-                      updateSetReps(ex.id, index, value);
-                      return;
-                    }
-                    updateSetRpe(ex.id, index, value);
-                  }}
-                  onToggleDone={(index) => toggleSetDone(ex.id, index)}
-                  onDeleteSet={(index) => removeSetWithUndo(ex.id, index)}
-                  onSetLabelPress={(index) => openSetMenu(ex.id, index)}
-                  onLastPress={(index) => copyLastSetToCurrent(ex.id, index)}
-                />
-              ) : (
-                ex.sets.map((s, idx) => (
-                  <ReanimatedSwipeable
-                    key={`${ex.id}-set-${idx}`}
-                    simultaneousWithExternalGesture={scrollNativeGesture}
-                    friction={1.2}
-                    rightThreshold={12}
-                    overshootRight={false}
-                    dragOffsetFromLeftEdge={24}
-                    dragOffsetFromRightEdge={24}
-                    renderRightActions={() => (
-                      <View style={styles.swipeDeleteContainer}>
-                        <TouchableOpacity
-                          style={styles.swipeDeleteButton}
-                          onPress={() => removeSetWithUndo(ex.id, idx)}
-                        >
-                          <Ionicons name="trash-outline" size={16} color="#fff" />
-                          <Text style={styles.swipeDeleteText}>Delete</Text>
-                        </TouchableOpacity>
-                      </View>
-                    )}
-                  >
-                    <View style={styles.setContainer}>
-                      <View style={[styles.setInlineRow, isTabletLayout && styles.setInlineRowTablet]}>
-                        {!isCardio ? (
-                          <TouchableOpacity
-                            onPress={() => openSetMenu(ex.id, idx)}
-                            style={styles.setLabelButton}
-                            accessibilityLabel={`Adjust set ${idx + 1} intensity`}
-                          >
-                            <Text style={[styles.setLabel, isTabletLayout && styles.setLabelTablet]}>
-                              {getSetTypeMarker(s, idx)}
-                            </Text>
-                          </TouchableOpacity>
-                        ) : null}
-                        <TouchableOpacity
-                          style={[styles.checkboxInline, styles.checkboxHitbox]}
-                          onPress={() => toggleSetDone(ex.id, idx)}
-                          activeOpacity={0.8}
-                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                        >
-                          <View style={[styles.checkbox, s.done && styles.checkboxChecked]}>
-                            {s.done ? <Text style={styles.cardioCheckboxMark}>✓</Text> : null}
-                          </View>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={styles.lastSetButton}
-                          onPress={() => copyLastSetToCurrent(ex.id, idx)}
-                          disabled={!previousSets[idx]}
-                          accessibilityLabel={`Copy previous values into set ${idx + 1}`}
-                        >
-                          <Text style={styles.lastSetText}>
-                          {previousSets[idx] ? formatLastSetSummary(previousSets[idx]) : "-"}
-                          </Text>
-                        </TouchableOpacity>
-                        <View style={[styles.setInputsGroup, isTabletLayout && styles.setInputsGroupTablet]}>
-                          {isCardio ? (
-                            <>
-                              <TouchableOpacity
-                                style={[styles.input, styles.setInput, styles.setInputCompact, styles.setColReps]}
-                                onPress={() => openCardioTimeModal(ex.id, idx, s.durationSec)}
-                              >
-                                <Text style={styles.cardioTapValue}>
-                                  {formatDurationHoursMinutes(s.durationSec ?? null) || "hh:mm"}
-                                </Text>
-                              </TouchableOpacity>
-                              <TouchableOpacity
-                                style={[styles.input, styles.setInput, styles.setInputCompact, styles.setColWeight]}
-                                onPress={() => openCardioDistanceModal(ex.id, idx, s.distanceKm ?? null, unit)}
-                              >
-                                <Text style={styles.cardioTapValue}>
-                                  {formatDistanceInput(s.distanceKm ?? null, unit) || String(unit)}
-                                </Text>
-                              </TouchableOpacity>
-                            </>
-                          ) : (
-                            <>
-                              <WorkoutGestureTextInput
-                                placeholder={weightLabel}
-                                placeholderTextColor="#7a7a8c"
-                                keyboardType="decimal-pad"
-                                value={s.weightText ?? formatWeightInput(s.weightKg, unit)}
-                                onChangeText={(v) => updateSetWeight(ex.id, idx, unit, v)}
-                                selectTextOnFocus={false}
-                                style={[
-                                  styles.input,
-                                  styles.setInput,
-                                  styles.setInputCompact,
-                                  styles.setColWeight,
-                                  isTabletLayout && styles.setInputTablet,
-                                ]}
-                              />
-                              <WorkoutGestureTextInput
-                                placeholder={repsLabel}
-                                placeholderTextColor="#7a7a8c"
-                                keyboardType="numeric"
-                                value={s.reps}
-                                onChangeText={(v) => updateSetReps(ex.id, idx, v)}
-                                selectTextOnFocus={false}
-                                style={[
-                                  styles.input,
-                                  styles.setInput,
-                                  styles.setInputCompact,
-                                  styles.setColReps,
-                                  isTabletLayout && styles.setInputTablet,
-                                  styles.setInputReps,
-                                  isTabletLayout && styles.setInputRepsTablet,
-                                ]}
-                              />
-                              <WorkoutGestureTextInput
-                                placeholder={effortScale === "rir" ? "0-4" : "6-10"}
-                                placeholderTextColor="#7a7a8c"
-                                keyboardType="decimal-pad"
-                                value={effortInputValue(s, effortScale)}
-                                onChangeText={(v) => updateSetRpe(ex.id, idx, v)}
-                                selectTextOnFocus={false}
-                                style={[
-                                  styles.input,
-                                  styles.setInput,
-                                  styles.setInputCompact,
-                                  styles.setColRpe,
-                                  isTabletLayout && styles.setInputTablet,
-                                ]}
-                              />
-                            </>
-                          )}
-                        </View>
-                      </View>
-                    </View>
-                  </ReanimatedSwipeable>
-                ))
-              )}
-              {isCardio ? (
-                <>
-                  <View style={styles.cardioMetaRow}>
-                    <Text style={styles.cardioMetaLabel}>Session Type</Text>
-                    <View style={styles.answerRow}>
-                      {CARDIO_SESSION_TYPES.map((option) => (
-                        <TouchableOpacity
-                          key={`cardio-session-${ex.id}-${option.value}`}
-                          style={[
-                            styles.answerChip,
-                            ex.cardioSessionType === option.value && styles.answerChipActive,
-                          ]}
-                          onPress={() => updateCardioSessionType(ex.id, option.value)}
-                        >
-                          <Text
-                            style={[
-                              styles.answerText,
-                              ex.cardioSessionType === option.value && styles.answerTextActive,
-                            ]}
-                          >
-                            {option.label}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  </View>
-                  <View style={styles.cardioMetaRow}>
-                    <Text style={styles.cardioMetaLabel}>Effort Level</Text>
-                    <View style={styles.answerRow}>
-                      {CARDIO_EFFORT_LEVELS.map((option) => (
-                        <TouchableOpacity
-                          key={`cardio-effort-${ex.id}-${option.value}`}
-                          style={[
-                            styles.answerChip,
-                            ex.cardioEffortLevel === option.value && styles.answerChipActive,
-                          ]}
-                          onPress={() => updateCardioEffortLevel(ex.id, option.value)}
-                        >
-                          <Text
-                            style={[
-                              styles.answerText,
-                              ex.cardioEffortLevel === option.value && styles.answerTextActive,
-                            ]}
-                          >
-                            {option.label}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  </View>
-                </>
-              ) : null}
-              <View style={styles.setActionsRow}>
-                <TouchableOpacity
-                  style={[styles.primaryButton, styles.setActionButton]}
-                  onPress={() => addEmptySet(ex.id)}
-                >
-                  <Text style={styles.primaryText}>Add set</Text>
-                </TouchableOpacity>
-                {ex.sets.length > 0 ? (
-                  <TouchableOpacity
-                    style={[styles.secondaryButton, styles.setActionButton]}
-                    onPress={() => duplicateLastSet(ex.id)}
-                  >
-                    <Text style={styles.secondaryText}>Duplicate last set</Text>
-                  </TouchableOpacity>
-                ) : (
-                  <View style={styles.setActionButton} />
-                )}
-              </View>
-              {undoDeletedSet?.exerciseId === ex.id ? (
-                <View style={styles.inlineUndoBanner}>
-                  <Text style={styles.inlineUndoBannerText}>Set deleted</Text>
-                  <TouchableOpacity onPress={undoRemoveSet} style={styles.inlineUndoBannerAction}>
-                    <Text style={styles.inlineUndoBannerActionText}>Undo</Text>
-                  </TouchableOpacity>
-                </View>
-              ) : null}
-            </View>
-          );
-        })
+        exerciseCards
       )}
 
       <TouchableOpacity
@@ -3764,7 +3796,8 @@ export default function WorkoutLog() {
                   </View>
                 </TouchableOpacity>
               ))}
-            </ScrollView>
+
+          </ScrollView>
             <TouchableOpacity
               style={[styles.secondaryButton, { marginTop: 10 }]}
               onPress={() => setShowRepeatPicker(false)}
@@ -3998,14 +4031,12 @@ export default function WorkoutLog() {
       </Modal>
 
       <Modal visible={showRestTimerModal} transparent animationType="fade">
-        <View style={styles.modalBackdrop}>
+        <KeyboardAwareModalFrame style={styles.modalBackdrop}>
           <AdaptiveModalCard style={styles.modalCard}>
             <Text style={styles.modalTitle}>
               {activeRestExercise ? `${activeRestExercise.name} Rest Timer` : "Rest Timer"}
             </Text>
-            <Text style={styles.modalText}>
-              Current: {activeRestDisplayMin}:{activeRestDisplaySec}
-            </Text>
+            <RestTimerText style={styles.modalText} clock={activeRestTimerState} prefix="Current: " />
             <View style={styles.answerRow}>
               {[60, 90, 120].map((seconds) => (
                 <TouchableOpacity
@@ -4095,7 +4126,7 @@ export default function WorkoutLog() {
               </TouchableOpacity>
             </View>
           </AdaptiveModalCard>
-        </View>
+        </KeyboardAwareModalFrame>
       </Modal>
 
       <Modal visible={showRoutineStartModal} transparent animationType="fade">
@@ -4364,7 +4395,7 @@ export default function WorkoutLog() {
       </Modal>
 
       <Modal visible={showRoutineNameModal} transparent animationType="fade">
-        <View style={styles.modalBackdrop}>
+        <KeyboardAwareModalFrame style={styles.modalBackdrop}>
           <AdaptiveModalCard style={styles.modalCard}>
             <Text style={styles.modalTitle}>{editingRoutineId ? "Update routine" : "Save routine"}</Text>
             <TextInput disableFullscreenUI
@@ -4395,7 +4426,7 @@ export default function WorkoutLog() {
               </TouchableOpacity>
             </View>
           </AdaptiveModalCard>
-        </View>
+        </KeyboardAwareModalFrame>
       </Modal>
 
       <Modal visible={showDatePickerModal} transparent animationType="fade">
@@ -4477,7 +4508,7 @@ export default function WorkoutLog() {
       </Modal>
 
       <Modal visible={showDurationModal} transparent animationType="fade">
-        <View style={styles.modalBackdrop}>
+        <KeyboardAwareModalFrame style={styles.modalBackdrop}>
           <AdaptiveModalCard style={styles.modalCard}>
             <Text style={styles.modalTitle}>Adjust duration</Text>
             <Text style={styles.modalText}>Set workout duration (hours and minutes).</Text>
@@ -4527,11 +4558,11 @@ export default function WorkoutLog() {
               </TouchableOpacity>
             </View>
           </AdaptiveModalCard>
-        </View>
+        </KeyboardAwareModalFrame>
       </Modal>
 
       <Modal visible={showCardioTimeModal} transparent animationType="fade">
-        <View style={styles.modalBackdrop}>
+        <KeyboardAwareModalFrame style={styles.modalBackdrop}>
           <AdaptiveModalCard style={styles.modalCard}>
             <Text style={styles.modalTitle}>Set Cardio Time</Text>
             <View style={styles.durationFieldRow}>
@@ -4583,11 +4614,11 @@ export default function WorkoutLog() {
               </TouchableOpacity>
             </View>
           </AdaptiveModalCard>
-        </View>
+        </KeyboardAwareModalFrame>
       </Modal>
 
       <Modal visible={showCardioDistanceModal} transparent animationType="fade">
-        <View style={styles.modalBackdrop}>
+        <KeyboardAwareModalFrame style={styles.modalBackdrop}>
           <AdaptiveModalCard style={styles.modalCard}>
             <Text style={styles.modalTitle}>Set Distance</Text>
             <Text style={styles.modalText}>Whole and decimal values.</Text>
@@ -4647,11 +4678,11 @@ export default function WorkoutLog() {
               </TouchableOpacity>
             </View>
           </AdaptiveModalCard>
-        </View>
+        </KeyboardAwareModalFrame>
       </Modal>
 
       <Modal visible={showFinishModal} transparent animationType="fade">
-        <View style={styles.modalBackdrop}>
+        <KeyboardAwareModalFrame style={styles.modalBackdrop}>
           <AdaptiveModalCard style={styles.modalCard}>
             <Text style={styles.modalTitle}>Quick questions</Text>
             <Text style={styles.modalText}>Followed recommendation?</Text>
@@ -4723,7 +4754,7 @@ export default function WorkoutLog() {
               </TouchableOpacity>
             </View>
           </AdaptiveModalCard>
-        </View>
+        </KeyboardAwareModalFrame>
       </Modal>
 
       <Modal visible={showTempoEditorModal} transparent animationType="fade">
@@ -4891,6 +4922,7 @@ export default function WorkoutLog() {
         </GestureDetector>
         </View>
       </KeyboardAvoidingView>
+
       {availableWeightsTarget ? (
         <AvailableWeightsModal
           key={`${activeUid}:${availableWeightsTarget.name}`}
@@ -5515,4 +5547,3 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.08)",
   },
 });
-

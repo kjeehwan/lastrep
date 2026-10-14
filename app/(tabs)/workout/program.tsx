@@ -1,3 +1,5 @@
+import { AdaptiveModalCard } from "../../../src/ui/AdaptiveModalCard";
+import { KeyboardAwareModalFrame } from "../../../src/ui/KeyboardAwareModalFrame";
 import { Ionicons } from "@expo/vector-icons";
 import { Href, Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import { onAuthStateChanged } from "firebase/auth";
@@ -378,8 +380,8 @@ export default function WorkoutProgramScreen() {
       </Modal>
 
       <Modal visible={exercisePickerDay != null} transparent animationType="fade">
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
+        <KeyboardAwareModalFrame style={styles.modalBackdrop}>
+          <AdaptiveModalCard contentSized style={styles.modalCard}>
             <Text style={styles.modalTitle}>
               {exercisePickerDay ? `Day ${exercisePickerDay.dayNumber} exercises` : "Pick exercises"}
             </Text>
@@ -446,8 +448,8 @@ export default function WorkoutProgramScreen() {
             >
               <Text style={styles.secondaryText}>Close</Text>
             </TouchableOpacity>
-          </View>
-        </View>
+          </AdaptiveModalCard>
+        </KeyboardAwareModalFrame>
       </Modal>
     </SafeAreaView>
   );

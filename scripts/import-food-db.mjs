@@ -931,11 +931,14 @@ writeBlob(
 const manifestContent = `/* eslint-disable @typescript-eslint/no-require-imports */
 export const FOOD_CORE_ASSET = require("../../../assets/nutrition-data/foods-core.blob");
 export const FOOD_SEARCH_INDEX_ASSET = require("../../../assets/nutrition-data/foods-search-index.blob");
+export const FOOD_SEARCH_CATALOG_ASSET = require("../../../assets/nutrition-data/foods-search-catalog.blob");
 export const FOOD_REST_ASSETS: Record<number, number> = {
 ${assetManifestEntries.join(",\n")}
 };
 `;
 fs.writeFileSync(path.resolve(outputDir, "foodsAssetManifest.ts"), manifestContent, "utf8");
+const { buildFoodSearchCatalog } = await import("./build-food-search-catalog.mjs");
+buildFoodSearchCatalog(assetOutputDir);
 
 console.log(
   `[${source}] Imported ${normalized.length} foods (after cap). Core=${core.length}, rest chunks=${Math.ceil(

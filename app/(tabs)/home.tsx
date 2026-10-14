@@ -5,6 +5,11 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ProfilePhoto } from "../../src/profile/ProfilePhoto";
 import { profilePhotoReference } from "../../src/profile/profilePhotoReference";
 import { BodyCompositionHistoryChart } from "../../src/bodyComposition/BodyCompositionHistoryChart";
+import { AddMeasurementSheet } from "../../src/bodyComposition/AddMeasurementSheet";
+import type { BodyCompositionMetric, BodyCompositionHistoryPoint } from "../../src/bodyComposition/bodyCompositionHistory";
+import { phaseForDate, phaseWeek, saveUserPhases } from "../../src/profile/phaseState";
+import { CalendarOverlay, type CalendarOverlayHandle } from "../../src/ui/CalendarOverlay";
+import { AdaptiveModalCard } from "../../src/ui/AdaptiveModalCard";
 import { normalizeBodyCompositionHistory } from "../../src/bodyComposition/normalizeBodyCompositionHistory";
 import { USER_BODY_COMPOSITION_FIELD, type BodyCompositionHistoryEntry } from "../../src/contracts/bodyComposition";
 import { formatEffort, resolveEffortScale, type EffortScale } from "../../src/workouts/effortScale";
@@ -136,32 +141,13 @@ type DashboardMetricKey =
   | "recovery_fatigue"
   | "recovery_motivation";
 
-type TrainingPhaseHistoryEntry = {
-  phase: TrainingPhase;
-  startedAt: Timestamp;
-};
 
-type DietPhaseHistoryEntry = {
-  phase: DietPhase;
-  startedAt: Timestamp;
-};
 type ReadinessHistoryRecord = {
   soreness: number;
   fatigue: number;
   motivation: number;
 };
 
-const TRAINING_PHASE_COLORS: Record<TrainingPhase, string> = {
-  Hypertrophy: "#60a5fa",
-  Strength: "#f59e0b",
-  Power: "#f43f5e",
-};
-
-const DIET_PHASE_COLORS: Record<DietPhase, string> = {
-  Cut: "#38bdf8",
-  Maintain: "#34d399",
-  Bulk: "#f97316",
-};
 const KG_TO_LBS = 2.20462;
 const KCAL_TO_KJ = 4.184;
 const isWeightUnit = (value: unknown): value is WeightUnit => value === "kg" || value === "lbs";
@@ -214,7 +200,15 @@ export default function Home() {
   const [showAdjustInputsModal, setShowAdjustInputsModal] = useState(false);
   const [workoutDraftPlan, setWorkoutDraftPlan] = useState<PlannedWorkoutSummary | null>(null);
   const [showProfileModal, setShowProfileModal] = useState(false);
-  const [showCalendarModal, setShowCalendarModal] = useState(false);
+  const calendarRef = useRef<CalendarOverlayHandle>(null);
+  const [showMeasurementSheet, setShowMeasurementSheet] = useState(false);
+  const [selectedMeasurementPoint, setSelectedMeasurementPoint] = useState<BodyCompositionHistoryPoint | null>(null);
+  const [editingMeasurement, setEditingMeasurement] = useState<{ entry: BodyCompositionHistoryEntry; metric: BodyCompositionMetric } | undefined>();
+  const [measurementChart, setMeasurementChart] = useState<{ metric: BodyCompositionMetric; revision: number; recordedAtMs?: number }>({ metric: "weight", revision: 0 });
+  const [phaseSaving, setPhaseSaving] = useState(false);
+  const [phasePicker, setPhasePicker] = useState<"trainingPhase" | "dietPhase" | null>(null);
+  const [returnToCalendar, setReturnToCalendar] = useState(false);
+  const [phaseHistory, setPhaseHistory] = useState<{ training: unknown; diet: unknown }>({ training: [], diet: [] });
   const [showDayModal, setShowDayModal] = useState(false);
   const [activeDashboardMetric, setActiveDashboardMetric] = useState<DashboardMetricKey | null>(
     null
@@ -248,8 +242,6 @@ export default function Home() {
   const [sleepHistory, setSleepHistory] = useState<ChartPoint[]>([]);
   const [trainingPhaseStartedAt, setTrainingPhaseStartedAt] = useState<Timestamp | null>(null);
   const [dietPhaseStartedAt, setDietPhaseStartedAt] = useState<Timestamp | null>(null);
-  const [trainingPhaseHistory, setTrainingPhaseHistory] = useState<TrainingPhaseHistoryEntry[]>([]);
-  const [dietPhaseHistory, setDietPhaseHistory] = useState<DietPhaseHistoryEntry[]>([]);
   const [weightUnit, setWeightUnit] = useState<WeightUnit>("kg");
   const [energyUnit, setEnergyUnit] = useState<EnergyUnit>("kcal");
   const [sorenessHistory, setSorenessHistory] = useState<ChartPoint[]>([]);
@@ -343,48 +335,7 @@ export default function Home() {
         setDietPhaseStartedAt(
           data?.dietPhaseStartedAt instanceof Timestamp ? data.dietPhaseStartedAt : null
         );
-        const rawTrainingHistory = Array.isArray(data?.trainingPhaseHistory)
-          ? data.trainingPhaseHistory
-          : [];
-        const rawDietHistory = Array.isArray(data?.dietPhaseHistory) ? data.dietPhaseHistory : [];
-        const parsedTrainingHistory = rawTrainingHistory
-          .map((entry: any) => ({
-            phase: isTrainingPhase(entry?.phase) ? entry.phase : null,
-            startedAt: entry?.startedAt instanceof Timestamp ? entry.startedAt : null,
-          }))
-          .filter(
-            (
-              entry: {
-                phase: TrainingPhase | null;
-                startedAt: Timestamp | null;
-              }
-            ): entry is TrainingPhaseHistoryEntry =>
-              entry.phase != null && entry.startedAt != null
-          )
-          .sort(
-            (a: TrainingPhaseHistoryEntry, b: TrainingPhaseHistoryEntry) =>
-              a.startedAt.toMillis() - b.startedAt.toMillis()
-          );
-        const parsedDietHistory = rawDietHistory
-          .map((entry: any) => ({
-            phase: isDietPhase(entry?.phase) ? entry.phase : null,
-            startedAt: entry?.startedAt instanceof Timestamp ? entry.startedAt : null,
-          }))
-          .filter(
-            (
-              entry: {
-                phase: DietPhase | null;
-                startedAt: Timestamp | null;
-              }
-            ): entry is DietPhaseHistoryEntry =>
-              entry.phase != null && entry.startedAt != null
-          )
-          .sort(
-            (a: DietPhaseHistoryEntry, b: DietPhaseHistoryEntry) =>
-              a.startedAt.toMillis() - b.startedAt.toMillis()
-          );
-        setTrainingPhaseHistory(parsedTrainingHistory);
-        setDietPhaseHistory(parsedDietHistory);
+        setPhaseHistory({ training: data?.trainingPhaseHistory, diet: data?.dietPhaseHistory });
         const target = data?.sleepSettings?.targetHours;
         if (typeof target === "number" && Number.isFinite(target) && target > 0 && target <= 24) {
           setSleepTargetHours(Math.round(target * 10) / 10);
@@ -809,20 +760,8 @@ export default function Home() {
     [calendarMatrix, calendarMonth]
   );
   const weeklyMetrics = useMemo(() => computeWeeklyWorkoutMetrics(workouts), [workouts]);
-  const trainingPhaseWeek = useMemo(() => {
-    if (!trainingPhaseStartedAt) return 1;
-    const start = trainingPhaseStartedAt.toDate();
-    const diffMs = nowMs - start.getTime();
-    const week = Math.floor(diffMs / (7 * 24 * 60 * 60 * 1000)) + 1;
-    return Math.max(1, week);
-  }, [nowMs, trainingPhaseStartedAt]);
-  const dietPhaseWeek = useMemo(() => {
-    if (!dietPhaseStartedAt) return 1;
-    const start = dietPhaseStartedAt.toDate();
-    const diffMs = nowMs - start.getTime();
-    const week = Math.floor(diffMs / (7 * 24 * 60 * 60 * 1000)) + 1;
-    return Math.max(1, week);
-  }, [dietPhaseStartedAt, nowMs]);
+  const trainingPhaseWeek = phaseWeek(trainingPhaseStartedAt?.toMillis() ?? null, nowMs);
+  const dietPhaseWeek = phaseWeek(dietPhaseStartedAt?.toMillis() ?? null, nowMs);
 
   const selectedDayWorkouts = useMemo(
     () => workouts.filter((workout) => toDateKey(workout.date) === selectedDateKey),
@@ -1275,24 +1214,24 @@ export default function Home() {
     }
   };
 
-  const resolvePhaseForDate = <TPhase extends string>(
-    date: Date,
-    history: { phase: TPhase; startedAt: Timestamp }[],
-    fallbackPhase: TPhase
-  ): TPhase => {
-    if (!history.length) return fallbackPhase;
-    const targetDateKey = toDateKey(date);
-    let selected = history[0].phase;
-    for (const entry of history) {
-      const entryDateKey = toDateKey(entry.startedAt.toDate());
-      if (entryDateKey <= targetDateKey) {
-        selected = entry.phase;
-      } else {
-        break;
-      }
-    }
-    return selected;
+
+  const changePhase = async (key: 'trainingPhase' | 'dietPhase', phase: string) => {
+    if (!uid || phaseSaving) return;
+    setPhaseSaving(true);
+    try { await saveUserPhases(uid, { [key]: phase }); setPhasePicker(null); }
+    catch { showAppAlert('Could not change phase', 'Check your connection and try again.'); }
+    finally { setPhaseSaving(false); }
   };
+
+  const closeDayDetails = () => {
+    setShowDayModal(false);
+    if (returnToCalendar) calendarRef.current?.open();
+    setReturnToCalendar(false);
+  };
+
+  const selectedDayEndMs = new Date(`${selectedDateKey}T23:59:59.999`).getTime();
+  const selectedTrainingPhase = phaseForDate(phaseHistory.training, trainingPhase, trainingPhaseStartedAt?.toMillis() ?? null, selectedDayEndMs);
+  const selectedDietPhase = phaseForDate(phaseHistory.diet, dietPhase, dietPhaseStartedAt?.toMillis() ?? null, selectedDayEndMs);
 
   if (redirectTo) return <Redirect href={redirectTo} />;
 
@@ -1324,7 +1263,7 @@ export default function Home() {
           <View style={styles.headerTopRow}>
             <LastrepLogo variant="header" />
             <View style={styles.iconContainer}>
-              <TouchableOpacity onPress={() => setShowCalendarModal(true)}>
+              <TouchableOpacity onPress={() => calendarRef.current?.open()}>
                 <Ionicons name="calendar-outline" size={26} color="#fff" />
               </TouchableOpacity>
               <TouchableOpacity onPress={() => router.push("/settings" as Href)} style={{ marginLeft: 12 }}>
@@ -1377,6 +1316,18 @@ export default function Home() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
+        <View style={styles.homePhaseRow}>
+          {(['trainingPhase', 'dietPhase'] as const).map((key) => {
+            const training = key === 'trainingPhase';
+            const week = training ? trainingPhaseWeek : dietPhaseWeek;
+            return <TouchableOpacity key={key} accessibilityRole="button" accessibilityLabel={training ? 'Change training phase' : 'Change diet phase'} disabled={!bodyHistoryLoaded || phaseSaving} style={styles.homePhaseSelector} onPress={() => setPhasePicker(key)}>
+              <Text style={styles.phaseSelectorLabel}>{training ? 'Training' : 'Diet'}</Text>
+              <View style={styles.phaseSelectorValueRow}><Text style={styles.phaseSelectorValue}>{training ? trainingPhase : dietPhase}</Text><Ionicons name="chevron-down" size={14} color="#98a0b3" /></View>
+              {week != null ? <Text style={styles.phaseSelectorWeek}>Week {week}</Text> : null}
+            </TouchableOpacity>;
+          })}
+        </View>
+
         {shouldShowFirstTimeBanner ? (
           <View style={styles.section}>
             <View style={[styles.card, styles.firstTimeBannerCard]}>
@@ -1468,12 +1419,21 @@ export default function Home() {
 
         <View style={styles.section}>
           <View style={styles.card}>
-            <Text style={styles.cardHeading}>Progress</Text>
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.cardHeading}>Progress</Text>
+              <TouchableOpacity accessibilityRole="button" accessibilityLabel="Add or edit body composition data" onPress={() => {
+                const entry = selectedMeasurementPoint ? bodyHistory.find((row) => row.recordedAt?.toMillis() === selectedMeasurementPoint.recordedAtMs && row.source === selectedMeasurementPoint.source) : undefined;
+                setEditingMeasurement(entry && selectedMeasurementPoint ? { entry, metric: selectedMeasurementPoint.key.split('-')[0] as BodyCompositionMetric } : undefined);
+                setShowMeasurementSheet(true);
+              }} style={styles.addDataButton}>
+                <Text style={styles.addDataText}>+ Add/edit</Text>
+              </TouchableOpacity>
+            </View>
             {bodyHistoryError ? (
               <Text style={styles.noticeSub}>Couldn&apos;t refresh progress. Please try again when connected.</Text>
             ) : null}
             {bodyHistoryLoaded ? (
-              <BodyCompositionHistoryChart key={uid} history={bodyHistory} weightUnit={weightUnit} standalone />
+              <BodyCompositionHistoryChart key={`${uid}:${measurementChart.revision}`} initialMetric={measurementChart.metric} initialRecordedAtMs={measurementChart.recordedAtMs} onSelectionChange={setSelectedMeasurementPoint} history={bodyHistory} weightUnit={weightUnit} standalone />
             ) : !bodyHistoryError ? (
               <Text style={styles.noticeSub}>Loading measurements...</Text>
             ) : null}
@@ -1586,12 +1546,31 @@ export default function Home() {
 
       </ScrollView>
 
-      <Modal visible={showCalendarModal} transparent animationType="fade">
+      {showMeasurementSheet && uid ? <AddMeasurementSheet key={`${uid}:${editingMeasurement?.entry.recordedAt?.toMillis() ?? "new"}:${editingMeasurement?.entry.source ?? "manual"}`} uid={uid} entry={editingMeasurement?.entry} history={bodyHistory} weightUnit={weightUnit} onClose={() => setShowMeasurementSheet(false)} onDeleted={() => { setSelectedMeasurementPoint(null); setMeasurementChart((previous) => ({ ...previous, revision: previous.revision + 1, recordedAtMs: editingMeasurement?.entry.recordedAt?.toMillis() })); }} onSaved={(input, editedEntry) => {
+        const metric: BodyCompositionMetric = input.weightKg != null ? "weight" : input.bodyFatPercent != null ? "bodyFat" : input.leanBodyMassKg != null ? "leanBodyMass" : "skeletalMuscleMass";
+        setMeasurementChart((previous) => ({ metric: editedEntry ? editingMeasurement?.metric ?? metric : metric, revision: previous.revision + 1, recordedAtMs: editedEntry?.recordedAt?.toMillis() }));
+      }} /> : null}
+      <Modal visible={phasePicker != null} transparent animationType="fade" onRequestClose={() => { if (!phaseSaving) setPhasePicker(null); }}>
         <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            <View style={styles.calendarModalHeaderRow}>
+          <AdaptiveModalCard contentSized style={styles.modalCard}>
+            <Text style={styles.modalTitle}>{phasePicker === 'trainingPhase' ? 'Training phase' : 'Diet phase'}</Text>
+            <Text style={styles.noticeSub}>Switching starts the new phase at Week 1.</Text>
+            {(phasePicker === 'trainingPhase' ? TRAINING_PHASES : DIET_PHASES).map((phase) => {
+              const selected = phase === (phasePicker === 'trainingPhase' ? trainingPhase : dietPhase);
+              return <TouchableOpacity key={phase} accessibilityRole="button" accessibilityState={{ selected }} disabled={phaseSaving} style={[styles.phasePickerOption, selected && styles.phaseChoiceActive]} onPress={() => { if (phasePicker) void changePhase(phasePicker, phase); }}><Text style={styles.phaseChoiceText}>{phase}</Text>{selected ? <Ionicons name="checkmark" size={20} color="#cbbfff" /> : null}</TouchableOpacity>;
+            })}
+            {phaseSaving ? <Text style={styles.noticeSub}>Saving...</Text> : null}
+            <TouchableOpacity disabled={phaseSaving} style={[styles.secondaryButtonWide, { marginTop: 16 }]} onPress={() => setPhasePicker(null)}><Text style={styles.phaseChoiceText}>Cancel</Text></TouchableOpacity>
+          </AdaptiveModalCard>
+        </View>
+      </Modal>
+
+      <CalendarOverlay ref={calendarRef}>
+        <View style={styles.modalBackdrop}>
+          <AdaptiveModalCard contentSized style={styles.modalCard}>
+            <View style={[styles.calendarModalHeaderRow, { marginBottom: 16 }]}>
               <Text style={styles.modalTitle}>Calendar</Text>
-              <TouchableOpacity onPress={() => setShowCalendarModal(false)} style={styles.calendarCloseButton}>
+              <TouchableOpacity onPress={() => calendarRef.current?.close()} style={styles.calendarCloseButton}>
                 <Ionicons name="close" size={18} color="#fff" />
               </TouchableOpacity>
             </View>
@@ -1621,6 +1600,10 @@ export default function Home() {
               </TouchableOpacity>
             </View>
 
+            <View style={styles.calendarPhaseLabels}>
+              <Text style={styles.noticeSub}>Training: {trainingPhase}</Text>
+              <Text style={styles.noticeSub}>Diet: {dietPhase}</Text>
+            </View>
             <View style={styles.calendarWeekdayRow}>
               {WEEKDAY_LABELS.map((label, index) => (
                 <Text key={`${label}-${index}`} style={styles.calendarWeekdayText}>
@@ -1637,15 +1620,6 @@ export default function Home() {
                   const isToday = dateKey === toDateKey(new Date());
                   const isSelected = dateKey === selectedDateKey;
                   const daySummary = daySummaryMap.get(dateKey);
-                  const programEntry = workoutProgram
-                    ? buildProgramCalendarEntryForDate(day, workoutProgram, workoutCountByDate)
-                    : null;
-                  const dayTrainingPhase = resolvePhaseForDate(
-                    day,
-                    trainingPhaseHistory,
-                    trainingPhase
-                  );
-                  const dayDietPhase = resolvePhaseForDate(day, dietPhaseHistory, dietPhase);
                   return (
                     <TouchableOpacity
                       key={dateKey}
@@ -1657,8 +1631,13 @@ export default function Home() {
                       ]}
                       onPress={() => {
                         setSelectedDateKey(dateKey);
+                        setReturnToCalendar(true);
+                        calendarRef.current?.close();
                         setShowDayModal(true);
                       }}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: isSelected }}
+                      accessibilityLabel={`${dateKey}${isToday ? ", today" : ""}, ${daySummary?.workoutCount || 0} workouts`}
                     >
                       <Text
                         style={[
@@ -1669,85 +1648,19 @@ export default function Home() {
                       >
                         {day.getDate()}
                       </Text>
-                      <View style={styles.phaseTracks}>
-                        <View
-                          style={[
-                            styles.phaseTrack,
-                            { backgroundColor: TRAINING_PHASE_COLORS[dayTrainingPhase] },
-                          ]}
-                        />
-                        <View
-                          style={[
-                            styles.phaseTrack,
-                            { backgroundColor: DIET_PHASE_COLORS[dayDietPhase] },
-                          ]}
-                        />
-                      </View>
                       <View
                         style={[
                           styles.calendarWorkoutDot,
                           !daySummary?.workoutCount && styles.calendarWorkoutDotHidden,
                         ]}
                       />
-                      {programEntry ? (
-                        <Text style={styles.calendarProgramTag}>
-                          {programEntry.type === "rest" ? "R" : `D${programEntry.dayNumber}`}
-                        </Text>
-                      ) : null}
+
                     </TouchableOpacity>
                   );
                 })}
               </View>
             ))}
 
-            <View style={styles.phaseWeekRow}>
-              <View
-                style={[
-                  styles.phasePill,
-                  { borderColor: TRAINING_PHASE_COLORS[trainingPhase] },
-                ]}
-              >
-                <View
-                  style={[
-                    styles.phasePillDot,
-                    { backgroundColor: TRAINING_PHASE_COLORS[trainingPhase] },
-                  ]}
-                />
-                <Text style={styles.phaseWeekText}>
-                  Training: {trainingPhase} - Week {trainingPhaseWeek}
-                </Text>
-              </View>
-              <View
-                style={[
-                  styles.phasePill,
-                  { borderColor: DIET_PHASE_COLORS[dietPhase] },
-                ]}
-              >
-                <View
-                  style={[
-                    styles.phasePillDot,
-                    { backgroundColor: DIET_PHASE_COLORS[dietPhase] },
-                  ]}
-                />
-                <Text style={styles.phaseWeekText}>
-                  Diet: {dietPhase} - Week {dietPhaseWeek}
-                </Text>
-              </View>
-            </View>
-
-            <Text style={styles.cardText}>
-              {selectedDaySummary
-                ? `${selectedDateKey}: ${selectedDaySummary.workoutCount} workout(s), ${selectedDaySummary.totalSets} sets, ${Math.round(convertKgToUnit(selectedDaySummary.totalVolumeKg, weightUnit))} ${weightUnit} volume`
-                : `${selectedDateKey}: no workouts logged`}
-            </Text>
-            {selectedProgramEntry ? (
-              <Text style={styles.noticeSub}>
-                Program:{" "}
-                {selectedProgramEntry.type === "rest"
-                  ? "Rest"
-                  : `Day ${selectedProgramEntry.dayNumber} (${selectedProgramEntry.title})`}
-              </Text>
-            ) : null}
             {__DEV__ ? (
               <View style={styles.devActionsRow}>
                 <TouchableOpacity
@@ -1777,9 +1690,9 @@ export default function Home() {
                 </TouchableOpacity>
               </View>
             ) : null}
-          </View>
+          </AdaptiveModalCard>
         </View>
-      </Modal>
+      </CalendarOverlay>
 
       <Modal visible={activeDashboardMetric != null} transparent animationType="fade">
         <TouchableWithoutFeedback onPress={() => setActiveDashboardMetric(null)}>
@@ -1900,6 +1813,7 @@ export default function Home() {
                                     ]}
                                     onPress={() => {
                                       setSelectedDateKey(cell.key);
+                                      setReturnToCalendar(false);
                                       setShowDayModal(true);
                                     }}
                                   />
@@ -1927,16 +1841,17 @@ export default function Home() {
         </TouchableWithoutFeedback>
       </Modal>
 
-      <Modal visible={showDayModal} transparent animationType="fade">
+      <Modal visible={showDayModal} transparent animationType="fade" onRequestClose={closeDayDetails}>
         <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Workout Day</Text>
+          <AdaptiveModalCard contentSized style={styles.modalCard}>
+            <Text style={styles.modalTitle}>{selectedDayWorkouts.length ? "Workout Day" : "Rest Day"}</Text>
             <Text style={styles.noticeSub}>{selectedDateKey}</Text>
+            <Text style={styles.cardText}>{selectedDaySummary ? `${selectedDaySummary.workoutCount} workout(s), ${selectedDaySummary.totalSets} sets, ${Math.round(convertKgToUnit(selectedDaySummary.totalVolumeKg, weightUnit))} ${weightUnit} volume` : "No workouts logged"}</Text>
+            {selectedTrainingPhase || selectedDietPhase ? <Text style={styles.noticeSub}>{[selectedTrainingPhase && `Training: ${selectedTrainingPhase}`, selectedDietPhase && `Diet: ${selectedDietPhase}`].filter(Boolean).join(" | ")}</Text> : null}
+            {selectedProgramEntry ? <Text style={styles.noticeSub}>Program: {selectedProgramEntry.type === "rest" ? "Rest" : `Day ${selectedProgramEntry.dayNumber} (${selectedProgramEntry.title})`}</Text> : null}
 
             <ScrollView style={styles.dayModalScroll} contentContainerStyle={{ gap: 10 }}>
-              {selectedDayWorkouts.length === 0 ? (
-                <Text style={styles.cardText}>No workouts logged on this date.</Text>
-              ) : (
+              {selectedDayWorkouts.length === 0 ? null : (
                 selectedDayWorkouts.map((workout) => (
                   <View key={workout.id} style={styles.dayWorkoutCard}>
                     <Text style={styles.dayWorkoutTitle}>{workout.title}</Text>
@@ -1952,7 +1867,7 @@ export default function Home() {
                       <View key={`${workout.id}-${exercise.name}-${exerciseIndex}`} style={styles.dayExerciseBlock}>
                         <Text style={styles.dayExerciseName}>{exercise.name}</Text>
                         {exercise.mode === "cardio" ? (
-                          <Text style={styles.noticeSub}>Zone: {exercise.zone || "-"}</Text>
+                          exercise.zone ? <Text style={styles.noticeSub}>Zone: {exercise.zone}</Text> : null
                         ) : exercise.tempo ? (
                           <Text style={styles.noticeSub}>Tempo: {exercise.tempo}</Text>
                         ) : null}
@@ -1988,11 +1903,11 @@ export default function Home() {
 
             <TouchableOpacity
               style={[styles.primaryButtonWide, { marginTop: 8 }]}
-              onPress={() => setShowDayModal(false)}
+              onPress={closeDayDetails}
             >
               <Text style={styles.primaryText}>Close</Text>
             </TouchableOpacity>
-          </View>
+          </AdaptiveModalCard>
         </View>
       </Modal>
 
@@ -2255,6 +2170,17 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "flex-start",
   },
+  homePhaseRow: { flexDirection: 'row', gap: 10, marginBottom: 4 },
+  homePhaseSelector: { flex: 1, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.04)' },
+  phaseSelectorLabel: { color: '#98a0b3', fontSize: 12, marginBottom: 4 },
+  phaseSelectorValueRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 6 },
+  phaseSelectorValue: { flexShrink: 1, color: '#fff', fontSize: 14, fontWeight: '600' },
+  phaseSelectorWeek: { color: '#98a0b3', fontSize: 12, marginTop: 4 },
+  phasePickerOption: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 14, borderRadius: 10, marginTop: 8, backgroundColor: 'rgba(255,255,255,0.06)' },
+  calendarPhaseLabels: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginVertical: 8 },
+  addDataButton: { paddingHorizontal: 8, paddingVertical: 10 },
+  addDataText: { color: '#cbbfff', fontSize: 14, fontWeight: '600' },
+  calendarDetailsButton: { paddingVertical: 12, alignItems: 'center', borderRadius: 10, backgroundColor: 'rgba(123,97,255,0.2)' },
   calendarDayCell: {
     width: "14.2857%",
     aspectRatio: 1,
@@ -2277,7 +2203,7 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "rgba(255,255,255,0.28)",
   },
-  calendarDayText: { color: "#d8daec", fontWeight: "700", fontSize: 12 },
+  calendarDayText: { color: "#d8daec", fontWeight: "700", fontSize: 15 },
   calendarDayTextMuted: { color: "#767c9a" },
   calendarDayTextSelected: { color: "#fff" },
   calendarWorkoutDot: {
@@ -2295,6 +2221,10 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     marginTop: 1,
   },
+  phaseChoiceRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginVertical: 10 },
+  phaseChoice: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.06)' },
+  phaseChoiceActive: { backgroundColor: 'rgba(123,97,255,0.3)', borderWidth: 1, borderColor: '#7b61ff' },
+  phaseChoiceText: { color: '#fff', fontWeight: '600' },
   phaseTracks: {
     width: "100%",
     gap: 2,

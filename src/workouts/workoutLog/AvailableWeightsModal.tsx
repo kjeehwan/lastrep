@@ -1,6 +1,7 @@
+import { AdaptiveModalCard } from "../../ui/AdaptiveModalCard";
 import { Ionicons } from "@expo/vector-icons";
 import React, { useState } from "react";
-import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { convertAvailableWeightsUnit, normalizeAvailableWeights, type AvailableWeights } from "../availableWeights";
 
@@ -57,9 +58,9 @@ export function AvailableWeightsModal({ name, settings, defaultUnit, onClose, on
     <Modal visible transparent animationType="slide" onRequestClose={() => { if (!saving) onClose(); }}>
       <KeyboardAvoidingView style={styles.overlay} behavior={Platform.OS === "ios" ? "padding" : "height"}>
         <Pressable style={StyleSheet.absoluteFill} onPress={() => { if (!saving) onClose(); }} accessibilityLabel="Close available weights" />
-        <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+        <AdaptiveModalCard contentSized style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) }]}>
           <View style={styles.heading}><Text style={styles.title}>Available weights</Text><Pressable disabled={saving} onPress={onClose} hitSlop={12} accessibilityLabel="Close"><Ionicons name="close" size={24} color="#fff" /></Pressable></View>
-          <ScrollView style={{ flexShrink: 1 }} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.body}>
+          <View style={styles.body}>
             <Text style={styles.exerciseName}>{name}</Text>
             <Text style={styles.hint}>Optional. Used for future suggestions; your current sets stay unchanged.</Text>
             <View style={styles.row}>{(["kg", "lbs"] as const).map((choice) => <Pressable key={choice} style={[styles.chip, unit === choice && styles.active]} onPress={() => switchUnit(choice)}><Text style={styles.text}>{choice}</Text></Pressable>)}</View>
@@ -81,9 +82,9 @@ export function AvailableWeightsModal({ name, settings, defaultUnit, onClose, on
             )}
             {error ? <Text style={styles.error}>{error}</Text> : null}
             {settings ? <Pressable disabled={saving} onPress={() => void save(true)} style={styles.clear}><Text style={styles.link}>Clear saved settings</Text></Pressable> : null}
-          </ScrollView>
+          </View>
           <Pressable disabled={saving} style={[styles.button, saving && { opacity: 0.5 }]} onPress={() => void save()}><Text style={styles.buttonText}>{saving ? "Saving..." : "Save available weights"}</Text></Pressable>
-        </View>
+        </AdaptiveModalCard>
       </KeyboardAvoidingView>
     </Modal>
   );
@@ -91,7 +92,7 @@ export function AvailableWeightsModal({ name, settings, defaultUnit, onClose, on
 
 const styles = StyleSheet.create({
   overlay: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.6)" },
-  sheet: { maxHeight: "88%", backgroundColor: "#14182b", borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingTop: 20 },
+  sheet: { width: "100%", maxHeight: "88%", backgroundColor: "#14182b", borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingTop: 20 },
   heading: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 14 },
   title: { color: "#fff", fontSize: 20, fontWeight: "700" },
   body: { gap: 12, paddingBottom: 18 },

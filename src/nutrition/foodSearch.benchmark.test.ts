@@ -31,6 +31,7 @@ vi.mock("./data/foodsAssetManifest", () => {
   return {
     FOOD_CORE_ASSET: assetPath("assets", "nutrition-data", "foods-core.blob"),
     FOOD_SEARCH_INDEX_ASSET: assetPath("assets", "nutrition-data", "foods-search-index.blob"),
+    FOOD_SEARCH_CATALOG_ASSET: assetPath("assets", "nutrition-data", "foods-search-catalog.blob"),
     FOOD_REST_ASSETS: restAssets,
   };
 });

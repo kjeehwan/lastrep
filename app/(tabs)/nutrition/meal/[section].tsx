@@ -1,3 +1,5 @@
+import { AdaptiveModalCard } from "../../../../src/ui/AdaptiveModalCard";
+import { KeyboardAwareModalFrame } from "../../../../src/ui/KeyboardAwareModalFrame";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { onAuthStateChanged } from "firebase/auth";
@@ -553,8 +555,8 @@ export default function MealSectionScreen() {
       </ScrollView>
 
       <Modal visible={editorVisible} transparent animationType="fade" onRequestClose={closeEditor}>
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
+        <KeyboardAwareModalFrame style={styles.modalBackdrop}>
+          <AdaptiveModalCard contentSized style={styles.modalCard}>
             <Text style={styles.modalTitle}>Edit {editingMeal?.name ?? "meal"}</Text>
 
             {!editorFallback ? (
@@ -661,8 +663,8 @@ export default function MealSectionScreen() {
                 <Text style={styles.primaryBtnText}>Save</Text>
               </TouchableOpacity>
             </View>
-          </View>
-        </View>
+          </AdaptiveModalCard>
+        </KeyboardAwareModalFrame>
       </Modal>
 
       <Modal

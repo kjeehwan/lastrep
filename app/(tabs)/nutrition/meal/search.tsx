@@ -1,3 +1,5 @@
+import { AdaptiveModalCard } from "../../../../src/ui/AdaptiveModalCard";
+import { KeyboardAwareModalFrame } from "../../../../src/ui/KeyboardAwareModalFrame";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { CameraView, type BarcodeScanningResult, useCameraPermissions } from "expo-camera";
@@ -1035,8 +1037,8 @@ export default function MealSearchScreen() {
       </ScrollView>
 
       <Modal visible={editorVisible} transparent animationType="fade" onRequestClose={() => setEditorVisible(false)}>
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
+        <KeyboardAwareModalFrame style={styles.modalBackdrop}>
+          <AdaptiveModalCard contentSized style={styles.modalCard}>
             <Text style={styles.modalTitle}>{editorFood?.name ?? "Edit"}</Text>
             <View style={styles.rowWrap}>
               {ENTRY_MODES.map((mode) => (
@@ -1085,8 +1087,8 @@ export default function MealSearchScreen() {
                 <Text style={styles.primaryBtnText}>Confirm</Text>
               </TouchableOpacity>
             </View>
-          </View>
-        </View>
+          </AdaptiveModalCard>
+        </KeyboardAwareModalFrame>
       </Modal>
 
       <Modal
@@ -1100,7 +1102,7 @@ export default function MealSearchScreen() {
           behavior={Platform.OS === "ios" ? "padding" : "height"}
           keyboardVerticalOffset={Platform.OS === "android" ? 24 : 0}
         >
-          <View style={styles.scannerCard}>
+          <AdaptiveModalCard contentSized style={styles.scannerCard}>
             <View style={styles.scannerHeader}>
               <View style={styles.searchBody}>
                 <Text style={styles.modalTitle}>Scan packaged food</Text>
@@ -1145,7 +1147,7 @@ export default function MealSearchScreen() {
                 <Text style={styles.primaryBtnText}>Look up</Text>
               </TouchableOpacity>
             </View>
-          </View>
+          </AdaptiveModalCard>
         </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
