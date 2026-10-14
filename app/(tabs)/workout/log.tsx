@@ -1,8 +1,9 @@
 import { KeyboardAwareModalFrame } from "../../../src/ui/KeyboardAwareModalFrame";
 import { Ionicons } from "@expo/vector-icons";
+import { useNow } from "../../../src/hooks/useNow";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createAudioPlayer } from "expo-audio";
-import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect, useIsFocused, useLocalSearchParams, useRouter } from "expo-router";
 import { getAuth, onAuthStateChanged } from "firebase/auth";
 import {
   addDoc,
@@ -352,6 +353,8 @@ const formatTempoFromIndices = (indices: number[]) =>
 
 export default function WorkoutLog() {
   const router = useRouter();
+  const isFocused = useIsFocused();
+  const guidanceNowMs = useNow(60_000, isFocused);
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const isTabletLayout = Math.min(width, height) >= 600;
@@ -397,7 +400,7 @@ export default function WorkoutLog() {
     pause: pauseElapsedTimer,
     setDuration: setElapsedDuration,
     reset: resetElapsedTimer,
-  } = useWorkoutElapsedTimer();
+  } = useWorkoutElapsedTimer(0, false, isFocused);
   const [sessionDateText, setSessionDateText] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(
@@ -513,9 +516,12 @@ export default function WorkoutLog() {
     [exercises, exerciseUnits, sessionTitle, sessionDateText, elapsedSeconds, workoutTimerRunning, workoutTimerStartedAtMs, restTimerByExercise]
   );
   const availableWeightsPreferences = useAvailableWeights(activeUid);
-  const guidanceWorkout = useMemo(() => withAvailableWeights(parseWorkoutDraftPlan(serializeWorkoutDraft(workoutDraftPayload)), availableWeightsPreferences.values) ?? {
+  // Guidance depends on prescriptions, not per-second timer display updates.
+  const guidanceWorkout = useMemo(() => withAvailableWeights(parseWorkoutDraftPlan(JSON.stringify({
+    exercises, sessionTitle, sessionDateText, draftSavedAt: guidanceNowMs,
+  }), new Date(guidanceNowMs)), availableWeightsPreferences.values) ?? {
     source: "none" as const, title: null, exerciseNames: [],
-  }, [workoutDraftPayload, availableWeightsPreferences.values]);
+  }, [exercises, sessionTitle, sessionDateText, guidanceNowMs, availableWeightsPreferences.values]);
   const todayPlan = useWorkoutTodayPlan(activeUid, guidanceWorkout);
   const todayGuidance = todayPlan.plan;
   const showTodayGuidance = todayPlan.visible;
@@ -3094,7 +3100,7 @@ export default function WorkoutLog() {
     return activeSetExercise.sets[activeSetMenu.setIndex] ?? null;
   }, [activeSetExercise, activeSetMenu]);
 
-  const currentGuidanceSignature = workoutGuidanceSignature(guidanceWorkout);
+  const currentGuidanceSignature = useMemo(() => workoutGuidanceSignature(guidanceWorkout), [guidanceWorkout]);
   const guidanceApplied = Boolean(appliedGuidance && todayGuidance &&
     appliedGuidance.plan.createdAt.isEqual(todayGuidance.createdAt) &&
     appliedGuidance.signature === currentGuidanceSignature);
