@@ -4,6 +4,7 @@ import {
   FOOD_CORE_ASSET,
   FOOD_REST_ASSETS,
   FOOD_SEARCH_INDEX_ASSET,
+  FOOD_SEARCH_CATALOG_ASSET,
 } from "./data/foodsAssetManifest";
 
 export type FoodItem = {
@@ -37,7 +38,7 @@ let searchIndexPromise: Promise<SearchIndexData> | null = null;
 let coreFoodsPromise: Promise<FoodItem[]> | null = null;
 let canonicalCoreUsdaPromise: Promise<IndexedFood[]> | null = null;
 let coreByIdPromise: Promise<Map<string, FoodItem>> | null = null;
-let allFoodsIndexedPromise: Promise<IndexedFood[]> | null = null;
+let searchCatalogPromise: Promise<[string, string, string, number][]> | null = null;
 
 type SearchIndexData = {
   FOOD_TOKEN_INDEX: Record<string, string[]>;
@@ -190,19 +191,28 @@ async function loadCanonicalCoreUsda(): Promise<IndexedFood[]> {
   return canonicalCoreUsdaPromise;
 }
 
-async function loadAllFoodsIndexed(): Promise<IndexedFood[]> {
-  if (!allFoodsIndexedPromise) {
-    allFoodsIndexedPromise = (async () => {
-      const core = await loadCoreFoods();
-      const chunkNos = Object.keys(FOOD_REST_ASSETS)
-        .map((key) => Number(key))
-        .filter((value) => Number.isFinite(value))
-        .sort((a, b) => a - b);
-      const chunks = await Promise.all(chunkNos.map((chunkNo) => loadRestChunk(chunkNo)));
-      return dedupeFoodsByName([...core, ...chunks.flat()]).map(toIndexedFood);
-    })();
+async function catalogMatches(predicate: (food: Pick<IndexedFood, "_name" | "_aliases" | "_blob">) => boolean): Promise<IndexedFood[]> {
+  if (!searchCatalogPromise) searchCatalogPromise = readBlobModuleJson<[string, string, string, number][]>(FOOD_SEARCH_CATALOG_ASSET);
+  const catalog = await searchCatalogPromise;
+  const idsByChunk = new Map<number, Set<string>>();
+  let sliceStartedAt = Date.now();
+  for (let index = 0; index < catalog.length; index++) {
+    const [id, name, aliases, chunk] = catalog[index];
+    if (predicate({ _name: name, _aliases: aliases, _blob: `${name} ${aliases}`.trim() })) {
+      if (!idsByChunk.has(chunk)) idsByChunk.set(chunk, new Set());
+      idsByChunk.get(chunk)!.add(id);
+    }
+    // Give input and navigation events a chance to run during broad scans.
+    if (index > 0 && index % 500 === 0 && Date.now() - sliceStartedAt >= 8) {
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      sliceStartedAt = Date.now();
+    }
   }
-  return allFoodsIndexedPromise;
+  const matches = await Promise.all([...idsByChunk].map(async ([chunk, ids]) => {
+    const rows = chunk === 0 ? await loadCoreFoods() : await loadRestChunk(chunk);
+    return rows.filter((food) => ids.has(food.id));
+  }));
+  return matches.flat().map(toIndexedFood);
 }
 
 async function loadSearchIndex() {
@@ -217,7 +227,7 @@ export function clearFoodSearchCache() {
 }
 
 export async function prewarmFoodSearch(): Promise<void> {
-  await Promise.all([loadRestChunk(1), loadRestChunk(2), loadUsdaFallbackFoods()]);
+  await loadCoreFoods();
 }
 
 function normalize(text: string): string {
@@ -711,7 +721,6 @@ function topTierScore(food: FoodItem, ctx: QueryCtx): number {
 
 async function canonicalUsdaRank(ctx: QueryCtx, limit: number): Promise<FoodItem[]> {
   const { FOOD_PREFIX_INDEX, FOOD_TOKEN_INDEX } = await loadSearchIndex();
-  const usdaFoods = await loadUsdaFallbackFoods();
   const qTokens = unique([ctx.q, ...ctx.tokens, ...ctx.expanded, ...getQueryLemmas(ctx.tokens)].map((x) => normalize(x)).filter(Boolean));
   const candidateIds = new Set<string>();
   for (const token of qTokens) {
@@ -737,7 +746,7 @@ async function canonicalUsdaRank(ctx: QueryCtx, limit: number): Promise<FoodItem
       ? (await resolveFoodsByIds([...candidateIds]))
           .filter((x) => x.id.startsWith("usda-"))
           .map(toIndexedFood)
-      : usdaFoods;
+      : await loadUsdaFallbackFoods();
   const isCanonicalUsda = (f: IndexedFood): boolean =>
     f.id.startsWith("usda-") &&
     f.caloriesPer100g <= 900 &&
@@ -843,12 +852,12 @@ async function resolvePotatoFamilyStrict(ctx: QueryCtx, limit: number): Promise<
   const indexedRows = dedupeFoodsByName(selectRows(indexedPool)).slice(0, limit);
   if (indexedRows.length > 0) return indexedRows;
 
-  const allRows = dedupeFoodsByName(selectRows(await loadAllFoodsIndexed()));
+  const allRows = dedupeFoodsByName(selectRows(await catalogMatches((food) => /\bpotato(?:es)?\b/.test(food._name))));
   return allRows.slice(0, limit);
 }
 
 async function resolveOatFamilyStrict(ctx: QueryCtx, limit: number): Promise<FoodItem[]> {
-  const plainOatRows = (await loadAllFoodsIndexed())
+  const plainOatRows = (await catalogMatches((food) => /\b(oat|oats|oatmeal)\b/.test(food._name)))
     .filter((f) => {
       const n = f._name;
       if (!/\b(oat|oats|oatmeal)\b/.test(n)) return false;
@@ -888,29 +897,21 @@ async function resolveOatFamilyStrict(ctx: QueryCtx, limit: number): Promise<Foo
   return dedupeFoodsByName(plainOatRows).slice(0, limit);
 }
 
-function hasBroadQueryMatch(food: IndexedFood, ctx: QueryCtx): boolean {
-  if (!ctx.q) return false;
-  if (food._name.includes(ctx.q) || food._blob.includes(ctx.q)) return true;
-  const lemmas = getQueryLemmas(ctx.tokens);
-  if (ctx.tokens.length > 1) {
-    return ctx.tokens.every(
-      (token) =>
-        new RegExp(`\\b${token}\\b`).test(food._name) ||
-        new RegExp(`\\b${token}\\b`).test(food._aliases) ||
-        new RegExp(`\\b${token}\\b`).test(food._blob)
-    );
-  }
-  return [...ctx.tokens, ...ctx.expanded, ...lemmas].some((token) => {
-    if (!token) return false;
-    const rx = new RegExp(`\\b${token}\\b`);
-    return rx.test(food._name) || rx.test(food._aliases) || rx.test(food._blob);
-  });
+function broadQueryMatcher(ctx: QueryCtx) {
+  const tokens = ctx.tokens.length > 1 ? ctx.tokens : [...ctx.tokens, ...ctx.expanded, ...getQueryLemmas(ctx.tokens)];
+  const expressions = tokens.filter(Boolean).map((token) => new RegExp(`\\b${token}\\b`));
+  return (food: Pick<IndexedFood, "_name" | "_aliases" | "_blob">) => {
+    if (!ctx.q) return false;
+    if (food._name.includes(ctx.q) || food._blob.includes(ctx.q)) return true;
+    const matches = (rx: RegExp) => rx.test(food._name) || rx.test(food._aliases) || rx.test(food._blob);
+    return ctx.tokens.length > 1 ? expressions.every(matches) : expressions.some(matches);
+  };
 }
 
 async function broadRankAllFoods(ctx: QueryCtx, limit: number): Promise<FoodItem[]> {
-  const pool = await loadAllFoodsIndexed();
+  const matches = broadQueryMatcher(ctx);
+  const pool = await catalogMatches(matches);
   const ranked = pool
-    .filter((food) => hasBroadQueryMatch(food, ctx))
     .map((food) => ({ food, s: score(food, ctx) }))
     .filter((entry) => entry.s > 0)
     .sort((a, b) => b.s - a.s || a.food.name.localeCompare(b.food.name))
@@ -1110,7 +1111,6 @@ function score(food: IndexedFood, ctx: QueryCtx): number {
 
 
 export async function searchFoodsAsync(query: string, limit = SEARCH_LIMIT_DEFAULT): Promise<FoodItem[]> {
-  const { FOOD_PREFIX_INDEX, FOOD_TOKEN_INDEX } = await loadSearchIndex();
   const q = normalize(query);
   const ctx = buildQueryCtx(q);
   const cacheKey = `canonical::${q}::${limit}`;
@@ -1127,6 +1127,8 @@ export async function searchFoodsAsync(query: string, limit = SEARCH_LIMIT_DEFAU
     queryCache.set(cacheKey, defaultRows);
     return defaultRows;
   }
+
+  const { FOOD_PREFIX_INDEX, FOOD_TOKEN_INDEX } = await loadSearchIndex();
 
   if (q === "potato" || q === "potatoes" || q.includes("sweet potato")) {
     const strictPotato = await resolvePotatoFamilyStrict(ctx, limit);

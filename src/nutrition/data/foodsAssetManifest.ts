@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 export const FOOD_CORE_ASSET = require("../../../assets/nutrition-data/foods-core.blob");
 export const FOOD_SEARCH_INDEX_ASSET = require("../../../assets/nutrition-data/foods-search-index.blob");
+export const FOOD_SEARCH_CATALOG_ASSET = require("../../../assets/nutrition-data/foods-search-catalog.blob");
 export const FOOD_REST_ASSETS: Record<number, number> = {
   1: require("../../../assets/nutrition-data/foods-rest-1.blob"),
   2: require("../../../assets/nutrition-data/foods-rest-2.blob"),
