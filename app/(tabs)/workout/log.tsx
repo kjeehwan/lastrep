@@ -92,6 +92,7 @@ import { WorkoutNativeSetRows } from "../../../src/workouts/workoutLog/WorkoutNa
 import { ExerciseProgressSummary } from "../../../src/workouts/workoutLog/ExerciseProgressSummary";
 import { effortInputValue, effortLabel, effortToRpe, formatEffort, isValidWorkoutEffort, resolveEffortScale, type EffortInput, type EffortScale } from "../../../src/workouts/effortScale";
 import { advanceRest, pauseRest, startRest, type RestClock } from "../../../src/workouts/workoutLog/timerClock";
+import { freshSetEffort } from "../../../src/workouts/workoutLog/freshSetEffort";
 
 type Unit = "kg" | "lbs" | "km" | "mi";
 type SetType = "warmup" | "normal" | "failure" | "drop";
@@ -746,7 +747,7 @@ export default function WorkoutLog() {
         ? previousSets.map((set) => ({
             weightKg: mode === "cardio" ? null : set.weightKg ?? null,
             reps: mode === "cardio" ? "" : String(set.reps ?? ""),
-            rpe: mode === "cardio" ? "" : String(set.rpe ?? ""),
+            ...freshSetEffort(),
             distanceKm: mode === "cardio" ? set.distanceKm ?? null : null,
             durationSec: mode === "cardio" ? set.durationSec ?? null : null,
             zone: mode === "cardio" ? String(set.zone ?? "") : "",
@@ -4808,9 +4809,12 @@ export default function WorkoutLog() {
         </View>
       </Modal>
 
-      <Modal visible={Boolean(activeSetMenu)} transparent animationType="slide">
-        <View style={[styles.sheetBackdrop, { paddingBottom: insets.bottom + 72 }]}>
-          <AdaptiveModalCard style={styles.sheetCard}>
+      <Modal visible={Boolean(activeSetMenu)} transparent animationType="fade" onRequestClose={closeSetMenu}>
+        <View style={[styles.sheetBackdrop, { paddingBottom: insets.bottom + 16, paddingTop: insets.top + 16 }]}>
+          <TouchableWithoutFeedback onPress={closeSetMenu} accessibilityLabel="Dismiss set options">
+            <View style={StyleSheet.absoluteFill} />
+          </TouchableWithoutFeedback>
+          <AdaptiveModalCard contentSized style={[styles.sheetCard, { maxHeight: Math.max(120, (height - insets.top - insets.bottom - 32) * 0.65) }]}>
             <View style={styles.sheetTitleRow}>
               <Text style={styles.modalTitle}>Set options</Text>
               <TouchableOpacity
@@ -5502,6 +5506,7 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   sheetCard: {
+    width: "100%",
     backgroundColor: "#111427",
     padding: 16,
     borderTopLeftRadius: 16,

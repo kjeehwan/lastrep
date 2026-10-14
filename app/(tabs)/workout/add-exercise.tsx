@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { getAuth, onAuthStateChanged } from "firebase/auth";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import {
   FlatList,
   KeyboardAvoidingView,
@@ -58,6 +58,8 @@ export default function AddExerciseScreen() {
   const [activeUid, setActiveUid] = useState<string | null>(auth.currentUser?.uid ?? null);
   const params = useLocalSearchParams<{ recent?: string }>();
   const [searchQuery, setSearchQuery] = useState("");
+  const deferredSearchQuery = useDeferredValue(searchQuery);
+  const searchInputRef = useRef<TextInput>(null);
   const [activeGroup, setActiveGroup] = useState<string>("all");
   const [customExercise, setCustomExercise] = useState("");
   const [selectedExercises, setSelectedExercises] = useState<string[]>([]);
@@ -137,43 +139,43 @@ export default function AddExerciseScreen() {
     };
   }, []);
 
+  // Normalize and alphabetize once, not on each keystroke or clear action.
+  const searchIndex = useMemo(() => catalog.map((item) => ({
+    item,
+    title: normalizeSearch(item.name),
+    searchableText: normalizeSearch([
+      item.name, ...item.aliases, ...item.primaryMuscles,
+      ...item.secondaryMuscles, ...item.equipment, item.movementPattern,
+    ].join(" ")),
+  })).sort((a, b) => a.item.name.localeCompare(b.item.name)), [catalog]);
+
   const filtered = useMemo(() => {
     const group =
       activeGroup === "all" || activeGroup === "favorites" || activeGroup === "recent"
         ? "all"
         : (activeGroup as ExerciseGroupKey);
-    const needle = normalizeSearch(searchQuery);
-    const base = group === "all" ? catalog : catalog.filter((item) => item.group === group);
+    const needle = normalizeSearch(deferredSearchQuery);
+    const base = searchIndex.filter(({ item }) => {
+      if (group !== "all" && item.group !== group) return false;
+      const name = item.name.toLowerCase();
+      if (activeGroup === "favorites") return favoriteSet.has(name);
+      if (activeGroup === "recent") return recentSet.has(name);
+      return true;
+    });
+    if (!needle) return base.map(({ item }) => item);
     const matches = base
-      .map((item) => {
-        const haystack = normalizeSearch(
-          [
-            item.name,
-            ...item.aliases,
-            ...item.primaryMuscles,
-            ...item.secondaryMuscles,
-            ...item.equipment,
-            item.movementPattern,
-          ].join(" ")
-        );
+      .map(({ item, title, searchableText }) => {
         return {
           item,
-          score: scoreExerciseSearch(needle, haystack, normalizeSearch(item.name)),
+          score: scoreExerciseSearch(needle, searchableText, title),
         };
       })
       .filter((entry) => entry.score > 0)
       .sort((a, b) => b.score - a.score || a.item.name.localeCompare(b.item.name))
       .map((entry) => entry.item);
 
-    const filteredByTab = matches.filter((item) => {
-      const name = item.name.toLowerCase();
-      if (activeGroup === "favorites") return favoriteSet.has(name);
-      if (activeGroup === "recent") return recentSet.has(name);
-      return true;
-    });
-
-    return filteredByTab;
-  }, [activeGroup, searchQuery, catalog, favoriteSet, recentSet]);
+    return matches;
+  }, [activeGroup, deferredSearchQuery, searchIndex, favoriteSet, recentSet]);
 
   const toggleFavorite = useCallback(async (name: string) => {
     const needle = name.trim().toLowerCase();
@@ -230,13 +232,29 @@ export default function AddExerciseScreen() {
         </View>
 
         <View style={styles.topControls}>
-          <TextInput disableFullscreenUI
-            placeholder="Search exercises"
-            placeholderTextColor="#7a7a8c"
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            style={styles.input}
-          />
+          <View style={styles.searchField}>
+            <TextInput disableFullscreenUI
+              ref={searchInputRef}
+              placeholder="Search exercises"
+              placeholderTextColor="#7a7a8c"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              style={styles.searchInput}
+            />
+            {searchQuery.length > 0 ? (
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel="Clear exercise search"
+                style={styles.searchClear}
+                onPress={() => {
+                  setSearchQuery("");
+                  searchInputRef.current?.focus();
+                }}
+              >
+                <Ionicons name="close-circle" size={20} color="#98a0b3" />
+              </TouchableOpacity>
+            ) : null}
+          </View>
           {selectedExercises.length ? (
             <View style={styles.selectedExerciseList}>
               {selectedExercises.map((name) => (
@@ -352,6 +370,13 @@ const styles = StyleSheet.create({
   addSelectedButtonDisabled: { backgroundColor: "rgba(255,255,255,0.08)" },
   addSelectedText: { color: "#fff", fontSize: 12, fontWeight: "800" },
   topControls: { paddingHorizontal: 12, paddingBottom: 8 },
+  searchField: {
+    flexDirection: "row", alignItems: "center", marginBottom: 8,
+    backgroundColor: "rgba(255,255,255,0.06)", borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth, borderColor: "rgba(255,255,255,0.12)",
+  },
+  searchInput: { flex: 1, minWidth: 0, color: "#fff", paddingHorizontal: 12, paddingVertical: 10 },
+  searchClear: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
   input: {
     backgroundColor: "rgba(255,255,255,0.06)",
     color: "#fff",
