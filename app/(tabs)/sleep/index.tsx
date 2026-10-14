@@ -22,6 +22,7 @@ import { auth } from "@/src/config/firebaseConfig";
 import type { SleepNightlySummary } from "@/src/contracts";
 import { useOfflineStatus } from "@/src/hooks/useOfflineStatus";
 import { useNow } from "@/src/hooks/useNow";
+import { shouldRefreshSleep, type SleepRefreshStamp } from "@/src/sleep/sleepRefreshGate";
 import { getSleepRecoveryHint, classifySleepVsTarget } from "@/src/sleep/sleepInsights";
 import {
   autoSyncSleepFromHealthConnectIfEligible,
@@ -62,7 +63,7 @@ export default function SleepIndex() {
   const [availability, setAvailability] = useState<HealthConnectAvailability>("unsupported");
   const timelineScrollRef = React.useRef<FlatList<ChartPoint> | null>(null);
   const refreshSleepTaskRef = React.useRef<{ cancel: () => void } | null>(null);
-  const lastSleepRefreshAtRef = React.useRef(0);
+  const lastSleepRefreshRef = React.useRef<SleepRefreshStamp | null>(null);
   const [timelineWindowStart, setTimelineWindowStart] = useState(0);
   const [timelineShouldSnapToLatest, setTimelineShouldSnapToLatest] = useState(true);
   const [timelineViewportWidthMeasured, setTimelineViewportWidthMeasured] = useState(0);
@@ -152,10 +153,10 @@ export default function SleepIndex() {
 
   useFocusEffect(
     useCallback(() => {
-      if (Date.now() - lastSleepRefreshAtRef.current >= 30_000) {
+      if (uid && shouldRefreshSleep(uid, lastSleepRefreshRef.current, Date.now())) {
         refreshSleepTaskRef.current?.cancel();
         refreshSleepTaskRef.current = scheduleAfterInteractions(async () => {
-          lastSleepRefreshAtRef.current = Date.now();
+          lastSleepRefreshRef.current = { uid, atMs: Date.now() };
           await refreshSleep({ autoSync: true });
         });
       }
@@ -167,7 +168,7 @@ export default function SleepIndex() {
         refreshSleepTaskRef.current?.cancel();
         subscription.remove();
       };
-    }, [refreshSleep, router])
+    }, [uid, refreshSleep, router])
   );
 
   const fallbackLastNightDateKey = useMemo(() => {

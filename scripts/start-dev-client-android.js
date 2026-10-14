@@ -14,6 +14,8 @@ const env = {
   APP_VARIANT: "dev",
   EXPO_NO_DEPENDENCY_VALIDATION: "1",
   EXPO_NO_TELEMETRY: "1",
+  // --no-dev cannot resolve Metro's lazy chunks through the production loader.
+  ...(fastMode ? { EXPO_NO_METRO_LAZY: "1" } : {}),
   // Android's adb reverse forwards 127.0.0.1. Keep Metro on IPv4 localhost.
   NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ""} --dns-result-order=ipv4first`.trim(),
   PATH: hasLocalWatchman
