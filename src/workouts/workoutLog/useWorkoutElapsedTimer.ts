@@ -2,12 +2,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState } from "react-native";
 import { elapsedAt, pauseElapsed, startElapsed, type ElapsedClock } from "./timerClock";
 
-export function useWorkoutElapsedTimer(initialElapsedSeconds = 0, initiallyRunning = false, displayActive = true) {
+export function useWorkoutElapsedTimer(initialElapsedSeconds = 0, initiallyRunning = false, displayActive = true, tickIntervalMs: number | null = 1000) {
   const [elapsedSeconds, setElapsedSeconds] = useState(initialElapsedSeconds);
   const [startedAtMs, setStartedAtMs] = useState(() => initiallyRunning ? Date.now() - initialElapsedSeconds * 1000 : null);
   const clockRef = useRef<ElapsedClock>({ elapsedSeconds: initialElapsedSeconds, startedAtMs });
   const running = startedAtMs != null;
   const refresh = useCallback(() => setElapsedSeconds(elapsedAt(clockRef.current, Date.now())), []);
+  const getElapsedSeconds = useCallback(() => elapsedAt(clockRef.current, Date.now()), []);
 
   useEffect(() => {
     if (!running || !displayActive) return;
@@ -19,7 +20,7 @@ export function useWorkoutElapsedTimer(initialElapsedSeconds = 0, initiallyRunni
     const resume = () => {
       stop();
       refresh();
-      interval = setInterval(refresh, 1000);
+      if (tickIntervalMs !== null) interval = setInterval(refresh, tickIntervalMs);
     };
     // The timestamp keeps counting; only the visible display needs ticking.
     if (AppState.currentState === "active") resume();
@@ -28,7 +29,7 @@ export function useWorkoutElapsedTimer(initialElapsedSeconds = 0, initiallyRunni
       else stop();
     });
     return () => { stop(); subscription.remove(); };
-  }, [displayActive, refresh, running]);
+  }, [displayActive, refresh, running, tickIntervalMs]);
 
   const start = useCallback(() => {
     clockRef.current = startElapsed(clockRef.current, Date.now());
@@ -53,6 +54,7 @@ export function useWorkoutElapsedTimer(initialElapsedSeconds = 0, initiallyRunni
 
   return {
     elapsedSeconds,
+    getElapsedSeconds,
     running,
     startedAtMs,
     restore,

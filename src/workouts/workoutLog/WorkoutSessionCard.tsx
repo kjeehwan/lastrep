@@ -1,5 +1,6 @@
 import React from "react";
 import { Text, TextInput, TouchableOpacity, View, type TextStyle, type ViewStyle } from "react-native";
+import { ElapsedTimerText } from "./TimerText";
 
 type SessionCardStyles = {
   card: ViewStyle;
@@ -21,7 +22,8 @@ type WorkoutSessionCardProps = {
   styles: SessionCardStyles;
   title: string;
   dateLabel: string;
-  elapsedLabel: string;
+  elapsedSeconds: number;
+  startedAtMs: number | null;
   timerRunning: boolean;
   timerStarted: boolean;
   trainingPhase: string;
@@ -35,7 +37,8 @@ export function WorkoutSessionCard({
   styles,
   title,
   dateLabel,
-  elapsedLabel,
+  elapsedSeconds,
+  startedAtMs,
   timerRunning,
   timerStarted,
   trainingPhase,
@@ -63,7 +66,7 @@ export function WorkoutSessionCard({
           onPress={onTimerPress}
         >
           <Text style={timerRunning ? styles.primaryText : styles.secondaryText}>
-            {timerRunning ? elapsedLabel : timerStarted ? "Resume Workout" : "Start Workout"}
+            {timerRunning ? <ElapsedTimerText seconds={elapsedSeconds} startedAtMs={startedAtMs} /> : timerStarted ? "Resume Workout" : "Start Workout"}
           </Text>
         </TouchableOpacity>
       </View>

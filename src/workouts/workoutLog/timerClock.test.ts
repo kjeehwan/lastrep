@@ -1,7 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { advanceRest, elapsedAt, pauseElapsed, pauseRest, startElapsed, startRest } from "./timerClock";
+import { advanceRest, elapsedAt, nextRestDeadlineDelay, pauseElapsed, pauseRest, startElapsed, startRest } from "./timerClock";
 
 describe("timestamp-based workout timers", () => {
+  it("stops a restored zero-second clock whose deadline has passed", () => {
+    const ended = advanceRest({ remainingSec: 0, running: true, endsAtMs: 100000 }, 110000);
+    expect(ended).toEqual({ remainingSec: 0, running: false });
+    expect(nextRestDeadlineDelay({ ended }, 110000)).toBeNull();
+  });
+  it("schedules only the next completion, without per-second screen updates", () => {
+    const clocks = { first: startRest(undefined, 30, 100000), second: startRest(undefined, 60, 100000) };
+    expect(nextRestDeadlineDelay(clocks, 110000)).toBe(20000);
+    const advanced = { first: advanceRest(clocks.first, 135000), second: advanceRest(clocks.second, 135000) };
+    expect(nextRestDeadlineDelay(advanced, 135000)).toBe(25000);
+    expect(nextRestDeadlineDelay(advanced, 165000)).toBe(0);
+    expect(nextRestDeadlineDelay({ paused: pauseRest(clocks.second, 110000) }, 120000)).toBeNull();
+  });
   it("counts background time without requiring any JS interval ticks", () => {
     const clock = startElapsed({ elapsedSeconds: 30, startedAtMs: null }, 100000);
     expect(elapsedAt(clock, 160000)).toBe(90);

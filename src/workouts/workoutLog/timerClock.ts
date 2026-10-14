@@ -1,6 +1,11 @@
 export type ElapsedClock = { elapsedSeconds: number; startedAtMs: number | null };
 export type RestClock = { remainingSec: number; running: boolean; endsAtMs?: number };
 
+export function nextRestDeadlineDelay(clocks: Record<string, RestClock>, nowMs: number): number | null {
+  const deadlines = Object.values(clocks).filter((clock) => clock.running && clock.endsAtMs != null).map((clock) => clock.endsAtMs!);
+  return deadlines.length ? Math.max(0, Math.min(...deadlines) - nowMs) : null;
+}
+
 export function elapsedAt(clock: ElapsedClock, nowMs: number): number {
   return clock.startedAtMs == null ? clock.elapsedSeconds : Math.max(0, Math.floor((nowMs - clock.startedAtMs) / 1000));
 }
@@ -16,7 +21,7 @@ export function pauseElapsed(clock: ElapsedClock, nowMs: number): ElapsedClock {
 export function advanceRest(clock: RestClock, nowMs: number): RestClock {
   if (!clock.running || clock.endsAtMs == null) return clock;
   const remainingSec = Math.max(0, Math.ceil((clock.endsAtMs - nowMs) / 1000));
-  if (remainingSec === clock.remainingSec) return clock;
+  if (remainingSec === clock.remainingSec && remainingSec > 0) return clock;
   return { remainingSec, running: remainingSec > 0, ...(remainingSec > 0 ? { endsAtMs: clock.endsAtMs } : {}) };
 }
 
