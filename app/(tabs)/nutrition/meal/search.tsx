@@ -39,6 +39,8 @@ import {
 } from "@/src/nutrition/quickLog";
 import { showAppDialog } from "@/src/ui/appDialog";
 import { NutritionFactsPreview } from "@/src/nutrition/components/NutritionFactsPreview";
+import { foodEditorStyles } from "@/src/nutrition/components/foodEditorStyles";
+import { quantityGrams, quantityValue } from "@/src/nutrition/foodQuantity";
 import { useMealLabels } from "@/src/nutrition/useMealLabels";
 import { initialMealTime, mealLabel, mealSectionId } from "@/src/nutrition/mealOrganization";
 
@@ -148,6 +150,7 @@ export default function MealSearchScreen() {
   const [editorVisible, setEditorVisible] = useState(false);
   const [editorMode, setEditorMode] = useState<FoodEntryMode>("grams");
   const [editorValue, setEditorValue] = useState("100");
+  const editorGramsRef = useRef<number | null>(null);
   const [editorFood, setEditorFood] = useState<FoodItem | null>(null);
   const [editorKey, setEditorKey] = useState<string | null>(null);
   const [editorPreview, setEditorPreview] = useState("Enter a value");
@@ -170,16 +173,6 @@ export default function MealSearchScreen() {
   const stagedCount = stagedItems.length;
   const canSearch = query.trim().length >= 2;
   const favoriteIds = useMemo(() => new Set(favorites.map((x) => x.food.id)), [favorites]);
-
-  const getOneServingDefaults = useCallback((food: FoodItem) => {
-    const grams = Math.round(food.servingGrams);
-    const calories = Math.round((food.caloriesPer100g * food.servingGrams) / 100);
-    return {
-      grams: `${grams}`,
-      calories: `${calories}`,
-      servings: "1",
-    } as const;
-  }, []);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (user) => {
@@ -341,7 +334,7 @@ export default function MealSearchScreen() {
       }
       const servingInfo = normalizeServingInfo(editorFood.servingLabel, editorFood.servingGrams);
       setEditorPreview(
-        `${Math.round(converted.grams)}g / ${Math.round(converted.calories)} kcal / ${formatServingQuantity(
+        `${Number(converted.grams.toFixed(2))}g / ${Math.round(converted.calories)} kcal / ${formatServingQuantity(
           converted.servings,
           servingInfo
         )}`
@@ -505,44 +498,29 @@ export default function MealSearchScreen() {
 
   const openEditor = (key: string, food: FoodItem) => {
     const existing = staged[key];
-    const defaults = getOneServingDefaults(food);
+    const mode = existing?.mode ?? "grams";
+    const value = existing?.value ?? quantityValue(food.servingGrams, "grams", food);
+    editorGramsRef.current = quantityGrams(value, mode, food);
     setEditorFood(food);
     setEditorKey(key);
-    setEditorMode(existing?.mode ?? "grams");
-    setEditorValue(
-      existing?.value ??
-        (existing?.mode === "calories"
-          ? defaults.calories
-          : existing?.mode === "servings"
-          ? defaults.servings
-          : defaults.grams)
-    );
+    setEditorMode(mode);
+    setEditorValue(value);
+    setEditorNutrition(null);
     setEditorVisible(true);
   };
 
   const handleEditorModeChange = (nextMode: FoodEntryMode) => {
-    if (!editorFood) {
-      setEditorMode(nextMode);
-      return;
-    }
-    const defaults = getOneServingDefaults(editorFood);
-    void (async () => {
-      const foodDb = await getFoodDb();
-      const converted = foodDb.computeFromFood(editorFood, editorMode, editorValue);
-      if (!converted) {
-        setEditorMode(nextMode);
-        setEditorValue(defaults[nextMode]);
-        return;
-      }
-      const nextValue =
-        nextMode === "grams"
-          ? `${Math.round(converted.grams)}`
-          : nextMode === "calories"
-          ? `${Math.round(converted.calories)}`
-          : `${roundServing(converted.servings)}`;
-      setEditorMode(nextMode);
-      setEditorValue(nextValue);
-    })();
+    if (!editorFood || nextMode === editorMode) return;
+    if (nextMode === "calories" && !(editorFood.caloriesPer100g > 0)) return;
+    setEditorValue(quantityValue(editorGramsRef.current, nextMode, editorFood));
+    setEditorMode(nextMode);
+    setEditorNutrition(null);
+  };
+
+  const handleEditorValueChange = (value: string) => {
+    setEditorValue(value);
+    setEditorNutrition(null);
+    editorGramsRef.current = editorFood ? quantityGrams(value, editorMode, editorFood) : null;
   };
 
   const confirmEditor = () => {
@@ -913,7 +891,7 @@ export default function MealSearchScreen() {
           {tab === "search" && !canSearch ? <Text style={styles.subText}>Type at least 2 characters or scan a barcode.</Text> : null}
           {tab === "search" && searching ? <Text style={styles.subText}>Searching...</Text> : null}
           {!searching && tab === "search" && submittedQuery.trim().length >= 2 && searchResults.length === 0 ? (
-            <Text style={styles.subText}>No results found.</Text>
+            <Text style={styles.subText}>No matching foods in the current database. Try a simpler food name or scan a packaged food barcode.</Text>
           ) : null}
 
           {tab === "search" &&
@@ -932,6 +910,7 @@ export default function MealSearchScreen() {
                   </TouchableOpacity>
                   <View style={styles.searchBody}>
                     <Text style={styles.searchTitle}>{item.name}</Text>
+                    <Text style={styles.subText}>{item.sourceType === "usda-generic" ? "USDA reference food" : item.id.startsWith("off-") ? "Open Food Facts product" : "USDA"}</Text>
                     <Text style={styles.subText}>{formatFoodHelper(item)}</Text>
                   </View>
                   <TouchableOpacity onPress={() => toggleFavorite(item)}>
@@ -1042,55 +1021,58 @@ export default function MealSearchScreen() {
       </ScrollView>
 
       <Modal visible={editorVisible} transparent animationType="fade" onRequestClose={() => setEditorVisible(false)}>
-        <KeyboardAwareModalFrame style={styles.modalBackdrop}>
-          <AdaptiveModalCard contentSized style={styles.modalCard}>
-            <Text style={styles.modalTitle}>{editorFood?.name ?? "Edit"}</Text>
-            <View style={styles.rowWrap}>
-              {ENTRY_MODES.map((mode) => (
-                <TouchableOpacity
-                  key={mode}
-                  style={[styles.chip, editorMode === mode && styles.chipActive]}
-                  onPress={() => handleEditorModeChange(mode)}
-                >
-                  <Text style={[styles.chipText, editorMode === mode && styles.chipTextActive]}>
-                    {mode === "grams" ? "Grams" : mode === "calories" ? "Calories" : "Servings"}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            <TextInput
-              style={styles.input}
-              value={editorValue}
-              onChangeText={setEditorValue}
-              keyboardType="decimal-pad"
-              placeholder={
-                editorFood
-                  ? editorMode === "grams"
-                    ? `${Math.round(editorFood.servingGrams)}g`
-                    : editorMode === "calories"
-                    ? `${Math.round((editorFood.caloriesPer100g * editorFood.servingGrams) / 100)} kcal`
-                    : "1 serving"
-                  : "100"
-              }
-              placeholderTextColor="#7a7a8c"
-            />
-            {editorFood ? <Text style={styles.subText}>{editorPreview}</Text> : null}
-            {editorFood && editorNutrition ? (
-              <NutritionFactsPreview
-                calories={editorNutrition.calories}
-                proteinGrams={editorNutrition.proteinGrams}
-                carbGrams={editorNutrition.carbGrams}
-                fatGrams={editorNutrition.fatGrams}
-                reference={`Reference: ${normalizeServingInfo(editorFood.servingLabel, editorFood.servingGrams)} / ${Math.round(editorFood.servingGrams)}g`}
+        <KeyboardAwareModalFrame style={foodEditorStyles.backdrop}>
+          <AdaptiveModalCard contentSized style={foodEditorStyles.card}>
+            <View style={foodEditorStyles.content}>
+              <Text style={styles.modalTitle}>{editorFood?.name ?? "Edit"}</Text>
+              <View style={styles.rowWrap}>
+                {ENTRY_MODES.map((mode) => (
+                  <TouchableOpacity
+                    key={mode}
+                    style={[styles.chip, editorMode === mode && styles.chipActive]}
+                    disabled={mode === "calories" && (editorFood?.caloriesPer100g ?? 0) <= 0}
+                    onPress={() => handleEditorModeChange(mode)}
+                  >
+                    <Text style={[styles.chipText, editorMode === mode && styles.chipTextActive]}>
+                      {mode === "grams" ? "Grams" : mode === "calories" ? "Calories" : "Servings"}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <TextInput
+                style={styles.input}
+                value={editorValue}
+                onChangeText={handleEditorValueChange}
+                keyboardType="decimal-pad"
+                placeholder={
+                  editorFood
+                    ? editorMode === "grams"
+                      ? `${Math.round(editorFood.servingGrams)}g`
+                      : editorMode === "calories"
+                      ? `${Math.round((editorFood.caloriesPer100g * editorFood.servingGrams) / 100)} kcal`
+                      : "1 serving"
+                    : "100"
+                }
+                placeholderTextColor="#7a7a8c"
               />
-            ) : null}
-            <View style={styles.modalActions}>
-              <TouchableOpacity style={styles.secondaryBtn} onPress={() => setEditorVisible(false)}>
-                <Text style={styles.secondaryBtnText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.primaryBtn} onPress={confirmEditor}>
-                <Text style={styles.primaryBtnText}>Confirm</Text>
-              </TouchableOpacity>
+              {editorFood ? <Text style={styles.subText}>{editorPreview}</Text> : null}
+              {editorFood && editorNutrition ? (
+                <NutritionFactsPreview
+                  calories={editorNutrition.calories}
+                  proteinGrams={editorNutrition.proteinGrams}
+                  carbGrams={editorNutrition.carbGrams}
+                  fatGrams={editorNutrition.fatGrams}
+                  reference={`Reference: ${normalizeServingInfo(editorFood.servingLabel, editorFood.servingGrams)} / ${Math.round(editorFood.servingGrams)}g`}
+                />
+              ) : null}
+              <View style={styles.modalActions}>
+                <TouchableOpacity style={styles.secondaryBtn} onPress={() => setEditorVisible(false)}>
+                  <Text style={styles.secondaryBtnText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.primaryBtn, !editorNutrition && { opacity: 0.45 }]} disabled={!editorNutrition} onPress={confirmEditor}>
+                  <Text style={styles.primaryBtnText}>Confirm</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </AdaptiveModalCard>
         </KeyboardAwareModalFrame>
@@ -1281,16 +1263,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     padding: 24,
-  },
-  modalCard: {
-    width: "100%",
-    maxWidth: 420,
-    borderRadius: 16,
-    backgroundColor: "#171727",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.1)",
-    padding: 16,
-    gap: 12,
   },
   scannerCard: {
     width: "100%",
