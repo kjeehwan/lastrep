@@ -1,0 +1,906 @@
+# Lastrep Training Notebook Design Specification
+
+Version: 1.1 | Date: October 15, 2026
+
+Status: proposed design baseline for mockups, not an implemented UI or an approved
+replacement for every existing interaction. The user endorsed documenting the
+pen-and-notepad direction; the precise tokens and layouts below are concrete
+proposals to evaluate in mockups. Do not present them as device-validated facts.
+
+## 1. Purpose and scope
+
+Create a distinctive, user-centered Lastrep interface rooted in the experience
+of keeping a serious training log with a pen and a notepad. The records belong
+to the user; recommendations are annotations that help the user act on them.
+
+This document must be sufficient to produce consistent screen mockups without
+consulting the original discussion. It specifies the visual system, layouts,
+copy, interaction states, accessibility, responsive behavior and review criteria.
+
+First implementation candidate: Workout. Other screens are extension blueprints,
+not prerequisites for the first prototype. No screen code, fonts, dependencies,
+branding assets or data models are changed by this document.
+
+### Product priorities, in order
+
+1. Record and edit accurately, quickly and with one hand where practical.
+2. Read current sets and previous performance at a glance.
+3. Preserve trustworthy records, drafts, permissions and feedback.
+4. Discover secondary features without overwhelming the active task.
+5. Express an authentic training-log identity without decorative friction.
+
+The design must work for beginners, experienced lifters, cardio users and people
+who have never used a paper log. Nostalgia is an emotional reference, not a
+prerequisite for understanding the app.
+
+### What this is not
+
+- Not a distressed journal, vintage scrapbook or bodybuilding stereotype.
+- No spiral bindings, torn edges, fake handwriting, ink smears or paper textures.
+- No ruled lines behind paragraphs, graphs or editable numbers.
+- No page-turn effects, ornamental stamps or decorative graphs.
+- No wholesale feature removal disguised as simplification.
+- No assumption that purple or blue inherently indicates poor design. The change
+  addresses hierarchy, consistency and task focus, not a superstition about color.
+
+## 2. Design concept: a training ledger
+
+Use a warm paper-like canvas, dark ink, deliberate typography, aligned numbers,
+fine section rules and restrained editorial hierarchy. Entries should feel
+specific to the person and date, rather than interchangeable dashboard cards.
+
+The central metaphor is structural:
+
+| Notebook idea | Digital expression | Avoid |
+| --- | --- | --- |
+| Dated page | Prominent session date and title | Fake page corners |
+| Training entries | Exercise sections and set tables | A floating card around every row |
+| Pen marks | Clear checkmarks, selected controls, a restrained accent | Scribbled fonts or animated drawing |
+| Margin notes | Optional coaching and exercise notes | Advice competing with the set table |
+| Looking back | Last column and exercise history | Unlabeled statistics with no actionable meaning |
+| Correction | Editable values and contextual Undo | Destructive cross-outs replacing readable records |
+
+### Visual hierarchy
+
+1. The task: session title, exercise names, editable set values.
+2. Supporting facts: previous performance, units, timer, completed count.
+3. Optional help: guidance, explanations, exercise demonstration and metadata.
+4. Administration: routine management, preferences and destructive actions.
+
+Never use a more saturated surface or larger type for level 3 than level 1.
+
+## 3. Measurement conventions and tokens
+
+All layout values are logical dp; font sizes are sp. Figma uses equivalent logical
+pixels at 1x. Do not copy physical device screenshot pixels into app styles.
+All screen coordinates below begin inside the safe area unless stated otherwise.
+
+### Spacing and shape
+
+| Token | Value | Use |
+| --- | --- | --- |
+| space-1 | 4 | Icon-to-label micro-spacing |
+| space-2 | 8 | Related text and controls |
+| space-3 | 12 | Field gaps, small section padding |
+| space-4 | 16 | Standard section gap and compact screen inset |
+| space-5 | 20 | Main phone screen inset |
+| space-6 | 24 | Major section spacing |
+| space-8 | 32 | Separate unrelated groups |
+| radius-input | 6 | Numeric/text inputs and small controls |
+| radius-button | 8 | Primary and secondary buttons |
+| radius-panel | 12 | Raised dialogs and exceptional grouped panels |
+| radius-sheet | 16 | Top sheet corners |
+| rule | 1 | Section separators and control borders |
+| focus-ring | 2 | Visible focused input/control border |
+
+Do not use fully rounded pills for every control. Use small rectangles with soft
+corners for the ledger character. Only compact status badges may use pill shapes.
+
+### Color roles
+
+Use semantic tokens, never isolated screen-specific approximations. These exact
+values define the mockup baseline. Contrast must be measured during implementation
+for actual foreground/background pairs, including disabled and selected states.
+
+| Role | Paper theme | Dark theme | Purpose |
+| --- | --- | --- | --- |
+| canvas | #F6F2E9 | #191A18 | Main page |
+| surface | #FFFCF5 | #242521 | Inputs, dialogs, selected group surfaces |
+| surface-subtle | #ECE7DC | #2D2E29 | Quiet selected rows and secondary grouping |
+| ink | #242720 | #F3F0E6 | Primary text and default icons |
+| ink-secondary | #625F55 | #BBB7AC | Supporting text and placeholders |
+| rule-subtle | #D8D1C3 | #41433A | Non-interactive separators |
+| control-border | #817B6E | #8E9083 | Necessary field/control boundaries |
+| accent | #A33F24 | #F2A07D | Links, selected indicators, focused controls |
+| accent-soft | #F3E4D8 | #3B2D25 | Small annotation/status backgrounds |
+| on-primary | #FFFCF5 | #191A18 | Text on solid primary button |
+| primary-fill | #242720 | #F3F0E6 | Primary button and active completion checkbox |
+| success | #3E6248 | #A6C6A6 | Saved/completed confirmation |
+| danger | #A12E2B | #FFAAA2 | Destructive actions and errors |
+| warning | #795000 | #E8C376 | Actual caution, never generic decoration |
+| backdrop | #000000 at 40% | #000000 at 60% | Modal scrim |
+
+- Paper theme is the primary exploration, not an approved forced default. Mock up
+  and review dark mode before changing existing theme behavior.
+- Primary actions are ink-filled, not orange-filled. Accent is a small emphasis.
+- Body text remains ink; do not render whole advice panels in warning colors.
+- No gradient page backgrounds, glass blur or large colored glow shadows.
+- Charts and macros may use additional semantic colors; see section 13.
+- Do not communicate status by color alone. Pair with words, shape or an icon.
+
+### Typography
+
+Proposed pairing: Source Serif 4 for editorial titles, Source Sans 3 for interface
+text and data. Verify font files, license notices, supported glyphs, tabular figures
+and native Android font mapping before implementation. These fonts are not
+currently assumed to be installed. Never depend on a live font network request.
+
+| Style | Family / weight | Size / line height | Use |
+| --- | --- | --- | --- |
+| page-title | Source Serif 4 / 600 | 26 / 32 | Session or main page title |
+| section-title | Source Sans 3 / 600 | 20 / 26 | Exercise heading, card heading |
+| dialog-title | Source Serif 4 / 600 | 24 / 30 | Sheet/dialog heading |
+| body | Source Sans 3 / 400 | 16 / 22 | Body and input text |
+| body-strong | Source Sans 3 / 600 | 16 / 22 | Actions and row titles |
+| numeric-input | Source Sans 3 / 600 | 17 / 24 | Set values; tabular numerals |
+| supporting | Source Sans 3 / 400 | 14 / 20 | Last values, metadata and hints |
+| label | Source Sans 3 / 600 | 13 / 18 | Table headers, badges |
+| timer | Source Sans 3 / 600 | 20 / 26 | Running timer; tabular numerals |
+
+- Do not use serif for numeric inputs, dense tables or long explanations.
+- Use sentence case. No letter-spaced all-caps slogans or oversized decision labels.
+- Default readable table text must not drop below 13 sp to fit columns.
+- Native script fallback must support Korean and other user-entered names. Do not
+  force Latin-only fonts on names or notes. Validate mixed-script line metrics.
+- Font loading failure uses readable platform fallback; it must not block logging.
+- Dynamic type wraps and reflows; it must not silently disable font scaling.
+
+## 4. Shared layout and component grammar
+
+### App shell
+
+- Sticky page toolbar: minimum 56 high, 20 horizontal inset, title and icon hit
+  targets aligned vertically. It stays outside the page ScrollView.
+- Workout uses an 80-high toolbar with 16 top/bottom padding around its 48-high
+  Finish button. This creates breathing room after the system status area and
+  between Finish and the bottom separator. Do not add padding inside the actual
+  Android status bar or replace real safe-area insets with fixture dimensions.
+- Preserve safe areas and system-bar insets; never paint content behind Android
+  navigation controls or use fixed assumptions about status-bar height.
+- Bottom navigation: five existing destinations and labels in their current order:
+  Home, Workout, Nutrition, Sleep, Profile. Minimum 56 high plus bottom inset.
+- Tab icon: 22-24, label: 12/16. Selected tab uses ink text and a 2-dp accent mark
+  above its icon. No large circular selection background or floating tab capsule.
+- Header and tab surfaces use canvas with a single separator, not glass or shadow.
+- On root pages, page title is left-aligned. A nested page may have Back; its title
+  and right action must fit without shifting when an action is unavailable.
+- Keep existing navigation behavior, including Settings back returning to a valid
+  app screen. A visual redesign is not permission to change routing semantics.
+
+### Sections, panels and cards
+
+Default page sections are separated by 24 vertical space and a fine rule where
+needed. Do not wrap the whole page in a card inside another card.
+
+Use a surface panel only for a genuinely grouped action, an editable form, a modal,
+or a comparison that benefits from a distinct boundary. If a panel has a heading,
+the heading lives inside it with 16 padding, matching other panels.
+
+For each panel/row, reserve a consistent 24-wide icon slot plus 12 gap before text.
+Items without icons omit the slot intentionally; unrelated icon glyph widths must
+not determine text alignment.
+
+### Buttons and inputs
+
+- Primary button: min-height 48, horizontal padding 16, ink fill, on-primary label.
+- Secondary: same height, transparent/surface fill, control-border, ink label.
+- Text action: min-height 44, accent text; always a meaningful verb.
+- Icon button: visual icon 20-24 inside at least 48 x 48 non-overlapping target.
+- Pressed state: immediate surface change, no scale bounce. Disabled: unavailable
+  action plus distinct muted styling, not merely an unexplained faded button.
+- Fields: surface fill, visible control-border, 6 radius, min-height 48, 12 inset.
+  Focus uses a 2-dp accent border without changing outer geometry.
+- Labels are persistent; placeholders are examples, never the only field name.
+- Long names wrap; do not shrink every label to fit. Units use their own space.
+- Numeric fields retain existing decimal rules and intermediate input such as
+  `20.`; do not rewrite text or move focus during each keystroke.
+- No unlabeled checkbox, trash icon, chevron or calendar icon for accessibility.
+
+### Elevation and motion
+
+Only modal surfaces need elevation: 0 4 16 rgba(0,0,0,0.12) for mockups. No shadow
+on every exercise. Use platform-appropriate rendering, not expensive blurred layers.
+Press feedback is immediate; sheet transition 180-220 ms; section expand 120-160 ms.
+Respect reduced motion. Never delay input, saving or navigation for animation.
+
+## 5. Workout information architecture
+
+### Important distinction
+
+The following relocation is a proposed UX change, not a statement about today's
+implementation. The current screen places session, guidance, routines and
+recommendation controls above exercise entries. The redesign keeps all of those
+capabilities but gives an active workout precedence over setup controls.
+
+### Empty session
+
+Order: sticky toolbar; date/session heading; concise empty prompt; setup actions;
+bottom navigation. Do not show an empty set table, false performance data, a
+disabled Finish button or an automatically generated AI plan.
+
+Copy and actions:
+
+- Heading: `Your next session`
+- Body: `Choose a routine or add your first exercise.`
+- Primary: `Choose routine`
+- Secondary: `Add exercise`
+- Text actions: `Recommend workout`, `Repeat past workout`, `Create routine`
+
+Recommendation focus and Quick/Standard/Extended are in the Recommend workout
+sheet, not a permanently expanded bank of chips. Preserve all supported focuses
+and existing volume/recovery logic; do not promise a fixed set count that differs
+from the actual recommendation. Routine management remains available in Choose.
+
+### Planned or active session
+
+Order:
+
+1. Sticky toolbar: `Workout` at left; labeled `Finish` action at right.
+2. Session heading: date, title, phase and elapsed timer.
+3. One-line workout-source action and optional compact guidance annotation.
+4. Exercise entries in their actual order.
+5. `+ Add exercise` and secondary session actions at end of the list.
+6. Conditional rest-timer dock above persistent bottom tabs.
+
+`Finish` is the primary toolbar action, ink-filled, minimum 72 x 44. It opens the
+existing finish review; it never immediately saves. Do not add a second sticky
+Finish CTA that competes with it. When routine builder is active, replace this
+with `Save routine` and clearly show `Routine builder`; do not show workout timers
+or falsely count routine editing as a completed workout.
+
+Move Discard into a labeled session overflow menu. It remains easy to find but
+does not sit beside the most frequently tapped input. This is a proposed
+placement change; preserve destructive confirmation and existing draft semantics.
+
+### Reference portrait wireframe
+
+Frame: 390 x 844, paper theme. Reference safe top 24 and bottom 24 are mockup
+fixtures only; actual system insets are dynamic. Usable content width = 350.
+
+```text
+Workout                                      [Finish]
+----------------------------------------------------
+Thu, Oct 15                                    18:42
+Chest + Triceps
+Hypertrophy
+Routine: Chest + Triceps                     [Change]
+
+[note icon] Today's Plan                    [Review >]
+----------------------------------------------------
+01  Bench press                                  [...]
+    [Demo]  [Rest 02:00]  [Tempo 3-0-1-0]
+    Note [Keep the last rep controlled                   ]
+
+Set       Last             kg       Reps     RPE   Done
+1         105 x 3 @ 10     [100]     [5]      [ ]   [x]
+2         105 x 3 @ 10     [100]     [5]      [ ]   [ ]
+3         105 x 3 @ 10     [100]     [5]      [ ]   [ ]
+[+ Add set]                         [Duplicate last set]
+----------------------------------------------------
+02  Incline dumbbell press                       [...]
+...
+----------------------------------------------------
+[+ Add exercise]
+[Save as routine]                    [Session options]
+----------------------------------------------------
+Rest: Bench press           01:24       [Pause] [Skip]
+----------------------------------------------------
+Home       Workout       Nutrition       Sleep    Profile
+```
+
+Wireframe communicates order, not literal monospace font, checkbox glyphs or exact
+line lengths. Use the numeric layout below for dimensions. No invented health
+claims or changed recommendations should be inferred from fixture prescriptions.
+
+### Session heading dimensions
+
+- Begins 16 below toolbar; date in supporting style, timer right-aligned.
+- Session title 8 below date, page-title style, wraps to two lines before growing.
+- Phase appears 8 below title; metadata is not an orange badge wall. Omit the
+  redundant `Timer running` text. If a paused state needs a label, place `Paused`
+  adjacent to the elapsed time, not in a separate row far from the number.
+- Source row 12 below metadata, minimum 44 high. `Change` opens routine/setup
+  actions. Loading another workout preserves the existing replace/append guard.
+- Right-align the visible `Change` and `Review` labels to the content's right
+  edge. Give both actions the same 62-wide, 44-high target; do not center the
+  labels in differently sized targets. The guidance row uses 20 for its icon,
+  two 8-dp gaps, 252 for its title and 62 for Review, totaling 350.
+- Guidance row 8 below source; next exercise separator 16 below guidance.
+- If no guidance applies, show `Today's Plan` / `Review` without a speculative
+  decision. Do not reserve a blank panel after it disappears.
+- Per-second timer text must not cause title/row width changes or whole-page renders.
+
+## 6. Exercise entry and set-table specification
+
+### Entry shell
+
+- No colored floating card. Canvas background, 1-dp top rule, 16 top/bottom space.
+- Heading: 24-wide ordinal slot, 8 gap, flexible exercise name, 48 overflow target.
+- Name uses section-title style, max two lines before expanding naturally for
+  accessibility. Tapping the name opens the existing history/progress modal.
+- Supporting controls row has min-height 44: `Demo`, `Rest 02:00`, `Tempo`.
+  When saved, show the tempo value, e.g. `Tempo 3-0-1-0`; allow a second line
+  within its target rather than shrinking the text. Never invent an unset tempo.
+- Keep the existing `speedometer-outline` icon alongside Tempo in the native
+  app; the browser prototype uses a matching outline speedometer treatment.
+- Use content-sized controls with equal visible gaps distributed across the
+  row, at least 44-high and 44-wide targets and a minimum 12 gap. The Tempo
+  value makes that control wider; equal-width targets alone do not create equal
+  visible spacing. At enlarged text, stack controls as full-width rows.
+- Keep Demo, Rest and Tempo controls for custom resistance exercises too. Tapping Demo
+  opens a neutral unavailable-media placeholder when no demo exists. Do not put
+  that placeholder permanently above the set table.
+- Remove the Details expansion. Keep a visible editable field labeled `Note`
+  below the supporting controls, showing the saved note or an example placeholder.
+  Available weights stays in the three-dot exercise menu.
+- Cardio retains Demo, Rest and Note without a resistance-training tempo control.
+
+### Resistance table geometry
+
+No extra inner card padding: table width equals screen content width.
+At content width 350, columns and gaps must be exactly:
+
+| Column | Width | Start x, relative to table | Alignment |
+| --- | --- | --- | --- |
+| Set | 28 | 0 | Center |
+| Last | 86 | 32 | Left |
+| kg / lbs | 60 | 122 | Center |
+| Reps | 60 | 186 | Center |
+| RPE / RIR | 52 | 250 | Center |
+| Done | 44 | 306 | Center |
+
+Five gaps of 4; total 350. Header min-height 28; set row min-height 52; inputs
+48 high, inset 2 vertically; subtle rule below rows. Last is aligned to the left
+edge of its content, not the center of the column. Headers align to fields below.
+Values are centered in numeric fields. The completion mark is visually 20 inside
+a 44-wide row target, not a giant filled square.
+
+At content width 320, use widths 24 / 76 / 54 / 54 / 48 / 44, five gaps of 4.
+For widths between 320 and 350, distribute additional width proportionally across
+Last and numeric inputs. Above 350, grow Last and inputs; do not grow checkboxes.
+Below 320, or when font scaling makes the table unreadable, use stacked set rows:
+`Set 1` + `Last 105 kg x 3` above a row of labeled Weight/Reps/Effort/Done fields.
+Do not introduce horizontal scrolling for the entire workout page.
+
+### Row states and behavior
+
+| State | Visual treatment | Required behavior |
+| --- | --- | --- |
+| Planned | Surface inputs, blank completion mark | Editable; not falsely recorded as done |
+| Focused | Accent border only around focused field | Cursor stays in that field after deletion or update |
+| Completed | Ink-filled check with on-primary tick; subtle row surface | Values remain readable and editable under existing rules |
+| Warmup | `W` marker and accessible warmup label | Not silently converted to a working set |
+| No previous set | Last shows dash | No invented load, effort or fabricated comparison |
+| Deleted | Row removed; inline `Set deleted` / `Undo` below that exercise | Existing Undo behavior, not an unrelated page toast |
+| Invalid numeric input | Field error after meaningful validation | No disruptive keystroke-level alert or cursor jump |
+
+- Last remains tappable to copy that set's supported previous values. Give it a
+  small underline or distinct actionable treatment; accessible label names the
+  exercise, set and copied values. Never copy automatically on focus.
+- Include that corresponding previous set's recorded effort in Last when known:
+  `105 x 3 @ 10` for RPE, or `105 x 3 @ 0` for the equivalent RIR preference.
+  The `@` value follows the user's global effort scale. Screen-reader labels
+  explicitly say RPE or RIR. Omit the suffix when effort was not recorded; never
+  invent a previous effort or populate today's blank effort field merely to
+  display history. Retain set-specific loads, reps and effort. Allow two lines
+  within the Last cell for longer values rather than shrinking its font.
+- Newly added exercise effort fields remain blank; the global RPE/RIR preference
+  controls labels, display and accepted values. RPE 6-10 corresponds to RIR 4-0.
+- Keep mixed loads and reps per set; never summarize three different sets as a
+  uniform prescription when applying guidance or displaying history.
+- Add set and Duplicate last set are separate minimum-44-high actions below table.
+- Do not permanently add another delete icon per row. Set marker opens compact
+  set options; preserve existing supported set types and deletion.
+
+### Cardio and bodyweight
+
+- Cardio uses its applicable time/distance controls and units, not resistance
+  load/reps/effort columns copied verbatim. Include zone selector when expanded.
+- Zone, Session type and Effort level may all be unset; tapping the selected
+  option again clears it. No `Not set` pill and no repetitive `(optional)` suffix.
+- Bodyweight exercises must not receive fictitious kg values. Guidance must name
+  reps/sets/effort changes where appropriate; preserve additional-load semantics
+  if the user explicitly logs external weight.
+- Missing time, distance, zone or effort is an empty value, not an invented zero.
+
+### Exercise menu
+
+Compact content-height sheet; never a screen-sized empty panel. Header is exercise
+name plus Close. First action row: reorder icon, `Up`, `Down`, with equal visual
+weight. Disable unavailable boundary actions. Place before Replace exercise.
+Follow with supported exercise settings and Delete exercise last, separated by a
+rule and danger color. Preserve current labels; do not casually rename Delete.
+Do not introduce drag-to-reorder in this design pass.
+
+## 7. Timers and active workout behavior
+
+- Session timer lives in session heading; tap opens existing adjustment controls.
+  Pause/resume are explicit controls in that view, not an unlabeled clock icon.
+- When rest is active, dock a 56-high row above bottom navigation: exercise name,
+  remaining time, Pause/Resume, Skip. Long names truncate here only; full name is
+  accessible in the timer detail. At narrow widths, use a two-row dock up to 88.
+- Timer detail opens from the countdown, with presets and custom duration.
+- When keyboard is open, hide the dock's expanded controls to protect input space;
+  keep countdown discoverable in exercise Rest control. Do not pause the timer.
+- Reserve scroll padding equal to actual nav + dock + safe inset, not a guessed
+  fixed number. Last row and Add exercise must scroll fully above the dock.
+- Background/lock catch-up, pause/resume and draft restoration remain unchanged.
+- Announce timer completion once, not every second. Never depend on animation,
+  background JS cadence or automatic notifications not already implemented.
+
+## 8. Today's Plan: a coaching annotation
+
+Workout is the primary home for actionable guidance. Do not force a round trip
+through Home to generate, review or apply it. Show one compact row above entries,
+not a large promotional card above the training log.
+
+| State | Compact row copy | Sheet action |
+| --- | --- | --- |
+| No plan | `Today's Plan` / `Review` | Generate/review with existing disclosure rules |
+| Generating | `Reviewing today's workout...` | Busy, no repeated request or premature Apply |
+| Fresh, no changes | `Train as planned` | Back to workout |
+| Fresh, changes | `4 exercises adjusted` | Apply changes |
+| Stale | `Workout or context changed` | Update today's plan |
+| Applied | `Changes applied` | Back to workout; Undo when supported |
+| Failed | `Couldn't review this workout` | Try again; workout remains editable |
+
+Sheet order: title/Close, short result, actual exercise changes, optional grouped
+reasons, Edit today's inputs, primary action. Do not repeat the headline as a
+subtitle and a count and an all-caps badge.
+
+- Show concrete before/after differences for affected working sets, preserving
+  mixed sets. Group the same reason once for affected exercises.
+- Keep detailed reasoning collapsed under `Why these suggestions?` by default.
+- Unchanged exercises do not require a paragraph each.
+- Show caution only when supported by reported context; no universal pain warning
+  after a user reports no pain. Clinical caution never becomes a decorative motif.
+- Use note/annotation icon, not a large sparkle graphic or yellow-filled panel.
+- Retain explicit user confirmation before changing a workout. Preserve completed
+  and warmup sets, available-weight rounding and existing Apply/Undo guards.
+- Do not imply an AI explanation is a clinician's advice or a measured fact.
+- Mockups show real states of disclosure, busy, error and stale handling. Do not
+  invent a faster service latency or hide errors behind permanent skeletons.
+
+## 9. Setup, search, history and completion surfaces
+
+### Choose routine and recommendations
+
+Choose routine opens a bounded sheet with Search, routine list, Repeat past
+workout and Create routine. Each row shows name and concise exercise/set summary.
+Deload remains explicitly labeled; do not offer to overwrite its source routine
+after completing a deload session.
+
+Recommend workout opens a sheet with focus selection and Quick/Standard/Extended,
+then `Recommend workout`. Use real supported choices; long focus lists wrap or
+scroll in the sheet, not off the edge of the main workout. Any volume reduction
+must be explained once with actual resulting volume, not an inconsistent promise.
+After loading, show a compact source/summary; details are expandable.
+
+### Add exercise
+
+- Sticky sheet/page title `Add exercise`, Close/Back, search below with a visible
+  clear button whenever nonempty. Clear must clear immediately.
+- Selected removable chips directly below Search; count and `Add (2)` action
+  remain visible above keyboard/system navigation.
+- Results show exercise name and useful equipment/muscle metadata; no ornamental
+  images at the expense of the result name. Custom exercise stays discoverable.
+- Preserve multiple selection and current custom-exercise keyboard behavior.
+- Loading, no matches and error states each have distinct copy and recovery action.
+- Selection does not change because a result disappears under a different query.
+
+### History and progress
+
+Exercise-name tap opens history with title/Close, compact progress/PR summary,
+chart where meaningful and sessions in reverse chronological order. One set per
+row within each date, never a dense inline paragraph of all sets.
+Estimated 1RM remains labeled as estimated. Show units and sparse-data empty
+states honestly; do not invent a smooth trend from one record.
+
+### Set options and other sheets
+
+- Height fits actual content, bounded by available viewport (maximum 85% when
+  necessary), with an internal scroll area rather than empty tall sheets.
+- Heading/Close is outside body scrolling where practical. Actions remain
+  reachable. Android Back and outside tap dismiss non-destructive sheets.
+- If unsaved work would be lost, use explicit discard handling consistent with
+  existing behavior. Do not pretend that every modal is swipe-dismissable today.
+- Gesture dismissal, if added, must not compete with form scrolling or cause
+  accidental draft loss. It is not required for the first mockup implementation.
+
+### Finish and discard
+
+1. Finish opens review with session title/date, actual completed volume and Save.
+2. Saving prevents duplicate submission; failure keeps the draft and offers retry.
+3. Save success is unambiguous: `Workout saved`, with a persistent acknowledgement
+   action rather than a blink-and-miss banner.
+4. Only then offer the existing optional source routine update, when applicable.
+5. Confirm `Routine updated` distinctly, without implying saving required updating.
+
+Discard is a separate confirmation: title `Discard workout?`, concise loss
+description, stacked full-width `Keep workout` and `Discard workout` actions.
+Do not invent autosaved cloud recovery. Completed data is never destroyed just
+to dismiss a design prototype.
+
+## 10. Keyboard, rotation and responsive rules
+
+### Reference frames
+
+| Frame | Purpose | Main width rule |
+| --- | --- | --- |
+| 390 x 844 | Primary phone portrait | 20 inset; 350 content |
+| 360 x 800 | Compact phone | 20 inset; 320 content |
+| 844 x 390 | Phone landscape with keyboard variant | 20 inset; centered max 760 |
+| 800 x 1280 | Tablet portrait | Centered max 760 |
+| 1280 x 800 | Tablet landscape | Centered max 760; no forced side dashboard |
+
+These dimensions are mockup fixtures, not orientation locks. System insets reduce
+available space. Keep a single exercise-reading order; do not split the workout
+into unrelated columns merely because a tablet is wide. Sheets cap at 560 unless
+a particular dense history view is explicitly designed otherwise.
+
+- Test tables at default and enlarged text. Switch to stacked rows when required
+  by content, not only by device-name detection.
+- With keyboard open, the focused field must automatically become visible and
+  remain visible after rotation. Manual scrolling is fallback, not the target UX.
+- Preserve selection, caret, raw input string and exercise order through rotation.
+- Android native inputs disable fullscreen/extract editing; the actual workout
+  remains visible instead of becoming a white system editor.
+- Do not double-subtract keyboard height when Android already resizes the window.
+- Numeric pad must allow decimals for weight where supported. Reps/effort retain
+  existing validation; keyboard labels alone do not validate values.
+- Do not focus weight because reps changed or because an async history read ends.
+- Bottom tabs may be hidden while keyboard is visible to preserve working space;
+  this is a proposed presentation change, not a reason to reset navigation state.
+- See existing [keyboard guardrails](keyboard-modal-guardrails.md) and
+  [adaptive layout notes](android-adaptive-layout.md). Retain their protections.
+
+## 11. Accessibility and inclusive use
+
+- Target at least 4.5:1 contrast for normal text, 3:1 for large text, and 3:1 for
+  necessary interactive boundaries/indicators. Measure actual rendered pairings.
+  Decorative rules may be subtler only if they convey no essential information.
+- Minimum targets: 48 x 48 generally; dense table cells may use at least 44 x 48
+  with sufficient separation. Hit slop must not overlap adjacent inputs.
+- Never use color, a blank checkbox or an unlabeled icon as the only explanation.
+- Screen-reader order follows visual order, exercise by exercise and set by set.
+  Example: `Bench press, set 2, reps, 5`. Completion announces checked state.
+- Editable number labels must include units and the global effort scale.
+- Charts have textual latest, date and change equivalents; no hover-only detail.
+- At 200% text, double history chart label and point rendering sizes using a
+  wider horizontally scrollable plot. Preserve observation spacing and enlarged
+  tap targets rather than squeezing enlarged labels into the original plot width.
+- Open history with the latest observation selected and its point in view.
+  Recenter the selected point when plot dimensions change; preserve deliberate
+  horizontal scrolling during unrelated updates, allowing older records to be reviewed.
+- At 200% text scale, use reflow/stacked layout rather than clipped text or tiny
+  type. Check long names, Korean names and large numeric values.
+- Stacked sets use a full-width set heading and Last entry, followed by aligned
+  label/input pairs and a labeled Done row. Keep control alignment deliberate;
+  enlarged text is an accessibility requirement, not an excuse for displaced buttons.
+- At 200% text, the completion box is 36 x 36 within a minimum 64-high target,
+  with a 28-wide checkmark. Routine/Change and Today's Plan/Review share 28/40
+  typography and matching top padding so first text lines align even when labels
+  wrap. Actions remain top-aligned and right-aligned, never vertically centered
+  against a multiline label. Enlarge supporting control icons to 24 and give
+  stacked sets a small internal inset so fields do not touch completed shading edges.
+- Reduced motion removes nonessential transitions; no haptic-only status.
+- Neutral, nonjudgmental copy. No shaming food labels or heroic pushing through pain.
+
+## 12. Copy, icons, data and feedback rules
+
+- Brand text: `Lastrep` or `lastrep`, never `LastRep`.
+- Plain verbs: Add, Edit, Save, Choose, Apply, Undo, Delete. No metaphorical labels
+  such as Ink it, Tear out page or Write your destiny.
+- Preserve established control names unless a change is explicit in this document.
+- Icons use the existing outline family, consistent stroke/optical size. No mix of
+  emoji, filled stickers and thin-line icons on the same control row.
+- Units are explicit at the column/field level. Respect kg/lbs and RPE/RIR settings.
+- Missing values use dash or helpful copy; zero is shown only when it is data.
+- Use user locale for dates and numbers; fixture English formatting is illustrative.
+- Destructive and success dialogs stack full-width buttons with 8-12 spacing,
+  readable labels and no horizontal three-button squeeze.
+- Inline validation is next to the affected field. Network errors retain inputs.
+- Loading does not briefly show first-user empty states to returning users.
+- A skeleton represents pending data, not an assertion that no records exist.
+- Never show internal SDK/build instructions, package hashes or developer setup
+  errors to an end user. Offer a plain-language recovery action instead.
+
+## 13. Extending the system beyond Workout
+
+Use shared tokens and controls, but do not force every screen into a set table.
+The following order and behaviors guide later mockups; verify current feature
+inventory before implementing any relocation.
+
+### Home: today's page
+
+- Header: existing logo with accessible name, date and profile entry.
+- Compact current training/diet phase controls with week counts; changes must
+  remain synchronized with Profile and existing phase history behavior.
+- Primary next action based on current context, not a grid of every possible CTA.
+- Progress section with weight/body-composition chart and explicit Add/Edit path.
+- Readiness, Weekly trends and Complete today's picture retain headings inside
+  their own grouping when those are panels. No floating orphan headings.
+- Calendar becomes a concise record index: clear day numbers, today outline,
+  recorded-workout indicator, selected state and accessible full-date labels.
+  Day tap opens workout/rest detail; closing detail returns to calendar.
+- Today's Plan may have a compact entry link if useful, but no second independent
+  plan generator or repeated exercise-change wall on Home.
+- Phase/context facts must not masquerade as a medical readiness score.
+
+### Nutrition: food diary
+
+- Date header, energy summary, protein summary, then meal entries with logged time
+  in a stable left column and user-chosen meal names. Preserve meal label settings.
+- Use narrow rules and section headings rather than six large floating meal cards.
+- Energy/protein consumed and target labels stay within bar bounds, share a
+  baseline and do not overlap at zero or near target. Remaining is header text.
+- Macro colors: protein #276A73, carbs #8A5B19, fat #785075 on paper; dark-theme
+  counterparts #83C6CF, #E4BB76, #C7A2C2. Validate contrast of overlaid percentages;
+  use ink/on-primary per segment rather than assuming white always works.
+- Match P/C/F gram labels to segment colors; percentages inside only where they
+  fit at readable size. For narrow segments, place the percentage in an accessible
+  companion label instead of squeezing text. Consumed and target use same order.
+- Labels below segments align with segments when space permits; avoid collisions
+  using a consistent fallback legend, not unreadably small text.
+- Editing and search use identical quantity-editor shell, spacing and typography.
+  Recorded edit opens in grams at actual quantity; unit switches convert values.
+- Confirmed selection summary must update outside the popup, too. Keep nutrition
+  facts accessible before adding and when editing an already logged item.
+- Preserve saved meals, copy previous meal, camera denial/manual barcode fallback,
+  missing product messaging, editable log time and swipe deletion behavior.
+
+### Sleep: recovery journal
+
+- Date, main duration, source/status, then session timing and history/trend.
+- Saved account data may remain visible while current-device sync is disconnected;
+  label stored record date separately from current connection status.
+- Distinguish `No saved data`, permission unavailable, loading and read failure.
+- No illustrative sleep stages or inferred clinical quality score without data.
+
+### Profile and Settings: functional notebook back matter
+
+- Account/photo, health sync, preferences, TDEE and other existing settings use
+  consistent label/control rows. Do not sacrifice discoverability to mimic paper.
+- Preserve meal labels below TDEE and explicit Save/Discard for staged edits.
+- Health consent, permissions and sync timestamps remain separate concepts.
+- Legal/contact links use the same icon slots and text alignment as account rows.
+- Subscription, restore and developer-build isolation retain verified outcome
+  messages. Restore never promises ongoing verification without evidence.
+- Preferences use the same typography as other screens; lengthy explanation is
+  progressively disclosed, not pasted under every button.
+
+### Charts, body composition and records
+
+- One latest daily body-data point where existing rules require it; date labels
+  include month at boundaries. Equal point spacing is acceptable for measurement
+  history only if date labels clearly communicate irregular sampling.
+- Connect actual observations, not invented daily values. Do not smooth sparse
+  body-fat readings into an apparent continuously measured curve.
+- Selected point has a visible ring and a larger invisible target; horizontal
+  scroll gives crowded observations room. Show date/value outside the chart too.
+- Switching metric reveals its latest actual measurement, not blank recent dates.
+- Weight preserves up to two recorded decimal places. Lean body mass and skeletal
+  muscle mass are separate metrics with definitions, never silently merged.
+- Point tap selects; Add/Edit is explicit and clarifies chosen date versus today.
+  Preserve deletion, existing values, examples and unit conversion in the editor.
+
+### Brand and app variants
+
+- Existing wordmark geometry is the baseline. Do not redraw it in the title font.
+- Production retains its approved gradient logo; dev retains orange-to-red gradient
+  with identical geometry. Logo gradient is a brand exception, not a UI palette.
+- Match optical size between variants. Do not stretch the wordmark or introduce
+  fake handwritten branding. App/splash assets are separate approval scope.
+
+## 14. Mandatory mockup package
+
+Create a focused Workout package before redesigning every screen. Each frame must
+name its viewport, theme, text scale, data state and keyboard state. Use reusable
+tokens/components; include interaction notes and explicit open questions.
+
+### Fixture data
+
+Date: Thu, Oct 15, 2026. Workout: Chest + Triceps. Phase: Hypertrophy. Units: kg.
+Effort: RPE. Timer: 18:42. No reported pain in baseline frame.
+
+| Exercise | Previous working sets | Current planned/logged sets |
+| --- | --- | --- |
+| Bench press | 105 x 3 at RPE 10, three sets | 100 x 5, three sets; first complete; effort blank |
+| Incline dumbbell press | 30 x 8, 28 x 10, 28 x 9 | 30 x 8, 28 x 10, 28 x 9; all incomplete |
+| Cable fly | No history | Load blank, reps 12, two sets; effort blank |
+| Tricep pushdown | 35 x 10, three sets | 35 x 10, three sets |
+
+These are synthetic layout fixtures, not a recommendation endorsed as appropriate
+for that prior performance. Include a separate bodyweight/cardio fixture rather
+than pretending this resistance table proves every exercise type works.
+
+### Required frames and annotated states
+
+1. Empty Workout, 390 x 844, paper: every setup path discoverable.
+2. Active Workout, 390 x 844, paper: header, metadata, first full exercise and next
+   heading visible. Do not shrink type to hit an arbitrary exercise count.
+3. Same active frame, dark: exact hierarchy, different semantic token values.
+4. Reps field focused with keyboard open: visible caret in reps, no weight jump,
+   last-row editing reachable, no obscured field or accidental completion.
+5. Rest running: timer dock, scrolled exercise and last-row clearance.
+6. Compact set-options sheet and exercise menu, including reorder boundary state.
+7. Add exercise with query, removable selected items, keyboard and Add count.
+8. Today's Plan no-change, changed, stale, applied and failed variants; same sheet
+   component, concise deltas, grouped explanation and genuine caution only.
+9. Finish review, saving failure, Workout saved, optional routine-update sequence.
+10. 360-wide and landscape-with-keyboard stress frames; one enlarged-text stacked
+    row example. Include a tablet composition, not just a scaled-up phone image.
+11. Cardio controls with unset and selected zone/session/effort states, plus
+    bodyweight entry and no-history/custom-exercise demonstration state.
+12. History/progress sheet: sparse history and multiple sets shown on separate rows.
+
+For the first visual review, prioritize frames 2 and 4 side by side with current
+UI captures. The remaining states are required before calling the design complete,
+not necessarily before choosing between initial visual directions.
+
+If exploring variants, vary only title treatment or section framing while keeping
+data, typography minimums and layout tasks constant. Do not compare one beautiful
+empty screenshot against a realistic densely populated current screen.
+
+## 15. Review rubric and acceptance gates
+
+### Visual gate
+
+- Looks like a deliberate training tool, not a themed generic dashboard.
+- Exercises and numbers dominate; setup and AI assistance do not overwhelm them.
+- Paper/dark versions have the same hierarchy and component geometry.
+- No arbitrary gradients, ornamental notebook effects or repetitive card nesting.
+- Screenshot contains believable long names, uneven sets and missing values.
+
+### Usability gate
+
+In a clickable prototype, verify that a user can locate the next incomplete set,
+edit reps, check a set, inspect Last, add an exercise, pause rest, finish and recover
+from a mistake. Compare task time, first-tap errors, scrolling and comprehension
+against the existing app; do not claim improvement based on visual preference.
+Targets: no lost data/focus, no hidden critical control and no increase in steps
+for normal set logging. Collect user reactions rather than asserting nostalgia
+appeals equally to all lifters.
+
+### Engineering gate before rollout
+
+- Keep current tests and add layout/interaction coverage for changed boundaries.
+- Android-native and JS set rows share tokens, dimensions and effort semantics.
+- Native source and its maintained override must stay consistent.
+- Focus/keyboard regression checked on a real phone; typecheck is not a substitute.
+- Recheck draft restore, mixed sets, Apply/Undo, deload, finish/update sequencing,
+  unit preferences, history and native input behavior after visual changes.
+- Font/text measurement and rotation checked before broad adoption.
+- No new per-keystroke Firestore reads, per-second whole-page re-renders or heavy
+  decorative assets. Profile the populated view; do not infer speed from mockups.
+- Release-build/internal-test checks remain necessary for native font/input edits.
+
+### Implementation map (current repository)
+
+| Area | Existing entry point / constraint |
+| --- | --- |
+| Workout orchestration | `app/(tabs)/workout/log.tsx`; avoid another monolithic redesign |
+| Session | `src/workouts/workoutLog/WorkoutSessionCard.tsx` |
+| Routines | `src/workouts/workoutLog/WorkoutRoutineSection.tsx` |
+| Recommendation | `src/workouts/workoutLog/WorkoutRecommendationSection.tsx` |
+| Guidance | `src/workouts/workoutLog/WorkoutTodayPlan.tsx` |
+| Native row adapter | `src/workouts/workoutLog/WorkoutNativeSetRows.tsx` |
+| Native implementation | `android/app/src/main/java/com/kjeehwan/lastrep/workoutnative/WorkoutSetListView.kt` |
+| Maintained native override | `native-overrides/android-kotlin/workoutnative/WorkoutSetListView.kt` |
+| History insights | `src/workouts/workoutLog/ExerciseProgressSummary.tsx` |
+| Timer behavior | `src/workouts/workoutLog/timerClock.ts`, `TimerText.tsx`, `useWorkoutElapsedTimer.ts` |
+| Draft persistence | `src/workouts/workoutLog/useWorkoutDraftPersistence.ts` |
+| Modal infrastructure | `src/ui/AdaptiveModalCard.tsx`, `src/ui/KeyboardAwareModalFrame.tsx` |
+| Brand wordmark | `components/LastrepLogo.tsx` |
+
+This map identifies starting points, not an exhaustive audit of current behavior.
+Introduce shared semantic tokens with a clear native mapping rather than copying
+new hex codes into every screen. Do not change data schemas or recommendation
+algorithms as part of applying the visual system.
+
+## 16. Delivery sequence and decisions to validate
+
+1. Review this baseline and produce initial Workout mockups, not app code.
+2. Review populated portrait plus keyboard state; choose/refine the visual direction.
+3. Complete state/responsive mockups and a focused interaction prototype.
+4. Implement Workout in an isolated branch, preserving verified behaviors.
+5. Device-test and compare with current UI; fix regressions before broad rollout.
+6. Extend shared system to Home/Nutrition/Sleep/Profile in separate reviewable batches.
+
+Decisions to validate in mockups:
+
+- Paper theme as launch default versus retaining the user's current theme.
+- Serif title character and font legibility on actual Android renderers.
+- Discoverability of setup actions moved out of the populated log.
+- Header Finish placement and session overflow discoverability.
+- Table density versus larger targets, especially at increased font scale.
+- Rest dock usefulness versus viewport cost with five bottom tabs.
+- Whether users understand Last as a copy action without a tutorial.
+
+Do not defer fundamental readability or focus integrity to these preference
+decisions. Those are acceptance requirements, not optional stylistic tradeoffs.
+
+### Change control
+
+Record approved deviations here when mockups resolve them. Until then, use the
+exact baseline above so different mockup authors do not invent unrelated palettes,
+fonts, control labels or screen structures. If a frame needs a different pattern,
+name the constraint and update the specification rather than silently improvising.
+
+## 17. Initial Figma mockups
+
+Created October 15, 2026 from version 1.0; revised to match version 1.1 following
+the user's first layout review:
+
+- [Side-by-side visual review](https://www.figma.com/design/DmOV6UcDygYzn4z88BeHA6/Lastrep-Training-notebook?node-id=3-3217)
+- [Active Workout, 390 x 844](https://www.figma.com/design/DmOV6UcDygYzn4z88BeHA6/Lastrep-Training-notebook?node-id=3-3224)
+- [Reps editing with keyboard, 390 x 844](https://www.figma.com/design/DmOV6UcDygYzn4z88BeHA6/Lastrep-Training-notebook?node-id=3-3617)
+
+The file contains editable layers, paper-theme semantic variables, shared text
+styles and reusable inputs, completion marks and action components. It uses the
+Source font pairing, the specified 350-wide set table and the synthetic session
+data above. All four fixture exercises remain in each scrollable ledger.
+
+Limited prototype links: tap Bench press / Set 2 / Reps in the active screen to
+open the editing state; tap the illustrative keyboard to return. This does not
+implement real typing, timers, saving, Finish, menus or other app interactions.
+The Material library keyboard has neutral presentation overrides and is only a
+placement illustration; actual device IME appearance and behavior may differ.
+
+Both frames were rendered and visually inspected. The focused reps field has
+82 dp clearance above the keyboard in this fixture. This is mockup geometry,
+not proof that native keyboard avoidance or focus behavior works on a device.
+Dark mode, other screen sizes and the rest of section 14 remain future mockup
+work. No application code or runtime behavior has been changed.
+
+Version 1.1 mockup revisions: increased Workout toolbar spacing, removed the
+remote `Timer running` label, aligned Review with Change, equalized the three
+exercise-control targets and displayed recorded previous-set effort in Last.
+Both revised frames were rendered and inspected; right label edges match,
+the example Last values fit at 14 sp and focused-field clearance remains 82 dp.
+
+## 18. Local browser prototype
+
+Figma's Starter-plan MCP quota blocked creation of the remaining frames. The user
+approved continuing in a separate browser prototype and bringing both approved
+screens into it. The additional states are local browser views, not Figma frames.
+
+Location: `prototypes/training-notebook/`.
+See its [run and review guide](../prototypes/training-notebook/README.md).
+
+```powershell
+node prototypes/training-notebook/serve.mjs
+```
+
+Open **http://127.0.0.1:4317**. This is a laptop-only loopback server, independent
+of Metro. The initial view compares the approved active screen with the approved
+editing layout, recreated as HTML rather than flattened screenshots.
+
+The state picker contains 47 examples across setup/search, active controls,
+Today's Plan, history and exercise types, completion and responsive checks.
+Dark mode, compact phone, landscape keyboard, 200% stacked rows and both tablet
+sizes can be inspected without changing the app. Optional viewport and effort
+controls also allow combinations to be checked.
+
+Implemented mock interactions include set editing, Last copying, completion,
+reordering, add/duplicate/delete/Undo, selected search chips, custom exercises,
+cardio toggle clearing, timers, check-in/disclosure, guidance Apply/Undo and the
+separate save-then-routine-update flow. Recommendations, records and service
+outcomes are synthetic; no real AI or account services are invoked.
+
+Review this as a design/interaction prototype. Fonts are bundled for offline use.
+Nothing is persisted or transmitted; switching examples resets the mock session.
+Simulated keyboard geometry and browser focus checks are not evidence of native
+Android keyboard, touch, lifecycle or accessibility correctness. Live media,
+other app tabs, actual saving and recommendation algorithms are outside scope.
+Lastrep's application code, routes, dependencies and backend remain unchanged.
