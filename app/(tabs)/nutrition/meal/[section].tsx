@@ -4,7 +4,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { onAuthStateChanged } from "firebase/auth";
 import { Timestamp } from "firebase/firestore";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Modal,
@@ -31,6 +31,8 @@ import { showAppDialog } from "@/src/ui/appDialog";
 import { isExpectedOfflineError } from "@/src/utils/networkErrors";
 import { copyPreviousMealToDate, createSavedMeal } from "@/src/nutrition/quickLog";
 import { NutritionFactsPreview } from "@/src/nutrition/components/NutritionFactsPreview";
+import { foodEditorStyles } from "@/src/nutrition/components/foodEditorStyles";
+import { quantityGrams, quantityValue, recordedMealGrams } from "@/src/nutrition/foodQuantity";
 import { useMealLabels } from "@/src/nutrition/useMealLabels";
 import { formatMealTime, mealLabel, sectionMealTime } from "@/src/nutrition/mealOrganization";
 import { MealOrganizationEditor } from "@/src/nutrition/components/MealOrganizationControls";
@@ -143,6 +145,7 @@ export default function MealSectionScreen() {
   const [editorVisible, setEditorVisible] = useState(false);
   const [editorMode, setEditorMode] = useState<FoodEntryMode>("grams");
   const [editorValue, setEditorValue] = useState("100");
+  const editorGramsRef = useRef<number | null>(null);
   const [editorPreview, setEditorPreview] = useState<MacroPreview | null>(null);
   const [editorFallback, setEditorFallback] = useState(false);
   const [manualCalories, setManualCalories] = useState("");
@@ -226,26 +229,23 @@ export default function MealSectionScreen() {
 
   const openEditorForMeal = async (meal: NutritionMeal) => {
     setEditingMeal(meal);
-    const modeFromSource = meal.source?.mode;
-    const valueFromSource = meal.source?.value;
+    const recordedGrams = recordedMealGrams(meal);
+    editorGramsRef.current = recordedGrams;
+    setEditorPreview(null);
     const canCompute =
       typeof meal.source?.caloriesPer100g === "number" &&
       Number.isFinite(meal.source.caloriesPer100g) &&
-      meal.source.caloriesPer100g > 0 &&
+      meal.source.caloriesPer100g >= 0 &&
       typeof meal.source?.proteinPer100g === "number" &&
       Number.isFinite(meal.source.proteinPer100g) &&
       typeof meal.source?.servingGrams === "number" &&
       Number.isFinite(meal.source.servingGrams) &&
       meal.source.servingGrams > 0;
 
-    if (canCompute) {
+    if (canCompute && recordedGrams != null) {
       setEditorFallback(false);
-      setEditorMode(
-        modeFromSource === "grams" || modeFromSource === "servings" || modeFromSource === "calories"
-          ? modeFromSource
-          : "grams"
-      );
-      setEditorValue(valueFromSource && valueFromSource.trim().length > 0 ? valueFromSource : "100");
+      setEditorMode("grams");
+      setEditorValue(quantityValue(recordedGrams, "grams", meal.source!));
       setManualCalories("");
       setManualProtein("");
       setManualCarbs("");
@@ -261,6 +261,20 @@ export default function MealSectionScreen() {
     setManualFats(meal.fatGrams == null ? "" : String(meal.fatGrams));
     setEditorPreview(null);
     setEditorVisible(true);
+  };
+
+  const changeEditorValue = (value: string) => {
+    setEditorValue(value);
+    setEditorPreview(null);
+    editorGramsRef.current = editingMeal?.source ? quantityGrams(value, editorMode, editingMeal.source) : null;
+  };
+
+  const changeEditorMode = (mode: FoodEntryMode) => {
+    if (mode === editorMode || !editingMeal?.source) return;
+    if (mode === "calories" && (editingMeal.source.caloriesPer100g ?? 0) <= 0) return;
+    setEditorValue(quantityValue(editorGramsRef.current, mode, editingMeal.source));
+    setEditorMode(mode);
+    setEditorPreview(null);
   };
 
   const handleDeleteMeal = (meal: NutritionMeal) => {
@@ -359,7 +373,7 @@ export default function MealSectionScreen() {
         !source ||
         typeof source.caloriesPer100g !== "number" ||
         !Number.isFinite(source.caloriesPer100g) ||
-        source.caloriesPer100g <= 0 ||
+        source.caloriesPer100g < 0 ||
         typeof source.proteinPer100g !== "number" ||
         !Number.isFinite(source.proteinPer100g) ||
         typeof source.servingGrams !== "number" ||
@@ -404,7 +418,7 @@ export default function MealSectionScreen() {
         proteinGrams: roundMacro(computed.proteinGrams),
         carbGrams: roundMacro(computed.carbGrams),
         fatGrams: roundMacro(computed.fatGrams),
-        grams: typeof computed.grams === "number" && Number.isFinite(computed.grams) ? Math.round(computed.grams) : null,
+        grams: typeof computed.grams === "number" && Number.isFinite(computed.grams) ? Number(computed.grams.toFixed(2)) : null,
         servings:
           typeof computed.servings === "number" && Number.isFinite(computed.servings)
             ? Math.round(computed.servings * 100) / 100
@@ -564,113 +578,116 @@ export default function MealSectionScreen() {
       </ScrollView>
 
       <Modal visible={editorVisible} transparent animationType="fade" onRequestClose={closeEditor}>
-        <KeyboardAwareModalFrame style={styles.modalBackdrop}>
-          <AdaptiveModalCard contentSized style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Edit {editingMeal?.name ?? "meal"}</Text>
+        <KeyboardAwareModalFrame style={foodEditorStyles.backdrop}>
+          <AdaptiveModalCard contentSized style={foodEditorStyles.card}>
+            <View style={foodEditorStyles.content}>
+              <Text style={styles.modalTitle}>Edit {editingMeal?.name ?? "meal"}</Text>
 
-            {!editorFallback ? (
-              <>
-                <View style={styles.rowWrap}>
-                  {ENTRY_MODES.map((mode) => (
-                    <TouchableOpacity
-                      key={mode}
-                      style={[styles.chip, editorMode === mode && styles.chipActive]}
-                      onPress={() => setEditorMode(mode)}
-                    >
-                  <Text style={[styles.chipText, editorMode === mode && styles.chipTextActive]}>
-                        {mode === "grams" ? "Grams" : mode === "calories" ? "Calories" : "Servings"}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
+              {!editorFallback ? (
+                <>
+                  <View style={styles.rowWrap}>
+                    {ENTRY_MODES.map((mode) => (
+                      <TouchableOpacity
+                        key={mode}
+                        style={[styles.chip, editorMode === mode && styles.chipActive]}
+                        disabled={mode === "calories" && (editingMeal?.source?.caloriesPer100g ?? 0) <= 0}
+                        onPress={() => changeEditorMode(mode)}
+                      >
+                        <Text style={[styles.chipText, editorMode === mode && styles.chipTextActive]}>
+                          {mode === "grams" ? "Grams" : mode === "calories" ? "Calories" : "Servings"}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
 
-                <TextInput
-                  style={styles.input}
-                  value={editorValue}
-                  onChangeText={setEditorValue}
-                  keyboardType="decimal-pad"
-                  placeholder={editorMode === "grams" ? "100" : editorMode === "servings" ? "1" : "200"}
-                  placeholderTextColor="#7a7a8c"
-                />
+                  <TextInput
+                    style={styles.input}
+                    value={editorValue}
+                    onChangeText={changeEditorValue}
+                    keyboardType="decimal-pad"
+                    placeholder={editorMode === "grams" ? "100" : editorMode === "servings" ? "1" : "200"}
+                    placeholderTextColor="#7a7a8c"
+                  />
 
-                {editorPreview ? (
+                  {editorPreview ? (
+                    <NutritionFactsPreview
+                      calories={editorPreview.calories}
+                      proteinGrams={editorPreview.proteinGrams}
+                      carbGrams={editorPreview.carbGrams}
+                      fatGrams={editorPreview.fatGrams}
+                      reference={`${editorPreview.grams ?? 0}g / ${editorPreview.servings ?? 0} servings / ${normalizeServingInfo(
+                        editingMeal?.source?.servingLabel,
+                        Number(editingMeal?.source?.servingGrams ?? 0)
+                      )}`}
+                    />
+                  ) : (
+                    <Text style={styles.subText}>Enter a positive value.</Text>
+                  )}
+                </>
+              ) : (
+                <>
+                  <Text style={styles.subText}>This item uses manual editing.</Text>
+                  <View style={styles.editRow}>
+                    <Text style={styles.subText}>Calories</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={manualCalories}
+                      onChangeText={setManualCalories}
+                      keyboardType="decimal-pad"
+                      placeholder="0"
+                      placeholderTextColor="#7a7a8c"
+                    />
+                  </View>
+                  <View style={styles.editRow}>
+                    <Text style={styles.subText}>Protein (g)</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={manualProtein}
+                      onChangeText={setManualProtein}
+                      keyboardType="decimal-pad"
+                      placeholder="0"
+                      placeholderTextColor="#7a7a8c"
+                    />
+                  </View>
+                  <View style={styles.editRow}>
+                    <Text style={styles.subText}>Carbs (g)</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={manualCarbs}
+                      onChangeText={setManualCarbs}
+                      keyboardType="decimal-pad"
+                      placeholder="0"
+                      placeholderTextColor="#7a7a8c"
+                    />
+                  </View>
+                  <View style={styles.editRow}>
+                    <Text style={styles.subText}>Fat (g)</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={manualFats}
+                      onChangeText={setManualFats}
+                      keyboardType="decimal-pad"
+                      placeholder="0"
+                      placeholderTextColor="#7a7a8c"
+                    />
+                  </View>
                   <NutritionFactsPreview
-                    calories={editorPreview.calories}
-                    proteinGrams={editorPreview.proteinGrams}
-                    carbGrams={editorPreview.carbGrams}
-                    fatGrams={editorPreview.fatGrams}
-                    reference={`${editorPreview.grams ?? 0}g / ${editorPreview.servings ?? 0} servings / ${normalizeServingInfo(
-                      editingMeal?.source?.servingLabel,
-                      Number(editingMeal?.source?.servingGrams ?? 0)
-                    )}`}
+                    calories={manualCalories.trim() ? Number(manualCalories) : null}
+                    proteinGrams={manualProtein.trim() ? Number(manualProtein) : null}
+                    carbGrams={manualCarbs.trim() ? Number(manualCarbs) : null}
+                    fatGrams={manualFats.trim() ? Number(manualFats) : null}
                   />
-                ) : (
-                  <Text style={styles.subText}>Enter a positive value.</Text>
-                )}
-              </>
-            ) : (
-              <>
-                <Text style={styles.subText}>This item uses manual editing.</Text>
-                <View style={styles.editRow}>
-                  <Text style={styles.subText}>Calories</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={manualCalories}
-                    onChangeText={setManualCalories}
-                    keyboardType="decimal-pad"
-                    placeholder="0"
-                    placeholderTextColor="#7a7a8c"
-                  />
-                </View>
-                <View style={styles.editRow}>
-                  <Text style={styles.subText}>Protein (g)</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={manualProtein}
-                    onChangeText={setManualProtein}
-                    keyboardType="decimal-pad"
-                    placeholder="0"
-                    placeholderTextColor="#7a7a8c"
-                  />
-                </View>
-                <View style={styles.editRow}>
-                  <Text style={styles.subText}>Carbs (g)</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={manualCarbs}
-                    onChangeText={setManualCarbs}
-                    keyboardType="decimal-pad"
-                    placeholder="0"
-                    placeholderTextColor="#7a7a8c"
-                  />
-                </View>
-                <View style={styles.editRow}>
-                  <Text style={styles.subText}>Fat (g)</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={manualFats}
-                    onChangeText={setManualFats}
-                    keyboardType="decimal-pad"
-                    placeholder="0"
-                    placeholderTextColor="#7a7a8c"
-                  />
-                </View>
-                <NutritionFactsPreview
-                  calories={manualCalories.trim() ? Number(manualCalories) : null}
-                  proteinGrams={manualProtein.trim() ? Number(manualProtein) : null}
-                  carbGrams={manualCarbs.trim() ? Number(manualCarbs) : null}
-                  fatGrams={manualFats.trim() ? Number(manualFats) : null}
-                />
-              </>
-            )}
+                </>
+              )}
 
-            <View style={styles.modalActions}>
-              <TouchableOpacity style={styles.secondaryBtn} onPress={closeEditor}>
-                <Text style={styles.secondaryBtnText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.primaryBtn} onPress={() => void saveEditedMeal()}>
-                <Text style={styles.primaryBtnText}>Save</Text>
-              </TouchableOpacity>
+              <View style={styles.modalActions}>
+                <TouchableOpacity style={styles.secondaryBtn} onPress={closeEditor}>
+                  <Text style={styles.secondaryBtnText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.primaryBtn, !editorFallback && !editorPreview && { opacity: 0.45 }]} disabled={!editorFallback && !editorPreview} onPress={() => void saveEditedMeal()}>
+                  <Text style={styles.primaryBtnText}>Save</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </AdaptiveModalCard>
         </KeyboardAwareModalFrame>

@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import readline from "node:readline";
 import zlib from "node:zlib";
+import { readPackagedFoods } from "./read-packaged-foods.mjs";
 
 /**
  * Usage:
@@ -646,7 +647,11 @@ const existingCore = mergeWithExisting
 const existingRest = mergeWithExisting
   ? loadExistingFoodsFromTs(path.resolve(outputDir, "foods-rest-1.ts"), "FOODS_REST_1")
   : [];
-const existingRows = mergeWithExisting ? [...existingCore, ...existingRest] : [];
+const packagedRows = mergeWithExisting ? readPackagedFoods(path.resolve("./assets/nutrition-data")) : [];
+const existingRows = packagedRows.length ? packagedRows : mergeWithExisting ? [...existingCore, ...existingRest] : [];
+if (mergeWithExisting && Number.isFinite(maxRows) && maxRows > 0 && maxRows < existingRows.length) {
+  throw new Error(`--max ${maxRows} is below the ${existingRows.length} existing foods. Increase the limit before merging.`);
+}
 const existingNameSet = new Set(existingRows.map((r) => normalizedNameKey(r.name)));
 
 if (source === "usda-csv") {
@@ -930,6 +935,7 @@ writeBlob(
 
 const manifestContent = `/* eslint-disable @typescript-eslint/no-require-imports */
 export const FOOD_CORE_ASSET = require("../../../assets/nutrition-data/foods-core.blob");
+export const FOOD_GENERIC_ASSET = require("../../../assets/nutrition-data/foods-generic.blob");
 export const FOOD_SEARCH_INDEX_ASSET = require("../../../assets/nutrition-data/foods-search-index.blob");
 export const FOOD_SEARCH_CATALOG_ASSET = require("../../../assets/nutrition-data/foods-search-catalog.blob");
 export const FOOD_REST_ASSETS: Record<number, number> = {

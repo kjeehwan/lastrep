@@ -31,22 +31,28 @@ vi.mock("./data/foodsAssetManifest", () => {
   }
   return {
     FOOD_CORE_ASSET: assetPath("assets", "nutrition-data", "foods-core.blob"),
+    FOOD_GENERIC_ASSET: assetPath("assets", "nutrition-data", "foods-generic.blob"),
     FOOD_SEARCH_INDEX_ASSET: assetPath("assets", "nutrition-data", "foods-search-index.blob"),
     FOOD_SEARCH_CATALOG_ASSET: assetPath("assets", "nutrition-data", "foods-search-catalog.blob"),
     FOOD_REST_ASSETS: restAssets,
   };
 });
 
-const { prewarmFoodSearch, searchFoodsAsync } = await import("./foodDb");
+const { prewarmFoodSearch, getFoodsByIdsAsync } = await import("./foodDb");
 it("prewarms only the small core, not the full index or food chunks", async () => {
   await prewarmFoodSearch();
   expect(reads.map((file) => path.basename(file))).toEqual(["foods-core.blob"]);
 });
-it("preserves ordering and nutrition values across 81 captured searches", async () => {
+it("preserves existing food IDs, nutrition and servings after intentional ranking changes", async () => {
   const expected = JSON.parse(await fs.readFile("src/nutrition/fixtures/search-results-before.json", "utf8"));
-  for (const entry of expected) {
-    expect(await searchFoodsAsync(entry.query, entry.limit), `${entry.query} limit ${entry.limit}`).toEqual(entry.rows);
+  const originals = new Map<string, Record<string, unknown>>();
+  for (const entry of expected) for (const food of entry.rows) {
+    const clean = Object.fromEntries(Object.entries(food).filter(([key]) => !key.startsWith("_")));
+    originals.set(food.id, clean);
   }
+  const loaded = await getFoodsByIdsAsync([...originals.keys()]);
+  expect(loaded).toHaveLength(originals.size);
+  for (const food of loaded) expect(food, food.id).toEqual(originals.get(food.id));
 }, 60000);
 
 it("catalog candidates match every packaged food and its actual chunk", async () => {
@@ -64,4 +70,14 @@ it("catalog candidates match every packaged food and its actual chunk", async ()
     }
   }
   expect(JSON.parse(await fs.readFile(path.join(directory, "foods-search-catalog.blob"), "utf8"))).toEqual(expected);
+});
+
+it("resolves records from the first and last positions of every packaged chunk", async () => {
+  const expected = [];
+  for (let chunk = 0; chunk <= 33; chunk++) {
+    const file = chunk === 0 ? "foods-core.blob" : `foods-rest-${chunk}.blob`;
+    const rows = JSON.parse(await fs.readFile(path.join("assets", "nutrition-data", file), "utf8"));
+    expected.push(rows[0], rows.at(-1));
+  }
+  expect(await getFoodsByIdsAsync(expected.map((food) => food.id))).toEqual(expected);
 });

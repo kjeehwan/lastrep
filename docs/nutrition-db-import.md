@@ -34,13 +34,51 @@ Optional flags:
 
 ## Output
 
-- `src/nutrition/data/foods-core.ts`
-- `src/nutrition/data/foods-rest-*.ts`
+- `assets/nutrition-data/foods-core.blob`
+- `assets/nutrition-data/foods-rest-*.blob`
+- `assets/nutrition-data/foods-search-catalog.blob`
+- `src/nutrition/data/foodsAssetManifest.ts`
 
 Current runtime note:
 
-- App search currently loads `foods-core` + `foods-rest-1` only for performance.
-- If more chunks are generated, they are not used until search loader is updated.
+- App search examines the lightweight name/alias catalog, then loads matching
+  chunks through the asset manifest. It does not parse the raw source CSV files.
+- Food-ID hydration uses this catalog's actual chunk locations, not the older
+  capped token/prefix index, which can be out of sync with packaged chunks.
+- `--merge-existing true` reads all current blob chunks in numeric order rather
+  than only the obsolete TS core/rest-1 files. It rejects a `--max` below the
+  current corpus size. Choose a limit with room for additional rows; full corpus
+  regeneration/deduplication must still be reviewed before shipping its assets.
+- `foods-generic.blob` is a separately generated, bounded supplement of USDA
+  Foundation/SR Legacy reference foods. Existing packaged IDs always take
+  precedence, preserving old nutrition and serving definitions.
+
+## Generic reference supplement
+
+```bash
+node scripts/build-generic-foods.mjs --in ./data/FoodData_Central_csv_2026-04-30/FoodData_Central_csv_2026-04-30
+```
+
+This streams local `food.csv`, `food_nutrient.csv` and `nutrient.csv`; it makes no
+network requests and does not bundle raw source files. It selects up to 40
+distinct descriptions per configured food family rather than taking the first
+alphabetical portion of the entire source. Breast and brown-rice variants have
+their own families to avoid being crowded out by other cuts/grains.
+
+Nutrient IDs and units are checked against the source definitions. Energy is
+selected from 2048 (specific Atwater), then 2047 (general Atwater), then 1008
+(kcal). Protein 1003, total fat 1004 and carbohydrate 1005 are grams per 100 g.
+Missing, negative or impossible required values are rejected. Serving size is
+explicitly 100 g rather than an inferred cup/portion. Values are not guessed or
+converted from a branded product to a generic food.
+
+The current supplement contains 783 source records. Records whose IDs already
+exist in the packaged dataset are not substituted at runtime.
+
+Coverage is not exhaustive. A brand absent from the packaged corpus may still
+be available via the separate Open Food Facts barcode lookup. Unknown searches
+return no match rather than unrelated filler. Korean packaged-food coverage is
+not promised by this batch.
 
 The Nutrition page continues to use the same UI and logic:
 - search by food

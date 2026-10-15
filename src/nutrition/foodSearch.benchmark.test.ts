@@ -30,12 +30,13 @@ vi.mock("./data/foodsAssetManifest", () => {
   }
   return {
     FOOD_CORE_ASSET: assetPath("assets", "nutrition-data", "foods-core.blob"),
+    FOOD_GENERIC_ASSET: assetPath("assets", "nutrition-data", "foods-generic.blob"),
     FOOD_SEARCH_INDEX_ASSET: assetPath("assets", "nutrition-data", "foods-search-index.blob"),
     FOOD_SEARCH_CATALOG_ASSET: assetPath("assets", "nutrition-data", "foods-search-catalog.blob"),
     FOOD_REST_ASSETS: restAssets,
   };
 });
-const { clearFoodSearchCache, searchFoodsAsync } = await import("./foodDb");
+const { clearFoodSearchCache, searchFoodsAsync, getFoodsByIdsAsync, computeFromFood } = await import("./foodDb");
 
 type QueryCase = {
   q: string;
@@ -92,4 +93,43 @@ describe("nutrition food search benchmark", () => {
       }
     }
   }, 20000);
+
+  it("returns cooked brown rice instead of unrelated raw/white rice", async () => {
+    const rows = await searchFoodsAsync("brown rice cooked", 20);
+    expect(rows.length).toBeGreaterThanOrEqual(3);
+    expect(rows.slice(0, 3).every((food) => /rice, brown/i.test(food.name) && /cooked/i.test(food.name))).toBe(true);
+    expect(rows.some((food) => food.id === "usda-169704" && food.caloriesPer100g === 123)).toBe(true);
+  });
+  it("returns plain oats before oatmeal bread, pancakes and baked desserts", async () => {
+    const rows = await searchFoodsAsync("oatmeal", 20);
+    expect(rows.slice(0, 5).every((food) => !/\b(bread|pancakes?|bake|cookies?)\b/i.test(food.name))).toBe(true);
+  });
+  it("returns cooked chicken preparations, not raw chicken or arbitrary branded fillers", async () => {
+    const rows = await searchFoodsAsync("chicken breast cooked", 20);
+    expect(rows.slice(0, 3).every((food) => /breast/i.test(food.name) && /cooked|roasted|grilled|boiled/i.test(food.name))).toBe(true);
+  });
+  it("handles regional spelling, punctuation, plural forms and partial final words", async () => {
+    expect((await searchFoodsAsync("greek yoghurt")).map((food) => food.id)).toEqual((await searchFoodsAsync("greek yogurt")).map((food) => food.id));
+    expect((await searchFoodsAsync("chicken-breast")).map((food) => food.id)).toEqual((await searchFoodsAsync("chicken breast")).map((food) => food.id));
+    expect((await searchFoodsAsync("egg whites"))[0].name).toMatch(/egg, white/i);
+    expect((await searchFoodsAsync("oatmea")).length).toBeGreaterThan(0);
+    for (const query of ["rice(", "rice [", "peanut butter (smooth)"]) expect((await searchFoodsAsync(query)).length).toBeGreaterThan(0);
+    expect(await searchFoodsAsync("[" )).toEqual([]);
+  });
+  it("hydrates every returned ID in order with identical nutrition and serving values", async () => {
+    for (const query of ["oatmeal", "chicken breast", "cherries", "Nutella"]) {
+      const rows = await searchFoodsAsync(query);
+      expect(await getFoodsByIdsAsync(rows.map((row) => row.id))).toEqual(rows);
+    }
+  });
+  it("returns no unrelated result for an unknown food, and obeys limits", async () => {
+    expect(await searchFoodsAsync("zzzznotfood")).toEqual([]);
+    expect(await searchFoodsAsync("milk", 0)).toEqual([]);
+    expect(await searchFoodsAsync("milk", 3)).toHaveLength(3);
+  });
+  it("does not divide by zero when a zero-calorie barcode product is entered by calories", () => {
+    const food = { id: "zero", name: "Cola Zero", aliases: [], servingLabel: "100 g", servingGrams: 100, caloriesPer100g: 0, proteinPer100g: 0 };
+    expect(computeFromFood(food, "calories", "100")).toBeNull();
+    expect(computeFromFood(food, "grams", "100")?.calories).toBe(0);
+  });
 });
