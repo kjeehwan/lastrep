@@ -70,6 +70,8 @@ export interface NutritionMeal {
   mealSection?: string | null;
   loggedAt: Timestamp;
   updatedAt: Timestamp;
+  createdAt?: Timestamp;
+  mealTimeMinutes?: number | null;
 }
 
 export type NutritionMealWrite = Omit<NutritionMeal, "id">;

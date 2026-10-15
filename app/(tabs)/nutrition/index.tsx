@@ -30,8 +30,12 @@ import type { DietPhase } from "@/src/types/decision";
 import { isExpectedOfflineError } from "@/src/utils/networkErrors";
 import { nutritionProfileContext } from "@/src/nutrition/profileContext";
 import { scheduleAfterInteractions } from "@/src/utils/scheduleAfterInteractions";
+import { useMealLabels } from "@/src/nutrition/useMealLabels";
+import { DEFAULT_MEAL_IDS, formatMealTime, mealLabel, mealSectionId, sectionMealTime } from "@/src/nutrition/mealOrganization";
+import { MealOrganizationEditor } from "@/src/nutrition/components/MealOrganizationControls";
+import { showAppDialog } from "@/src/ui/appDialog";
 
-const DEFAULT_SECTIONS = ["Breakfast", "Snack 1", "Lunch", "Snack 2", "Dinner", "Snack 3"];
+const DEFAULT_SECTIONS = DEFAULT_MEAL_IDS;
 const RECOMMENDED_MACRO_RATIO = { protein: 0.3, carbs: 0.45, fats: 0.25 };
 const MUTED = "#a5acc1";
 const SUCCESS = "#4ade80";
@@ -88,6 +92,8 @@ export default function NutritionIndex() {
   const router = useRouter();
   const params = useLocalSearchParams<{ date?: string; focusMeals?: string }>();
   const [uid, setUid] = useState<string | null>(null);
+  const { labels } = useMealLabels(uid);
+  const [mealEditor, setMealEditor] = useState<{ section: string; mode: "menu" | "time" } | null>(null);
   const [redirectTo, setRedirectTo] = useState<Href | null>(null);
   const [meals, setMeals] = useState<NutritionMeal[]>([]);
   const [loadingMeals, setLoadingMeals] = useState(true);
@@ -328,13 +334,14 @@ export default function NutritionIndex() {
   const persistMealSections = useCallback(
     async (nextSections: string[]) => {
       if (!uid) return;
-      setMealSectionsOrder(nextSections);
       try {
         await saveNutritionProfile(uid, calorieTargets, proteinTargetGrams, nextSections);
+        setMealSectionsOrder(nextSections);
       } catch (error) {
         if (!isExpectedOfflineError(error)) {
           console.log("Failed to save meal sections", error);
         }
+        showAppDialog({ title: "Could not save meal sections", message: "Please try again." });
       }
     },
     [uid, calorieTargets, proteinTargetGrams]
@@ -351,10 +358,9 @@ export default function NutritionIndex() {
 
   const handleAddMealSection = () => {
     const name = newMealName.trim();
-    if (!name) return;
-    if (sections.includes(name)) {
-      setAddMealVisible(false);
-      setNewMealName("");
+    if (!name || name.length > 24) return;
+    if (sections.includes(name) || sections.some((id) => mealLabel(id, labels).toLowerCase() === name.toLowerCase())) {
+      showAppDialog({ title: "Meal already exists", message: "Choose a different meal name." });
       return;
     }
     const next = [...sections, name];
@@ -827,7 +833,7 @@ export default function NutritionIndex() {
             </TouchableOpacity>
           </View>
           {loadingMeals ? <Text style={styles.subText}>Loading meals...</Text> : null}
-          {sections.map((section, index) => {
+          {sections.map((section) => {
             const stats = sectionStats.get(section) ?? {
               count: 0,
               calories: 0,
@@ -838,9 +844,14 @@ export default function NutritionIndex() {
               fatsKnownCount: 0,
             };
             return (
-              <TouchableOpacity key={section} style={styles.sectionRow} onPress={() => handleOpenSection(section)}>
+              <View key={section} style={styles.sectionRow}>
+                <TouchableOpacity disabled={!stats.count} accessibilityLabel={`Edit ${mealLabel(section, labels)} time`} style={styles.mealTime}
+                  onPress={() => setMealEditor({ section, mode: "time" })}>
+                  <Text style={styles.subText}>{stats.count ? formatMealTime(sectionMealTime(meals.filter((meal) => mealSectionId(meal) === section))) : "--:--"}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={{ flex: 1, flexDirection: "row", alignItems: "center" }} onPress={() => handleOpenSection(section)}>
                 <View style={styles.sectionRowLeft}>
-                  <Text style={styles.sectionRowTitle}>{section}</Text>
+                  <Text style={styles.sectionRowTitle}>{mealLabel(section, labels)}</Text>
                   <Text style={styles.subText}>{stats.count} entries</Text>
                 </View>
                 <View style={styles.sectionRowRight}>
@@ -851,15 +862,11 @@ export default function NutritionIndex() {
                     {stats.fatsKnownCount > 0 ? `${Math.round(stats.fats)}g` : "0g"}
                   </Text>
                 </View>
-                <View style={styles.reorderCol}>
-                  <TouchableOpacity style={styles.reorderBtn} onPress={() => moveSection(index, -1)}>
-                    <Ionicons name="chevron-up" size={14} color="#cfd3f8" />
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.reorderBtn} onPress={() => moveSection(index, 1)}>
-                    <Ionicons name="chevron-down" size={14} color="#cfd3f8" />
-                  </TouchableOpacity>
-                </View>
-              </TouchableOpacity>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.mealMenu} accessibilityLabel={`${mealLabel(section, labels)} options`} onPress={() => setMealEditor({ section, mode: "menu" })}>
+                  <Ionicons name="ellipsis-horizontal" size={20} color="#a5acc1" />
+                </TouchableOpacity>
+              </View>
             );
           })}
         </View>
@@ -891,6 +898,7 @@ export default function NutritionIndex() {
             <Text style={styles.modalTitle}>Add meal section</Text>
             <TextInput
               value={newMealName}
+              maxLength={24}
               onChangeText={setNewMealName}
               placeholder="e.g. Pre-workout"
               placeholderTextColor="#7a7a8c"
@@ -907,6 +915,10 @@ export default function NutritionIndex() {
           </AdaptiveModalCard>
         </KeyboardAwareModalFrame>
       </Modal>
+      {mealEditor ? <MealOrganizationEditor key={`${selectedDateKey}:${mealEditor.section}:${mealEditor.mode}`} uid={uid} section={mealEditor.section} sections={sections}
+        meals={meals.filter((meal) => mealSectionId(meal) === mealEditor.section)} dateKey={selectedDateKey} initialMode={mealEditor.mode} onClose={() => setMealEditor(null)}
+        onMoveUp={sections.indexOf(mealEditor.section) > 0 ? () => { moveSection(sections.indexOf(mealEditor.section), -1); setMealEditor(null); } : undefined}
+        onMoveDown={sections.indexOf(mealEditor.section) < sections.length - 1 ? () => { moveSection(sections.indexOf(mealEditor.section), 1); setMealEditor(null); } : undefined} /> : null}
     </SafeAreaView>
   );
 }
@@ -1017,17 +1029,10 @@ const styles = StyleSheet.create({
     borderRadius: 10, backgroundColor: "rgba(255,255,255,0.05)",
   },
   sectionRowLeft: { gap: 2, flex: 1 },
+  mealTime: { minWidth: 56, minHeight: 44, justifyContent: "center", marginRight: 8 },
+  mealMenu: { width: 44, minHeight: 44, alignItems: "center", justifyContent: "center" },
   sectionRowTitle: { color: "#fff", fontSize: 15, fontWeight: "700" },
   sectionRowRight: { alignItems: "flex-end", gap: 2, marginLeft: 8 },
-  reorderCol: { marginLeft: 8, gap: 4 },
-  reorderBtn: {
-    width: 22,
-    height: 22,
-    borderRadius: 6,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.08)",
-  },
   sectionRowMacro: { color: "#fff", fontSize: 14, fontWeight: "700" },
   historyRow: {
     flexDirection: "row", alignItems: "center", paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth,
