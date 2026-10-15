@@ -1,4 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
+import { MealPreferencesCard } from "../../../src/nutrition/components/MealOrganizationControls";
+import { normalizeMealLabels, reconcileMealLabelDraft, type MealLabels } from "../../../src/nutrition/mealOrganization";
 import { resolveEffortScale, type EffortScale } from "../../../src/workouts/effortScale";
 import Slider from "@react-native-community/slider";
 import { ProfilePhoto } from "../../../src/profile/ProfilePhoto";
@@ -7,7 +9,7 @@ import { stageProfilePhoto, commitProfilePhoto, discardProfilePhotoUpload } from
 import * as ImagePicker from "expo-image-picker";
 import { Href, Redirect, useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { onAuthStateChanged } from "firebase/auth";
-import { doc, onSnapshot, setDoc, Timestamp } from "firebase/firestore";
+import { doc, onSnapshot, setDoc, Timestamp, updateDoc } from "firebase/firestore";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   BackHandler,
@@ -122,6 +124,7 @@ type ProfileSnapshot = {
   heightUnit: HeightUnit;
   energyUnit: EnergyUnit;
   effortScale: EffortScale;
+  mealLabels: MealLabels;
   bodyWeight: string;
   bodyFatPercent: string;
   muscleMass: string;
@@ -225,6 +228,7 @@ export default function ProfileIndex() {
   const [heightUnit, setHeightUnit] = useState<HeightUnit>("cm");
   const [energyUnit, setEnergyUnit] = useState<EnergyUnit>("kcal");
   const [effortScale, setEffortScale] = useState<EffortScale>("rpe");
+  const [mealLabels, setMealLabels] = useState<MealLabels>(() => normalizeMealLabels(null));
   const [bodyWeight, setBodyWeight] = useState("");
   const [bodyFatPercent, setBodyFatPercent] = useState("");
   const [muscleMass, setMuscleMass] = useState("");
@@ -288,6 +292,7 @@ export default function ProfileIndex() {
         heightUnit,
         energyUnit,
         effortScale,
+        mealLabels: normalizeMealLabels(mealLabels),
         bodyWeight: bodyWeight.trim(),
         bodyFatPercent: bodyFatPercent.trim(),
         muscleMass: muscleMass.trim(),
@@ -313,6 +318,7 @@ export default function ProfileIndex() {
       heightUnit,
       energyUnit,
       effortScale,
+      mealLabels,
       bodyWeight,
       bodyFatPercent,
       muscleMass,
@@ -331,6 +337,13 @@ export default function ProfileIndex() {
       const baseline = JSON.parse(initialSnapshotRef.current) as ProfileSnapshot;
       const local = JSON.parse(latestSnapshotRef.current) as ProfileSnapshot;
       let changed = false;
+      const remoteLabels = normalizeMealLabels(data.mealLabels);
+      const reconciled = reconcileMealLabelDraft(baseline.mealLabels, local.mealLabels, remoteLabels);
+      if (JSON.stringify(reconciled.baseline) !== JSON.stringify(baseline.mealLabels)) {
+        setMealLabels(reconciled.draft);
+        baseline.mealLabels = reconciled.baseline;
+        changed = true;
+      }
       if (isTrainingPhase(data.trainingPhase) && local.trainingPhase === baseline.trainingPhase && data.trainingPhase !== baseline.trainingPhase) {
         setTrainingPhase(data.trainingPhase);
         setInitialTrainingPhase(data.trainingPhase);
@@ -425,6 +438,7 @@ export default function ProfileIndex() {
       if (isHeightUnit(parsed.heightUnit)) setHeightUnit(parsed.heightUnit);
       if (isEnergyUnit(parsed.energyUnit)) setEnergyUnit(parsed.energyUnit);
       setEffortScale(resolveEffortScale(parsed.effortScale));
+      setMealLabels(normalizeMealLabels(parsed.mealLabels));
       if (typeof parsed.bodyWeight === "string") setBodyWeight(parsed.bodyWeight);
       if (typeof parsed.bodyFatPercent === "string") setBodyFatPercent(parsed.bodyFatPercent);
       if (typeof parsed.muscleMass === "string") setMuscleMass(parsed.muscleMass);
@@ -519,6 +533,7 @@ export default function ProfileIndex() {
         if (data?.nickname) setNickname(data.nickname);
         if (typeof data?.description === "string") setProfileDescription(data.description);
         setProfilePhotoUri(profilePhotoReference(data));
+        setMealLabels(normalizeMealLabels(data?.mealLabels));
         if (isTrainingPhase(data?.trainingPhase)) {
           setTrainingPhase(data.trainingPhase);
           setInitialTrainingPhase(data.trainingPhase);
@@ -1137,6 +1152,10 @@ export default function ProfileIndex() {
         ...(dietPhase !== initialDietPhase ? { dietPhase } : {}),
       };
       const savedPhases = await saveUserPhases(uid, phaseChanges, profilePayload);
+      if (initialSnapshot && JSON.stringify(normalizeMealLabels((JSON.parse(initialSnapshot) as ProfileSnapshot).mealLabels)) !== JSON.stringify(normalizeMealLabels(mealLabels))) {
+        // Replace the map, rather than deep-merge names that a reset removed.
+        await updateDoc(doc(db, "users", uid), { mealLabels: normalizeMealLabels(mealLabels) });
+      }
       await setDoc(
         doc(db, "users", uid),
         { sleepSettings: { targetHours: Math.round(parsedSleepTarget * 10) / 10 } },
@@ -1215,6 +1234,7 @@ export default function ProfileIndex() {
     dietPhase,
     weightUnit,
     effortScale,
+    mealLabels,
     heightUnit,
     availabilityDays,
     initialTrainingPhase,
@@ -1682,7 +1702,7 @@ export default function ProfileIndex() {
 
         <View style={styles.card}>
           <View style={styles.sectionHeaderRow}>
-            <Text style={styles.cardTitleNoMargin}>Body composition</Text>
+          <Text style={styles.cardTitleNoMargin}>Body composition</Text>
           </View>
           <Text style={styles.helperText}>Latest source: {latestBodyCompositionSource}</Text>
           <Text style={styles.helperText}>Last updated: {latestBodyCompositionLabel}</Text>
@@ -1813,6 +1833,8 @@ export default function ProfileIndex() {
             <Text style={styles.secondaryButtonText}>Use for nutrition targets</Text>
           </TouchableOpacity>
         </View>
+
+        <MealPreferencesCard labels={mealLabels} onChange={setMealLabels} disabled={loading || savingProfile || initialSnapshot == null} />
 
         <View style={styles.card}>
           <View style={styles.nutritionTargetsHeaderRow}>

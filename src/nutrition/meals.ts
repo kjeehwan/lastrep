@@ -14,6 +14,7 @@ import {
   Timestamp,
   type Unsubscribe,
   where,
+  writeBatch,
 } from "firebase/firestore";
 import { db } from "../config/firebaseConfig";
 import {
@@ -39,6 +40,7 @@ import {
   normalizeCalorieTargets,
 } from "./mealHelpers";
 import type { NutritionTrendReport } from "./mealHelpers";
+import { initialMealTime, mealSectionId, validMealMinutes } from "./mealOrganization";
 
 export * from "./mealHelpers";
 
@@ -114,6 +116,8 @@ function mapMealDoc(mealDoc: QueryDocumentSnapshot<DocumentData>): NutritionMeal
     mealSection: data.mealSection ?? null,
     loggedAt: data.loggedAt,
     updatedAt: data.updatedAt,
+    createdAt: data.createdAt,
+    mealTimeMinutes: data.mealTimeMinutes ?? null,
   };
 }
 
@@ -242,24 +246,43 @@ export async function saveNutritionProfile(
   uid: string,
   calorieTargetsByDietPhase: NutritionCalorieTargetsByDietPhase,
   proteinTargetGrams: number | null = null,
-  mealSections: string[] | null = null
+  mealSections?: string[] | null
 ): Promise<void> {
+  const profile = buildNutritionProfile(
+    calorieTargetsByDietPhase,
+    proteinTargetGrams,
+    mealSections ?? null,
+    Timestamp.now()
+  );
+  // Profile target edits do not own the meal order configured in Nutrition.
+  if (mealSections === undefined) delete profile.mealSections;
   await setDoc(
     doc(db, USERS_COLLECTION, uid),
     {
-      [USER_NUTRITION_PROFILE_FIELD]: buildNutritionProfile(
-        calorieTargetsByDietPhase,
-        proteinTargetGrams,
-        mealSections,
-        Timestamp.now()
-      ),
+      [USER_NUTRITION_PROFILE_FIELD]: profile,
     },
     { merge: true }
   );
 }
 
-export async function createMeal(uid: string, payload: NutritionMealWrite): Promise<void> {
-  await addDoc(collection(db, USERS_COLLECTION, uid, NUTRITION_MEALS_SUBCOLLECTION), payload);
+export async function createMeal(uid: string, payload: NutritionMealWrite, dayMeals?: NutritionMeal[]): Promise<void> {
+  const existing = (dayMeals ?? await getMealsForDate(uid, payload.loggedAt.toDate()))
+    .filter((meal) => mealSectionId(meal) === mealSectionId(payload));
+  await addDoc(collection(db, USERS_COLLECTION, uid, NUTRITION_MEALS_SUBCOLLECTION), {
+    ...payload,
+    createdAt: Timestamp.now(),
+    mealTimeMinutes: initialMealTime(existing),
+  });
+}
+
+export async function saveSectionMealTime(uid: string, meals: NutritionMeal[], minutes: number): Promise<void> {
+  if (!validMealMinutes(minutes) || meals.length === 0 || meals.length > 500) throw new Error("Unable to update meal time.");
+  const batch = writeBatch(db);
+  const updatedAt = Timestamp.now();
+  for (const meal of meals) {
+    batch.update(doc(db, USERS_COLLECTION, uid, NUTRITION_MEALS_SUBCOLLECTION, meal.id), { mealTimeMinutes: minutes, updatedAt });
+  }
+  await batch.commit();
 }
 
 export async function updateMeal(

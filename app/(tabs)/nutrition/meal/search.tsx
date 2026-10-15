@@ -39,6 +39,8 @@ import {
 } from "@/src/nutrition/quickLog";
 import { showAppDialog } from "@/src/ui/appDialog";
 import { NutritionFactsPreview } from "@/src/nutrition/components/NutritionFactsPreview";
+import { useMealLabels } from "@/src/nutrition/useMealLabels";
+import { initialMealTime, mealLabel, mealSectionId } from "@/src/nutrition/mealOrganization";
 
 type SelectionDraft = {
   key: string;
@@ -135,6 +137,7 @@ export default function MealSearchScreen() {
   );
 
   const [uid, setUid] = useState<string | null>(null);
+  const { labels } = useMealLabels(uid);
   const [query, setQuery] = useState("");
   const [submittedQuery, setSubmittedQuery] = useState("");
   const [searchNonce, setSearchNonce] = useState(0);
@@ -688,6 +691,7 @@ export default function MealSearchScreen() {
     try {
       const foodDb = await getFoodDb();
       const targetMeals = await getMealsForDate(uid, selectedDate);
+      const mealTimeMinutes = initialMealTime(targetMeals.filter((meal) => mealSectionId(meal) === section));
       for (const entry of entries) {
         const converted = foodDb.computeFromFood(entry.food, entry.mode, entry.value);
         if (!converted) continue;
@@ -746,9 +750,10 @@ export default function MealSearchScreen() {
             loggedAt,
             updatedAt: now,
             source: baseSource,
-          } as any);
+          } as any, targetMeals);
           targetMeals.unshift({
             id: `local-${entry.food.id}-${now.seconds}`,
+            mealTimeMinutes,
             name: entry.food.name,
             calories: Math.round(converted.calories),
             proteinGrams: Math.round(converted.proteinGrams),
@@ -833,9 +838,9 @@ export default function MealSearchScreen() {
         <TouchableOpacity style={styles.iconBtn} onPress={goToSection}>
           <Ionicons name="chevron-back" size={22} color="#fff" />
         </TouchableOpacity>
-        <View>
-          <Text style={styles.title}>Add to {section}</Text>
-          <Text style={styles.subText}>{selectedDateKey}</Text>
+        <View style={{ flex: 1, alignItems: "center", paddingHorizontal: 8 }}>
+          <Text style={[styles.title, { textAlign: "center" }]}>Add to {mealLabel(section, labels)}</Text>
+          <Text style={[styles.subText, { textAlign: "center" }]}>{selectedDateKey}</Text>
         </View>
         <TouchableOpacity style={styles.nextBtn} onPress={commitStaged} disabled={submitting}>
           <Text style={styles.nextText}>{submitting ? "Saving..." : "Next"}</Text>

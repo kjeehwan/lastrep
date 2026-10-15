@@ -22,7 +22,8 @@ import {
   type NutritionSavedMealItem,
   type NutritionSavedMealWrite,
 } from "../contracts";
-import { getRecentMeals } from "./meals";
+import { getRecentMeals, getMealsForDate } from "./meals";
+import { initialMealTime, mealSectionId } from "./mealOrganization";
 import { findPreviousSectionMeals, mealsToSavedItems } from "./quickLogHelpers";
 
 export { findPreviousSectionMeals, mealsToSavedItems } from "./quickLogHelpers";
@@ -38,7 +39,8 @@ function itemToMealWrite(
   item: NutritionSavedMealItem,
   section: string,
   date: Date,
-  itemIndex: number
+  itemIndex: number,
+  mealTimeMinutes: number | null
 ): NutritionMealWrite {
   const now = Timestamp.now();
   return {
@@ -51,6 +53,8 @@ function itemToMealWrite(
     mealSection: section,
     loggedAt: targetTimestamp(date, itemIndex),
     updatedAt: now,
+    createdAt: now,
+    mealTimeMinutes,
   };
 }
 
@@ -91,10 +95,12 @@ export async function addSavedMealToDate(
   section: string,
   date: Date
 ): Promise<void> {
+  const existing = (await getMealsForDate(uid, date)).filter((meal) => mealSectionId(meal) === section);
+  const minutes = initialMealTime(existing);
   const batch = writeBatch(db);
   const mealsCollection = collection(db, USERS_COLLECTION, uid, NUTRITION_MEALS_SUBCOLLECTION);
   savedMeal.items.forEach((item, index) => {
-    batch.set(doc(mealsCollection), itemToMealWrite(item, section, date, index));
+    batch.set(doc(mealsCollection), itemToMealWrite(item, section, date, index, minutes));
   });
   await batch.commit();
 }
@@ -109,10 +115,13 @@ export async function copyPreviousMealToDate(
   const previous = findPreviousSectionMeals(meals, section, targetDate);
   if (previous.length === 0) return { copied: 0, sourceDate: null };
   const items = mealsToSavedItems(previous);
+  const existing = meals.filter((meal) => mealSectionId(meal) === section &&
+    meal.loggedAt.toDate().toDateString() === targetDate.toDateString());
+  const minutes = initialMealTime(existing);
   const batch = writeBatch(db);
   const mealsCollection = collection(db, USERS_COLLECTION, uid, NUTRITION_MEALS_SUBCOLLECTION);
   items.forEach((item, index) => {
-    batch.set(doc(mealsCollection), itemToMealWrite(item, section, targetDate, index));
+    batch.set(doc(mealsCollection), itemToMealWrite(item, section, targetDate, index, minutes));
   });
   await batch.commit();
   return { copied: items.length, sourceDate: previous[0].loggedAt.toDate() };

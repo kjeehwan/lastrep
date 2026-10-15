@@ -31,6 +31,9 @@ import { showAppDialog } from "@/src/ui/appDialog";
 import { isExpectedOfflineError } from "@/src/utils/networkErrors";
 import { copyPreviousMealToDate, createSavedMeal } from "@/src/nutrition/quickLog";
 import { NutritionFactsPreview } from "@/src/nutrition/components/NutritionFactsPreview";
+import { useMealLabels } from "@/src/nutrition/useMealLabels";
+import { formatMealTime, mealLabel, sectionMealTime } from "@/src/nutrition/mealOrganization";
+import { MealOrganizationEditor } from "@/src/nutrition/components/MealOrganizationControls";
 
 const ENTRY_MODES: FoodEntryMode[] = ["grams", "calories", "servings"];
 
@@ -132,6 +135,9 @@ export default function MealSectionScreen() {
     [selectedDateKey]
   );
   const [uid, setUid] = useState<string | null>(null);
+  const { labels } = useMealLabels(uid);
+  const sectionName = mealLabel(section, labels);
+  const [timeEditorVisible, setTimeEditorVisible] = useState(false);
   const [dayMeals, setDayMeals] = useState<NutritionMeal[]>([]);
   const [editingMeal, setEditingMeal] = useState<NutritionMeal | null>(null);
   const [editorVisible, setEditorVisible] = useState(false);
@@ -278,8 +284,8 @@ export default function MealSectionScreen() {
   const handleCopyPrevious = () => {
     if (!uid || quickActionPending) return;
     showAppDialog({
-      title: `Copy previous ${section.toLowerCase()}?`,
-      message: `The nearest earlier ${section.toLowerCase()} will be added to ${selectedDateKey}.`,
+      title: `Copy previous ${sectionName}?`,
+      message: `The nearest earlier ${sectionName} will be added to ${selectedDateKey}.`,
       buttons: [
         { text: "Cancel", role: "cancel" },
         {
@@ -293,7 +299,7 @@ export default function MealSectionScreen() {
                 message:
                   result.copied > 0 && result.sourceDate
                     ? `${result.copied} item${result.copied === 1 ? "" : "s"} copied from ${formatDateKey(result.sourceDate)}.`
-                    : `No earlier ${section.toLowerCase()} was found in the last 90 days.`,
+                    : `No earlier ${sectionName} was found in the last 90 days.`,
                 buttons: [{ text: "OK" }],
               });
             } catch (error) {
@@ -314,7 +320,7 @@ export default function MealSectionScreen() {
 
   const openSaveMeal = () => {
     if (sectionMeals.length === 0) return;
-    setSavedMealName(`${section} meal`);
+    setSavedMealName(`${sectionName} meal`);
     setSaveMealVisible(true);
   };
 
@@ -463,16 +469,19 @@ export default function MealSectionScreen() {
         >
           <Ionicons name="chevron-back" size={22} color="#fff" />
         </TouchableOpacity>
-        <View>
-          <Text style={styles.title}>{section}</Text>
-          <Text style={styles.subText}>{selectedDateKey}</Text>
+        <View style={{ flex: 1, alignItems: "center", paddingHorizontal: 8 }}>
+          <Text style={[styles.title, { textAlign: "center" }]}>{sectionName}</Text>
+          <Text style={[styles.subText, { textAlign: "center" }]}>{selectedDateKey}</Text>
         </View>
         <View style={{ width: 32 }} />
       </View>
 
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>{section} summary</Text>
+          <Text style={styles.sectionTitle}>{sectionName} summary</Text>
+          {sectionMeals.length ? <TouchableOpacity style={{ minHeight: 44, justifyContent: "center" }} onPress={() => setTimeEditorVisible(true)}>
+            <Text style={styles.subText}>Meal time: {formatMealTime(sectionMealTime(sectionMeals))} · Edit</Text>
+          </TouchableOpacity> : null}
           <Text style={styles.summaryCalories}>{sectionTotals.calories} kcal</Text>
           <Text style={styles.subText}>
             Protein {Math.round(sectionTotals.protein)}g / Carbs {Math.round(sectionTotals.carbs)}g / Fat{" "}
@@ -705,6 +714,8 @@ export default function MealSectionScreen() {
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
+      {timeEditorVisible ? <MealOrganizationEditor uid={uid} section={section} sections={[section]} meals={sectionMeals} dateKey={selectedDateKey}
+        initialMode="time" onClose={() => setTimeEditorVisible(false)} /> : null}
     </SafeAreaView>
   );
 }
