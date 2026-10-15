@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Timestamp } from "firebase/firestore";
 import type { NutritionMeal } from "../contracts";
-import { quantityGrams, quantityValue, recordedMealGrams } from "./foodQuantity";
+import { quantityGrams, quantityValue, recordedMealGrams, selectedFoodSummary } from "./foodQuantity";
 
 const density = { servingGrams: 164, caloriesPer100g: 116 };
 function oatmeal(source: Partial<NonNullable<NutritionMeal["source"]>> = {}, calories = 190): NutritionMeal {
@@ -9,6 +9,15 @@ function oatmeal(source: Partial<NonNullable<NutritionMeal["source"]>> = {}, cal
     source: { ...density, mode: "servings", value: "1", ...source } };
 }
 describe("food editor quantities", () => {
+  it("summarizes the confirmed selection rather than the reference serving", () => {
+    const food = { servingGrams: 100, caloriesPer100g: 130 };
+    expect(selectedFoodSummary({ food, mode: "grams", value: "200" })).toBe("200g / 260 kcal / 2 servings");
+    expect(selectedFoodSummary({ food, mode: "calories", value: "260" })).toBe("200g / 260 kcal / 2 servings");
+    expect(selectedFoodSummary({ food, mode: "servings", value: "2" })).toBe("200g / 260 kcal / 2 servings");
+    expect(selectedFoodSummary({ food, mode: "servings", value: "1" })).toBe("100g / 130 kcal / 1 serving");
+    expect(selectedFoodSummary({ food, mode: "grams", value: "200.25" })).toBe("200.25g / 260 kcal / 2 servings");
+    expect(selectedFoodSummary({ food, mode: "grams", value: "" })).toBeNull();
+  });
   it("opens one recorded serving in grams, not 1 gram", () => {
     const grams = recordedMealGrams(oatmeal());
     expect(grams).toBe(164);

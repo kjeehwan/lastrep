@@ -21,6 +21,15 @@ export function quantityValue(grams: number | null, mode: FoodEntryMode, density
   return positive(value) ? String(Number(value.toFixed(6))) : "";
 }
 
+export function selectedFoodSummary(draft: { mode: FoodEntryMode; value: string; food: Density }): string | null {
+  const grams = quantityGrams(draft.value, draft.mode, draft.food);
+  const calories = draft.food.caloriesPer100g;
+  const servingGrams = draft.food.servingGrams;
+  if (grams == null || typeof calories !== "number" || !Number.isFinite(calories) || calories < 0 || !positive(servingGrams)) return null;
+  const servings = Number((grams / servingGrams).toFixed(2));
+  return `${Number(grams.toFixed(2))}g / ${Math.round(grams * calories / 100)} kcal / ${servings} ${servings === 1 ? "serving" : "servings"}`;
+}
+
 export function recordedMealGrams(meal: NutritionMeal): number | null {
   const source = meal.source;
   if (!source) return null;
