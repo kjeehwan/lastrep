@@ -40,7 +40,7 @@ import {
 import { showAppDialog } from "@/src/ui/appDialog";
 import { NutritionFactsPreview } from "@/src/nutrition/components/NutritionFactsPreview";
 import { foodEditorStyles } from "@/src/nutrition/components/foodEditorStyles";
-import { quantityGrams, quantityValue } from "@/src/nutrition/foodQuantity";
+import { quantityGrams, quantityValue, selectedFoodSummary } from "@/src/nutrition/foodQuantity";
 import { useMealLabels } from "@/src/nutrition/useMealLabels";
 import { initialMealTime, mealLabel, mealSectionId } from "@/src/nutrition/mealOrganization";
 
@@ -73,7 +73,9 @@ async function getFoodDb() {
   return foodDbPromise;
 }
 
-function formatFoodHelper(food: FoodItem): string {
+function formatFoodHelper(food: FoodItem, draft?: SelectionDraft): string {
+  const selectedSummary = draft ? selectedFoodSummary(draft) : null;
+  if (selectedSummary) return selectedSummary;
   const servingGrams = Math.round(food.servingGrams);
   const servingCalories = Math.round((food.caloriesPer100g * food.servingGrams) / 100);
   const servingText = normalizeServingInfo(food.servingLabel, food.servingGrams);
@@ -911,7 +913,7 @@ export default function MealSearchScreen() {
                   <View style={styles.searchBody}>
                     <Text style={styles.searchTitle}>{item.name}</Text>
                     <Text style={styles.subText}>{item.sourceType === "usda-generic" ? "USDA reference food" : item.id.startsWith("off-") ? "Open Food Facts product" : "USDA"}</Text>
-                    <Text style={styles.subText}>{formatFoodHelper(item)}</Text>
+                    <Text style={styles.subText}>{formatFoodHelper(item, staged[stageKey])}</Text>
                   </View>
                   <TouchableOpacity onPress={() => toggleFavorite(item)}>
                     <Ionicons name={favored ? "star" : "star-outline"} size={18} color={favored ? "#ffd166" : "#cfd3f8"} />
@@ -941,7 +943,7 @@ export default function MealSearchScreen() {
                       </TouchableOpacity>
                       <View style={styles.searchBody}>
                         <Text style={styles.searchTitle}>{meal.name}</Text>
-                        <Text style={styles.subText}>{formatFoodHelper(food)}</Text>
+                        <Text style={styles.subText}>{formatFoodHelper(food, staged[stageKey])}</Text>
                       </View>
                       <TouchableOpacity onPress={() => toggleFavorite(food)}>
                         <Ionicons name={favored ? "star" : "star-outline"} size={18} color={favored ? "#ffd166" : "#cfd3f8"} />
@@ -970,7 +972,7 @@ export default function MealSearchScreen() {
                   </TouchableOpacity>
                   <View style={styles.searchBody}>
                     <Text style={styles.searchTitle}>{food.name}</Text>
-                    <Text style={styles.subText}>{formatFoodHelper(food)}</Text>
+                    <Text style={styles.subText}>{formatFoodHelper(food, staged[stageKey])}</Text>
                   </View>
                   <TouchableOpacity onPress={() => toggleFavorite(food)}>
                     <Ionicons name="star" size={18} color="#ffd166" />
