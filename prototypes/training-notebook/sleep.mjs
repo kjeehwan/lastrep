@@ -1,3 +1,5 @@
+import './input-behavior.mjs';
+import { readNotebookPreferences, writeNotebookPreferences } from './notebook-preferences.mjs';
 import { rebuildSleepDays, sessionsForDate, importSleepSessions, mockWearableSessions, excludeSleepSession, sleepConflicts } from './sleep-sessions.mjs';
 import { SLEEP_DAY, sleepStates, sleepFixture, selectedSleep, sleepWindow, weeklySleep, durationText, targetDelta, shiftSleepDate, saveSleep, timeMinutes, minutesTime, sleepInterval, inferSleepDates, saveSleepTarget } from './sleep-model.mjs';
 import { calendarCells } from './home-model.mjs';
@@ -13,7 +15,7 @@ const heading = (title, action = '') => `<div class="sleep-section-head"><h3>${t
 let s, example = 'overview', size = [390, 844], dark = false, large = false, syncTimer, toastTimer;
 function choose(id) {
   clearTimeout(syncTimer); clearTimeout(toastTimer);
-  example = id; s = sleepFixture(id); inferSleepDates(s); dark = id === 'dark'; large = id === 'large';
+  example = id; s = sleepFixture(id); if (id === 'overview') { const prefs = readNotebookPreferences(); if (prefs?.profile?.sleepTarget) s.target = Number(prefs.profile.sleepTarget); if (prefs?.health) { const h = prefs.health; s.connection = !h.available ? 'unavailable' : !h.consent ? 'disconnected' : !h.sleep ? 'permission' : 'connected'; } } inferSleepDates(s); dark = id === 'dark'; large = id === 'large';
   $('#dark').checked = dark; $('#large').checked = large;
   setReviewState($('#example'), sleepStates.map(([id, title]) => [id, title]), id); render(false);
 }
@@ -74,7 +76,7 @@ function modal() {
     case 'sync-confirm': return dialog('Import sleep to this account?', `${p('Destination · demo@example.test')}${p('Import this device’s Health Connect sleep records into the signed-in account.')}${p('Design simulation only. No health access or upload occurs.')}`, btn('Import sleep', 'confirm-sync', 'primary') + btn('Simulate importing split sessions', 'import-split') + btn('Cancel', 'close'));
     case 'health': return dialog('Health sync / Profile', `${p('In the app, this action opens the Health sync section in Profile to review consent, device permissions and connection status.')}${p('This is a destination preview, not a permission request. Saved sleep records are unaffected.')}`, btn('Simulate connected access', 'simulate-connect', 'primary') + btn('Simulate disconnected access', 'simulate-disconnect') + btn('Back', 'close'));
     case 'setup': return dialog('Set up Health Connect', `<ol class="sleep-setup-steps"><li>Open Health Connect in your Android device settings. Install or update it if your supported device prompts you to.</li><li>In your sleep-tracking app, enable sharing sleep records with Health Connect.</li><li>Return to Lastrep → Profile → Health sync. Connect and allow Sleep access.</li></ol>${p('Health Connect availability depends on the device. If it is not supported, you can record sleep manually.')}${p('Prototype only: no settings or store app is opened.')}`, btn('Simulate setup complete', 'simulate-connect', 'primary') + btn('Back', 'close'));
-    case 'target': return dialog('Sleep target', `<label class="sleep-field"><span>Daily target in hours</span><input inputmode="decimal" data-target value="${esc(s.targetDraft)}" placeholder="e.g. 7.5" aria-describedby="target-error"></label><p class="sleep-error" id="target-error" role="alert">${esc(s.error)}</p>${p('Uses the same preference as Profile. This prototype updates only the current Sleep study.') }`, btn('Save target', 'save-target', 'primary') + btn('Cancel', 'close'));
+    case 'target': return dialog('Sleep target', `<label class="sleep-field"><span>Daily target in hours</span><input inputmode="decimal" data-target value="${esc(s.targetDraft)}" placeholder="e.g. 7.5" aria-describedby="target-error"></label><p class="sleep-error" id="target-error" role="alert">${esc(s.error)}</p>${p('Uses the same preference as Profile. Saved targets are shared with Profile in this browser tab; no account data is changed.') }`, btn('Save target', 'save-target', 'primary') + btn('Cancel', 'close'));
     default: return '';
   }
 }
@@ -107,13 +109,13 @@ function preview() {
   const hours = Number(s.draft); return s.draft.trim() && Number.isFinite(hours) && hours > 0 && hours <= 24 ? `${durationText(hours)} · 7.5 hours means 7 h 30 min.` : 'Use decimal hours, for example 7.5 for 7 h 30 min.';
 }
 function tabs() {
-  return `<nav class="bottom-tabs" aria-label="App destinations">${[['Home', './home.html'], ['Workout', './'], ['Nutrition', './nutrition.html'], ['Sleep', ''], ['Profile', '']].map(([name, href]) => href ? `<a class="tab tab-link" href="${href}">${icon(name.toLowerCase())}${name}</a>` : `<button class="tab ${name === 'Sleep' ? 'active' : ''}" data-action="${name === 'Sleep' ? 'top' : 'health'}" ${name === 'Sleep' ? 'aria-current="page"' : ''}>${icon(name.toLowerCase())}${name}</button>`).join('')}</nav>`;
+  return `<nav class="bottom-tabs" aria-label="App destinations">${[['Home', './home.html'], ['Workout', './'], ['Nutrition', './nutrition.html'], ['Sleep', ''], ['Profile', './profile.html']].map(([name, href]) => href ? `<a class="tab tab-link" href="${href}">${icon(name.toLowerCase())}${name}</a>` : `<button class="tab ${name === 'Sleep' ? 'active' : ''}" data-action="${name === 'Sleep' ? 'top' : 'health'}" ${name === 'Sleep' ? 'aria-current="page"' : ''}>${icon(name.toLowerCase())}${name}</button>`).join('')}</nav>`;
 }
 function render(preserve = true) {
   const y = $('.sleep-device .viewport')?.scrollTop ?? 0, chartX = $('.sleep-chart-wrap')?.scrollLeft ?? 0, sheetY = $('.sheet-body')?.scrollTop ?? 0;
   $('#state-title').textContent = sleepStates.find(row => row[0] === example)[1];
   $('#state-description').textContent = sleepStates.find(row => row[0] === example)[2];
-  $('#stage').innerHTML = `<div class="frame-wrap"><h3>Sleep / Recovery journal</h3><section class="device sleep-device ${dark ? 'dark' : ''} ${large ? 'large-text' : ''}" style="--width:${size[0]}px;--height:${size[1]}px" aria-label="Interactive Sleep prototype"><div class="system-bar" aria-hidden="true"><span>9:41</span><span>LTE&nbsp;&nbsp;92%</span></div><header class="toolbar"><div><h2>Sleep</h2></div></header><div class="viewport" tabindex="0" aria-label="Scrollable sleep journal"><div class="page-content">${s.loading ? `<div role="status">${p('Loading saved sleep…')}<div class="sleep-skeleton"></div><div class="sleep-skeleton"></div></div>` : dates() + notices() + summary() + sessionList() + trend() + connection()}</div></div>${tabs()}${modal()}${s.toast && !s.modal ? `<div class="toast" role="status"><span>${esc(s.toast)}</span><button class="icon-button" data-action="dismiss" aria-label="Dismiss notification">×</button></div>` : ''}</section><p class="frame-caption">${size.join(' × ')} / ${dark ? 'Dark' : 'Paper'} / ${large ? '200%' : '100%'} text. Illustrative data only.</p></div>`;
+  $('#stage').innerHTML = `<div class="frame-wrap"><h3>Sleep / Recovery journal</h3><section class="device sleep-device ${dark ? 'dark' : ''} ${large ? 'large-text' : ''}" style="--width:${size[0]}px;--height:${size[1]}px" aria-label="Interactive Sleep prototype"><div class="system-bar" aria-hidden="true"><span>9:41</span><span>LTE&nbsp;&nbsp;92%</span></div><header class="toolbar notebook-toolbar"><div><button class="icon-button" data-action="home" aria-label="Back to Home">${icon('left')}</button><h2 class="toolbar-title">Sleep</h2><span aria-hidden="true"></span></div></header><div class="viewport" tabindex="0" aria-label="Scrollable sleep journal"><div class="page-content">${s.loading ? `<div role="status">${p('Loading saved sleep…')}<div class="sleep-skeleton"></div><div class="sleep-skeleton"></div></div>` : dates() + notices() + summary() + sessionList() + trend() + connection()}</div></div>${tabs()}${modal()}${s.toast && !s.modal ? `<div class="toast" role="status"><span>${esc(s.toast)}</span><button class="icon-button" data-action="dismiss" aria-label="Dismiss notification">×</button></div>` : ''}</section><p class="frame-caption">${size.join(' × ')} / ${dark ? 'Dark' : 'Paper'} / ${large ? '200%' : '100%'} text. Illustrative data only.</p></div>`;
   $('.sleep-device .viewport').scrollTop = preserve ? y : 0;
   const chart = $('.sleep-chart-wrap');
   if (chart) chart.scrollLeft = !preserve || s.followLatest ? chart.scrollWidth : chartX;
@@ -146,6 +148,7 @@ $('#stage').addEventListener('click', event => {
   const d = el.dataset;
   switch (d.action) {
     case 'outside': if (el === event.target) close(); return;
+    case 'home': location.href = './home.html'; return;
     case 'close': close(); return;
     case 'calendar': s.month = s.selected.slice(0, 7); s.modal = 'calendar'; render(); return;
     case 'month': { const date = new Date(`${s.month}-01T12:00:00Z`); date.setUTCMonth(date.getUTCMonth() + Number(d.step)); s.month = date.toISOString().slice(0, 7); render(); return; }
@@ -168,9 +171,9 @@ $('#stage').addEventListener('click', event => {
     case 'save': attemptSave(); return;
     case 'replace-conflicts': attemptSave(true); return;
     case 'back-to-entry': s.modal = 'entry'; s.error = ''; render(); return;
-    case 'health': s.modal = 'health'; render(); return;
+    case 'health': location.href = './profile.html#health'; return;
     case 'target': s.targetDraft = String(s.target); s.error = ''; s.modal = 'target'; render(); return;
-    case 'save-target': try { saveSleepTarget(s); s.modal = ''; notify('Sleep target updated in this mock journal.'); } catch (error) { s.error = error.message; render(); } return;
+    case 'save-target': try { saveSleepTarget(s); writeNotebookPreferences({ profile: { sleepTarget: String(s.target) } }); s.modal = ''; notify('Sleep target updated in this mock journal.'); } catch (error) { s.error = error.message; render(); } return;
     case 'simulate-connect': s.connection = 'connected'; close(); return;
     case 'simulate-disconnect': s.connection = 'disconnected'; close(); return;
     case 'sync': sync(); return;

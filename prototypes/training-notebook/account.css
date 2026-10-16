@@ -1,0 +1,101 @@
+.account-device .page-content{max-width:760px;padding:0 20px 32px}
+.account-device .toolbar>div{display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:12px}
+.account-device .toolbar h2{text-align:center;font-size:calc(20px * var(--scale))}
+.account-device .toolbar .icon-button{width:44px;min-width:44px;min-height:44px}
+.account-device .toolbar svg{width:22px;height:22px}
+.account-device .toolbar .btn{min-width:70px;padding:8px 12px;min-height:44px}
+.account-panel{padding:24px 0;border-bottom:1px solid var(--rule)}
+.account-panel:last-child{border-bottom:0}
+.account-heading{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:16px}
+.account-heading .btn{flex-shrink:0}
+.account-identity{display:flex;align-items:center;gap:16px;min-width:0}
+.account-avatar{width:64px;height:64px;flex:0 0 64px;border-radius:50%;border:1px solid var(--border);background:var(--surface);overflow:hidden;display:grid;place-items:center;font-size:28px;font-weight:600}
+.account-avatar svg{width:100%;height:100%}
+.account-identity-copy{min-width:0;display:grid;gap:5px}
+.account-device .account-name{font:600 calc(26px * var(--scale))/1.25 'Source Serif',serif;overflow-wrap:anywhere}
+.account-device .account-identity-copy p{overflow-wrap:anywhere}
+.account-row{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:60px;padding:12px 0;border-bottom:1px solid var(--rule);font-size:calc(16px * var(--scale))}
+.account-row:last-child{border-bottom:0}
+.account-row-copy{display:grid;gap:4px;min-width:0;text-align:left}
+.account-row-copy small{font-size:calc(13px * var(--scale));color:var(--secondary);line-height:1.4}
+.account-device button.account-row{width:100%;text-align:left}
+.account-row-value{max-width:54%;text-align:right;color:var(--secondary);overflow-wrap:anywhere}
+.account-row .account-chevron{width:16px;height:16px;color:var(--secondary)}
+.account-row-end{display:flex;align-items:center;gap:8px;justify-content:flex-end;min-width:0;max-width:60%}
+.account-row-end .account-row-value{max-width:none}
+.account-device .account-choice{display:flex;width:100%;align-items:center;justify-content:space-between;gap:16px;padding:12px 0;min-height:52px;border-bottom:1px solid var(--rule);font-size:calc(16px * var(--scale));text-align:left}
+.account-choice[aria-pressed=true]{color:var(--accent)}
+.account-choice svg{width:20px;height:20px}
+.account-actions{display:grid;gap:12px;margin-top:16px}
+.account-actions .btn{width:100%}
+.account-link-row{display:grid;grid-template-columns:24px minmax(0,1fr) auto;align-items:center;gap:12px;min-height:56px;width:100%;text-align:left;padding:8px 0;font-size:calc(16px * var(--scale))}
+.account-link-row svg{width:20px;height:20px;justify-self:center}
+.account-link-row span{min-width:0;overflow-wrap:anywhere}
+.account-link-row .trailing{width:16px;height:16px}
+.account-device .account-notice{border-left:2px solid var(--accent);padding:10px 0 10px 12px;margin-top:16px;display:grid;gap:8px}
+.account-device .account-notice p{font-size:calc(14px * var(--scale))}
+.account-device .account-error{font-size:calc(14px * var(--scale));line-height:1.4;color:var(--danger)}
+.account-error:empty{display:none}
+.account-device .account-dirty{padding:12px 0 0;color:var(--accent);font-size:calc(14px * var(--scale))}
+.account-device .account-badge{font-size:calc(14px * var(--scale));color:var(--secondary)}
+.account-device .account-estimate{font-size:calc(26px * var(--scale));line-height:1.3;font-weight:600;margin-bottom:8px}
+.account-device .sheet-body{gap:20px}
+.account-device .sheet-footer{gap:12px}
+.account-device .sheet-head{align-items:flex-start}
+.account-device .sheet-head h2{overflow-wrap:normal}
+.account-device .sheet-head .close{width:48px;min-width:48px}
+.account-device .field{display:grid;gap:8px}
+.account-device .field>span{font-size:calc(16px * var(--scale));font-weight:600}
+.account-device input:not([type=range]),.account-device textarea{width:100%;font-size:calc(17px * var(--scale));min-height:52px;min-width:0}
+.account-device textarea{min-height:110px;line-height:1.4}
+.account-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}
+.account-device .account-body-row{display:grid;grid-template-columns:minmax(0,1fr) 100px auto;align-items:center;gap:8px}
+.account-body-row>span{font-size:calc(16px * var(--scale))}
+.account-body-row input{text-align:left}
+.account-device .account-body-row small{color:var(--secondary);font-size:calc(14px * var(--scale))}
+.account-photo-preview{display:grid;justify-items:center;gap:12px}
+.account-photo-preview .account-avatar{width:96px;height:96px}
+.account-device .account-access{font-size:calc(22px * var(--scale));font-weight:600;line-height:1.3;margin-bottom:10px}
+.account-device .sheet .btn{width:100%}
+.account-device .account-readonly{padding:12px;border:1px solid var(--rule);overflow-wrap:anywhere;font-size:calc(16px * var(--scale))}
+.account-device .tab-link{text-decoration:none}
+.account-device .skeleton-block{height:140px;background:var(--subtle);margin:24px 0}
+.account-device .sheet ol{margin:0;padding-left:24px;display:grid;gap:16px}
+.account-device .toast{font-size:calc(14px * var(--scale));bottom:88px}
+.account-device .health-toggle{border:1px solid var(--border);width:20px;height:20px;flex:0 0 20px;border-radius:4px;display:grid;place-items:center}
+.health-toggle.checked{background:var(--primary);color:var(--on-primary)}
+.account-device .health-toggle svg{width:16px;height:16px}
+.large-text .account-identity{align-items:flex-start;flex-wrap:wrap}
+.large-text .account-row{align-items:flex-start;flex-direction:column;gap:8px}
+.large-text .account-row-value{max-width:100%;text-align:left}
+.large-text .account-row-end{max-width:100%;justify-content:flex-start}
+.large-text .account-heading{align-items:flex-start;flex-wrap:wrap}
+.large-text .account-form-grid{grid-template-columns:1fr}
+.large-text .account-body-row{grid-template-columns:minmax(0,1fr) auto}
+.large-text .account-body-row>span{grid-column:1/-1}
+.account-device.large-text .toolbar .btn{min-width:100px}
+.large-text .account-link-row{grid-template-columns:24px minmax(0,1fr) 16px;align-items:start}
+.large-text .account-link-row svg{margin-top:9px}
+.account-device.large-text input{min-height:64px}
+.large-text .account-choice{gap:12px}
+.large-text .health-toggle{width:32px;height:32px;flex-basis:32px}
+.large-text .health-toggle svg{width:24px;height:24px}
+.account-device .account-row{border-bottom:1px solid var(--rule)}
+.account-device .account-row:last-child{border-bottom:0}
+.account-body-summary{display:flex;align-items:center;justify-content:space-between;gap:8px;border-bottom:1px solid var(--rule);min-height:60px}
+.account-body-title{display:flex;align-items:center;min-width:0}
+.account-body-title>button:first-child{min-height:60px;text-align:left;font-size:calc(16px * var(--scale))}
+.account-device .account-help{display:grid;place-items:center;flex:0 0 44px;width:44px;height:44px;color:var(--ink)}
+.account-help span{display:grid;place-items:center;border:1px solid var(--border);border-radius:50%;width:20px;height:20px;font:inherit;line-height:1}
+.account-device .account-help{font-size:calc(16px * var(--scale));font-weight:400}
+.account-device.large-text .account-help{width:48px;height:48px;flex-basis:48px;font-size:28px}
+.large-text .account-help span{width:32px;height:32px}
+.account-body-value{display:flex;align-items:center;justify-content:flex-end;gap:8px;min-height:60px;color:var(--secondary);font-size:calc(16px * var(--scale));text-align:right}
+.account-body-value svg{width:16px;height:16px}
+.account-nickname{display:flex;align-items:center;flex-wrap:wrap;gap:10px}
+.account-device .account-badge{display:inline-flex;align-items:center;justify-content:center;padding:3px 9px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--ink);font-size:calc(13px * var(--scale));line-height:1.35;font-weight:600;width:fit-content}
+.large-text .account-body-summary{align-items:flex-start;flex-direction:column;gap:0;padding:8px 0}
+.large-text .account-body-title{flex-wrap:wrap}
+.large-text .account-body-value{justify-content:flex-start;text-align:left}
+.account-device .account-version-row{grid-template-columns:24px minmax(0,1fr) auto}
+.account-version-row>span:last-child{color:var(--secondary);font-variant-numeric:tabular-nums}

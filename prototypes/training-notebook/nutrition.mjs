@@ -1,3 +1,5 @@
+import './input-behavior.mjs';
+import { readNotebookPreferences, writeNotebookPreferences } from './notebook-preferences.mjs';
 import { setReviewState } from './review-state-picker.mjs';
 import { NUTRITION_DAY, MOCK_LOG_TIME, foods, nutritionStates, nutritionFixture, dayMeals, currentMeal, nutritionFor, entryNutrition, sumNutrition, totals, gramsFrom, quantityFor, macroPercentages, confirmQuantity, addEntries, addStaged, addMealSection, moveMeal, previousMeal, shiftDate } from './nutrition-model.mjs';
 import { notebookIcon as icon } from './notebook-icons.mjs';
@@ -16,7 +18,7 @@ let s, example = 'daily', size = [390, 844], dark = false, large = false, toastT
 function choose(id) {
   setReviewState(document.querySelector('#example'), nutritionStates.map(([id, title]) => [id, title]), id);
   clearTimeout(toastTimer);
-  s = nutritionFixture(id); example = id; dark = id === 'dark'; large = id === 'large';
+  s = nutritionFixture(id); if (id === 'daily') { const labels = readNotebookPreferences()?.profile?.mealLabels; if (Array.isArray(labels) && labels.length === 6) s.labels = [...labels]; } example = id; dark = id === 'dark'; large = id === 'large';
   $('#example').value = id; $('#dark').checked = dark; $('#large').checked = large;
   $('#meal-labels').value = id === 'numbered' ? 'numbered' : 'named'; render(false);
 }
@@ -126,7 +128,7 @@ function timeDialog() {
   return dialog('Meal logging time', `${p(`${esc(mealName())} · ${dateText(s.date)}`)}<div class="nutrition-time-display" aria-live="polite">${time}</div><div class="time-picker-grid">${[['Hours', 24], ['Minutes', 60]].map(([title, count], column) => `<div><h3 class="time-picker-heading">${title}</h3><div class="time-options" role="listbox" aria-label="${title}" data-time-list="${column}">${Array.from({ length: count }, (_, value) => { const text = String(value).padStart(2, '0'), selected = time.split(':')[column] === text; return `<button class="time-option ${selected ? 'selected' : ''}" role="option" aria-selected="${selected}" tabindex="${selected ? 0 : -1}" data-action="time-option" data-column="${column}" data-value="${text}">${text}</button>`; }).join('')}</div></div>`).join('')}</div>${p('Approximate time you recorded or ate this meal.', 'editor-helper')}`, btn('Save time', 'save-time', 'primary') + btn('Cancel', 'close'));
 }
 function tabs() {
-  return `<nav class="bottom-tabs" aria-label="App destinations">${[['Home', './home.html'], ['Workout', './'], ['Nutrition', ''], ['Sleep', './sleep.html'], ['Profile', '']].map(([label, href]) => href ? `<a class="tab tab-link" href="${href}">${icon(label.toLowerCase())}${label}</a>` : `<button class="tab ${label === 'Nutrition' ? 'active' : ''}" data-action="tab" data-tab="${label}" ${label === 'Nutrition' ? 'aria-current="page"' : ''}>${icon(label.toLowerCase())}${label}</button>`).join('')}</nav>`;
+  return `<nav class="bottom-tabs" aria-label="App destinations">${[['Home', './home.html'], ['Workout', './'], ['Nutrition', ''], ['Sleep', './sleep.html'], ['Profile', './profile.html']].map(([label, href]) => href ? `<a class="tab tab-link" href="${href}">${icon(label.toLowerCase())}${label}</a>` : `<button class="tab ${label === 'Nutrition' ? 'active' : ''}" data-action="tab" data-tab="${label}" ${label === 'Nutrition' ? 'aria-current="page"' : ''}>${icon(label.toLowerCase())}${label}</button>`).join('')}</nav>`;
 }
 function alignAmountLabels() {
   document.querySelectorAll('.amount-labels').forEach(el => {
@@ -156,7 +158,7 @@ function render(preserve = true) {
   const title = s.page === 'daily' ? 'Nutrition' : s.page === 'search' ? `Add to ${mealName()}` : mealName();
   $('#state-title').textContent = nutritionStates.find(row => row[0] === example)?.[1] ?? 'Nutrition';
   $('#state-description').textContent = nutritionStates.find(row => row[0] === example)?.[2] ?? '';
-  $('#stage').innerHTML = `<div class="frame-wrap"><h3>Nutrition / ${s.page === 'daily' ? 'Daily diary' : esc(mealName())}</h3><section class="device nutrition-device ${dark ? 'dark' : ''} ${large ? 'large-text' : ''}" style="--width:${size[0]}px;--height:${size[1]}px" aria-label="Interactive Nutrition prototype"><div class="system-bar" aria-hidden="true"><span>9:41</span><span>LTE&nbsp;&nbsp;92%</span></div><header class="toolbar"><div>${s.page !== 'daily' ? `<button class="icon-button" data-action="back" aria-label="Back">${icon('left')}</button>` : ''}<div class="${s.page === 'daily' ? 'root-title' : ''}"><h2 class="${s.page === 'daily' ? 'root-title' : ''}">${esc(title)}</h2>${s.page !== 'daily' ? `<span class="title-date">${dateText(s.date)}</span>` : ''}</div><span aria-hidden="true"></span></div></header><div class="viewport" tabindex="0" aria-label="Scrollable nutrition diary"><div class="page-content">${s.page === 'daily' ? diary() : s.page === 'meal' ? mealPage() : searchPage()}</div></div>${s.page === 'search' ? `<footer class="food-search-footer"><span class="supporting">${Object.keys(s.staged).length} selected</span>${btn(`Add (${Object.keys(s.staged).length})`, 'add-staged', 'primary', '', !Object.keys(s.staged).length)}</footer>` : ''}${tabs()}${s.modal ? modal() : ''}${s.toast ? `<div class="toast" role="status"><span>${esc(s.toast)}</span><button data-action="dismiss-toast" aria-label="Dismiss notification">×</button></div>` : ''}</section><p class="frame-caption">${size.join(' × ')} / ${dark ? 'Dark' : 'Paper'} / ${large ? '200%' : '100%'} text. Illustrative data only.</p></div>`;
+  $('#stage').innerHTML = `<div class="frame-wrap"><h3>Nutrition / ${s.page === 'daily' ? 'Daily diary' : esc(mealName())}</h3><section class="device nutrition-device ${dark ? 'dark' : ''} ${large ? 'large-text' : ''}" style="--width:${size[0]}px;--height:${size[1]}px" aria-label="Interactive Nutrition prototype"><div class="system-bar" aria-hidden="true"><span>9:41</span><span>LTE&nbsp;&nbsp;92%</span></div><header class="toolbar notebook-toolbar"><div>${s.page !== 'daily' ? `<button class="icon-button" data-action="back" aria-label="Back">${icon('left')}</button>` : `<button class="icon-button" data-action="home" aria-label="Back to Home">${icon('left')}</button>`}<div class="toolbar-title"><h2>${esc(title)}</h2>${s.page !== 'daily' ? `<span class="title-date">${dateText(s.date)}</span>` : ''}</div><span aria-hidden="true"></span></div></header><div class="viewport" tabindex="0" aria-label="Scrollable nutrition diary"><div class="page-content">${s.page === 'daily' ? diary() : s.page === 'meal' ? mealPage() : searchPage()}</div></div>${s.page === 'search' ? `<footer class="food-search-footer"><span class="supporting">${Object.keys(s.staged).length} selected</span>${btn(`Add (${Object.keys(s.staged).length})`, 'add-staged', 'primary', '', !Object.keys(s.staged).length)}</footer>` : ''}${tabs()}${s.modal ? modal() : ''}${s.toast ? `<div class="toast" role="status"><span>${esc(s.toast)}</span><button data-action="dismiss-toast" aria-label="Dismiss notification">×</button></div>` : ''}</section><p class="frame-caption">${size.join(' × ')} / ${dark ? 'Dark' : 'Paper'} / ${large ? '200%' : '100%'} text. Illustrative data only.</p></div>`;
   $('.nutrition-device .viewport').scrollTop = preserve ? y : 0;
   if ($('.nutrition-device .sheet-body')) $('.nutrition-device .sheet-body').scrollTop = preserve ? dy : 0;
   alignAmountLabels();
@@ -174,20 +176,20 @@ function open(name) {
   if (name === 'rename') s.draft.name = mealName();
   if (name === 'time') s.draft.time = currentMeal(s).time ?? MOCK_LOG_TIME;
   if (name === 'manual-food') { s.manualEntry = null; for (const key of ['manualName', 'manualCalories', 'manualProtein', 'manualCarbs', 'manualFat']) delete s.draft[key]; }
-  render(false);
+  render(); if ($('.sheet-body')) $('.sheet-body').scrollTop = 0;
 }
-function close() { s.modal = ''; s.error = ''; render(false); }
+function close() { s.modal = ''; s.error = ''; render(); }
 function viewFood(foodId, entryId = null) {
   const row = entryId ? currentMeal(s).entries.find(r => r.id === entryId) : null;
-  if (row?.manual) { s.manualEntry = row.id; s.draft = { ...s.draft, manualName: row.name, manualCalories: String(row.calories), manualProtein: String(row.protein), manualCarbs: String(row.carbs), manualFat: String(row.fat) }; s.modal = 'manual-food'; s.error = ''; render(false); return; }
+  if (row?.manual) { s.manualEntry = row.id; s.draft = { ...s.draft, manualName: row.name, manualCalories: String(row.calories), manualProtein: String(row.protein), manualCarbs: String(row.carbs), manualFat: String(row.fat) }; s.modal = 'manual-food'; s.error = ''; render(); return; }
   const grams = row?.grams ?? s.staged[foodId] ?? foodById(foodId).serving;
   s.editor = { foodId, entryId, mode: 'grams', raw: String(Number(grams.toFixed(4))), grams }; s.per100 = false; open('editor');
 }
 function barcodeLookup() {
   const raw = s.draft.barcode?.trim() ?? '';
   if (!/^\d{12,14}$/.test(raw)) { s.error = 'Enter a 12–14 digit barcode.'; s.modal = 'barcode-manual'; render(); return; }
-  const current = s, token = s.lookupToken = (s.lookupToken ?? 0) + 1; s.error = ''; s.modal = 'barcode-busy'; render(false);
-  setTimeout(() => { if (s !== current || s.lookupToken !== token || s.modal !== 'barcode-busy') return; if (raw === '5901234123457') viewFood('milk'); else { s.modal = 'barcode-missing'; render(false); } }, 550);
+  const current = s, token = s.lookupToken = (s.lookupToken ?? 0) + 1; s.error = ''; s.modal = 'barcode-busy'; render();
+  setTimeout(() => { if (s !== current || s.lookupToken !== token || s.modal !== 'barcode-busy') return; if (raw === '5901234123457') viewFood('milk'); else { s.modal = 'barcode-missing'; render(); } }, 550);
 }
 $('#stage').addEventListener('input', event => {
   const el = event.target;
@@ -201,6 +203,7 @@ $('#stage').addEventListener('click', event => {
   const d = el.dataset;
   switch (d.action) {
     case 'outside': if (event.target === el) close(); return;
+    case 'home': location.href = './home.html'; return;
     case 'close': close(); return;
     case 'open': open(d.modal); return;
     case 'toggle-composition': s.composition = !s.composition; render(); return;
@@ -248,7 +251,7 @@ $('#stage').addEventListener('click', event => {
     case 'add-meal': try { addMealSection(s, s.draft.newMeal); s.modal = ''; notify('Meal section added to this mock diary.'); } catch (error) { s.error = error.message; render(); } return;
     case 'toggle-reorder': s.reordering = !s.reordering; render(); return;
     case 'move-meal': s.meal = Number(d.index); moveMeal(s, Number(d.step)); render(); return;
-    case 'save-name': if (!s.draft.name?.trim()) { s.error = 'Enter a meal name.'; render(); return; } s.labels[s.meal] = s.draft.name.trim(); s.modal = ''; notify('Meal name updated in this mock diary.'); return;
+    case 'save-name': if (!s.draft.name?.trim()) { s.error = 'Enter a meal name.'; render(); return; } s.labels[s.meal] = s.draft.name.trim(); if (s.meal < 6) writeNotebookPreferences({ profile: { mealLabels: s.labels.slice(0, 6), mealPreset: 'custom' } }); s.modal = ''; notify('Meal name updated in this mock diary.'); return;
     case 'save-time': if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(s.draft.time ?? '')) { s.error = 'Choose a valid time.'; render(); return; } currentMeal(s).time = s.draft.time; s.modal = ''; notify('Logging time updated in this mock diary.'); return;
     case 'save-recipe': if (!s.draft.recipeName?.trim()) { s.error = 'Enter a name for the saved meal.'; render(); return; } s.recipes.push({ id: `recipe-${++s.serial}`, name: s.draft.recipeName.trim(), entries: structuredClone(currentMeal(s).entries) }); s.modal = ''; notify('Meal saved for reuse in this mock session.'); return;
     case 'add-recipe': { const recipe = s.recipes.find(r => r.id === d.id); if (recipe) { addEntries(s, recipe.entries); currentMeal(s).time = MOCK_LOG_TIME; s.page = 'meal'; notify('Saved meal added to this mock diary.'); } return; }

@@ -1,5 +1,8 @@
 // Approved outline vocabulary, copied from the reviewed Home study.
 const paths = {
+  info: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="7.5" r="1.1" fill="currentColor" stroke="none"/><path d="M12 11.5v5"/>',
+  mail: '<rect x="3" y="5" width="18" height="14" rx="1"/><path d="m3 6 9 7 9-7"/>',
+  document: '<path d="M6 3h8l4 4v14H6V3Zm8 0v5h4M9 12h6M9 16h6"/>',
   'move-up': '<path d="m7 14 5-5 5 5"/>',
   'move-down': '<path d="m7 10 5 5 5-5"/>',
   reorder: '<path d="M7 4v16m-3-3 3 3 3-3M17 20V4m-3 3 3-3 3 3"/>',

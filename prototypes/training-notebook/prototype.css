@@ -97,3 +97,14 @@ main{margin-left:248px;padding:36px 36px 24px;min-height:100vh;overflow:auto}.re
 .large-text .exercise-controls .tempo-control{flex-wrap:wrap;gap:8px}
 .device input[type=range]{margin:0}
 .bottom-tabs .icon-workout{stroke-width:1.5}
+
+/* Symmetric header slots keep page titles centered independently of actions. */
+.device .notebook-toolbar>div{display:grid;grid-template-columns:44px minmax(0,1fr) 44px;gap:12px}
+.device .notebook-toolbar.has-header-action>div{grid-template-columns:80px minmax(0,1fr) 80px}
+.device .notebook-toolbar .toolbar-title{grid-column:2;text-align:center;min-width:0;overflow-wrap:anywhere}
+.device .notebook-toolbar .toolbar-title h2{text-align:center}
+.device .notebook-toolbar .icon-button{width:44px;min-width:44px;min-height:44px;justify-self:start}
+.device .notebook-toolbar .icon-button svg{width:22px;height:22px}
+.device .notebook-toolbar .toolbar-action{grid-column:3;justify-self:end;min-width:0;width:80px;padding:8px}
+.device.large-text .notebook-toolbar.has-header-action>div{grid-template-columns:44px minmax(0,1fr) 44px}
+.device.large-text .notebook-toolbar.has-header-action .toolbar-action{grid-column:1/-1;width:auto;min-width:100px}

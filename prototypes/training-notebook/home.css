@@ -2,6 +2,7 @@
 .home-logo{width:118px;height:40px;display:block}
 .home-header-actions{display:flex;gap:4px;align-items:center}
 .home-header-actions .avatar{border-radius:50%;border:1px solid var(--border);width:44px;min-width:44px;min-height:44px;font-size:18px;font-weight:600;background:var(--surface)}
+.home-header-actions .avatar svg{width:42px;height:42px;border-radius:50%}
 .home-device .page-content{padding-top:20px;padding-bottom:32px;max-width:760px}
 .home-page-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}
 .home-page-heading .editorial{margin-top:4px}

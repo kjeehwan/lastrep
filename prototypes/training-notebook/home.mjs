@@ -1,3 +1,6 @@
+import './input-behavior.mjs';
+import { demoAvatar } from './notebook-avatar.mjs';
+import { readNotebookPreferences, writeNotebookPreferences } from './notebook-preferences.mjs';
 import { setReviewState } from './review-state-picker.mjs';
 import { readCheckIn, writeCheckIn, clearCheckIn, checkInFields } from './check-in.mjs';
 import { TODAY, trendObservationDate, metrics, homeStates, homeFixture, observations, selectedObservation, displayValue, valuesForDate, phaseWeeks, changePhase, phaseOnDate, readiness, saveMeasurement, workoutDays, calendarCells } from './home-model.mjs';
@@ -28,8 +31,10 @@ function choose(value, useShared = false) {
   example = value; s = homeFixture(value); dark = value === 'dark'; large = value === 'large';
   const shared = useShared ? readCheckIn() : null; if (!useShared) clearCheckIn(); if (shared) Object.assign(s, shared);
   $('#example').value = value; $('#dark').checked = dark; $('#large').checked = large; $('#unit').value = 'kg';
+  if (useShared) applySharedPreferences();
   render(false);
 }
+function applySharedPreferences() { const prefs = readNotebookPreferences(); const p = prefs?.profile; if (p?.training) s.training = structuredClone(p.training); if (p?.diet) s.diet = structuredClone(p.diet); if (p?.phaseHistory) s.phaseHistory = structuredClone(p.phaseHistory); s.profileName = p?.name ?? 'Daniel'; s.profilePhoto = p?.photo ?? false; if (prefs?.health) { const h = prefs.health; s.connected = h.available && h.consent && (h.sleep || h.body); } }
 function logo() {
   // Preserve the existing production wordmark and gradient; the notebook study is not a rebrand.
   return '<svg class="home-logo" viewBox="0 0 132 41" role="img" aria-label="Lastrep"><defs><linearGradient id="home-brand" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4a90e2"/><stop offset="1" stop-color="#7b61ff"/></linearGradient></defs><text x="0" y="31" font-family="sans-serif" font-size="36" font-weight="bold" fill="url(#home-brand)">lastrep</text></svg>';
@@ -162,7 +167,7 @@ function render(preserve = true) {
   const active = document.activeElement, focused = active?.dataset?.measure ? { key: active.dataset.measure, start: active.selectionStart, end: active.selectionEnd } : null;
   $('#state-title').textContent = homeStates.find(row => row[0] === example)?.[1] ?? 'Home';
   $('#state-description').textContent = homeStates.find(row => row[0] === example)?.[2] ?? '';
-  $('#stage').innerHTML = `<div class="frame-wrap"><h3>Home / ${s.hasWorkouts ? 'Daniel' : 'First session'}</h3><section class="device home-device ${dark ? 'dark' : ''} ${large ? 'large-text' : ''}" style="--width:${size[0]}px;--height:${size[1]}px" aria-label="Interactive Home prototype"><div class="system-bar" aria-hidden="true"><span>9:41</span><span>LTE&nbsp;&nbsp;92%</span></div><header class="home-header">${logo()}<div class="home-header-actions"><button class="icon-button" data-action="calendar" aria-label="Open calendar">${icon('calendar')}</button><button class="icon-button" data-action="open" data-modal="settings" aria-label="Open Settings">${icon('settings')}</button><button class="avatar" data-action="open" data-modal="profile" aria-label="Open Daniel's profile">D</button></div></header><div class="viewport" tabindex="0" aria-label="Scrollable Home"><div class="page-content">${homePage()}</div></div>${tabs()}${s.modal ? modal() : ''}${s.toast ? `<div class="toast" role="status"><span>${esc(s.toast)}</span><button data-action="dismiss-toast" aria-label="Dismiss notification">×</button></div>` : ''}</section><p class="frame-caption">${size.join(' × ')} / ${dark ? 'Dark' : 'Paper'} / ${large ? '200%' : '100%'} text. Synthetic data only.</p></div>`;
+  $('#stage').innerHTML = `<div class="frame-wrap"><h3>Home / ${s.hasWorkouts ? esc(s.profileName ?? 'Daniel') : 'First session'}</h3><section class="device home-device ${dark ? 'dark' : ''} ${large ? 'large-text' : ''}" style="--width:${size[0]}px;--height:${size[1]}px" aria-label="Interactive Home prototype"><div class="system-bar" aria-hidden="true"><span>9:41</span><span>LTE&nbsp;&nbsp;92%</span></div><header class="home-header">${logo()}<div class="home-header-actions"><button class="icon-button" data-action="calendar" aria-label="Open calendar">${icon('calendar')}</button><button class="icon-button" data-action="open" data-modal="settings" aria-label="Open Settings">${icon('settings')}</button><button class="avatar" data-action="open" data-modal="profile" aria-label="Open profile">${s.profilePhoto ? demoAvatar() : esc((s.profileName ?? 'Daniel')[0])}</button></div></header><div class="viewport" tabindex="0" aria-label="Scrollable Home"><div class="page-content">${homePage()}</div></div>${tabs()}${s.modal ? modal() : ''}${s.toast ? `<div class="toast" role="status"><span>${esc(s.toast)}</span><button data-action="dismiss-toast" aria-label="Dismiss notification">×</button></div>` : ''}</section><p class="frame-caption">${size.join(' × ')} / ${dark ? 'Dark' : 'Paper'} / ${large ? '200%' : '100%'} text. Synthetic data only.</p></div>`;
   $('.home-device .viewport').scrollTop = preserve ? scroll : 0;
   const sheet = $('.home-device .sheet-body'); if (sheet) sheet.scrollTop = preserve ? sheetScroll : 0;
   const chart = $('.body-chart-scroll'), dot = chart?.querySelector('.point.selected');
@@ -189,13 +194,15 @@ $('#stage').addEventListener('click', event => {
   const d = el.dataset;
   switch (d.action) {
     case 'outside': if (event.target === el) close(); return;
-    case 'open': open(d.modal); return;
+    case 'open': if (d.modal === 'profile' || d.modal === 'settings') { location.href = `./${d.modal}.html`; return; } open(d.modal); return;
     case 'close': close(); return;
     case 'home': s.modal = ''; $('.home-device .viewport').scrollTop = 0; return;
     case 'workout': window.location.href = s.planned ? './#active' : './#empty'; return;
     case 'builder': window.location.href = './#empty'; return;
     case 'nutrition': case 'meal': open('meal'); return;
-    case 'profile': case 'sleep': case 'health': open(d.action); return;
+    case 'profile': location.href = './profile.html'; return;
+    case 'health': location.href = './profile.html#health'; return;
+    case 'sleep': open(d.action); return;
     case 'meal-logged': s.mealLogged = true; s.modal = ''; notify('Meal marked logged in this mock session.'); return;
     case 'dismiss-welcome': s.dismissedWelcome = true; render(); return;
     case 'dismiss-toast': s.toast = ''; render(); return;
@@ -212,7 +219,7 @@ $('#stage').addEventListener('click', event => {
       catch (error) { s.error = error.message; render(); } return;
     case 'keep-data': s.modal = 'measurement'; render(false); return;
     case 'delete-measurement': s.records = s.records.filter(row => row.date !== s.editDate); s.selected = observations(s.records, s.metric).at(-1)?.date ?? null; s.modal = ''; notify('Selected date removed from this mock session.'); return;
-    case 'phase': changePhase(s, d.kind, d.value); s.modal = ''; notify('Phase updated in this mock Home and Profile.'); return;
+    case 'phase': changePhase(s, d.kind, d.value); writeNotebookPreferences({ profile: { training: s.training, diet: s.diet, phaseHistory: s.phaseHistory } }); s.modal = ''; notify('Phase updated in this mock Home and Profile.'); return;
     case 'calendar': s.modal = 'calendar'; render(false); return;
     case 'calendar-today': s.calendarMonth = TODAY.slice(0, 7); s.calendarDate = TODAY; render(false); return;
     case 'month': { const date = new Date(`${s.calendarMonth}-01T12:00:00`); date.setMonth(date.getMonth() + Number(d.step)); s.calendarMonth = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`; render(false); return; }
@@ -248,3 +255,5 @@ const initial = window.location.hash.slice(1);
 choose(homeStates.some(row => row[0] === initial) ? initial : 'returning', true);
 
 window.addEventListener('pageshow', event => { if (event.persisted) { const shared = readCheckIn(); if (shared) { Object.assign(s, shared); render(); } } });
+
+window.addEventListener('pageshow', event => { if (event.persisted) { applySharedPreferences(); render(); } });

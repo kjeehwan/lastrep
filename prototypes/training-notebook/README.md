@@ -3,7 +3,8 @@
 A standalone, dependency-free browser design study based on
 [`docs/training-notebook-design.md`](../../docs/training-notebook-design.md).
 Workout, Home, Nutrition and Sleep incorporate the approved review refinements.
-Profile and Settings are next. None replaces a Lastrep application screen.
+Profile and Settings also incorporate the approved review refinements. All six
+main screen design directions are approved. None replaces a Lastrep application screen.
 
 ## Open it
 
@@ -13,7 +14,7 @@ review sidebar. Home has 25 example states; its design direction is approved.
 
 **Nutrition study:** **http://127.0.0.1:4317/nutrition.html**. It has 44 example
 states and shares the approved notebook typography, colors and control rules.
-All four studies are linked from their sidebars and available bottom-tab destinations.
+All six studies are linked from their sidebars and available bottom-tab destinations.
 
 **Sleep study:** **http://127.0.0.1:4317/sleep.html**. Its 33 example states use
 the approved notebook typography and restrained chart palette.
@@ -36,9 +37,9 @@ the approved notebook typography and restrained chart palette.
    Tap either date to change it; a calendar cancellation keeps the time draft.
    Tap Your target to edit the target directly; Cancel changes nothing and Save
    updates this study's summary and chart. Native Profile/Sleep must share one
-   preference; Profile is not mocked up yet.
+   preference; the Profile candidate now demonstrates this within the browser tab.
 4. Review disconnected/saved, removed permission and unavailable states. Account
-   records remain visible. Health-access controls preview Profile rather than
+   records remain visible. Health-access controls link to the Profile study rather than
    pretending to grant a device permission. No real health access occurs.
    Missing/outdated Health Connect offers setup steps; unsupported devices offer
    manual logging without promising installation will fix them.
@@ -61,6 +62,53 @@ the approved notebook typography and restrained chart palette.
 Sleep uses an independent in-memory fixture. No account, health or API access;
 no sleep data is shared with Home. Reset/reload discards edits.
 Checks: `node --test prototypes/training-notebook/sleep.verify.mjs`.
+
+### Profile and Settings approved baseline
+
+**Profile:** **http://127.0.0.1:4317/profile.html** (29 states).
+**Settings:** **http://127.0.0.1:4317/settings.html** (20 states).
+
+1. Profile: edit identity/photo, cancel and reopen; then stage a change and try
+   Back or a bottom tab. Check Save/Discard/Keep editing and save-failure retry.
+   Photo uses an illustration only, not your camera, files or cloud account.
+2. Change and save a phase; inspect it on Home. Change it on Home and return to
+   Profile. Save a sleep target in either Profile or Sleep and inspect the other.
+3. Review grouped Units/RIR and Nutrition targets editors, TDEE disabled/valid
+   states and the body snapshot. Tap each body metric to edit, including lean
+   mass; use adjacent help buttons for definitions. Closing a sheet must preserve
+   the page position. TDEE stages calorie changes and keeps protein. Goal and
+   Meal labels cards are removed; rename meals directly in Nutrition. Saved
+   effort/weight defaults appear in Workout.
+4. Compare disconnected, consent, permission review, partial, revoked and
+   unavailable health states. Cancel must not connect; permissions alone are not
+   consent. Disconnect keeps saved timestamps. Sync is explicitly simulated.
+5. Settings: check Account/Support/Legal alignment, neutral nickname access badge,
+   App version inside Support with its outlined information icon (no About section),
+   dev billing, manual Premium,
+   all four Restore outcomes, logout/delete cancellation and Back to Home.
+   Store actions are previews. Policy/mail links open only when explicitly tapped.
+6. Use the viewport controls, dark paper and 200% text for both screens. Workout,
+   Nutrition and Sleep now share the centered root title/Back to Home pattern.
+
+Only selected synthetic preferences share same-tab sessionStorage: identity/avatar,
+phase history, sleep target, meal labels, effort/weight defaults and health-state
+simulation. Profile/Settings Reset clears these preferences. Explicit review
+states remain canned examples. Other record fixtures stay independent: Home body
+history, Nutrition records/targets, Workout drafts and Sleep sessions are not a
+unified account. No actual health, photo, billing, login or deletion API is called.
+
+Checks: `node --test prototypes/training-notebook/account.verify.mjs`.
+All prototype models: `node --test prototypes/training-notebook/*.verify.mjs prototypes/training-notebook/verify.mjs`.
+
+October 16 approved baseline verification: 86 prototype model tests and 1,022 browser
+layout checks across the six studies passed. Interaction checks covered Profile
+Save/Discard, nested photo cancellation, shared phases/targets/units,
+TDEE, consent/permissions/disconnect, save retry, restore outcomes/dev isolation,
+deletion previews and navigation. Additional checks covered four-metric editing,
+focused inputs, preserved scroll, help separation, access badges, Support version and
+centered headers/back navigation. Lint, JavaScript syntax and diff checks passed.
+No browser errors or unintended external requests were recorded. This verifies
+the mockups, not the corresponding native app features.
 
 ### Nutrition review paths
 
@@ -250,14 +298,15 @@ device validation when implementing the native screen.
   the default design. Full-width sets use aligned label/input pairs and Done rows.
   Native font scaling, screen readers and device usability still need verification.
 
-- Everything is synthetic and in memory. Refreshing/resetting discards edits.
+- Everything is synthetic. Record edits are in memory; recovery check-ins and
+  selected demo preferences use same-tab sessionStorage as described above.
 - No account, Firestore, OpenAI, health, billing, camera or production API calls.
 - Saving and AI review delays are short simulated transitions, not performance
   claims about real services. Explicit failure states are chosen in the selector.
 - Recommendations load a display fixture; this is not a recommendation engine.
   The example adjustments demonstrate UI and preservation rules, not medical or
   training guidance. The historical chart is also synthetic and explicitly labeled.
-- Demonstration videos/images and other app tabs are outside this study. Those
+- Demonstration videos/images and unimplemented destinations are outside this study. Those
   controls explain that limitation rather than silently navigating to a blank page.
 - The illustrated keyboards are layout aids, not Android/iOS keyboard emulation.
   Landscape uses a shorter keyboard illustration. Actual IME dimensions and native

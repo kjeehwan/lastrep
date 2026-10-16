@@ -1,10 +1,10 @@
 # Lastrep Training Notebook Design Specification
 
-Version: 1.5 | Date: October 16, 2026
+Version: 1.7 | Date: October 16, 2026
 
-Status: Workout, Home, Nutrition and Sleep browser design directions approved through
-iterative review. Shared rules below incorporate that feedback. No screen redesign
-is implemented in the native app or device-validated.
+Status: Workout, Home, Nutrition, Sleep, Profile and Settings browser design
+directions approved through iterative review. Shared rules below incorporate that
+feedback. No screen redesign is implemented in the native app or device-validated.
 The initial Figma pair records an earlier Workout revision; the local browser
 prototype and decisions below capture the subsequent approved refinements.
 
@@ -18,9 +18,9 @@ This document must be sufficient to produce consistent screen mockups without
 consulting the original discussion. It specifies the visual system, layouts,
 copy, interaction states, accessibility, responsive behavior and review criteria.
 
-First implementation candidate: Workout. Home, Nutrition and Sleep also have
-approved browser design baselines. Profile and Settings remain extension
-blueprints, not approved full-screen designs. No app screen code, fonts, dependencies,
+First implementation candidate: Workout. All six main screens now have approved
+browser design baselines, including Profile and Settings (section 22).
+No app screen code, fonts, dependencies,
 branding assets or data models are changed by this document.
 
 ### Authority and interpretation
@@ -318,8 +318,15 @@ not determine text alignment.
 - The label is persistent. A new measurement uses `e.g.` plus the latest known
   value for that metric, or an example if none exists. Editing shows actual
   recorded values, not an example, 1, or an unexplained zero.
-- Left-align typed values, placeholders and the initial cursor. Keep units
+- Left-align typed values and placeholders. An empty field starts with its cursor
+  at the left. On first focus, select an existing numeric value for replacement
+  with the active selection end at the right; do not reselect on each keystroke,
+  render or subsequent caret-placement tap. Keep units
   outside the input with a small fixed gap; units must never overlap editable text.
+- Preserve the parent screen's scroll position when opening or closing editors,
+  including Save, Done, Cancel and help sheets. Keep the focused field above the
+  keyboard and re-check visibility after rotation or keyboard-size changes.
+  Browser viewport checks do not replace native phone/IME testing.
 - Definitions use the shared help glyph immediately after the relevant title,
   vertically centered. Its correctly centered target occupies real layout space;
   leave the input/unit columns aligned rather than moving them for each title.
@@ -844,7 +851,8 @@ inventory before implementing any relocation.
 
 - Account/photo, health sync, preferences, TDEE and other existing settings use
   consistent label/control rows. Do not sacrifice discoverability to mimic paper.
-- Preserve meal labels below TDEE and explicit Save/Discard for staged edits.
+- Keep meal naming in Nutrition, not a second Profile preference card. Preserve
+  explicit Save/Discard for staged Profile edits.
 - Health consent, permissions and sync timestamps remain separate concepts.
 - Legal/contact links use the same icon slots and text alignment as account rows.
 - Subscription, restore and developer-build isolation retain verified outcome
@@ -1166,7 +1174,7 @@ design fixtures, not production analytics verification.
   Tapping a date opens Workout Day or Rest Day. Closing it returns to Calendar.
   Phase names are shown in day details rather than adding colors to every cell.
 - Choosing another phase starts week 1 today; choosing the current phase does
-  not reset its start. The Profile scope preview shares the same phase object.
+  not reset its start. Saved phases are shared with the Profile browser study.
   Historical calendar phase labels are not rewritten by today's phase change.
 - At 200%: reflow phases, chart tabs, readiness inputs and measurement fields;
   enlarge chart rendering 2x and scroll to the selected point. Modal content
@@ -1179,14 +1187,16 @@ actions, disconnected/saved, sparse/empty, loading/error, calendar/day details,
 phase selection, body-data add/edit/delete/validation, recovery check-in,
 readiness information, weekly detail, profile preview, dark and 200% text.
 
-Profile and Settings destination dialogs explain their scope; they are not
-complete screen redesigns or substitutes for real permissions. Nutrition and
+Profile and Settings now link to their browser studies (section 22), not real
+accounts or permissions. Their old selector-only destination previews remain
+historical Home review fixtures. Nutrition and
 Sleep link to their separate browser studies (sections 20/21); their fixtures
 are not shared with Home's mock meal/sleep status.
-Most state is in memory only. Saved recovery check-ins are the exception:
+Most record state is in memory only. Saved recovery check-ins are an exception:
 same-tab session storage shares ratings, discomfort, activity and daily notes
 with Workout's Today's inputs/Today's Plan. Reset example clears this saved context.
-Cancel discards edits; only Save changes the shared values. This is browser-only
+Cancel discards edits; only Save changes the shared values. Selected demo Profile
+preferences also use same-tab session storage, as detailed in section 22. This is browser-only
 design state, not account persistence or a backend implementation.
 Body-data edits, phase changes and check-ins do not leave the browser. No Firebase,
 OpenAI, health-service calls, photos, production accounts or app dependencies are used.
@@ -1214,7 +1224,7 @@ not a second list of potentially conflicting screen-only tokens.
 
 All future screen mockups must pass the section 16 checklist before being treated
 as consistent with this design baseline. Workout, Home, Nutrition and Sleep have
-each been reviewed independently. Full Profile and Settings studies are next.
+each been reviewed independently. Profile and Settings are also approved (section 22).
 
 ## 20. Nutrition browser study: approved direction
 
@@ -1391,7 +1401,7 @@ scores. A session belongs to its wake date; the selected summary says Total for
    up to 24; one decimal). No separate help icon. Saving updates the summary,
    target line and attainment calculation. Native Sleep and Profile must use the
    same `sleepSettings.targetHours` preference in both directions; no second
-   screen-local target. Profile is not yet implemented in the browser study.
+   screen-local target. The Profile browser candidate now shares this saved target.
 5. Daily sleep shows combined duration columns for the latest 14 calendar dates. Use
    muted border-tone bars and accent only for the selected observation. A dashed
    horizontal rule marks the actual personal target. Missing records are outlined
@@ -1540,8 +1550,157 @@ split night, night plus nap, wearable split, provider overlap, manual overlap,
 session details, exclusion, dark paper and 200% text. Descriptive notes appear below the state selector, never
 as dropdown group labels or selectable states.
 
-The Sleep study links to Home, Workout and Nutrition but uses its own in-memory
-fixture. There is no cross-screen sleep persistence, health access, network save,
+The Sleep study links to the other studies but uses its own in-memory session
+fixture. Its target and simulated connection state share selected Profile
+preferences; sleep records do not. There is no real health access, network save,
 actual account identity or recommendation calculation. Refresh/reset discards
 changes. Keep this limitation explicit; do not interpret simulation checks as
 production consent, health-provider, device keyboard or accessibility validation.
+
+## 22. Profile and Settings browser studies: approved direction
+
+These approved browser baselines extend the notebook vocabulary.
+Profile is a personal-preference ledger. Settings contains account
+operations, support, legal and billing. Do not move daily workout guidance here.
+Use the existing paper/ink tokens, bundled fonts, ruled sections, sticky headers,
+22-pixel header/tab icons and 24-pixel row-icon alignment slots with a 12-pixel
+text gap. Account, Support and Legal text must start on the same vertical line.
+Reflow at 200% rather than reducing type or shrinking controls.
+
+### Profile hierarchy and editing contract
+
+1. Header: Back to Home, Profile, Save. Save is disabled when clean or loading.
+2. Identity: photo/initial, nickname, description and illustrative access label.
+   Edit opens a focused sheet. Photo selection is nested within identity editing.
+   Cancel restores the previously staged identity, including its photo.
+3. Training: training phase, diet phase and days available per week. Do not add
+   a second generic Goal selector: phases convey the current training/diet intent
+   for this experienced-lifter audience without competing preference fields.
+   Changing a phase stages Week 1; its start/history changes only on Save.
+   Selecting the saved phase again must not restart its week count.
+4. Units: weight, height, food energy and one global RPE/RIR preference. Effort is
+   stored canonically as RPE in the Workout fixture; display conversion is not
+   a rewrite of exercise history. Body masses remain canonical kg.
+5. Body composition: tap any of the four metric labels or values to open the
+   grouped editor, focused on that metric. Weight, body fat, lean body mass and
+   skeletal muscle are all editable; no redundant Add/edit section action.
+   Align label, input and unit. Missing values are Not recorded, never zero.
+   Lean body mass and skeletal muscle have separate adjacent help buttons;
+   tapping the value edits it, not its definition. Preserve the underlying page
+   scroll position on opening, accepting or cancelling any sheet. Do not return
+   to the top of the screen after an edit unless navigation explicitly requires it.
+   On first focus, select an existing numeric value for replacement, with the
+   selection's active end at the right. Empty fields start at position zero.
+   Do not repeatedly select while typing or prevent a later tap from placing the
+   caret. Apply this numeric-entry behavior across the browser studies. Keep
+   help glyphs in the label's type/ink, centered in the shared help target.
+   Scroll focused fields into view and re-check after viewport/keyboard changes;
+   the browser prototype's visual-viewport handling is not proof of native IME
+   avoidance. Native implementation requires phone checks in both orientations.
+   This study's snapshot is independent of Home's measurement-history fixture.
+6. TDEE calculator: current estimate and Calculate. Preserve the current app's
+   equation, activity factors and validation, not a new recommendation model.
+   Use canonical cm/kg, age 13-100 and height 100-250 cm. Applying sets Maintain
+   to the rounded estimate, Cut to estimate minus 400 kcal and Bulk to estimate
+   plus 300 kcal; it preserves the protein target. Incomplete inputs disable Apply.
+   Applying stages nutrition targets; the top-level Save still commits them.
+7. Nutrition targets: separate calories for each diet phase, plus protein. Tapping
+   any target opens the complete group, titled Nutrition targets. Units uses the
+   same grouped-editor convention, titled Units and effort; related preferences
+   can be reviewed together rather than navigating four separate sheets.
+   Meal labels are renamed directly in Nutrition, including Meals 1-6 if desired.
+8. Sleep target: the same saved preference as Sleep. Validate greater than zero,
+   no more than 24 hours, and round to the native preference's decimal precision.
+9. Health sync: the explicit connection/data-state model below.
+
+Each focused sheet uses Done/Cancel. Done accepts the staged section; it does not
+silently save the whole Profile. Leaving with edits offers Save and leave,
+Discard and leave, or Keep editing, stacked with readable full-width labels.
+Failed/offline saves retain edits and do not mutate the saved baseline. Inline
+validation explains the field problem. The browser's own tab-close/navigation
+controls are not a substitute for testing native unsaved-change guards.
+
+### Health state and disclosure
+
+Keep app consent, device permissions, saved-account timestamps and last-sync
+timestamps independent. Supported data describes capability, not access.
+Disconnected/revoked access must not hide previously saved records or fabricate
+new sync timestamps. Sleep permission can be ready while body access is absent;
+the partial-body fixture explains that lean mass is missing.
+
+Connect opens the optional-health disclosure, then a separately labeled simulated
+permission sheet. Cancel must not connect. Managing permissions alone does not
+accept app consent. Disconnect in Lastrep stops mock reads, keeps saved records
+and explains that revoking device permissions is a separate action. No confusing
+three-way 'cannot disconnect / disconnect only' copy. Unavailable devices get
+setup guidance and manual-entry alternatives, never developer/package/SHA steps.
+AI context disclosure remains separate from granting health access.
+
+### Settings hierarchy and outcomes
+
+Order: Account, Support, Legal, Subscription, Session, Delete account.
+Back always returns to Home. Account shows the nickname and a compact Premium or
+Free badge, not a redundant Edit action. Keep badges neutral paper/ink with a
+fine outline: they identify account access, not an action or warning. While access is loading, show Checking
+access, not a transient Free badge. Subscription contains status detail and actions,
+not a second heading-sized Premium access active/Free access label. Support shows
+App version beneath Report a problem, aligned with its text; there is no separate
+About section. Give App version an outlined information icon in the same 24-pixel
+slot as Report a problem: 20-pixel glyph, 1.5-unit stroke, circular outline and a
+clearly visible filled dot above a shorter stem. The browser SVG uses a 1.1-unit
+dot radius, with no stroke on the dot. Keep the version right-aligned and the row
+non-interactive; do not add a chevron or button affordance.
+The native implementation must use the installed version/build,
+not the browser fixture. Support points users to Settings > Support for the version and uses
+lastrep.dev@gmail.com. Privacy opens the published policy only after an explicit
+link click. Log out and deletion require confirmation. Deletion explains that
+Google Play subscriptions must be cancelled separately. Browser simulations must
+never imply that a real account was signed out or deleted.
+
+Separate Premium entitlement from a paid subscription, including manually granted
+Premium. Development builds explain billing is unavailable; no purchase/restore
+SDK calls are simulated as real. Do not invent prices in a design fixture.
+Restore disables duplicate requests while checking and uses native-source copy:
+
+- Checking: "Checking purchases..."
+- Restored: "Purchases restored. Premium is active."
+- No active subscription: "No active subscription found. Make sure you're using
+  the Google Play account you subscribed with."
+- Not confirmed: "An active subscription was found, but Lastrep hasn't confirmed
+  Premium access yet. Please try again shortly."
+- Failure: "Couldn't restore purchases. Check your connection and try again."
+
+No-subscription must not revoke a manual grant. The unconfirmed result must not
+claim that a background verification is still running.
+
+### Review coverage and simulation boundaries
+
+Profile has 29 selectable states; Settings has 20. Review default, focused
+editors, unsaved/invalid/error/offline/loading, consent/partial/revoked/unavailable,
+all restore outcomes, free/manual Premium/dev billing, destructive confirmations,
+dark paper and 200% text. State descriptions sit below the selector, never mixed
+with selectable states. Preserve original dropdown order and scroll to selection.
+
+Saved demo preferences use sessionStorage in the same browser tab: identity/avatar,
+phases/history, Nutrition-managed meal labels, sleep target, effort/weight defaults and simulated
+health connection. Profile changes are shared only after Save; Home phase and
+Sleep target saves update the same preferences. Reset in Profile/Settings clears
+this demo preference store. Explicit review states remain deterministic fixtures.
+Nutrition records/targets, Home body history, Workout drafts and Sleep sessions
+remain independent examples, not a unified app store. Photo uses an illustration,
+not a file picker or upload. There are no Firebase, health, billing, account,
+camera or deletion API calls. The public policy/mail links are explicit exceptions
+to offline browsing. Native keyboard, accessibility and actual provider/billing
+behavior still require separate implementation and device verification.
+
+### Shared root-screen header revision
+
+Workout, Nutrition, Sleep and Profile have a left Back to Home action and a
+geometrically centered page title. Use equal left/right header slots, not a
+space-between layout where a wider Finish/Save button shifts the title. Workout
+retains Finish at the right. In enlarged text, move a wide action to a second row
+rather than crowding the title or shrinking type. Nutrition subpages retain their
+existing parent-screen back behavior; the root Nutrition back action goes Home.
+Home keeps its brand/utility header. All header icons use the same 22-pixel glyph
+inside a 44-pixel compact target. These revisions supersede earlier root headers
+in the approved browser references without changing native navigation yet.

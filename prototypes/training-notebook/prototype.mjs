@@ -1,3 +1,5 @@
+import './input-behavior.mjs';
+import { readNotebookPreferences } from './notebook-preferences.mjs';
 import { setReviewState } from './review-state-picker.mjs';
 import { readCheckIn, writeCheckIn, clearCheckIn, checkInFields } from './check-in.mjs';
 import { copy, fixture, catalog, exerciseFromCatalog, lastText, effortValue, guidanceChanges, moveExercise, summary, setUnit, states } from './model.mjs';
@@ -5,6 +7,7 @@ import { copy, fixture, catalog, exerciseFromCatalog, lastText, effortValue, gui
 const $ = (q, root = document) => root.querySelector(q);
 const escape = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const icons = {
+  left: '<path d="m14 6-6 6 6 6"/>',
   home: '<path d="M3 11 12 3l9 8M5 10v11h5v-7h4v7h5V10"/>',
   workout: '<path d="M2 12h20" stroke-width="1.5"/><path d="M7 5v14M17 5v14M4 9v6M20 9v6" stroke-width="2.1"/>',
   nutrition: '<path d="M12 7C4 2 1 10 5 17c2 5 5 4 7 3 2 1 5 2 7-3 4-7 1-15-7-10Z"/><path d="M12 7c0-4 3-5 6-5-1 4-3 5-6 5Z"/>',
@@ -54,6 +57,7 @@ function makeState(id) {
 function loadExample(id, useShared = false) {
   setReviewState(document.querySelector('#example'), states.map(([group, id, title]) => [id, title, group]), id);
   chosen = id; s = makeState(id); const shared = useShared ? readCheckIn() : null; if (!useShared) clearCheckIn(); if (shared) Object.assign(s, shared); if (s.modal === 'context') s.contextBefore = structuredClone({ ratings: s.ratings, pain: s.pain, activity: s.activity, note: s.note }); lastInput = null; scale = $('#effort').value;
+  if (useShared) { const prefs = readNotebookPreferences()?.profile; if (prefs?.units?.effort) { scale = prefs.units.effort; $('#effort').value = scale; } if (prefs?.units?.weight) s.exercises = s.exercises.map(e => e.mode === 'cardio' ? e : setUnit(e, prefs.units.weight)); }
   size = id === 'compact' ? [360, 800] : id === 'landscape' ? [844, 390] : id === 'tablet' ? [800, 1280] : id === 'tablet-wide' ? [1280, 800] : [390, 844];
   theme = id === 'dark'; large = id === 'large'; compare = id === 'active';
   if (id === 'landscape') { s.keyboard = true; s.demoScroll = 136; }
@@ -184,7 +188,7 @@ function frame(reference = false) {
   const search = !reference && s.page === 'search', custom = !reference && s.page === 'custom';
   const title = search ? 'Add exercise' : custom ? 'Custom exercise' : s.builder ? 'Routine builder' : 'Workout';
   const main = search ? searchPage() : custom ? customPage() : s.exercises.length ? sessionHeader() + s.exercises.map(exercise).join('') + `<div class="section-stack">${button('+ Add exercise', 'search', '')}<div class="session-actions">${button('Save as routine', 'open', 'text', { modal: 'create-routine' })}${button('Session options', 'open', 'text', { modal: 'session-options' })}</div></div>` : empty();
-  return `<div class="frame-wrap"><h3>${reference ? 'Approved / Reps editing' : escape(states.find(v => v[1] === chosen)?.[2] ?? 'Workout')}</h3><section class="device ${theme ? 'dark' : ''} ${large ? 'large-text' : ''} ${reference ? 'reference' : 'interactive'}" style="--width:${size[0]}px;--height:${size[1]}px" ${reference ? 'inert' : ''} aria-label="${reference ? 'Approved static editing reference' : 'Interactive Workout prototype'}"><div class="system-bar" aria-hidden="true"><span>9:41</span><span>LTE&nbsp;&nbsp; 92%</span></div><header class="toolbar"><div><h2>${title}</h2>${search || custom ? '<button class="icon-button close" data-action="back-search" aria-label="Close exercise picker">×</button>' : s.exercises.length ? button(s.builder ? 'Save routine' : 'Finish', 'open', 'primary', { modal: 'finish' }) : ''}</div></header><div class="viewport" tabindex="0" aria-label="Scrollable workout"><div class="page-content">${main}</div></div>${search ? `<footer class="search-footer"><span class="supporting">${s.selected.length} selected</span>${button(`Add (${s.selected.length})`, 'add-selected', 'primary', {}, !s.selected.length)}</footer>` : custom ? `<footer class="search-footer">${button('Cancel', 'back-search')}${button('Create exercise', 'save-custom', 'primary')}</footer>` : !key && s.rest ? restDock() : ''}${key ? keyboard(!reference && (search || custom || s.keyboardAlpha)) : tabs()}${!reference && s.modal ? modal() : ''}${!reference && s.toast ? `<div class="toast" role="status"><span>${escape(s.toast)}</span><button data-action="dismiss-toast" aria-label="Dismiss message">×</button></div>` : ''}</section><p class="frame-caption">${reference ? 'Approved editing reference. Interact with the screen on the left.' : `${size[0]} × ${size[1]} / ${theme ? 'Dark' : 'Paper'} / ${large ? '200%' : '100%'} text. Synthetic records only.`}</p></div>`;
+  return `<div class="frame-wrap"><h3>${reference ? 'Approved / Reps editing' : escape(states.find(v => v[1] === chosen)?.[2] ?? 'Workout')}</h3><section class="device ${theme ? 'dark' : ''} ${large ? 'large-text' : ''} ${reference ? 'reference' : 'interactive'}" style="--width:${size[0]}px;--height:${size[1]}px" ${reference ? 'inert' : ''} aria-label="${reference ? 'Approved static editing reference' : 'Interactive Workout prototype'}"><div class="system-bar" aria-hidden="true"><span>9:41</span><span>LTE&nbsp;&nbsp; 92%</span></div><header class="toolbar notebook-toolbar ${!search && !custom && s.exercises.length ? 'has-header-action' : ''}"><div><button class="icon-button" data-action="${search || custom ? 'back-search' : 'home'}" aria-label="${search || custom ? 'Close exercise picker' : 'Back to Home'}">${icon('left')}</button><h2 class="toolbar-title">${title}</h2>${!search && !custom && s.exercises.length ? button(s.builder ? 'Save routine' : 'Finish', 'open', 'primary toolbar-action', { modal: 'finish' }) : '<span aria-hidden="true"></span>'}</div></header><div class="viewport" tabindex="0" aria-label="Scrollable workout"><div class="page-content">${main}</div></div>${search ? `<footer class="search-footer"><span class="supporting">${s.selected.length} selected</span>${button(`Add (${s.selected.length})`, 'add-selected', 'primary', {}, !s.selected.length)}</footer>` : custom ? `<footer class="search-footer">${button('Cancel', 'back-search')}${button('Create exercise', 'save-custom', 'primary')}</footer>` : !key && s.rest ? restDock() : ''}${key ? keyboard(!reference && (search || custom || s.keyboardAlpha)) : tabs()}${!reference && s.modal ? modal() : ''}${!reference && s.toast ? `<div class="toast" role="status"><span>${escape(s.toast)}</span><button data-action="dismiss-toast" aria-label="Dismiss message">×</button></div>` : ''}</section><p class="frame-caption">${reference ? 'Approved editing reference. Interact with the screen on the left.' : `${size[0]} × ${size[1]} / ${theme ? 'Dark' : 'Paper'} / ${large ? '200%' : '100%'} text. Synthetic records only.`}</p></div>`;
 }
 
 function focusSet(id, index, field, scroll = true) {
@@ -216,7 +220,7 @@ function render(preserve = true) {
   else if (s.modal) $('.interactive .sheet-head .close')?.focus({ preventScroll: true });
 }
 
-function openModal(name) { if (name === 'context') s.contextBefore = structuredClone({ ratings: s.ratings, pain: s.pain, activity: s.activity, note: s.note }); if (name === 'history') s.historyPoint = historySessions(getExercise()).length - 1; if (name === 'tempo') s.draft.tempo = getExercise()?.tempo ?? ''; s.keyboard = false; s.modal = name; render(false); }
+function openModal(name) { if (name === 'context') s.contextBefore = structuredClone({ ratings: s.ratings, pain: s.pain, activity: s.activity, note: s.note }); if (name === 'history') s.historyPoint = historySessions(getExercise()).length - 1; if (name === 'tempo') s.draft.tempo = getExercise()?.tempo ?? ''; s.keyboard = false; s.modal = name; render(); const body = $('.interactive .sheet-body'); if (body) body.scrollTop = 0; }
 function performSave() { const current = s; s.modal = 'saving'; render(); setTimeout(() => { if (s !== current || s.modal !== 'saving') return; s.modal = s.deload ? 'deload-saved' : 'saved'; render(false); }, 650); }
 function generatePlan() { const current = s; s.disclosure = true; s.modal = 'plan-busy'; s.plan = 'busy'; render(false); setTimeout(() => { if (s !== current || s.modal !== 'plan-busy') return; s.plan = s.pain === 'None' || !adjustmentCount() ? 'ok' : 'changes'; s.modal = `plan-${s.plan}`; render(false); }, 650); }
 function mutateWorkout() { if (s.plan && !['none', 'applied'].includes(s.plan)) s.plan = 'stale'; }
@@ -282,6 +286,7 @@ $('#stage').addEventListener('click', async event => {
   if (action === 'outside' && event.target !== b) return;
   const e = getExercise(d.id || s.selectedId);
   switch (action) {
+    case 'home': location.href = './home.html'; return;
     case 'open': {
       if (d.modal === 'finish') {
         const invalid = [...$('.interactive').querySelectorAll('input[data-set]')].filter(el => !validateInput(el));
@@ -289,10 +294,10 @@ $('#stage').addEventListener('click', async event => {
       }
       if (d.id) s.selectedId = d.id; openModal(d.modal); return;
     }
-    case 'close': case 'outside': if (s.modal === 'saving') return; if (s.modal === 'context' && s.contextBefore) Object.assign(s, s.contextBefore); s.contextBefore = null; s.modal = ''; render(false); $('.interactive .toolbar .btn')?.focus({ preventScroll: true }); return;
+    case 'close': case 'outside': if (s.modal === 'saving') return; if (s.modal === 'context' && s.contextBefore) Object.assign(s, s.contextBefore); s.contextBefore = null; s.modal = ''; render(); $('.interactive .toolbar .btn')?.focus({ preventScroll: true }); return;
     case 'hide-keyboard': s.keyboard = false; render(); $('.interactive .viewport')?.focus({ preventScroll: true }); return;
     case 'dismiss-toast': s.toast = ''; render(); return;
-    case 'tab': if (d.value === 'Home') location.href = './home.html'; else if (d.value === 'Nutrition') location.href = './nutrition.html'; else if (d.value === 'Sleep') location.href = './sleep.html'; else if (d.value !== 'Workout') toast('This destination is outside the current browser studies.'); return;
+    case 'tab': if (d.value === 'Home') location.href = './home.html'; else if (d.value === 'Nutrition') location.href = './nutrition.html'; else if (d.value === 'Sleep') location.href = './sleep.html'; else if (d.value === 'Profile') location.href = './profile.html'; else if (d.value !== 'Workout') toast('This destination is outside the current browser studies.'); return;
     case 'search': s.page = 'search'; s.keyboard = false; s.modal = ''; s.query = ''; s.searchMode = 'ready'; s.selected = []; render(false); return;
     case 'back-search': if (s.page === 'custom') { s.page = 'search'; } else { s.page = 'workout'; } s.keyboard = false; render(false); return;
     case 'clear-search': s.query = ''; s.searchMode = 'ready'; render(); return;
