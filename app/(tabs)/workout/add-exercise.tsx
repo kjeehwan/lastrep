@@ -1,3 +1,6 @@
+import { NotebookHeader } from "../../../src/ui/notebook/NotebookHeader";
+import { useNotebook, useNotebookStyles, notebookSheet } from "../../../src/ui/notebook/Notebook";
+import { type NotebookColors } from "../../../src/ui/notebook/tokens";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -53,6 +56,8 @@ const scoreExerciseSearch = (needle: string, searchableText: string, title: stri
 };
 
 export default function AddExerciseScreen() {
+  const { colors } = useNotebook();
+  const styles = useNotebookStyles(createStyles);
   const router = useRouter();
   const auth = getAuth();
   const [activeUid, setActiveUid] = useState<string | null>(auth.currentUser?.uid ?? null);
@@ -215,28 +220,14 @@ export default function AddExerciseScreen() {
         style={styles.keyboardAvoiding}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.headerIcon}>
-            <Ionicons name="chevron-back" size={20} color="#fff" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Add Exercise</Text>
-          <TouchableOpacity
-            style={[styles.addSelectedButton, selectedExercises.length === 0 && styles.addSelectedButtonDisabled]}
-            disabled={selectedExercises.length === 0}
-            onPress={() => void submitSelection(selectedExercises)}
-          >
-            <Text style={styles.addSelectedText}>
-              {selectedExercises.length ? `Add (${selectedExercises.length})` : "Add"}
-            </Text>
-          </TouchableOpacity>
-        </View>
+        <NotebookHeader title="Add exercise" onBack={() => router.back()} action={`Add (${selectedExercises.length})`} onAction={() => void submitSelection(selectedExercises)} disabled={!selectedExercises.length} />
 
         <View style={styles.topControls}>
           <View style={styles.searchField}>
             <TextInput disableFullscreenUI
               ref={searchInputRef}
               placeholder="Search exercises"
-              placeholderTextColor="#7a7a8c"
+              placeholderTextColor={colors.muted}
               value={searchQuery}
               onChangeText={setSearchQuery}
               style={styles.searchInput}
@@ -251,7 +242,7 @@ export default function AddExerciseScreen() {
                   searchInputRef.current?.focus();
                 }}
               >
-                <Ionicons name="close-circle" size={20} color="#98a0b3" />
+                <Ionicons name="close-circle" size={20} color={colors.muted} />
               </TouchableOpacity>
             ) : null}
           </View>
@@ -260,7 +251,7 @@ export default function AddExerciseScreen() {
               {selectedExercises.map((name) => (
                 <TouchableOpacity key={name.toLowerCase()} style={styles.selectedExerciseChip} onPress={() => toggleExerciseSelection(name)}>
                   <Text style={styles.selectedExerciseText} numberOfLines={1}>{name}</Text>
-                  <Ionicons name="close" size={14} color="#e8e7ff" />
+                  <Ionicons name="close" size={14} color={colors.ink} />
                 </TouchableOpacity>
               ))}
             </View>
@@ -303,7 +294,7 @@ export default function AddExerciseScreen() {
                 <Ionicons
                   name={selectedExercises.some((name) => name.toLowerCase() === item.name.toLowerCase()) ? "checkmark-circle" : "add-circle-outline"}
                   size={20}
-                  color="#7b61ff"
+                  color={colors.accent}
                 />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.rowTitle}>{item.name}</Text>
@@ -316,7 +307,7 @@ export default function AddExerciseScreen() {
                 <Ionicons
                   name={favoriteSet.has(item.name.toLowerCase()) ? "star" : "star-outline"}
                   size={16}
-                  color="#ffd166"
+                  color={colors.accent}
                 />
               </TouchableOpacity>
             </View>
@@ -326,7 +317,7 @@ export default function AddExerciseScreen() {
         <View style={styles.customRow}>
           <TextInput disableFullscreenUI
             placeholder="Custom exercise"
-            placeholderTextColor="#7a7a8c"
+            placeholderTextColor={colors.muted}
             value={customExercise}
             onChangeText={setCustomExercise}
             style={[styles.input, { flex: 1, marginBottom: 0 }]}
@@ -347,8 +338,8 @@ export default function AddExerciseScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#0d0d1a" },
+const createStyles = (colors: NotebookColors) => { const base = notebookSheet({
+  safe: { flex: 1, backgroundColor: colors.canvas },
   keyboardAvoiding: { flex: 1 },
   header: {
     paddingHorizontal: 16,
@@ -357,50 +348,50 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
-  headerTitle: { color: "#fff", fontSize: 18, fontWeight: "700" },
+  headerTitle: { color: colors.ink, fontSize: 18, fontWeight: "700" },
   headerIcon: {
     width: 34,
     height: 34,
     borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.08)",
+    backgroundColor: colors.subtle,
   },
-  addSelectedButton: { minWidth: 58, paddingHorizontal: 10, height: 34, borderRadius: 10, backgroundColor: "#7b61ff", alignItems: "center", justifyContent: "center" },
-  addSelectedButtonDisabled: { backgroundColor: "rgba(255,255,255,0.08)" },
-  addSelectedText: { color: "#fff", fontSize: 12, fontWeight: "800" },
+  addSelectedButton: { minWidth: 58, paddingHorizontal: 10, height: 34, borderRadius: 10, backgroundColor: colors.primary, alignItems: "center", justifyContent: "center" },
+  addSelectedButtonDisabled: { backgroundColor: colors.subtle },
+  addSelectedText: { color: colors.onPrimary, fontSize: 12, fontWeight: "800" },
   topControls: { paddingHorizontal: 12, paddingBottom: 8 },
   searchField: {
     flexDirection: "row", alignItems: "center", marginBottom: 8,
-    backgroundColor: "rgba(255,255,255,0.06)", borderRadius: 10,
-    borderWidth: StyleSheet.hairlineWidth, borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor: colors.subtle, borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth, borderColor: colors.rule,
   },
-  searchInput: { flex: 1, minWidth: 0, color: "#fff", paddingHorizontal: 12, paddingVertical: 10 },
+  searchInput: { flex: 1, minWidth: 0, color: colors.ink, paddingHorizontal: 12, paddingVertical: 10 },
   searchClear: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
   input: {
-    backgroundColor: "rgba(255,255,255,0.06)",
-    color: "#fff",
+    backgroundColor: colors.subtle,
+    color: colors.ink,
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(255,255,255,0.12)",
+    borderColor: colors.rule,
     marginBottom: 8,
   },
   groupChips: { gap: 8, paddingVertical: 4 },
   selectedExerciseList: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 6 },
-  selectedExerciseChip: { maxWidth: "100%", flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 999, backgroundColor: "rgba(123,97,255,0.22)", borderWidth: StyleSheet.hairlineWidth, borderColor: "rgba(123,97,255,0.75)", paddingHorizontal: 10, paddingVertical: 6 },
-  selectedExerciseText: { color: "#e8e7ff", fontSize: 12, fontWeight: "700", flexShrink: 1 },
+  selectedExerciseChip: { maxWidth: "100%", flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 999, backgroundColor: colors.accentSoft, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, paddingHorizontal: 10, paddingVertical: 6 },
+  selectedExerciseText: { color: colors.ink, fontSize: 12, fontWeight: "700", flexShrink: 1 },
   groupChip: {
     borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.16)",
+    borderColor: colors.rule,
   },
-  groupChipActive: { backgroundColor: "rgba(123,97,255,0.22)", borderColor: "#7b61ff" },
-  groupChipText: { color: "#cdd0e0", fontSize: 12, fontWeight: "600" },
-  groupChipTextActive: { color: "#fff" },
+  groupChipActive: { backgroundColor: colors.accentSoft, borderColor: colors.accent },
+  groupChipText: { color: colors.muted, fontSize: 12, fontWeight: "600" },
+  groupChipTextActive: { color: colors.ink },
   row: {
     paddingVertical: 10,
     paddingHorizontal: 12,
@@ -409,8 +400,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   rowMain: { flex: 1, flexDirection: "row", alignItems: "center", gap: 8 },
-  rowTitle: { color: "#fff", fontWeight: "600" },
-  rowMeta: { color: "#98a0b3", fontSize: 12 },
+  rowTitle: { color: colors.ink, fontWeight: "600" },
+  rowMeta: { color: colors.muted, fontSize: 12 },
   iconButton: {
     width: 30,
     height: 30,
@@ -426,14 +417,21 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 12,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: "rgba(255,255,255,0.1)",
-    backgroundColor: "#0d0d1a",
+    borderTopColor: colors.rule,
+    backgroundColor: colors.canvas,
   },
   addButton: {
-    backgroundColor: "#7b61ff",
+    backgroundColor: colors.primary,
     paddingVertical: 10,
     paddingHorizontal: 14,
     borderRadius: 10,
   },
-  addButtonText: { color: "#fff", fontWeight: "700" },
-});
+  addButtonText: { color: colors.onPrimary, fontWeight: "700" },
+}); return { ...base, ...notebookSheet({
+ searchField: { flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: colors.border, borderRadius: 4, backgroundColor: colors.surface, paddingHorizontal: 12, marginBottom: 12 },
+ searchInput: { flex: 1, minHeight: 48, color: colors.ink, fontSize: 16 },
+ row: { flexDirection: "row", alignItems: "center", paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: colors.rule, backgroundColor: colors.canvas },
+ rowTitle: { color: colors.ink, fontSize: 16, fontWeight: "600" }, rowMeta: { color: colors.muted, fontSize: 14, marginTop: 4 },
+ input: { borderWidth: 1, borderColor: colors.border, borderRadius: 4, color: colors.ink, backgroundColor: colors.surface, minHeight: 48, paddingHorizontal: 12, fontSize: 16 },
+ addButton: { minHeight: 48, padding: 12, borderRadius: 8, backgroundColor: colors.primary, alignItems: "center", justifyContent: "center" },
+}) }; };

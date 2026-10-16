@@ -23,6 +23,18 @@ class WorkoutSetListManager : SimpleViewManager<WorkoutSetListView>() {
     view.reactTagForEvents = view.id
   }
 
+  @ReactProp(name = "notebookColors")
+  fun setNotebookColors(view: WorkoutSetListView, colors: ReadableMap?) { view.setNotebookColors(colors) }
+
+  @ReactProp(name = "fontFamily")
+  fun setNotebookFont(view: WorkoutSetListView, value: String?) { view.setNotebookFont(value) }
+
+  @ReactProp(name = "activeSetIndex", defaultInt = -1)
+  fun setActiveSetIndex(view: WorkoutSetListView, value: Int) { view.setActiveSetIndex(value) }
+
+  @ReactProp(name = "editingSuspended", defaultBoolean = false)
+  fun setEditingSuspended(view: WorkoutSetListView, value: Boolean) { view.setEditingSuspended(value) }
+
   @ReactProp(name = "sets")
   fun setSets(view: WorkoutSetListView, sets: ReadableArray?) {
     val items = mutableListOf<WorkoutSetItem>()
@@ -76,7 +88,9 @@ class WorkoutSetListManager : SimpleViewManager<WorkoutSetListView>() {
       "topSetChange" to mapOf("registrationName" to "onSetChange"),
       "topToggleDone" to mapOf("registrationName" to "onToggleDone"),
       "topDeleteSet" to mapOf("registrationName" to "onDeleteSet"),
-      "topSetLabelPress" to mapOf("registrationName" to "onSetLabelPress")
+      "topSetLabelPress" to mapOf("registrationName" to "onSetLabelPress"),
+      "topLastPress" to mapOf("registrationName" to "onLastPress"),
+      "topSetActivate" to mapOf("registrationName" to "onSetActivate")
     )
 
   private fun ReadableMap.getStringOrEmpty(key: String): String {

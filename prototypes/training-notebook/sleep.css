@@ -1,0 +1,111 @@
+.sleep-device .page-content{max-width:760px;padding-top:20px;padding-bottom:32px}
+.sleep-device .toolbar h2{font-size:calc(20px * var(--scale))}
+.sleep-date{display:grid;grid-template-columns:44px minmax(0,1fr) 44px;align-items:center;gap:8px;margin-bottom:20px}
+.sleep-device .sleep-date button{min-height:44px;min-width:0}
+.sleep-date .selected-date{display:flex;justify-content:center;align-items:center;gap:8px;font-size:calc(16px * var(--scale));font-weight:600;line-height:1.4}
+.sleep-date .selected-date svg{width:16px;height:16px}
+.sleep-section{border-top:1px solid var(--rule);padding-top:20px;margin-top:24px}
+.sleep-section-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:16px}
+.sleep-section-head .btn{flex-shrink:0}
+.sleep-device .sleep-kicker{font-size:calc(14px * var(--scale));color:var(--secondary);margin-bottom:8px}
+.sleep-device .sleep-duration{font:600 calc(42px * var(--scale))/1.15 'Source Serif',serif;letter-spacing:-.02em;margin-bottom:12px;overflow-wrap:anywhere}
+.sleep-device .sleep-duration.no-record{font-size:calc(28px * var(--scale));letter-spacing:0}
+.sleep-duration small{font:400 calc(20px * var(--scale))/1.3 'Source Sans',sans-serif;letter-spacing:0;color:var(--secondary)}
+.sleep-summary{display:grid;gap:8px}
+.sleep-entry-action{margin-top:16px}
+.sleep-target{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:12px}
+.sleep-device .sleep-target .btn{font-weight:400;font-size:calc(14px * var(--scale))}
+.sleep-notice{border-left:2px solid var(--accent);padding:8px 0 8px 12px;display:grid;gap:8px;margin-bottom:20px}
+.sleep-notice .btn{justify-self:start}
+.sleep-chart-wrap{overflow-x:auto;overscroll-behavior-x:contain;padding:4px 0 8px;margin-top:16px}
+.sleep-chart{display:flex;min-width:100%;width:max-content;gap:0}
+.sleep-device .sleep-night{width:56px;min-width:56px;padding:0 4px;display:flex;flex-direction:column;align-items:center;gap:8px;border-radius:0}
+.sleep-plot{width:100%;height:144px;display:flex;align-items:flex-end;justify-content:center;position:relative;border-bottom:1px solid var(--rule)}
+.sleep-plot::before{content:'';position:absolute;left:-4px;right:-4px;top:var(--target-y);border-top:1px dashed var(--border)}
+.sleep-bar{width:20px;height:var(--bar-height);background:var(--border);position:relative;border-radius:2px 2px 0 0}
+.sleep-night[aria-pressed=true] .sleep-bar{background:var(--accent)}
+.sleep-night[aria-pressed=true] .sleep-night-date{color:var(--accent);font-weight:600}
+.sleep-gap{height:12px;width:20px;border:1px dashed var(--border);margin-bottom:2px;background:var(--canvas)}
+.sleep-night-date{font-size:calc(13px * var(--scale));line-height:1.4;min-height:22px;white-space:nowrap}
+.sleep-device .sleep-chart-caption{font-size:calc(13px * var(--scale));color:var(--secondary);margin-top:8px}
+.sleep-week-summary{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:16px 0}
+.sleep-week-summary>div{display:grid;gap:4px;min-width:0}
+.sleep-week-summary strong{font-size:calc(22px * var(--scale));font-weight:600}
+.sleep-week-summary span{font-size:calc(13px * var(--scale));color:var(--secondary)}
+.sleep-data-line{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;padding:10px 0;font-size:calc(14px * var(--scale));border-bottom:1px solid var(--rule)}
+.sleep-data-line>span{color:var(--secondary)}
+.sleep-data-line>strong{text-align:right;font-weight:400;min-width:0;overflow-wrap:anywhere}
+.sleep-sync-actions{display:flex;align-items:center;gap:20px;flex-wrap:wrap;margin-top:12px}
+.sleep-records{display:grid;gap:0}
+.sleep-device .sleep-history-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;width:100%;text-align:left;min-height:64px;padding:12px 0;border-bottom:1px solid var(--rule);font-size:calc(16px * var(--scale))}
+.sleep-history-row small{grid-column:1/-1;color:var(--secondary);font-size:calc(13px * var(--scale))}
+.sleep-device .sleep-field{display:grid;gap:8px}
+.sleep-field input{width:100%;min-width:0;font-size:calc(20px * var(--scale));height:56px}
+.sleep-device .sleep-field span{font-size:calc(16px * var(--scale));font-weight:600}
+.sleep-device .sleep-error{color:var(--danger);font-size:calc(14px * var(--scale));line-height:1.4}
+.sleep-device .sleep-error:empty{display:none}
+.sleep-device .sheet-body{gap:20px}
+.sleep-device .sheet-footer{gap:12px}
+.sleep-device .sheet .icon-button.close{width:48px;min-width:48px}
+.sleep-device .sheet-head h2{overflow-wrap:normal}
+.sleep-calendar-head{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 0 0}
+.sleep-calendar-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px 0}
+.sleep-weekday{font-size:12px;text-align:center;color:var(--secondary);padding:8px 0}
+.sleep-device .sleep-calendar-day{height:44px;min-width:0;border-radius:6px;font-size:calc(16px * var(--scale));position:relative}
+.sleep-calendar-day.today{border:1px solid var(--border)}
+.sleep-device .sleep-calendar-day.selected{background:var(--primary);color:var(--on-primary)}
+.sleep-calendar-day.recorded::after{content:'';position:absolute;bottom:4px;left:calc(50% - 2px);width:4px;height:4px;border-radius:50%;background:currentColor}
+.sleep-device .sleep-skeleton{height:140px;margin:20px 0;background:var(--subtle);border-radius:4px}
+.sleep-device .toast{bottom:88px;font-size:calc(14px * var(--scale))}
+.sleep-device .tab-link{text-decoration:none}
+.large-text .sleep-duration{font-size:64px}
+.large-text .sleep-section-head{align-items:flex-start;flex-wrap:wrap}
+.large-text .sleep-section-head .btn{flex-shrink:1}
+.large-text .sleep-target{align-items:flex-start;flex-direction:column;gap:0}
+.large-text .sleep-night{width:100px;min-width:100px}
+.large-text .sleep-plot{height:200px}
+.large-text .sleep-bar,.large-text .sleep-gap{width:32px}
+.large-text .sleep-week-summary{grid-template-columns:1fr}
+.large-text .sleep-data-line{flex-direction:column;gap:4px}
+.large-text .sleep-data-line>strong{text-align:left}
+.large-text .sleep-history-row{grid-template-columns:1fr}
+.large-text .sleep-calendar-day{height:48px;font-size:24px}
+.large-text .sleep-weekday{font-size:16px}
+.large-text .sleep-calendar-head h3{font-size:28px}
+.large-text .sleep-field input{height:64px;font-size:32px}
+.large-text .sheet-head .close{min-width:56px;width:56px}
+.sleep-target{justify-content:flex-start;gap:4px}
+.sleep-chart-selection{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;font-size:calc(16px * var(--scale))}
+.sleep-chart-selection strong{font-size:calc(20px * var(--scale));font-weight:600}
+.sleep-entry-modes{display:flex;gap:0;border-bottom:1px solid var(--rule);flex-wrap:wrap}
+.sleep-device .sleep-entry-modes button{min-height:44px;padding:8px 12px;font-size:calc(14px * var(--scale));line-height:1.4;border-bottom:2px solid transparent}
+.sleep-device .sleep-entry-modes button[aria-pressed=true]{border-bottom-color:var(--accent);color:var(--accent);font-weight:600}
+.sleep-clock{width:260px;max-width:100%;aspect-ratio:1;margin:0 auto;touch-action:pan-y}
+.sleep-clock svg{width:100%;height:auto;display:block;overflow:visible}
+.sleep-clock text{font:16px 'Source Sans',sans-serif;fill:var(--secondary);pointer-events:none}
+.sleep-clock .clock-center-label{font-size:14px}
+.sleep-clock .clock-handle-label{font-size:12px;font-weight:600;fill:var(--ink)}
+.sleep-clock [data-clock-handle]{cursor:grab;touch-action:none}
+.sleep-clock [data-clock-handle]:focus-visible{outline:none}
+.sleep-clock [data-clock-handle]:focus-visible circle:last-of-type{stroke-width:4}
+.sleep-clock-fields{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px}
+.sleep-device .sleep-interval-preview{font-size:calc(22px * var(--scale));font-weight:600}
+.sleep-setup-steps{padding-left:24px;display:grid;gap:16px;margin:0}
+.large-text .sleep-target{flex-direction:row;align-items:center;flex-wrap:wrap}
+.large-text .sleep-chart-selection{align-items:flex-start;flex-direction:column;gap:4px}
+.large-text .sleep-clock{width:300px}
+.large-text .sleep-clock text{font-size:22px}
+.large-text .sleep-clock .clock-center-label{font-size:20px}
+.large-text .sleep-clock .clock-handle-label{font-size:18px}
+.large-text .sleep-clock-fields{grid-template-columns:1fr}
+.sleep-device .sleep-target-edit{min-height:44px;font-size:calc(14px * var(--scale));color:var(--accent);text-align:left;text-decoration:underline;text-decoration-color:var(--rule);text-underline-offset:4px}
+.sleep-time-field{min-width:0;display:grid;gap:4px}
+.sleep-device .sleep-time-date{display:flex;align-items:center;justify-content:flex-start;gap:8px;min-height:44px;font-size:calc(14px * var(--scale));color:var(--accent);text-align:left}
+.sleep-time-date svg{width:16px;height:16px}
+.large-text .sleep-time-date{flex-wrap:wrap}
+.sleep-device .sleep-session-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 12px;min-height:72px;width:100%;text-align:left;padding:14px 0;border-bottom:1px solid var(--rule);font-size:calc(16px * var(--scale))}
+.sleep-session-row>span{min-width:0;overflow-wrap:anywhere}
+.sleep-session-row>strong{font-size:calc(17px * var(--scale));font-weight:600}
+.sleep-session-row>small{grid-column:1/-1;color:var(--secondary);font-size:calc(13px * var(--scale));line-height:1.4}
+.sleep-conflict-row{border-top:1px solid var(--rule);padding-top:12px;display:grid;gap:6px}
+.large-text .sleep-session-row{grid-template-columns:minmax(0,1fr)}

@@ -1694,7 +1694,7 @@ export default function Home() {
         </View>
       </CalendarOverlay>
 
-      <Modal visible={activeDashboardMetric != null} transparent animationType="fade">
+      <Modal visible={activeDashboardMetric != null} transparent animationType="fade" onRequestClose={() => setActiveDashboardMetric(null)}>
         <TouchableWithoutFeedback onPress={() => setActiveDashboardMetric(null)}>
           <View style={styles.modalBackdrop}>
             <TouchableWithoutFeedback onPress={() => {}}>
@@ -1911,7 +1911,7 @@ export default function Home() {
         </View>
       </Modal>
 
-      <Modal visible={showProfileModal} transparent animationType="fade">
+      <Modal visible={showProfileModal} transparent animationType="fade" onRequestClose={() => setShowProfileModal(false)}>
         <TouchableWithoutFeedback onPress={() => setShowProfileModal(false)}>
           <View style={styles.modalBackdrop}>
             <TouchableWithoutFeedback onPress={() => {}}>
@@ -1945,7 +1945,7 @@ export default function Home() {
         </TouchableWithoutFeedback>
       </Modal>
 
-      <Modal visible={showAdjustInputsModal} transparent animationType="fade">
+      <Modal visible={showAdjustInputsModal} transparent animationType="fade" onRequestClose={() => setShowAdjustInputsModal(false)}>
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Adjust inputs</Text>

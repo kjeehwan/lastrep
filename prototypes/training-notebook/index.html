@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Lastrep - Training notebook prototype</title>
+  <link rel="stylesheet" href="./prototype.css">
+</head>
+<body>
+  <a class="skip" href="#preview">Skip to prototype</a>
+  <aside class="workbench" aria-label="Prototype review controls">
+    <div class="workbench-brand">Lastrep<span>Training notebook / 01</span></div>
+    <h1>Workout, reconsidered.</h1>
+    <p>A working design study based on <code>training-notebook-design.md</code> v1.1.</p>
+    <a class="spec-link" href="./home.html">Review Home prototype</a>
+    <a class="spec-link" href="./nutrition.html">Review Nutrition prototype</a>
+    <a class="spec-link" href="./sleep.html">Review Sleep prototype</a>
+    <a class="spec-link" href="./profile.html">Review Profile</a><a class="spec-link" href="./settings.html">Review Settings</a>
+    <label for="example">Review a state</label>
+    <select id="example"></select>
+    <label for="viewport">Viewport</label>
+    <select id="viewport">
+      <option value="390,844">Phone / 390 x 844</option>
+      <option value="360,800">Compact / 360 x 800</option>
+      <option value="844,390">Landscape / 844 x 390</option>
+      <option value="800,1280">Tablet / 800 x 1280</option>
+      <option value="1280,800">Wide tablet / 1280 x 800</option>
+    </select>
+    <div class="review-toggles">
+      <label><input id="dark" type="checkbox"> Dark paper</label>
+      <label><input id="large" type="checkbox"> 200% text stress test</label>
+      <label><input id="compare" type="checkbox" checked> Compare approved screens</label>
+    </div>
+    <label for="effort">Effort preference</label>
+    <select id="effort"><option>RPE</option><option>RIR</option></select>
+    <button id="reset" class="review-button">Reset example</button>
+    <div class="review-note" role="note">
+      <strong>Prototype, not the Lastrep app.</strong>
+      <p>All records and advice are synthetic. Saved check-ins are shared with Home in this tab's session storage. Other edits stay in memory. No login, real saving, AI requests or health-service access.</p>
+      <p>Keyboard illustrations test layout, not Android behavior. Choosing another example resets this session.</p>
+    </div>
+    <a class="spec-link" href="./README.md" target="_blank" rel="noopener">Scope and review guide</a>
+  </aside>
+  <main id="preview" tabindex="-1">
+    <header class="review-heading"><div><p class="eyebrow">The training ledger</p><h2 id="state-title">The approved direction</h2></div><span class="prototype-tag">Interactive study</span></header>
+    <p id="state-description" class="state-description"></p>
+    <div id="stage" class="stage"></div>
+    <footer class="review-footer">Warm paper. Clear records. Less between you and the next set.</footer>
+  </main>
+  <script type="module" src="./prototype.mjs"></script>
+</body>
+</html>

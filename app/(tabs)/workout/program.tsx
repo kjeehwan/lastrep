@@ -341,7 +341,7 @@ export default function WorkoutProgramScreen() {
         {feedback ? <Text style={styles.muted}>{feedback}</Text> : null}
       </ScrollView>
 
-      <Modal visible={pickerDay != null} transparent animationType="fade">
+      <Modal visible={pickerDay != null} transparent animationType="fade" onRequestClose={() => setPickerDayNumber(null)}>
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>
@@ -379,7 +379,7 @@ export default function WorkoutProgramScreen() {
         </View>
       </Modal>
 
-      <Modal visible={exercisePickerDay != null} transparent animationType="fade">
+      <Modal visible={exercisePickerDay != null} transparent animationType="fade" onRequestClose={() => setExercisePickerDayNumber(null)}>
         <KeyboardAwareModalFrame style={styles.modalBackdrop}>
           <AdaptiveModalCard contentSized style={styles.modalCard}>
             <Text style={styles.modalTitle}>

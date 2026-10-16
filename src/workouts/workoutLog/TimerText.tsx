@@ -13,7 +13,7 @@ function clockLabel(seconds: number) {
 export function ElapsedTimerText({ seconds, startedAtMs }: { seconds: number; startedAtMs: number | null }) {
   const focused = useIsFocused();
   const now = useNow(1000, focused && startedAtMs !== null);
-  return <>{clockLabel(elapsedAt({ elapsedSeconds: seconds, startedAtMs }, now))}</>;
+  return <>{clockLabel(elapsedAt({ elapsedSeconds: seconds, startedAtMs }, now)).padStart(5, "0")}</>;
 }
 
 export function RestTimerText({ clock, prefix, style }: { clock: RestClock; prefix: string; style?: StyleProp<TextStyle> }) {

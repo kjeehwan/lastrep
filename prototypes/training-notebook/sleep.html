@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lastrep - Sleep notebook study</title>
+  <link rel="stylesheet" href="./prototype.css"><link rel="stylesheet" href="./sleep.css">
+</head>
+<body>
+  <a class="skip" href="#preview">Skip to prototype</a>
+  <aside class="workbench" aria-label="Sleep review controls">
+    <div class="workbench-brand">Lastrep<span>Training notebook / 04</span></div>
+    <h1>Sleep, on record.</h1>
+    <p>A quiet recovery journal. Recorded nights, personal targets and honest gaps.</p>
+    <a class="spec-link" href="./home.html">Review Home</a><a class="spec-link" href="./">Review Workout</a><a class="spec-link" href="./nutrition.html">Review Nutrition</a>
+    <a class="spec-link" href="./profile.html">Review Profile</a><a class="spec-link" href="./settings.html">Review Settings</a>
+    <label for="example">Review a state</label><select id="example"></select>
+    <label for="viewport">Viewport</label><select id="viewport">
+      <option value="390,844">Phone / 390 x 844</option><option value="360,800">Compact / 360 x 800</option><option value="844,390">Landscape / 844 x 390</option><option value="800,1280">Tablet / 800 x 1280</option><option value="1280,800">Wide tablet / 1280 x 800</option>
+    </select>
+    <div class="review-toggles"><label><input id="dark" type="checkbox"> Dark paper</label><label><input id="large" type="checkbox"> 200% text stress test</label></div>
+    <button id="reset" class="review-button">Reset example</button>
+    <div class="review-note"><strong>Design study, not the app.</strong><p>All records are synthetic, dated October 15, 2026. No health access, login or real saving. Sync and account settings are explicitly simulated.</p><p>Date-specific manual editing is proposed. No sleep stages, bedtime or quality score is invented from duration.</p></div>
+    <a class="spec-link" href="./README.md">Scope and review guide</a>
+  </aside>
+  <main id="preview" tabindex="-1">
+    <header class="review-heading"><div><p class="eyebrow">The recovery journal</p><h2 id="state-title">Sleep</h2></div><span class="prototype-tag">Interactive study</span></header>
+    <p id="state-description" class="state-description"></p><div id="stage" class="stage"></div>
+    <footer class="review-footer">Keep the record. Notice the pattern. No invented scores.</footer>
+  </main>
+  <script type="module" src="./sleep.mjs"></script>
+</body>
+</html>
