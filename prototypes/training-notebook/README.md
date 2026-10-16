@@ -7,11 +7,49 @@ Workout states. It does not replace any Lastrep application screen.
 
 ## Open it
 
+**Home study:** after starting the server, open
+**http://127.0.0.1:4317/home.html**. The two studies link to one another from the
+review sidebar. Home has 25 example states; its design is pending review.
+
 From the repository root:
 
 ```powershell
 node prototypes/training-notebook/serve.mjs
 ```
+
+### Home review paths
+
+- Returning user: review the phase selectors, workout shortcut, Progress,
+  Readiness and Weekly Trends. Scroll the screen; the header and tabs stay put.
+- Change a phase, then tap the profile initial: its phase controls share the
+  same in-memory state. Changing to a different phase starts week 1; selecting
+  the current phase preserves its start date. Calendar past-day phases stay historical.
+- Tap a Progress point: it only selects a record. Tap Add/edit to open the form.
+  Add today and Edit Oct 12 (for example) explicitly name their dates; switching modes
+  preserves each temporary input draft. Save replaces the latest mock daily
+  entry rather than adding multiple same-day chart points. Delete confirms the date.
+- Switch to Body fat: its latest observation is in July, not the date of the
+  newest weight. Lean mass intentionally has no records. Skeletal muscle is a
+  distinct metric. Large text enlarges chart labels/marks and scrolls to selection.
+- Open Calendar, tap a date, then close day details: return to Calendar. Rest
+  days show one No workouts logged message. Workout indicators are completed
+  records, not today's unfinished plan. Phase information lives in day details.
+- In Complete today's picture, mock logging a meal removes only that action.
+  Connecting health data links to a scope preview, not a fake permission grant.
+- Check new-user, disconnected/saved, sparse, loading, error, dark and 200% states.
+  Returning-user loading never flashes Get started. Saved data is not evidence
+  that sync is currently connected.
+
+Home interactions are illustrative. Profile, Settings, Sleep and Nutrition
+destinations are scope previews, not complete redesigned pages. Workout opens
+the separate approved study. Saved recovery check-ins (ratings, discomfort,
+activity and note) are shared across those pages using same-tab session storage.
+Other state is not shared. Reset example clears the saved check-in. No values
+are transmitted to a server.
+The logo retains the current production gradient treatment; no branding assets
+or native app files are changed.
+
+Home model checks: `node --test prototypes/training-notebook/home.verify.mjs`.
 
 Open **http://127.0.0.1:4317**. Keep that terminal running. Stop with Ctrl+C.
 If that port is occupied, choose another:

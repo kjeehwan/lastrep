@@ -1,10 +1,11 @@
+import { readCheckIn, writeCheckIn, clearCheckIn, checkInFields } from './check-in.mjs';
 import { copy, fixture, catalog, exerciseFromCatalog, lastText, effortValue, guidanceChanges, moveExercise, summary, setUnit, states } from './model.mjs';
 
 const $ = (q, root = document) => root.querySelector(q);
 const escape = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const icons = {
   home: '<path d="M3 11 12 3l9 8M5 10v11h5v-7h4v7h5V10"/>',
-  workout: '<path d="M2 12h20M5 6v12M8 8v8M16 8v8M19 6v12"/>',
+  workout: '<path d="M2 12h20" stroke-width="1.5"/><path d="M7 5v14M17 5v14M4 9v6M20 9v6" stroke-width="2.1"/>',
   nutrition: '<path d="M12 7C4 2 1 10 5 17c2 5 5 4 7 3 2 1 5 2 7-3 4-7 1-15-7-10Z"/><path d="M12 7c0-4 3-5 6-5-1 4-3 5-6 5Z"/>',
   sleep: '<path d="M20 16A9 9 0 0 1 8 4a9 9 0 1 0 12 12Z"/>',
   profile: '<circle cx="12" cy="7" r="4"/><path d="M4 21c0-9 16-9 16 0Z"/>',
@@ -15,7 +16,7 @@ const icons = {
   check: '<path d="m5 12 4 4L19 6"/>', reorder: '<path d="M7 4v16m-3-3 3 3 3-3M17 20V4m-3 3 3-3 3 3"/>',
   photo: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8" cy="9" r="2"/><path d="m4 19 6-6 4 3 3-5 4 8"/>',
 };
-const icon = n => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[n] ?? icons.note}</svg>`;
+const icon = n => `<svg class="icon-${n}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[n] ?? icons.note}</svg>`;
 const attrs = o => Object.entries(o).map(([k, v]) => `data-${k}="${escape(v)}"`).join(' ');
 const button = (label, action, kind = 'text', data = {}, disabled = false) => `<button type="button" class="btn ${kind}" data-action="${action}" ${attrs(data)} ${disabled ? 'disabled' : ''}>${label}</button>`;
 const paragraph = (str, cls = 'supporting') => `<p class="${cls}">${str}</p>`;
@@ -49,8 +50,8 @@ function makeState(id) {
   return state;
 }
 
-function loadExample(id) {
-  chosen = id; s = makeState(id); lastInput = null; scale = $('#effort').value;
+function loadExample(id, useShared = false) {
+  chosen = id; s = makeState(id); const shared = useShared ? readCheckIn() : null; if (!useShared) clearCheckIn(); if (shared) Object.assign(s, shared); if (s.modal === 'context') s.contextBefore = structuredClone({ ratings: s.ratings, pain: s.pain, activity: s.activity, note: s.note }); lastInput = null; scale = $('#effort').value;
   size = id === 'compact' ? [360, 800] : id === 'landscape' ? [844, 390] : id === 'tablet' ? [800, 1280] : id === 'tablet-wide' ? [1280, 800] : [390, 844];
   theme = id === 'dark'; large = id === 'large'; compare = id === 'active';
   if (id === 'landscape') { s.keyboard = true; s.demoScroll = 136; }
@@ -162,7 +163,7 @@ function modal() {
     case 'plan-stale': return dialogShell("Today's Plan", `<h3>Workout or context changed</h3>${paragraph('Update the review before applying changes. Your workout has not been altered.')}${button("Edit today's inputs", 'open', 'text', { modal: 'context' })}`, actions("Update today's plan", 'generate-plan'));
     case 'plan-applied': return dialogShell("Today's Plan", `<h3>Changes applied</h3>${paragraph('The remaining working-set loads were updated. Completed and warmup sets were kept.')} ${s.planAfter === JSON.stringify(s.exercises) ? button('Undo changes', 'undo-plan', '') : paragraph('Undo is unavailable because you edited the workout after applying changes.')}`, button('Back to workout', 'close', 'primary'));
     case 'plan-error': return dialogShell("Today's Plan", `<h3>Couldn't review this workout</h3>${paragraph('Your workout is unchanged. Try again, or continue logging.')}`, actions('Try again', 'generate-plan'));
-    case 'context': return dialogShell("Today's inputs", `${['soreness', 'fatigue', 'motivation'].map(k => `<label class="field"><span class="rating-label"><span>${k[0].toUpperCase() + k.slice(1)}</span><output id="rating-${k}">${s.ratings[k]}/10</output></span><input type="range" min="0" max="10" step="1" value="${s.ratings[k]}" data-rating="${k}"></label>`).join('')}<h3>Pain or discomfort</h3>${paragraph('Illustrative body-area choices. This prototype does not assess injuries.', 'mock-disclaimer')}${chips(['None', 'Neck', 'Shoulder', 'Elbow', 'Wrist / hand', 'Upper back', 'Lower back', 'Hip / groin', 'Knee', 'Ankle / foot', 'Other'], s.pain, 'pain')}${field('Additional activity', 'activity', s.activity, 'e.g. Travel, hiking, physical work')}${field('Daily note', 'dailyNote', s.note, 'Anything relevant to today')}${paragraph('All context is optional. No information leaves this browser.', 'mock-disclaimer')}`, button('Save check-in', 'save-context', 'primary'));
+    case 'context': return dialogShell("Today's inputs", checkInFields(s), button('Save check-in', 'save-context', 'primary'));
     case 'history': return dialogShell(escape(e?.name ?? 'Bench press'), historyContent(e));
     case 'history-empty': return dialogShell(escape(e?.name ?? 'Cable fly'), `<h3>No recorded sessions yet</h3>${paragraph('Complete and save working sets to see exercise history and progress. No weight will be invented for this exercise.')}`, button('Back to workout', 'close', 'primary'));
     case 'finish': case 'saving': case 'save-error': return dialogShell('Finish workout', `<h3>${escape(s.title || 'Workout')}</h3>${paragraph('Thu, Oct 15, 2026')}<div class="stats"><div><strong>${sum.completed} / ${sum.total}</strong><span>sets marked complete</span></div><div><strong>${Number(sum.volumeKg.toFixed(2))} kg</strong><span>completed weighted volume</span></div></div>${sum.completed < sum.total ? paragraph('Some sets are unfinished. Return to the workout if you want to finish logging them.') : ''}<h3>Followed recommendation?</h3>${chips(['Yes', 'Partial', 'No'], s.followed, 'followed')}<h3>Helpful?</h3>${chips(['Yes', 'Neutral', 'No'], s.helpful, 'helpful')}${s.modal === 'save-error' ? paragraph('Save failed. Your draft is kept. Try again or return to the workout.', 'danger') : ''}`, button(s.modal === 'saving' ? 'Saving...' : s.modal === 'save-error' ? 'Try again' : s.builder ? 'Save routine' : 'Save workout', 'save', 'primary', {}, s.modal === 'saving') + button('Back to workout', 'close', '', {}, s.modal === 'saving'));
@@ -213,7 +214,7 @@ function render(preserve = true) {
   else if (s.modal) $('.interactive .sheet-head .close')?.focus({ preventScroll: true });
 }
 
-function openModal(name) { if (name === 'history') s.historyPoint = historySessions(getExercise()).length - 1; if (name === 'tempo') s.draft.tempo = getExercise()?.tempo ?? ''; s.keyboard = false; s.modal = name; render(false); }
+function openModal(name) { if (name === 'context') s.contextBefore = structuredClone({ ratings: s.ratings, pain: s.pain, activity: s.activity, note: s.note }); if (name === 'history') s.historyPoint = historySessions(getExercise()).length - 1; if (name === 'tempo') s.draft.tempo = getExercise()?.tempo ?? ''; s.keyboard = false; s.modal = name; render(false); }
 function performSave() { const current = s; s.modal = 'saving'; render(); setTimeout(() => { if (s !== current || s.modal !== 'saving') return; s.modal = s.deload ? 'deload-saved' : 'saved'; render(false); }, 650); }
 function generatePlan() { const current = s; s.disclosure = true; s.modal = 'plan-busy'; s.plan = 'busy'; render(false); setTimeout(() => { if (s !== current || s.modal !== 'plan-busy') return; s.plan = s.pain === 'None' || !adjustmentCount() ? 'ok' : 'changes'; s.modal = `plan-${s.plan}`; render(false); }, 650); }
 function mutateWorkout() { if (s.plan && !['none', 'applied'].includes(s.plan)) s.plan = 'stale'; }
@@ -243,7 +244,7 @@ $('#stage').addEventListener('input', event => {
   if (el.dataset.set) { el.setCustomValidity(''); el.removeAttribute('aria-invalid'); el.parentElement.querySelector('.field-error')?.remove(); el.removeAttribute('aria-describedby'); }
   if (el.dataset.set) { const e = getExercise(el.dataset.set), row = e.sets[Number(el.dataset.index)], k = el.dataset.field; row[k] = k === 'rpe' && scale === 'RIR' ? el.value === '' ? '' : String(10 - Number(el.value)) : el.value; mutateWorkout(); return; }
   if (el.hasAttribute('data-query')) { s.query = el.value; s.searchMode = 'ready'; render(); return; }
-  if (el.dataset.rating) { s.ratings[el.dataset.rating] = Number(el.value); $(`#rating-${el.dataset.rating}`).value = `${el.value}/10`; return; }
+  if (el.dataset.rating) { s.ratings[el.dataset.rating] = Number(el.value); $(`#rating-${el.dataset.rating}`).value = `${el.value}/10`; el.setAttribute('aria-valuetext', el.value + ' out of 10'); return; }
   if (el.dataset.draft) {
     const name = el.dataset.draft; s.draft[name] = el.value;
     if (name.startsWith('note-')) getExercise(name.slice(5)).notes = el.value;
@@ -286,7 +287,7 @@ $('#stage').addEventListener('click', async event => {
       }
       if (d.id) s.selectedId = d.id; openModal(d.modal); return;
     }
-    case 'close': case 'outside': if (s.modal === 'saving') return; s.modal = ''; render(false); $('.interactive .toolbar .btn')?.focus({ preventScroll: true }); return;
+    case 'close': case 'outside': if (s.modal === 'saving') return; if (s.modal === 'context' && s.contextBefore) Object.assign(s, s.contextBefore); s.contextBefore = null; s.modal = ''; render(false); $('.interactive .toolbar .btn')?.focus({ preventScroll: true }); return;
     case 'hide-keyboard': s.keyboard = false; render(); $('.interactive .viewport')?.focus({ preventScroll: true }); return;
     case 'dismiss-toast': s.toast = ''; render(); return;
     case 'tab': if (d.value !== 'Workout') toast('This study covers Workout only. Other app destinations are not implemented.'); return;
@@ -342,7 +343,7 @@ $('#stage').addEventListener('click', async event => {
     case 'accept-disclosure': case 'generate-plan': generatePlan(); return;
     case 'toggle-why': s.why = !s.why; render(); return;
     case 'pain': s.pain = d.value; render(); return;
-    case 'save-context': s.modal = ''; s.plan = s.plan === 'none' ? 'none' : 'stale'; render(); return;
+    case 'save-context': writeCheckIn(s); s.contextBefore = null; s.modal = ''; s.plan = s.plan === 'none' ? 'none' : 'stale'; render(); return;
     case 'apply-plan': s.planBefore = copy(s.exercises); s.exercises = guidanceChanges(s.exercises, s.step); s.planAfter = JSON.stringify(s.exercises); s.plan = 'applied'; s.modal = ''; render(); return;
     case 'undo-plan': if (s.planAfter === JSON.stringify(s.exercises)) { s.exercises = copy(s.planBefore); s.planAfter = null; s.plan = 'changes'; s.modal = ''; render(); } return;
     case 'followed': s.followed = d.value; render(); return;
@@ -366,7 +367,7 @@ $('#stage').addEventListener('click', async event => {
 });
 
 document.addEventListener('keydown', event => {
-  if (event.key === 'Escape') { if (s.modal && s.modal !== 'saving') { s.modal = ''; render(false); } else if (s.keyboard) { s.keyboard = false; render(); } return; }
+  if (event.key === 'Escape') { if (s.modal && s.modal !== 'saving') { if (s.modal === 'context' && s.contextBefore) Object.assign(s, s.contextBefore); s.contextBefore = null; s.modal = ''; render(false); } else if (s.keyboard) { s.keyboard = false; render(); } return; }
   if (['Enter', ' '].includes(event.key) && event.target.matches('circle.hit')) { event.preventDefault(); s.historyPoint = Number(event.target.dataset.value); render(); }
   if (event.key !== 'Tab' || !s.modal) return;
   const list = [...$('.interactive .sheet').querySelectorAll('button:not(:disabled),input,textarea,[tabindex="0"]')];
@@ -391,4 +392,6 @@ setInterval(() => {
   if (s.rest?.deadline && remaining() === 0) { s.rest = { ...s.rest, deadline: null, remaining: 0 }; render(); }
   if (s.clockStart && s.clockStart !== 'paused') document.querySelectorAll('[data-clock="session"]').forEach(el => { el.textContent = time(s.elapsed + Math.floor((Date.now() - s.clockStart) / 1000)); });
 }, 500);
-loadExample(location.hash.slice(1) && states.some(x => x[1] === location.hash.slice(1)) ? location.hash.slice(1) : 'active');
+loadExample(location.hash.slice(1) && states.some(x => x[1] === location.hash.slice(1)) ? location.hash.slice(1) : 'active', true);
+
+window.addEventListener('pageshow', event => { if (event.persisted) { const shared = readCheckIn(); if (shared) { const changed = JSON.stringify([s.ratings, s.pain, s.activity, s.note]) !== JSON.stringify([shared.ratings, shared.pain, shared.activity, shared.note]); Object.assign(s, shared); if (changed && s.plan !== 'none') s.plan = 'stale'; render(); } } });

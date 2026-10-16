@@ -95,3 +95,5 @@ main{margin-left:248px;padding:36px 36px 24px;min-height:100vh;overflow:auto}.re
 .exercise-controls .tempo-control{flex-wrap:nowrap;gap:6px}
 .large-text .exercise-controls{display:grid;grid-template-columns:1fr;gap:0}
 .large-text .exercise-controls .tempo-control{flex-wrap:wrap;gap:8px}
+.device input[type=range]{margin:0}
+.bottom-tabs .icon-workout{stroke-width:1.5}
