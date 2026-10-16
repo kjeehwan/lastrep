@@ -1,8 +1,8 @@
 # Lastrep Training Notebook Design Specification
 
-Version: 1.4 | Date: October 16, 2026
+Version: 1.5 | Date: October 16, 2026
 
-Status: Workout, Home and Nutrition browser design directions approved through
+Status: Workout, Home, Nutrition and Sleep browser design directions approved through
 iterative review. Shared rules below incorporate that feedback. No screen redesign
 is implemented in the native app or device-validated.
 The initial Figma pair records an earlier Workout revision; the local browser
@@ -18,9 +18,9 @@ This document must be sufficient to produce consistent screen mockups without
 consulting the original discussion. It specifies the visual system, layouts,
 copy, interaction states, accessibility, responsive behavior and review criteria.
 
-First implementation candidate: Workout. Other screens are extension blueprints,
-with Home also explored in the browser; Nutrition/Sleep/Profile are not approved
-full-screen designs yet. No app screen code, fonts, dependencies,
+First implementation candidate: Workout. Home, Nutrition and Sleep also have
+approved browser design baselines. Profile and Settings remain extension
+blueprints, not approved full-screen designs. No app screen code, fonts, dependencies,
 branding assets or data models are changed by this document.
 
 ### Authority and interpretation
@@ -207,6 +207,12 @@ alignment slot does not mean that every glyph inside it is 24 wide.
 - Icons do not all double with text. Fixed header/tab glyphs retain their sizes;
   enlarged labeled actions, help and completion controls use the explicit tokens.
   Keep the tab labels readable and test screen-reader names separately.
+- Dense ledger controls use unboxed outline glyphs in full, nonoverlapping tap
+  targets. Do not enlarge each record merely to add secondary controls; reveal
+  controls in a deliberate editing mode. Reflow remains allowed for large text.
+- Avoid duplicate actions: tapping a record can open its editor without an extra
+  plus/edit icon doing the same thing. A menu must provide distinct useful actions;
+  a non-gesture Delete alternative remains justified alongside swipe deletion.
 
 ### Approved icon vocabulary
 
@@ -811,7 +817,7 @@ inventory before implementing any relocation.
 - Use narrow rules and section headings rather than six large floating meal cards.
 - Energy/protein consumed and target labels stay within bar bounds, share a
   baseline and do not overlap at zero or near target. Remaining is header text.
-- Macro palette under review: protein #4C6454, carbs #86643C, fat #666A70 on paper;
+- Approved macro palette: protein #4C6454, carbs #86643C, fat #666A70 on paper;
   dark counterparts #A8BEA6, #CDB78F, #B2B7BE. Validate overlaid percentage contrast;
   use ink/on-primary per segment rather than assuming white always works.
 - Match P/C/F gram labels to segment colors; percentages inside only where they
@@ -977,8 +983,8 @@ algorithms as part of applying the visual system.
 
 ## 16. Delivery sequence and decisions to validate
 
-1. Preserve the approved Workout/Home browser baseline and shared design rules.
-2. Review Nutrition mockups using the same rules before native implementation.
+1. Preserve the approved Workout/Home/Nutrition browser baseline and shared rules.
+2. Next: mock up Profile/Settings using the same rules before native implementation.
 3. Resolve remaining screen-specific design questions without changing verified
    logging, consent, billing or data semantics as part of visual cleanup.
 4. Implement Workout in an isolated branch, preserving verified behaviors.
@@ -1173,10 +1179,10 @@ actions, disconnected/saved, sparse/empty, loading/error, calendar/day details,
 phase selection, body-data add/edit/delete/validation, recovery check-in,
 readiness information, weekly detail, profile preview, dark and 200% text.
 
-Profile, Settings and Sleep destination dialogs explain their scope; they are
-not complete screen redesigns or substitutes for real permissions. Nutrition
-now links to its separate browser study (section 20); its fixture is not shared
-with Home's mock meal status.
+Profile and Settings destination dialogs explain their scope; they are not
+complete screen redesigns or substitutes for real permissions. Nutrition and
+Sleep link to their separate browser studies (sections 20/21); their fixtures
+are not shared with Home's mock meal/sleep status.
 Most state is in memory only. Saved recovery check-ins are the exception:
 same-tab session storage shares ratings, discomfort, activity and daily notes
 with Workout's Today's inputs/Today's Plan. Reset example clears this saved context.
@@ -1207,9 +1213,8 @@ not a second list of potentially conflicting screen-only tokens.
 | Profile photo/name/description | Section 13: Home | Initial fallback; private recovery notes never become profile text |
 
 All future screen mockups must pass the section 16 checklist before being treated
-as consistent with this design baseline. Home approval does not approve other
-screens; Nutrition remains a separate review candidate, and full Profile,
-Settings and Sleep studies have not been built.
+as consistent with this design baseline. Workout, Home, Nutrition and Sleep have
+each been reviewed independently. Full Profile and Settings studies are next.
 
 ## 20. Nutrition browser study: approved direction
 
@@ -1292,7 +1297,7 @@ sections/reordering, rather than assuming only the six initial slots are allowed
 - Logging time uses a notebook-styled hour/minute list picker, not a browser
   time input. Save commits the draft; Cancel leaves the recorded time unchanged.
   Each list supports arrow keys and one keyboard tab stop for its selected option.
-- On all three browser studies, the review-state selector preserves the original
+- On all browser studies, the review-state selector preserves the original
   order and groupings. On opening, scroll the current state to the top of the
   popup without moving it in the sequence. Scroll upward for earlier states and
   downward for later states. Support arrow keys, Home/End, Enter and Escape.
@@ -1342,3 +1347,201 @@ in this browser candidate; existing native unit preferences must be preserved la
 Review the main diary and shared quantity editor first, then meal reuse/search/
 barcode flows. Native keyboard, gestures and screen-reader testing remain required
 when an approved design is implemented in the app.
+
+## 21. Sleep browser study: approved direction
+
+Created October 16, 2026. Open **http://127.0.0.1:4317/sleep.html** on the same
+local server. Approved after iterative review, including multiple daily sessions
+and simulated wearable imports. This is a design study with synthetic records, not
+native health sync or a change to recovery recommendations.
+
+### Source audit and scope
+
+The existing `app/(tabs)/sleep/index.tsx` supports duration history, a Profile
+sleep target, manual duration and Health Connect sync. `SleepNightlySummary`
+contains date, hours, manual/health source and recorded timestamp. It does not
+contain bedtime, wake time, sleep stages or clinical quality scores. The current
+`src/sleep/sleep.ts` reads multiple Health Connect SleepSession records but sums
+their start/end intervals into daily totals, discarding session identity and
+timings. Its raw sum does not deduplicate overlaps. Thus native import already
+accepts multiple records, but does not provide the proposed session ledger.
+
+The revised mock preserves synthetic individual sessions with known timings,
+alongside explicitly labeled older daily totals whose timings are unknown. It
+does not reconstruct timings from those totals, invent stages or provide quality
+scores. A session belongs to its wake date; the selected summary says Total for
+[date], including split nights and naps. Do not call an older record Last night.
+
+### Hierarchy and geometry
+
+1. Sticky Sleep toolbar, system-bar spacing and the same bottom destinations as
+   other studies. Use 20 content insets and 760 maximum content width.
+2. Centered selected-date control with previous/next actions. The date opens one
+   Home-style Monday-first calendar. A day tap selects immediately; no second
+   picker or confirmation. Future days are unavailable in this logging study.
+3. Selected duration is the main editorial figure: Source Serif 42 normally,
+   64 at enlarged text, with smaller interface-font h/min units. Show the record
+   date, personal-target delta in minutes, source and saved timestamp. No fake
+   zero when missing. A missing date says Not recorded.
+4. Keep Record sleep / Add sleep session directly below the summary. Individual
+   edits belong on the session, never on the daily total. The personal
+   target is a preference, not an AI prescription. The Your target text itself
+   is a tappable, subtly underlined accent action with a 44-high target. It opens
+   a prefilled target-hours editor with Save/Cancel and validation (more than 0,
+   up to 24; one decimal). No separate help icon. Saving updates the summary,
+   target line and attainment calculation. Native Sleep and Profile must use the
+   same `sleepSettings.targetHours` preference in both directions; no second
+   screen-local target. Profile is not yet implemented in the browser study.
+5. Daily sleep shows combined duration columns for the latest 14 calendar dates. Use
+   muted border-tone bars and accent only for the selected observation. A dashed
+   horizontal rule marks the actual personal target. Missing records are outlined
+   gaps, never zero-height measured nights. No connecting line across missing data.
+6. Each chart date occupies 56 horizontally (100 at enlarged text); plots are
+   144 high (200 enlarged), bars 20 wide (32 enlarged). Every column is a full
+   selectable target. The latest nights are in view initially and after resizing,
+   unless the user has deliberately browsed history; preserve that position.
+7. Below the chart, show average daily duration and recorded-day coverage for the
+   seven calendar dates ending on the selected date. Exclude missing entries
+   from the average. State both target attainment and coverage without inventing
+   advice: e.g. 3 of 6 recorded days met your target; 1 day has no entry.
+8. Put the selected date and actual duration immediately above the chart, not
+   only in the offscreen main summary. Missing nights say Not recorded there.
+   View records expands the newest five records with date, duration and source.
+   View 5 more appends the next five, or the actual remaining count; hide the
+   action when exhausted. Closing/reopening resets the list to five. Selecting
+   a record updates the main summary. No permanent extra chart is needed.
+9. Health sync is a separate lower section: current-device connection, last sync
+   on this device and the relevant Sync / Connect / Review action. Saved account
+   data and source timestamps stay visible independently of that device state.
+
+### Entry, sync and failure states
+
+- New manual entries default to Sleep / wake times: a notebook-styled 24-hour
+  circular dial with midnight at top, draggable B/W handles (Bedtime/Wake time),
+  an arc and calculated duration in the center. Dragging snaps to five minutes;
+  precise HH:MM text fields permit individual minutes and avoid a nested native
+  time popup. Keyboard arrows on either handle adjust five minutes. Field values
+  and the dial update together, including when a field still has focus.
+- Inputs start empty, with examples 23:00 and 07:00, not fabricated recorded times.
+  Show an editable explicit date beneath each time, not Previous day / Same day
+  toggles. Initially infer bedtime as the prior date for overnight sleep or the
+  wake date for a same-day nap. Tapping either date opens the shared calendar;
+  returning preserves time drafts and entry scroll. Once dates are chosen
+  explicitly, do not silently change them when times are edited. Cancel from
+  that calendar returns to the entry, not the diary. Calculate the interval, including midnight,
+  validating more than 0 and no more than 24 hours. It is a user-entered interval;
+  disclose that awake time is not subtracted. Do not call it measured sleep.
+- Duration only remains available with a persistent hours label, example 7.5
+  and h/min preview. An imported or legacy duration without times opens here;
+  explain why rather than deriving a fictional bedtime/wake time. Switching from
+  valid times to duration preloads the equivalent amount. Known manual times
+  preload on edit. Cancel changes nothing; errors retain the draft. A new Save
+  appends a session, even when its wake date already has another session. Edit
+  changes the selected session by stable ID, not every entry for that date. The
+  wake date determines its diary date. Never change device sync time on manual save.
+- Date-specific add/edit is proposed here; the current app's manual override
+  targets its latest night. Native implementation must explicitly reconcile
+  manual overrides with subsequent health imports, not silently redefine that
+  policy during visual work. Editing imported duration does not edit the original
+  Health Connect record. Bedtime/wake time are proposed additional manual fields,
+  not existing nightly-summary fields. Native calculations must use time zones
+  and actual timestamps for daylight-saving transitions, not copy the mock's
+  simplified wall-clock arithmetic. Keyboard and dial gestures need device tests.
+- A sync confirmation names the destination demo account before import. The
+  mock explicitly labels its simulation. A successful check with no new records
+  changes only last-check time and feedback, not recorded data/source/time.
+- Disconnected, revoked Sleep permission and unavailable-provider states retain
+  saved account history and offer manual entry. Their access actions preview the
+  Profile Health sync destination; no permission is actually requested or granted.
+- A missing/outdated provider offers Set up Health Connect with install/update,
+  source-app sleep sharing and Lastrep consent/permission steps. Unsupported
+  devices instead retain manual logging without an installation promise. Native
+  action routing must use availability and Android version: built-in system
+  Health Connect and standalone providers are not identical. See the official
+  [availability guidance](https://developer.android.com/health-and-fitness/health-connect/availability).
+  In the browser, setup remains an explicitly labeled simulation.
+- Loading uses neutral placeholders. Refresh failure retains saved data and Retry.
+  Offline explicitly retains history and disables sync; a manual save attempt
+  keeps its draft and asks for reconnection in this mock. This is not evidence
+  of the production app's offline-write behavior.
+- Older data explicitly names its date. Above-target duration is not proof of
+  good recovery; below-target duration alone does not prescribe training changes.
+
+### Multiple sessions and wearable records
+
+- Sleep entries sits between the summary and chart. Each entry shows start/end
+  dates/times when known, duration and its actual source. A split night from
+  23:00–03:00 and 04:00–07:00 is two entries totaling 7 hours; 03:00–04:00 does
+  not count. A 13:00–14:30 nap adds 1.5 hours, making the day's total 8.5 hours.
+- An old daily total is labeled Saved daily total / times unavailable. It is
+  not counted as a reconstructed session. Adding a timed entry to an unknown-time
+  total requires review rather than blindly summing unverifiable amounts.
+- New overlapping manual sessions open a review sheet before any mutation. Show
+  the conflicting entries, preserve the draft and offer Replace listed entries
+  or Back to edit. Replacing excludes only those entries; unrelated sessions
+  remain. Touching endpoints are not overlaps. Do not silently replace an entire day.
+- Manual sessions can be edited or deleted individually. Imported entries offer
+  Correct in Lastrep and Exclude from totals; neither writes to Health Connect.
+  A correction preserves the original as excluded and creates a manual entry
+  referencing it. Re-import must not restore excluded/overridden records.
+  Excluded entries remain inspectable; restoration checks conflicts first.
+- The simulated import retains each provider record using origin + provider ID.
+  Repeated sync updates existing sessions rather than adding copies. When actual
+  provider sessions replace a legacy imported total for that day, exclude the
+  legacy total from calculations; never add both representations together.
+- The mock uses the union of known intervals to prevent overlap double-counting,
+  including overlaps across wake dates. Manual corrections and the fixture's
+  primary source take attribution priority. Other source records remain visible,
+  with a review notice and the amount actually contributing in session details.
+  This union is not proof that every minute was asleep: imported session windows
+  may include awake time. Unknown manual durations cannot be interval-deduplicated;
+  a same-day timed import is retained for review, not added blindly.
+- Sync confirmation includes a labeled split-session import simulation. Repeating
+  it must preserve both provider session identities, daily totals, exclusions
+  and manual corrections. It is not a real wearable integration test.
+
+### Native implementation follow-up
+
+This design requires a session-level account store and derived daily summaries,
+not just a changed chart. Preserve the existing nightly-summary contract for
+Home/readiness/recommendations while deriving it from the new session ledger.
+Migrate old totals as explicit legacy records without fabricated timestamps.
+Persist manual corrections and exclusions so another sync/device cannot undo them.
+
+The Health Connect adapter must preserve record IDs, data origin, start/end
+timestamps, offsets/timezone, last-modified/version metadata and available sleep
+stages. Read every page and reconcile updates and deletions with the provider's
+change stream; an absent record in a partial response is not a deletion. Respect
+current account consent and device permissions before every import.
+
+Resolve cross-source duplication with an explicit source-priority policy aligned
+with Health Connect's deduplicated aggregation where applicable. Reconcile manual
+entries/overrides separately; do not simply sum raw records. Where validated stage
+information exists, distinguish sleep time from awake/in-bed time. Missing stage
+information must remain labeled as session duration, not a measured asleep claim.
+Handle timezone travel, DST, overnight date allocation, provider source changes,
+legacy conflicts and account deletion in migration and regression tests.
+
+Health Connect represents sleep as individual sessions with start/end and optional
+stages; multiple sessions can be read when the wearable's companion app writes
+them. This is not a guarantee for every wearable. See the official
+[sleep experience documentation](https://developer.android.com/health-and-fitness/health-connect/experiences/sleep).
+Actual backend migration, permission/data safety review and device tests remain
+outside this browser-only batch. The mock does not implement provider pagination,
+change-token/deletion reconciliation, stage-aware aggregation or timezone/DST.
+
+### Review coverage and boundaries
+
+33 selectable states cover overview, empty, disconnected with/without records,
+permission removed, unavailable, stale, sparse, manual source, new/edit/invalid/
+failed save, sync confirmation/progress/no new data/failure, loading/refresh
+failure/offline, calendar, paginated record list, setup guide, unsupported device,
+split night, night plus nap, wearable split, provider overlap, manual overlap,
+session details, exclusion, dark paper and 200% text. Descriptive notes appear below the state selector, never
+as dropdown group labels or selectable states.
+
+The Sleep study links to Home, Workout and Nutrition but uses its own in-memory
+fixture. There is no cross-screen sleep persistence, health access, network save,
+actual account identity or recommendation calculation. Refresh/reset discards
+changes. Keep this limitation explicit; do not interpret simulation checks as
+production consent, health-provider, device keyboard or accessibility validation.

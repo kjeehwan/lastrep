@@ -2,18 +2,65 @@
 
 A standalone, dependency-free browser design study based on
 [`docs/training-notebook-design.md`](../../docs/training-notebook-design.md).
-Workout, Home and Nutrition incorporate the approved review refinements.
-None replaces a Lastrep application screen.
+Workout, Home, Nutrition and Sleep incorporate the approved review refinements.
+Profile and Settings are next. None replaces a Lastrep application screen.
 
 ## Open it
 
 **Home study:** after starting the server, open
-**http://127.0.0.1:4317/home.html**. The two studies link to one another from the
+**http://127.0.0.1:4317/home.html**. The studies link to one another from the
 review sidebar. Home has 25 example states; its design direction is approved.
 
 **Nutrition study:** **http://127.0.0.1:4317/nutrition.html**. It has 44 example
 states and shares the approved notebook typography, colors and control rules.
-All three studies are linked from their sidebars and available bottom-tab destinations.
+All four studies are linked from their sidebars and available bottom-tab destinations.
+
+**Sleep study:** **http://127.0.0.1:4317/sleep.html**. Its 33 example states use
+the approved notebook typography and restrained chart palette.
+
+### Sleep review paths
+
+1. Overview: selected night, duration, target comparison, source and saved time.
+   Tap a chart date or calendar day; missing nights show Not recorded, not zero.
+2. Scroll the chart. It opens on the latest nights, including after changing
+   viewport; deliberate browsing is retained. Weekly averages count only recorded
+   nights and show coverage. A nearby date/duration readout follows bar selection.
+   View records opens five records; View more appends five at a time.
+3. Record sleep using the circular 24-hour clock: drag B/W handles or type HH:MM
+   times, review explicit dates under both time fields and the calculated interval,
+   then Cancel
+   or Save. Duration-only mode remains for imported records without timestamps.
+   No times are invented. Saved manual times preload on edit. Date-specific and
+   time-based entry are proposed; native schema, DST, override and gesture checks
+   remain necessary. The interval does not subtract time awake.
+   Tap either date to change it; a calendar cancellation keeps the time draft.
+   Tap Your target to edit the target directly; Cancel changes nothing and Save
+   updates this study's summary and chart. Native Profile/Sleep must share one
+   preference; Profile is not mocked up yet.
+4. Review disconnected/saved, removed permission and unavailable states. Account
+   records remain visible. Health-access controls preview Profile rather than
+   pretending to grant a device permission. No real health access occurs.
+   Missing/outdated Health Connect offers setup steps; unsupported devices offer
+   manual logging without promising installation will fix them.
+5. Sync sleep asks for destination-account confirmation. The simulated check keeps
+   records unchanged and reports No new records; last sync changes, saved time
+   does not. Failure, offline, loading and stale records have separate states.
+6. Review dark, 200%, compact, landscape and tablet layouts. No bedtime, sleep
+   stages, quality scores or recommendations are inferred from duration.
+7. Split night: two entries (23:00–03:00, 04:00–07:00) total 7 hours. Add a nap;
+   only that session is added. Edit/delete through each entry, not the daily total.
+8. Wearable split: provider sessions retain source and stable IDs. Repeating the
+   split-session sync simulation does not duplicate records. Corrections/exclusions
+   in Lastrep survive it. Provider-overlap keeps sources visible but counts time
+   once. The mock counts session windows, not stage-verified time asleep.
+9. Overlap review retains the draft and requires confirmation before replacing
+   the listed entries. Legacy totals with unknown times are not silently summed
+   with new sessions. This proposes a session store; native imports still flatten
+   sessions to daily totals. Migration/provider reconciliation is not implemented.
+
+Sleep uses an independent in-memory fixture. No account, health or API access;
+no sleep data is shared with Home. Reset/reload discards edits.
+Checks: `node --test prototypes/training-notebook/sleep.verify.mjs`.
 
 ### Nutrition review paths
 
@@ -93,10 +140,10 @@ node prototypes/training-notebook/serve.mjs
   Returning-user loading never flashes Get started. Saved data is not evidence
   that sync is currently connected.
 
-Home interactions are illustrative. Profile, Settings, Sleep and Nutrition
-destinations are scope previews, not complete redesigned pages. Workout opens
-the separate approved study. Saved recovery check-ins (ratings, discomfort,
-activity and note) are shared across those pages using same-tab session storage.
+Home interactions are illustrative. Profile and Settings remain scope previews.
+Workout, Nutrition and Sleep link to their separate browser studies. Saved
+recovery check-ins (ratings, discomfort, activity and note) are shared only
+between Home and Workout using same-tab session storage.
 Other state is not shared. Reset example clears the saved check-in. No values
 are transmitted to a server.
 The logo retains the current production gradient treatment; no branding assets

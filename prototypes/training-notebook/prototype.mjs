@@ -292,7 +292,7 @@ $('#stage').addEventListener('click', async event => {
     case 'close': case 'outside': if (s.modal === 'saving') return; if (s.modal === 'context' && s.contextBefore) Object.assign(s, s.contextBefore); s.contextBefore = null; s.modal = ''; render(false); $('.interactive .toolbar .btn')?.focus({ preventScroll: true }); return;
     case 'hide-keyboard': s.keyboard = false; render(); $('.interactive .viewport')?.focus({ preventScroll: true }); return;
     case 'dismiss-toast': s.toast = ''; render(); return;
-    case 'tab': if (d.value === 'Home') location.href = './home.html'; else if (d.value === 'Nutrition') location.href = './nutrition.html'; else if (d.value !== 'Workout') toast('This destination is outside the current browser studies.'); return;
+    case 'tab': if (d.value === 'Home') location.href = './home.html'; else if (d.value === 'Nutrition') location.href = './nutrition.html'; else if (d.value === 'Sleep') location.href = './sleep.html'; else if (d.value !== 'Workout') toast('This destination is outside the current browser studies.'); return;
     case 'search': s.page = 'search'; s.keyboard = false; s.modal = ''; s.query = ''; s.searchMode = 'ready'; s.selected = []; render(false); return;
     case 'back-search': if (s.page === 'custom') { s.page = 'search'; } else { s.page = 'workout'; } s.keyboard = false; render(false); return;
     case 'clear-search': s.query = ''; s.searchMode = 'ready'; render(); return;
