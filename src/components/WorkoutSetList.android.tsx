@@ -26,6 +26,11 @@ type SetLabelPressEvent = NativeSyntheticEvent<{ index: number }>;
 type LastPressEvent = NativeSyntheticEvent<{ index: number }>;
 
 type NativeProps = {
+  activeSetIndex?: number;
+  editingSuspended?: boolean;
+  onSetActivate?: (event: NativeSyntheticEvent<{ index: number }>) => void;
+  notebookColors?: Record<string, string>;
+  fontFamily?: string;
   sets: WorkoutSetUi[];
   weightLabel?: string;
   repsLabel?: string;

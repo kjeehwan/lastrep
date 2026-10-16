@@ -1,3 +1,10 @@
+import { Play, Clock3, Gauge, Check } from "lucide-react-native";
+import { NotebookHeader } from "../../../src/ui/notebook/NotebookHeader";
+import { notebookRowHeight } from "../../../src/ui/notebook/tokens";
+import { useNumberEntry } from "../../../src/ui/notebook/useNumberEntry";
+import { lastResistanceSet } from "../../../src/workouts/workoutLog/setPresentation";
+import { useNotebook, useNotebookStyles, notebookSheet } from "../../../src/ui/notebook/Notebook";
+import { notebookFonts, type NotebookColors } from "../../../src/ui/notebook/tokens";
 import { useEventCallbacks } from "../../../src/hooks/useEventCallbacks";
 import { KeyboardAwareModalFrame } from "../../../src/ui/KeyboardAwareModalFrame";
 import { Ionicons } from "@expo/vector-icons";
@@ -25,7 +32,6 @@ import {
   AppState,
   BackHandler,
   Keyboard,
-  Modal,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -90,7 +96,7 @@ import { useWorkoutElapsedTimer } from "../../../src/workouts/workoutLog/useWork
 import { serializeWorkoutDraft } from "../../../src/workouts/workoutLog/workoutDraft";
 import { WorkoutModalShell } from "../../../src/workouts/workoutLog/WorkoutModalShell";
 import { WorkoutRecommendationSection } from "../../../src/workouts/workoutLog/WorkoutRecommendationSection";
-import { WorkoutRoutineSection } from "../../../src/workouts/workoutLog/WorkoutRoutineSection";
+import { NotebookModal as Modal } from "../../../src/ui/notebook/NotebookModal";
 import { WorkoutSessionCard } from "../../../src/workouts/workoutLog/WorkoutSessionCard";
 import { WorkoutNativeSetRows } from "../../../src/workouts/workoutLog/WorkoutNativeSetRows";
 import { ExerciseProgressSummary } from "../../../src/workouts/workoutLog/ExerciseProgressSummary";
@@ -406,11 +412,20 @@ const formatDurationInput = (durationSec: number | null) => {
 const imageLookupKey = (exerciseName: string) => exerciseName.trim().toLowerCase();
 
 export default function WorkoutLog() {
+  const { colors } = useNotebook();
+  const styles = useNotebookStyles(createStyles);
   const router = useRouter();
 
   const isFocused = useIsFocused();
   const guidanceNowMs = useNow(60_000, isFocused);
-  const { width, height } = useWindowDimensions();
+  const { width, height, fontScale } = useWindowDimensions();
+  const [showSetup, setShowSetup] = useState(false);
+  const [showSetTypeHelp, setShowSetTypeHelp] = useState(false);
+  const [editingSet, setEditingSet] = useState<string | null>(null);
+  const distanceWholeRef = useRef<TextInput>(null);
+  const distanceDecimalRef = useRef<TextInput>(null);
+  const distanceWholeEntry = useNumberEntry(distanceWholeRef);
+  const distanceDecimalEntry = useNumberEntry(distanceDecimalRef);
   const insets = useSafeAreaInsets();
   const isTabletLayout = Math.min(width, height) >= 600;
   const [exercises, setExercises] = useState<Exercise[]>([]);
@@ -1881,6 +1896,8 @@ export default function WorkoutLog() {
     setExercises((prev) => prev.map((ex) => (ex.id === exerciseId ? { ...ex, cardioEffortLevel: toggleCardioChoice(ex.cardioEffortLevel, value) } : ex)));
   };
   const openCardioTimeModal = (exerciseId: string, setIndex: number, currentSec: number | null | undefined) => {
+    Keyboard.dismiss();
+    setEditingSet(`${exerciseId}:${setIndex}`);
     const sec = Math.max(0, currentSec ?? 0);
     const hours = Math.floor(sec / 3600);
     const minutes = Math.floor((sec % 3600) / 60);
@@ -1916,6 +1933,10 @@ export default function WorkoutLog() {
     setCardioTimeTarget(null);
   };
   const openCardioDistanceModal = (exerciseId: string, setIndex: number, currentKm: number | null, unit: Unit) => {
+    Keyboard.dismiss();
+    setEditingSet(`${exerciseId}:${setIndex}`);
+    distanceWholeEntry.reset();
+    distanceDecimalEntry.reset();
     const display = currentKm == null ? 0 : unit === "mi" ? currentKm / 1.60934 : currentKm;
     const normalized = Math.max(0, Math.round(display * 100) / 100);
     const whole = Math.floor(normalized);
@@ -2095,6 +2116,7 @@ export default function WorkoutLog() {
   };
 
   const openSetMenu = (exerciseId: string, setIndex: number) => {
+    setShowSetTypeHelp(false);
     setActiveSetMenu({ exerciseId, setIndex });
   };
 
@@ -3070,6 +3092,7 @@ export default function WorkoutLog() {
     void recommendWorkout(lengthId);
   };
 
+  const runningRest = exercises.find((exercise) => { const clock = restTimerByExercise[exercise.id]; return clock?.running || clock && clock.remainingSec > 0 && clock.remainingSec < (restPreferenceByExercise[exercise.id] ?? 90); });
   const totalSets = useMemo(
     () => exercises.reduce((sum, ex) => sum + ex.sets.length, 0),
     [exercises]
@@ -3152,10 +3175,11 @@ export default function WorkoutLog() {
 
   const cardActions = useEventCallbacks({ openExerciseDemo, openExerciseHistory, openExerciseActions, setReplaceSearch, setReplaceGroup, replaceExercise, updateExerciseNotes, openTempoEditor, openRestTimerModal, updateSetWeight, updateSetReps, updateSetRpe, toggleSetDone, removeSetWithUndo, openSetMenu, copyLastSetToCurrent, openCardioTimeModal, openCardioDistanceModal, setExercises, updateCardioSessionType, updateCardioEffortLevel, addEmptySet, duplicateLastSet, undoRemoveSet });
   // Cache unchanged card JSX so navigation and background context updates don't rebuild every row.
-  const exerciseCards = useMemo(() => exercises.map((ex) => {
+  const exerciseCards = useMemo(() => exercises.map((ex, exerciseIndex) => {
           const unit = exerciseUnits[ex.id] || "kg";
           const mode = getExerciseMode(ex.name);
           const isCardio = mode === "cardio";
+          const largeText = fontScale >= 1.5;
           const usesNativeSetRows = Platform.OS === "android" && !isCardio;
           const weightLabel = isCardio
             ? "Distance"
@@ -3168,54 +3192,29 @@ export default function WorkoutLog() {
           const rpeLabel = isCardio ? "Zone" : effortLabel(effortScale);
           const previousSets = previousExerciseSetsByName.get(normalizeExerciseName(ex.name)) ?? [];
           const exerciseCatalogItem = findCatalogExercise(ex.name);
-          const remoteDemoImages = exerciseImageMap[imageLookupKey(ex.name)] ?? [];
-          const demoThumbnailUri = remoteDemoImages[0] ?? null;
-          const demoThumbnail = exerciseCatalogItem?.demoImages?.[0] ?? null;
           const restTimer = restTimerByExercise[ex.id] ?? { remainingSec: 90, running: false };
           return (
             <View key={ex.id} style={styles.card}>
               <View style={styles.exerciseHeader}>
-                {exerciseCatalogItem ? (
-                  <TouchableOpacity
-                    style={styles.exerciseDemoThumbButton}
-                    onPress={() => cardActions.openExerciseDemo(ex.name)}
-                    accessibilityLabel={`Open ${ex.name} demo`}
-                  >
-                    {demoThumbnailUri ? (
-                      <Image source={demoThumbnailUri} style={styles.exerciseDemoThumbImage} contentFit="cover" />
-                    ) : demoThumbnail ? (
-                      <Image source={demoThumbnail} style={styles.exerciseDemoThumbImage} contentFit="cover" />
-                    ) : (
-                      <View style={styles.exerciseDemoThumbFallback}>
-                        <Ionicons name="images-outline" size={18} color="#cdd0e0" />
-                      </View>
-                    )}
-                  </TouchableOpacity>
-                ) : (
-                  <View style={styles.exerciseDemoThumbButton} accessibilityLabel="No demo available for this custom exercise">
-                    <View style={styles.exerciseDemoThumbFallback}>
-                      <Ionicons name="images-outline" size={18} color="#cdd0e0" />
-                    </View>
-                  </View>
-                )}
+                <Text style={styles.exerciseOrdinal}>{String(exerciseIndex + 1).padStart(2, "0")}</Text>
                 <TouchableOpacity
                   style={styles.exerciseNameButton}
                   onPress={() => cardActions.openExerciseHistory(ex.name)}
                   accessibilityLabel={`View ${ex.name} history`}
                 >
-                  <Text style={styles.exerciseName} numberOfLines={1} ellipsizeMode="tail">
+                  <Text style={styles.exerciseName}>
                     {ex.name}
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.iconButton} onPress={() => cardActions.openExerciseActions(ex.id)}>
-                  <Ionicons name="ellipsis-horizontal" size={18} color="#cdd0e0" />
+                  <Ionicons name="ellipsis-horizontal" size={18} color={colors.muted} />
                 </TouchableOpacity>
               </View>
               {replaceTarget === ex.id ? (
                 <View style={[styles.pickerCard, { marginTop: 10 }]}>
                   <TextInput disableFullscreenUI
                     placeholder="Search to replace"
-                    placeholderTextColor="#7a7a8c"
+                    placeholderTextColor={colors.muted}
                     value={replaceSearch}
                     onChangeText={cardActions.setReplaceSearch}
                     style={[styles.input, { marginBottom: 8 }]}
@@ -3272,7 +3271,7 @@ export default function WorkoutLog() {
                         style={styles.pickerRow}
                         onPress={() => cardActions.replaceExercise(ex.id, item.name)}
                       >
-                        <Ionicons name="swap-horizontal-outline" size={18} color="#7b61ff" />
+                        <Ionicons name="swap-horizontal-outline" size={18} color={colors.accent} />
                         <View style={{ flex: 1 }}>
                           <Text style={styles.pickerText}>{item.name}</Text>
                           <Text style={styles.muted}>
@@ -3291,53 +3290,26 @@ export default function WorkoutLog() {
                   </ScrollView>
                 </View>
               ) : null}
-              <View style={styles.exerciseMetaNotesSingle}>
-                <TextInput disableFullscreenUI
-                  placeholder="Add notes"
-                  placeholderTextColor="#7a7a8c"
-                  value={ex.notes ?? ""}
-                  onChangeText={(v) => cardActions.updateExerciseNotes(ex.id, v)}
-                  style={[styles.input, styles.metaInput]}
-                />
+              <View style={[styles.inlineTipRow, largeText && { flexDirection: "column" }]}>
+                <TouchableOpacity style={styles.restTimerInlineButton} onPress={() => cardActions.openExerciseDemo(ex.name)} accessibilityLabel={`Open ${ex.name} demo`}>
+                  <Play size={16} strokeWidth={1.5} color={colors.muted} /><Text style={styles.restTimerInlineText}>Demo</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.restTimerInlineButton} onPress={() => cardActions.openRestTimerModal(ex.id)}><Clock3 size={16} strokeWidth={1.5} color={colors.muted} /><RestTimerText style={styles.restTimerInlineText} clock={restTimer} prefix="Rest " /></TouchableOpacity>
+                {!isCardio ? <TouchableOpacity style={styles.restTimerInlineButton} onPress={() => cardActions.openTempoEditor(ex.id, ex.tempo)}><Gauge size={16} strokeWidth={1.5} color={colors.muted} /><Text style={styles.restTimerInlineText}>Tempo{ex.tempo?.trim() ? " " + ex.tempo : ""}</Text></TouchableOpacity> : null}
               </View>
-              {!isCardio ? (
-                <View style={styles.inlineTipRow}>
-                  <TouchableOpacity
-                    style={styles.restTimerInlineButton}
-                    onPress={() => cardActions.openTempoEditor(ex.id, ex.tempo)}
-                  >
-                    <Ionicons name="speedometer-outline" size={14} color="#cdd0e0" />
-                    <Text style={styles.restTimerInlineText}>
-                      Tempo {(ex.tempo ?? "").trim() || DEFAULT_TEMPO}
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.restTimerInlineButton}
-                    onPress={() => cardActions.openRestTimerModal(ex.id)}
-                  >
-                    <Ionicons name="timer-outline" size={14} color="#cdd0e0" />
-                    <RestTimerText style={styles.restTimerInlineText} clock={restTimer} prefix="Rest " />
-                  </TouchableOpacity>
-                </View>
-              ) : null}
+              <View style={styles.exerciseMetaNotesSingle}>
+                <Text style={styles.noteLabel}>Note</Text>
+                <TextInput disableFullscreenUI placeholder="Keep the last rep controlled" placeholderTextColor={colors.muted} accessibilityLabel={`${ex.name} note`} value={ex.notes ?? ""} onChangeText={(v) => cardActions.updateExerciseNotes(ex.id, v)} style={[styles.input, styles.metaInput]} />
+              </View>
               <View
                 style={[
                   styles.setHeaderRow,
+                  largeText && { display: "none" },
                   isTabletLayout && styles.setHeaderRowTablet,
                   usesNativeSetRows && styles.nativeSetHeaderRow,
                 ]}
               >
                 {!isCardio ? <Text style={[styles.setHeaderText, styles.setHeaderSet]}>Set</Text> : null}
-                <Text
-                  style={[
-                    styles.setHeaderText,
-                    styles.setHeaderCheck,
-                    isCardio && styles.cardioSetHeaderCheck,
-                    usesNativeSetRows && styles.nativeSetHeaderCheck,
-                  ]}
-                >
-                  {"\u2713"}
-                </Text>
                 <Text style={[styles.setHeaderText, styles.setHeaderLast, usesNativeSetRows && styles.nativeSetHeaderLast]}>
                   Last
                 </Text>
@@ -3354,21 +3326,36 @@ export default function WorkoutLog() {
                     </Text>
                   ) : null}
                 </View>
+                <Text
+                  style={[
+                    styles.setHeaderText,
+                    styles.setHeaderCheck,
+                    isCardio && styles.cardioSetHeaderCheck,
+                    usesNativeSetRows && styles.nativeSetHeaderCheck,
+                  ]}
+                >
+                  Done
+                </Text>
               </View>
               {ex.sets.length === 0 ? (
                 <Text style={styles.muted}>No sets yet.</Text>
               ) : Platform.OS === "android" && !isCardio ? (
                 <WorkoutNativeSetRows
+                  activeSetIndex={ex.sets.findIndex((_set, index) => editingSet === `${ex.id}:${index}`)}
+                  editingSuspended={showCardioTimeModal || showCardioDistanceModal}
+                  onActivate={(index) => setEditingSet(`${ex.id}:${index}`)}
                   listKey={`native-set-list-${ex.id}-${ex.sets
                     .map((set, idx) => `${idx}:${getSetTypeMarker(set, idx)}`)
                     .join("|")}-${String(unit).toLowerCase()}-${weightLabel}-${repsLabel}-${rpeLabel}`}
-                  style={{ height: Math.max(ex.sets.length, 1) * 52 }}
+                  style={{ height: Math.max(ex.sets.length, 1) * notebookRowHeight(fontScale) }}
+                  notebookColors={colors}
+                  fontFamily="NotebookSans"
                   weightLabel={weightLabel}
                   repsLabel={repsLabel}
                   rpeLabel={effortScale === "rir" ? "0-4" : "6-10"}
                   rows={ex.sets.map((set, idx) => ({
                     marker: getSetTypeMarker(set, idx),
-                    last: previousSets[idx] ? formatLastSetSummary(previousSets[idx]) : "-",
+                    last: previousSets[idx] ? lastResistanceSet(previousSets[idx], unit, effortScale) : "-",
                     weight: set.weightText ?? formatWeightInput(set.weightKg, unit),
                     reps: set.reps,
                     rpe: effortInputValue(set, effortScale),
@@ -3406,14 +3393,14 @@ export default function WorkoutLog() {
                           style={styles.swipeDeleteButton}
                           onPress={() => cardActions.removeSetWithUndo(ex.id, idx)}
                         >
-                          <Ionicons name="trash-outline" size={16} color="#fff" />
+                          <Ionicons name="trash-outline" size={16} color={colors.ink} />
                           <Text style={styles.swipeDeleteText}>Delete</Text>
                         </TouchableOpacity>
                       </View>
                     )}
                   >
-                    <View style={styles.setContainer}>
-                      <View style={[styles.setInlineRow, isTabletLayout && styles.setInlineRowTablet]}>
+                    <View style={[styles.setContainer, (editingSet === `${ex.id}:${idx}` || cardioTimeTarget?.exerciseId === ex.id && cardioTimeTarget.setIndex === idx || cardioDistanceTarget?.exerciseId === ex.id && cardioDistanceTarget.setIndex === idx) && styles.activeSet]}>
+                      <View style={[styles.setInlineRow, isTabletLayout && styles.setInlineRowTablet, largeText && { flexWrap: "wrap" }]}>
                         {!isCardio ? (
                           <TouchableOpacity
                             onPress={() => cardActions.openSetMenu(ex.id, idx)}
@@ -3426,16 +3413,6 @@ export default function WorkoutLog() {
                           </TouchableOpacity>
                         ) : null}
                         <TouchableOpacity
-                          style={[styles.checkboxInline, styles.checkboxHitbox]}
-                          onPress={() => cardActions.toggleSetDone(ex.id, idx)}
-                          activeOpacity={0.8}
-                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                        >
-                          <View style={[styles.checkbox, s.done && styles.checkboxChecked]}>
-                            {s.done ? <Text style={styles.cardioCheckboxMark}>✓</Text> : null}
-                          </View>
-                        </TouchableOpacity>
-                        <TouchableOpacity
                           style={styles.lastSetButton}
                           onPress={() => cardActions.copyLastSetToCurrent(ex.id, idx)}
                           disabled={!previousSets[idx]}
@@ -3445,7 +3422,7 @@ export default function WorkoutLog() {
                           {previousSets[idx] ? formatLastSetSummary(previousSets[idx]) : "-"}
                           </Text>
                         </TouchableOpacity>
-                        <View style={[styles.setInputsGroup, isTabletLayout && styles.setInputsGroupTablet]}>
+                        <View style={[styles.setInputsGroup, isTabletLayout && styles.setInputsGroupTablet, largeText && { flexBasis: "100%", flexWrap: "wrap" }]}>
                           {isCardio ? (
                             <>
                               <TouchableOpacity
@@ -3469,11 +3446,12 @@ export default function WorkoutLog() {
                             <>
                               <WorkoutGestureTextInput
                                 placeholder={weightLabel}
-                                placeholderTextColor="#7a7a8c"
+                                placeholderTextColor={colors.muted}
                                 keyboardType="decimal-pad"
                                 value={s.weightText ?? formatWeightInput(s.weightKg, unit)}
                                 onChangeText={(v) => cardActions.updateSetWeight(ex.id, idx, unit, v)}
-                                selectTextOnFocus={false}
+                                onFocus={() => setEditingSet(`${ex.id}:${idx}`)}
+                                selectTextOnFocus
                                 style={[
                                   styles.input,
                                   styles.setInput,
@@ -3484,10 +3462,11 @@ export default function WorkoutLog() {
                               />
                               <WorkoutGestureTextInput
                                 placeholder={repsLabel}
-                                placeholderTextColor="#7a7a8c"
+                                placeholderTextColor={colors.muted}
                                 keyboardType="numeric"
                                 value={s.reps}
                                 onChangeText={(v) => cardActions.updateSetReps(ex.id, idx, v)}
+                                onFocus={() => setEditingSet(`${ex.id}:${idx}`)}
                                 selectTextOnFocus={false}
                                 style={[
                                   styles.input,
@@ -3501,10 +3480,11 @@ export default function WorkoutLog() {
                               />
                               <WorkoutGestureTextInput
                                 placeholder={effortScale === "rir" ? "0-4" : "6-10"}
-                                placeholderTextColor="#7a7a8c"
+                                placeholderTextColor={colors.muted}
                                 keyboardType="decimal-pad"
                                 value={effortInputValue(s, effortScale)}
                                 onChangeText={(v) => cardActions.updateSetRpe(ex.id, idx, v)}
+                                onFocus={() => setEditingSet(`${ex.id}:${idx}`)}
                                 selectTextOnFocus={false}
                                 style={[
                                   styles.input,
@@ -3517,6 +3497,19 @@ export default function WorkoutLog() {
                             </>
                           )}
                         </View>
+                        <TouchableOpacity
+                          style={[styles.checkboxInline, styles.checkboxHitbox, largeText && { minWidth: 64, minHeight: 64 }]}
+                          accessibilityRole="checkbox"
+                          accessibilityState={{ checked: s.done }}
+                          accessibilityLabel={`${ex.name}, set ${idx + 1} completed`}
+                          onPress={() => { setEditingSet(`${ex.id}:${idx}`); cardActions.toggleSetDone(ex.id, idx); }}
+                          activeOpacity={0.8}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        >
+                          <View style={[styles.checkbox, s.done && styles.checkboxChecked, largeText && { width: 36, height: 36, borderWidth: 2, borderRadius: 6 }]}>
+                            {s.done ? <Check size={largeText ? 28 : 16} strokeWidth={2} color={colors.onPrimary} /> : null}
+                          </View>
+                        </TouchableOpacity>
                       </View>
                     </View>
                   </ReanimatedSwipeable>
@@ -3586,17 +3579,17 @@ export default function WorkoutLog() {
               ) : null}
               <View style={styles.setActionsRow}>
                 <TouchableOpacity
-                  style={[styles.primaryButton, styles.setActionButton]}
+                  style={[styles.textAction, styles.setActionButton]}
                   onPress={() => cardActions.addEmptySet(ex.id)}
                 >
-                  <Text style={styles.primaryText}>Add set</Text>
+                  <Text style={styles.linkText}>+ Add set</Text>
                 </TouchableOpacity>
                 {ex.sets.length > 0 ? (
                   <TouchableOpacity
-                    style={[styles.secondaryButton, styles.setActionButton]}
+                    style={[styles.textAction, styles.setActionButton, { alignItems: "flex-end" }]}
                     onPress={() => cardActions.duplicateLastSet(ex.id)}
                   >
-                    <Text style={styles.secondaryText}>Duplicate last set</Text>
+                    <Text style={styles.linkText}>Duplicate last set</Text>
                   </TouchableOpacity>
                 ) : (
                   <View style={styles.setActionButton} />
@@ -3612,7 +3605,7 @@ export default function WorkoutLog() {
               ) : null}
             </View>
           );
-        }), [exercises, exerciseUnits, getExerciseMode, effortScale, previousExerciseSetsByName, findCatalogExercise, exerciseImageMap, restTimerByExercise, replaceTarget, replaceSearch, replaceGroup, replacementOptions, isTabletLayout, formatLastSetSummary, scrollNativeGesture, getExerciseZone, undoDeletedSet, cardActions]);
+        }), [exercises, exerciseUnits, getExerciseMode, effortScale, previousExerciseSetsByName, findCatalogExercise, restTimerByExercise, replaceTarget, replaceSearch, replaceGroup, replacementOptions, isTabletLayout, formatLastSetSummary, scrollNativeGesture, getExerciseZone, undoDeletedSet, cardActions, styles, colors, fontScale, editingSet, cardioTimeTarget, cardioDistanceTarget, showCardioTimeModal, showCardioDistanceModal]);
 
   return (
     <SafeAreaView style={styles.screen} edges={["top", "left", "right"]}>
@@ -3622,29 +3615,18 @@ export default function WorkoutLog() {
         keyboardVerticalOffset={Platform.OS === "ios" ? insets.top : 0}
       >
         <View style={styles.scrollShell}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={handleGoBack} style={styles.backButton}>
-            <Ionicons name="chevron-back" size={22} color="#fff" />
-          </TouchableOpacity>
-          <Text style={styles.title}>{routineBuilderMode ? "Create Routine" : "Workout"}</Text>
-          <TouchableOpacity
-            onPress={discardWorkout}
-            style={[styles.backButton, styles.discardHeaderButton]}
-            disabled={saving}
-          >
-            <Ionicons name="trash-outline" size={18} color="#ffb8b8" />
-          </TouchableOpacity>
-        </View>
+        <NotebookHeader title={routineBuilderMode ? "Routine builder" : "Workout"} onBack={handleGoBack} action={exercises.length ? routineBuilderMode ? "Save" : "Finish" : undefined} onAction={routineBuilderMode ? openCreateRoutineModal : finishWorkout} disabled={saving} />
         <GestureDetector gesture={scrollNativeGesture}>
           <ScrollView
             style={styles.container}
             contentContainerStyle={[styles.content, { paddingBottom: 140 + keyboardHeight }]}
             keyboardShouldPersistTaps="handled"
+            // Native set inputs manage keyboard visibility without ReactScrollView's focus traversal.
+            scrollsChildToFocus={Platform.OS !== "android"}
             keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
             scrollEventThrottle={16}
           >
-      <WorkoutSessionCard
-        styles={styles}
+      {exercises.length > 0 || routineBuilderMode ? <WorkoutSessionCard
         title={sessionTitle}
         dateLabel={
           parseSessionDate(sessionDateText)?.toLocaleDateString(undefined, {
@@ -3662,7 +3644,8 @@ export default function WorkoutLog() {
         onDatePress={openDatePicker}
         onTimerPress={workoutTimerRunning ? openDurationAdjustModal : startWorkoutTimer}
         onChangePhase={() => router.push({ pathname: "/profile", params: { from: "/(tabs)/workout/log" } })}
-      />
+      /> : <View style={styles.emptyHeading}><Text style={styles.sessionTitle}>Your next session</Text><Text style={styles.muted}>Choose a routine or add your first exercise.</Text></View>}
+      {exercises.length > 0 ? <View style={styles.sourceRow}><Text style={[styles.muted, { flex: 1 }]}>Routine: {routines.find((routine) => routine.id === lastAppliedRoutineId)?.name ?? "Custom workout"}</Text><TouchableOpacity onPress={() => setShowMyRoutinesModal(true)} style={styles.textAction}><Text style={styles.linkText}>Change</Text></TouchableOpacity></View> : null}
 
       {!routineBuilderMode && sessionDateText === toLocalDateKey(new Date()) ? (
         <WorkoutTodayPlan
@@ -3714,27 +3697,6 @@ export default function WorkoutLog() {
         </View>
       ) : null}
 
-      <WorkoutRoutineSection
-        styles={styles}
-        routineCount={routines.length}
-        builderMode={routineBuilderMode}
-        onCreateRoutine={beginCreateRoutine}
-        onRepeatPastWorkout={handleRepeatPastWorkoutPress}
-        onViewRoutines={() => setShowMyRoutinesModal(true)}
-        onSaveRoutine={openCreateRoutineModal}
-        onExitBuilder={() => setRoutineBuilderMode(false)}
-      />
-
-      <WorkoutRecommendationSection
-        styles={styles}
-        focuses={RECOMMENDATION_FOCUSES}
-        selectedFocus={recommendationFocus}
-        recommending={recommending}
-        summary={recommendationSummary}
-        onSelectFocus={setRecommendationFocus}
-        onOpenLengthPicker={() => setShowWorkoutLengthModal(true)}
-      />
-
       {uiFeedback ? (
         <View style={styles.feedbackBanner}>
           <Text style={styles.feedbackBannerText}>{uiFeedback}</Text>
@@ -3751,13 +3713,20 @@ export default function WorkoutLog() {
         </View>
       ) : null}
 
-      {exercises.length === 0 ? (
-        <View style={styles.emptyCard}>
-          <Text style={styles.muted}>No exercises added yet.</Text>
+      <View style={styles.sessionControls}>
+        <View style={styles.sessionActionRow}>
+          <TouchableOpacity style={styles.sessionAction} onPress={() => setShowMyRoutinesModal(true)}><Text style={styles.linkText}>My routines</Text></TouchableOpacity>
+          <TouchableOpacity style={[styles.sessionAction, styles.sessionActionRight]} onPress={beginCreateRoutine}><Text style={styles.linkText}>Create routine</Text></TouchableOpacity>
         </View>
-      ) : (
-        exerciseCards
-      )}
+        <View style={styles.sessionActionRow}>
+          <TouchableOpacity style={styles.sessionAction} onPress={handleRepeatPastWorkoutPress}><Text style={styles.linkText}>Repeat past workout</Text></TouchableOpacity>
+          <TouchableOpacity style={[styles.sessionAction, styles.sessionActionRight]} onPress={() => setShowSetup(true)}><Text style={styles.linkText}>Recommend workout</Text></TouchableOpacity>
+        </View>
+        {routineBuilderMode ? <TouchableOpacity style={styles.textAction} onPress={() => setRoutineBuilderMode(false)}><Text style={styles.linkText}>Exit builder</Text></TouchableOpacity> : null}
+        {exercises.length ? <TouchableOpacity style={styles.textAction} onPress={discardWorkout}><Text style={[styles.linkText, { color: colors.danger }]}>Discard workout</Text></TouchableOpacity> : null}
+      </View>
+
+      {exerciseCards}
 
       <TouchableOpacity
         style={[styles.secondaryButton, { marginTop: 12 }]}
@@ -3766,17 +3735,13 @@ export default function WorkoutLog() {
         <Text style={styles.secondaryText}>Add exercise</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity
-        style={[styles.secondaryButton, { marginTop: 16, opacity: saving ? 0.6 : 1 }]}
-        onPress={finishWorkout}
-        disabled={saving}
-      >
-        <Text style={styles.secondaryText}>
-          {saving ? "Saving..." : `Finish workout (${totalSets} sets)`}
-        </Text>
-      </TouchableOpacity>
-
-      <Modal visible={showRepeatPicker} transparent animationType="fade">
+      {exercises.length ? <TouchableOpacity style={[styles.secondaryButton, { marginTop: 12 }]} onPress={openCreateRoutineModal}><Text style={styles.secondaryText}>Save as routine</Text></TouchableOpacity> : null}
+      <WorkoutModalShell visible={showSetup} onRequestClose={() => setShowSetup(false)} backdropStyle={styles.modalBackdrop} cardStyle={styles.modalCard}>
+        <Text style={styles.modalTitle}>Recommend workout</Text>
+        <WorkoutRecommendationSection styles={styles} focuses={RECOMMENDATION_FOCUSES} selectedFocus={recommendationFocus} recommending={recommending} summary={recommendationSummary} onSelectFocus={setRecommendationFocus} onOpenLengthPicker={() => { setShowSetup(false); setShowWorkoutLengthModal(true); }} />
+        <TouchableOpacity style={styles.secondaryButton} onPress={() => setShowSetup(false)}><Text style={styles.secondaryText}>Back to workout</Text></TouchableOpacity>
+      </WorkoutModalShell>
+      <Modal visible={showRepeatPicker} transparent animationType="fade" onRequestClose={() => setShowRepeatPicker(false)}>
         <View style={styles.modalBackdrop}>
           <AdaptiveModalCard style={styles.modalCard}>
             <Text style={styles.modalTitle}>Repeat a past workout</Text>
@@ -3787,7 +3752,7 @@ export default function WorkoutLog() {
                   style={styles.pickerRow}
                   onPress={() => applyPastWorkout(w)}
                 >
-                  <Ionicons name="repeat-outline" size={18} color="#7b61ff" />
+                  <Ionicons name="repeat-outline" size={18} color={colors.accent} />
                   <View>
                     <Text style={styles.pickerText}>{w.title}</Text>
                     <Text style={styles.muted}>
@@ -3808,7 +3773,7 @@ export default function WorkoutLog() {
         </View>
       </Modal>
 
-      <Modal visible={showMyRoutinesModal} transparent animationType="fade">
+      <Modal visible={showMyRoutinesModal} transparent animationType="fade" onRequestClose={() => setShowMyRoutinesModal(false)}>
         <View style={styles.modalBackdrop}>
           <AdaptiveModalCard style={styles.modalCard}>
             <Text style={styles.modalTitle}>My routines</Text>
@@ -3827,7 +3792,7 @@ export default function WorkoutLog() {
                         </Text>
                       </View>
                       <TouchableOpacity style={styles.iconButton} onPress={() => openRoutineActions(routine)}>
-                        <Ionicons name="ellipsis-horizontal" size={16} color="#cdd0e0" />
+                        <Ionicons name="ellipsis-horizontal" size={16} color={colors.muted} />
                       </TouchableOpacity>
                     </View>
                     <TouchableOpacity
@@ -3853,7 +3818,7 @@ export default function WorkoutLog() {
         </View>
       </Modal>
 
-      <Modal visible={showExerciseDemo} transparent animationType="fade">
+      <Modal visible={showExerciseDemo} transparent animationType="fade" onRequestClose={closeExerciseDemo}>
         <View style={styles.modalBackdrop}>
           <AdaptiveModalCard style={styles.modalCard}>
             <Text style={styles.modalTitle}>{activeDemoExercise?.name ?? "Exercise Demo"}</Text>
@@ -3897,7 +3862,7 @@ export default function WorkoutLog() {
         </View>
       </Modal>
 
-      <Modal visible={showExerciseActionsModal} transparent animationType="fade">
+      <Modal visible={showExerciseActionsModal} transparent animationType="fade" onRequestClose={closeExerciseActions}>
         <TouchableWithoutFeedback onPress={closeExerciseActions}>
           <View style={styles.modalBackdrop}>
             <TouchableWithoutFeedback onPress={() => {}}>
@@ -3910,7 +3875,7 @@ export default function WorkoutLog() {
                   <Ionicons
                     name={activeActionMode === "cardio" ? "map-outline" : "barbell-outline"}
                     size={18}
-                    color="#cdd0e0"
+                    color={colors.muted}
                   />
                   <View style={styles.exerciseOptionUnits}>
                     {(activeActionMode === "cardio" ? (["km", "mi"] as Unit[]) : (["kg", "lbs"] as Unit[])).map(
@@ -3950,13 +3915,13 @@ export default function WorkoutLog() {
                       closeExerciseActions();
                     }}
                   >
-                    <Ionicons name="options-outline" size={18} color="#cdd0e0" />
+                    <Ionicons name="options-outline" size={18} color={colors.muted} />
                     <Text style={styles.exerciseOptionText}>{availableWeightsPreferences.loaded ? "Available weights" : availableWeightsPreferences.error ? "Weight settings unavailable" : "Loading weight settings..."}</Text>
                   </TouchableOpacity>
                 ) : null}
 
                 <View style={styles.exerciseReorderRow}>
-                  <Ionicons name="swap-vertical-outline" size={18} color="#cdd0e0" />
+                  <Ionicons name="swap-vertical-outline" size={18} color={colors.muted} />
                   <Text style={styles.exerciseOptionText}>Reorder</Text>
                   <View style={styles.exerciseMoveRow}>
                     <TouchableOpacity
@@ -3964,7 +3929,7 @@ export default function WorkoutLog() {
                       disabled={!activeExerciseActionId || activeActionIndex <= 0}
                       onPress={() => activeExerciseActionId && moveExercise(activeExerciseActionId, -1)}
                     >
-                      <Ionicons name="arrow-up-outline" size={15} color="#cdd0e0" />
+                      <Ionicons name="arrow-up-outline" size={15} color={colors.muted} />
                       <Text style={styles.exerciseMoveText}>Up</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
@@ -3975,7 +3940,7 @@ export default function WorkoutLog() {
                       disabled={!activeExerciseActionId || activeActionIndex < 0 || activeActionIndex >= exercises.length - 1}
                       onPress={() => activeExerciseActionId && moveExercise(activeExerciseActionId, 1)}
                     >
-                      <Ionicons name="arrow-down-outline" size={15} color="#cdd0e0" />
+                      <Ionicons name="arrow-down-outline" size={15} color={colors.muted} />
                       <Text style={styles.exerciseMoveText}>Down</Text>
                     </TouchableOpacity>
                   </View>
@@ -3991,7 +3956,7 @@ export default function WorkoutLog() {
                     closeExerciseActions();
                   }}
                 >
-                  <Ionicons name="swap-horizontal-outline" size={18} color="#cdd0e0" />
+                  <Ionicons name="swap-horizontal-outline" size={18} color={colors.muted} />
                   <Text style={styles.exerciseOptionText}>Replace exercise</Text>
                 </TouchableOpacity>
 
@@ -4005,7 +3970,7 @@ export default function WorkoutLog() {
                   <Ionicons
                     name={activeActionIsFavorite ? "star" : "star-outline"}
                     size={18}
-                    color="#ffd166"
+                    color={colors.accent}
                   />
                   <Text style={styles.exerciseOptionText}>
                     {activeActionIsFavorite ? "Added to favorites" : "Add to favorites"}
@@ -4021,8 +3986,8 @@ export default function WorkoutLog() {
                     deleteExercise(targetId);
                   }}
                 >
-                  <Ionicons name="trash-outline" size={18} color="#ff7a7a" />
-                  <Text style={[styles.exerciseOptionText, { color: "#ff7a7a" }]}>Delete exercise</Text>
+                  <Ionicons name="trash-outline" size={18} color={colors.danger} />
+                  <Text style={[styles.exerciseOptionText, { color: colors.danger }]}>Delete exercise</Text>
                 </TouchableOpacity>
               </AdaptiveModalCard>
             </TouchableWithoutFeedback>
@@ -4030,7 +3995,7 @@ export default function WorkoutLog() {
         </TouchableWithoutFeedback>
       </Modal>
 
-      <Modal visible={showRestTimerModal} transparent animationType="fade">
+      <Modal visible={showRestTimerModal} transparent animationType="fade" onRequestClose={closeRestTimerModal}>
         <KeyboardAwareModalFrame style={styles.modalBackdrop}>
           <AdaptiveModalCard style={styles.modalCard}>
             <Text style={styles.modalTitle}>
@@ -4063,9 +4028,9 @@ export default function WorkoutLog() {
               ))}
             </View>
             <View style={styles.restCustomRow}>
-              <TextInput disableFullscreenUI
+              <TextInput selectTextOnFocus disableFullscreenUI
                 placeholder="Custom (sec)"
-                placeholderTextColor="#7a7a8c"
+                placeholderTextColor={colors.muted}
                 keyboardType="numeric"
                 value={
                   activeRestTimerExerciseId
@@ -4129,7 +4094,7 @@ export default function WorkoutLog() {
         </KeyboardAwareModalFrame>
       </Modal>
 
-      <Modal visible={showRoutineStartModal} transparent animationType="fade">
+      <Modal visible={showRoutineStartModal} transparent animationType="fade" onRequestClose={() => setShowRoutineStartModal(false)}>
         <View style={styles.modalBackdrop}>
           <AdaptiveModalCard style={styles.modalCard}>
             <Text style={styles.modalTitle}>Create routine</Text>
@@ -4158,39 +4123,38 @@ export default function WorkoutLog() {
         </View>
       </Modal>
 
-      <Modal visible={showRoutineActionsModal} transparent animationType="fade">
+      <Modal visible={showRoutineActionsModal} transparent animationType="fade" onRequestClose={closeRoutineActions}>
         <View style={styles.modalBackdrop}>
           <AdaptiveModalCard style={styles.modalCard}>
             <Text style={styles.modalTitle}>
               {selectedRoutine ? selectedRoutine.name : "Routine actions"}
             </Text>
-            <Text style={styles.modalText}>Choose what you want to do with this routine.</Text>
             <TouchableOpacity
-              style={[styles.primaryButton, { marginTop: 12 }]}
+              style={styles.routineMenuRow}
               onPress={handleUpdateSelectedRoutine}
               disabled={!selectedRoutine}
             >
-              <Text style={styles.primaryText}>Update from current workout</Text>
+              <Text style={styles.linkText}>Update from current workout</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.secondaryButton, { marginTop: 10 }]}
+              style={styles.routineMenuRow}
               onPress={() => selectedRoutine && openDeloadConfirm(selectedRoutine)}
               disabled={!selectedRoutine}
             >
-              <Text style={styles.secondaryText}>Apply deload</Text>
+              <Text style={styles.linkText}>Apply deload</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.dangerButton, { marginTop: 10 }]}
+              style={styles.routineMenuRow}
               onPress={handleAskDeleteSelectedRoutine}
               disabled={!selectedRoutine}
             >
-              <Text style={styles.primaryText}>Delete routine</Text>
+              <Text style={[styles.linkText, { color: colors.danger }]}>Delete routine</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.secondaryButton, { marginTop: 10 }]}
+              style={styles.routineMenuRow}
               onPress={closeRoutineActions}
             >
-              <Text style={styles.secondaryText}>Cancel</Text>
+              <Text style={styles.linkText}>Close</Text>
             </TouchableOpacity>
           </AdaptiveModalCard>
         </View>
@@ -4222,7 +4186,7 @@ export default function WorkoutLog() {
                         {option.detail}
                       </Text>
                     </View>
-                    {selected ? <Ionicons name="checkmark-circle" size={22} color="#a99bff" /> : null}
+                    {selected ? <Ionicons name="checkmark-circle" size={22} color={colors.accent} /> : null}
                   </TouchableOpacity>
                 );
               })}
@@ -4236,7 +4200,7 @@ export default function WorkoutLog() {
             </TouchableOpacity>
       </WorkoutModalShell>
 
-      <Modal visible={showDeloadConfirmModal} transparent animationType="fade">
+      <Modal visible={showDeloadConfirmModal} transparent animationType="fade" onRequestClose={() => setShowDeloadConfirmModal(false)}>
         <View style={styles.modalBackdrop}>
           <AdaptiveModalCard style={styles.modalCard}>
             <Text style={styles.modalTitle}>Apply deload?</Text>
@@ -4261,7 +4225,7 @@ export default function WorkoutLog() {
         </View>
       </Modal>
 
-      <Modal visible={showExerciseHistoryModal} transparent animationType="fade">
+      <Modal visible={showExerciseHistoryModal} transparent animationType="fade" onRequestClose={() => setShowExerciseHistoryModal(false)}>
         <View style={styles.modalBackdrop}>
           <AdaptiveModalCard style={styles.modalCard}>
             <Text style={styles.modalTitle}>{historyExerciseName ?? "Exercise"} history</Text>
@@ -4303,7 +4267,7 @@ export default function WorkoutLog() {
         </View>
       </Modal>
 
-      <Modal visible={showRoutineDeleteModal} transparent animationType="fade">
+      <Modal visible={showRoutineDeleteModal} transparent animationType="fade" onRequestClose={() => { setShowRoutineDeleteModal(false); setSelectedRoutine(null); }}>
         <View style={styles.modalBackdrop}>
           <AdaptiveModalCard style={styles.modalCard}>
             <Text style={styles.modalTitle}>Delete this routine?</Text>
@@ -4333,7 +4297,7 @@ export default function WorkoutLog() {
         </View>
       </Modal>
 
-      <Modal visible={showWorkoutSavedModal} transparent animationType="fade">
+      <Modal visible={showWorkoutSavedModal} transparent animationType="fade" onRequestClose={closeRoutineUpdateAfterFinish}>
         <View style={styles.modalBackdrop}>
           <AdaptiveModalCard style={styles.modalCard}>
             <Text style={styles.modalTitle}>Workout saved</Text>
@@ -4350,7 +4314,7 @@ export default function WorkoutLog() {
         </View>
       </Modal>
 
-      <Modal visible={showRoutineUpdateAfterFinishModal} transparent animationType="fade">
+      <Modal visible={showRoutineUpdateAfterFinishModal} transparent animationType="fade" onRequestClose={closeRoutineUpdateAfterFinish}>
         <View style={styles.modalBackdrop}>
           <AdaptiveModalCard style={styles.modalCard}>
             <Text style={styles.modalTitle}>Update routine?</Text>
@@ -4375,7 +4339,7 @@ export default function WorkoutLog() {
         </View>
       </Modal>
 
-      <Modal visible={showRoutineUpdatedConfirmationModal} transparent animationType="fade">
+      <Modal visible={showRoutineUpdatedConfirmationModal} transparent animationType="fade" onRequestClose={closeRoutineUpdateAfterFinish}>
         <View style={styles.modalBackdrop}>
           <AdaptiveModalCard style={styles.modalCard}>
             <Text style={styles.modalTitle}>Routine updated</Text>
@@ -4394,13 +4358,13 @@ export default function WorkoutLog() {
         </View>
       </Modal>
 
-      <Modal visible={showRoutineNameModal} transparent animationType="fade">
+      <Modal visible={showRoutineNameModal} transparent animationType="fade" onRequestClose={() => { setShowRoutineNameModal(false); setEditingRoutineId(null); setRoutineFormError(null); }}>
         <KeyboardAwareModalFrame style={styles.modalBackdrop}>
           <AdaptiveModalCard style={styles.modalCard}>
             <Text style={styles.modalTitle}>{editingRoutineId ? "Update routine" : "Save routine"}</Text>
             <TextInput disableFullscreenUI
               placeholder="Routine name"
-              placeholderTextColor="#7a7a8c"
+              placeholderTextColor={colors.muted}
               value={routineNameInput}
               onChangeText={setRoutineNameInput}
               style={styles.input}
@@ -4429,7 +4393,7 @@ export default function WorkoutLog() {
         </KeyboardAwareModalFrame>
       </Modal>
 
-      <Modal visible={showDatePickerModal} transparent animationType="fade">
+      <Modal visible={showDatePickerModal} transparent animationType="fade" onRequestClose={() => setShowDatePickerModal(false)}>
         <View style={styles.modalBackdrop}>
           <AdaptiveModalCard style={styles.modalCard}>
             <View style={styles.calendarHeader}>
@@ -4441,7 +4405,7 @@ export default function WorkoutLog() {
                   )
                 }
               >
-                <Ionicons name="chevron-back" size={16} color="#cdd0e0" />
+                <Ionicons name="chevron-back" size={16} color={colors.muted} />
               </TouchableOpacity>
               <Text style={styles.modalTitle}>
                 {MONTH_LABELS[datePickerMonth.getMonth()]} {datePickerMonth.getFullYear()}
@@ -4454,7 +4418,7 @@ export default function WorkoutLog() {
                   )
                 }
               >
-                <Ionicons name="chevron-forward" size={16} color="#cdd0e0" />
+                <Ionicons name="chevron-forward" size={16} color={colors.muted} />
               </TouchableOpacity>
             </View>
             <View style={styles.calendarWeekRow}>
@@ -4507,15 +4471,15 @@ export default function WorkoutLog() {
         </View>
       </Modal>
 
-      <Modal visible={showDurationModal} transparent animationType="fade">
+      <Modal visible={showDurationModal} transparent animationType="fade" onRequestClose={() => setShowDurationModal(false)}>
         <KeyboardAwareModalFrame style={styles.modalBackdrop}>
           <AdaptiveModalCard style={styles.modalCard}>
             <Text style={styles.modalTitle}>Adjust duration</Text>
             <Text style={styles.modalText}>Set workout duration (hours and minutes).</Text>
             <View style={styles.durationFieldRow}>
-              <TextInput disableFullscreenUI
+              <TextInput selectTextOnFocus disableFullscreenUI
                 placeholder="00"
-                placeholderTextColor="#7a7a8c"
+                placeholderTextColor={colors.muted}
                 value={durationAdjustHoursText}
                 onChangeText={setDurationAdjustHoursText}
                 keyboardType="numeric"
@@ -4523,9 +4487,9 @@ export default function WorkoutLog() {
                 style={styles.durationFieldInput}
               />
               <Text style={styles.durationFieldColon}>:</Text>
-              <TextInput disableFullscreenUI
+              <TextInput selectTextOnFocus disableFullscreenUI
                 placeholder="00"
-                placeholderTextColor="#7a7a8c"
+                placeholderTextColor={colors.muted}
                 value={durationAdjustMinutesText}
                 onChangeText={setDurationAdjustMinutesText}
                 keyboardType="numeric"
@@ -4561,14 +4525,14 @@ export default function WorkoutLog() {
         </KeyboardAwareModalFrame>
       </Modal>
 
-      <Modal visible={showCardioTimeModal} transparent animationType="fade">
+      <Modal visible={showCardioTimeModal} transparent animationType="fade" onRequestClose={() => { setShowCardioTimeModal(false); setCardioTimeTarget(null); }}>
         <KeyboardAwareModalFrame style={styles.modalBackdrop}>
           <AdaptiveModalCard style={styles.modalCard}>
             <Text style={styles.modalTitle}>Set Cardio Time</Text>
             <View style={styles.durationFieldRow}>
-              <TextInput disableFullscreenUI
+              <TextInput selectTextOnFocus disableFullscreenUI
                 placeholder="00"
-                placeholderTextColor="#7a7a8c"
+                placeholderTextColor={colors.muted}
                 value={cardioTimeHoursText}
                 onChangeText={setCardioTimeHoursText}
                 keyboardType="numeric"
@@ -4576,9 +4540,9 @@ export default function WorkoutLog() {
                 style={styles.durationFieldInput}
               />
               <Text style={styles.durationFieldColon}>:</Text>
-              <TextInput disableFullscreenUI
+              <TextInput selectTextOnFocus disableFullscreenUI
                 placeholder="00"
-                placeholderTextColor="#7a7a8c"
+                placeholderTextColor={colors.muted}
                 value={cardioTimeMinutesText}
                 onChangeText={setCardioTimeMinutesText}
                 keyboardType="numeric"
@@ -4617,27 +4581,31 @@ export default function WorkoutLog() {
         </KeyboardAwareModalFrame>
       </Modal>
 
-      <Modal visible={showCardioDistanceModal} transparent animationType="fade">
+      <Modal visible={showCardioDistanceModal} transparent animationType="fade" onRequestClose={() => { setShowCardioDistanceModal(false); setCardioDistanceTarget(null); }}>
         <KeyboardAwareModalFrame style={styles.modalBackdrop}>
           <AdaptiveModalCard style={styles.modalCard}>
             <Text style={styles.modalTitle}>Set Distance</Text>
             <Text style={styles.modalText}>Whole and decimal values.</Text>
             <View style={styles.durationFieldRow}>
-              <TextInput disableFullscreenUI
+              <TextInput selectTextOnFocus={false} disableFullscreenUI
                 placeholder="0"
-                placeholderTextColor="#7a7a8c"
+                placeholderTextColor={colors.muted}
                 value={cardioDistanceWholeText}
-                onChangeText={setCardioDistanceWholeText}
+                ref={distanceWholeRef}
+                onFocus={() => distanceWholeEntry.selectInitial(cardioDistanceWholeText)}
+                onChangeText={(value) => { distanceWholeEntry.changed(); setCardioDistanceWholeText(value); }}
                 keyboardType="numeric"
                 maxLength={3}
                 style={styles.durationFieldInput}
               />
               <Text style={styles.durationFieldColon}>.</Text>
-              <TextInput disableFullscreenUI
+              <TextInput selectTextOnFocus={false} disableFullscreenUI
                 placeholder="00"
-                placeholderTextColor="#7a7a8c"
+                placeholderTextColor={colors.muted}
                 value={cardioDistanceDecimalText}
-                onChangeText={setCardioDistanceDecimalText}
+                ref={distanceDecimalRef}
+                onFocus={() => distanceDecimalEntry.selectInitial(cardioDistanceDecimalText)}
+                onChangeText={(value) => { distanceDecimalEntry.changed(); setCardioDistanceDecimalText(value); }}
                 keyboardType="numeric"
                 maxLength={2}
                 style={styles.durationFieldInput}
@@ -4681,10 +4649,11 @@ export default function WorkoutLog() {
         </KeyboardAwareModalFrame>
       </Modal>
 
-      <Modal visible={showFinishModal} transparent animationType="fade">
+      <Modal visible={showFinishModal} transparent animationType="fade" onRequestClose={() => setShowFinishModal(false)}>
         <KeyboardAwareModalFrame style={styles.modalBackdrop}>
           <AdaptiveModalCard style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Quick questions</Text>
+            <Text style={styles.modalTitle}>Finish workout</Text>
+            <Text style={styles.modalText}>{totalSets} sets planned. Only completed sets are saved.</Text>
             <Text style={styles.modalText}>Followed recommendation?</Text>
             <View style={styles.answerRow}>
               {([
@@ -4727,7 +4696,7 @@ export default function WorkoutLog() {
                 <Text style={[styles.modalText, { marginTop: 12 }]}>Optional session title</Text>
                 <TextInput disableFullscreenUI
                   placeholder="e.g., Upper body"
-                  placeholderTextColor="#7a7a8c"
+                  placeholderTextColor={colors.muted}
                   value={sessionTitle}
                   onChangeText={setSessionTitle}
                   style={styles.input}
@@ -4757,7 +4726,7 @@ export default function WorkoutLog() {
         </KeyboardAwareModalFrame>
       </Modal>
 
-      <Modal visible={showTempoEditorModal} transparent animationType="fade">
+      <Modal visible={showTempoEditorModal} transparent animationType="fade" onRequestClose={closeTempoEditor}>
         <View style={styles.modalBackdrop}>
           <AdaptiveModalCard style={styles.modalCard}>
             <Text style={styles.modalTitle}>Adjust Tempo</Text>
@@ -4781,9 +4750,9 @@ export default function WorkoutLog() {
                   minimumValue={0}
                   maximumValue={4}
                   step={1}
-                  minimumTrackTintColor="#7b61ff"
-                  maximumTrackTintColor="rgba(255,255,255,0.22)"
-                  thumbTintColor="#cdd0e0"
+                  minimumTrackTintColor={colors.primary}
+                  maximumTrackTintColor={colors.rule}
+                  thumbTintColor={colors.muted}
                   value={tempoDraftIndices[segment.idx] ?? DEFAULT_TEMPO_INDICES[segment.idx]}
                   onValueChange={(value) => setTempoDraftIndex(segment.idx, Number(value))}
                 />
@@ -4815,7 +4784,7 @@ export default function WorkoutLog() {
         </View>
       </Modal>
 
-      <Modal visible={showDiscardConfirmModal} transparent animationType="fade">
+      <Modal visible={showDiscardConfirmModal} transparent animationType="fade" onRequestClose={() => setShowDiscardConfirmModal(false)}>
         <View style={styles.modalBackdrop}>
           <AdaptiveModalCard style={styles.modalCard}>
             <Text style={styles.modalTitle}>Discard this workout?</Text>
@@ -4840,7 +4809,12 @@ export default function WorkoutLog() {
         </View>
       </Modal>
 
-      <Modal visible={Boolean(activeSetMenu)} transparent animationType="fade" onRequestClose={closeSetMenu}>
+      <WorkoutModalShell visible={showSetTypeHelp} onRequestClose={() => setShowSetTypeHelp(false)} backdropStyle={styles.modalBackdrop} cardStyle={styles.modalCard}>
+        <Text style={styles.modalTitle}>Set types</Text>
+        <Text style={styles.modalText}>Warm-up: lighter preparation set.</Text><Text style={styles.modalText}>Normal: standard working set.</Text><Text style={styles.modalText}>Failure: pushed to failure.</Text><Text style={styles.modalText}>Drop: reduce load and continue.</Text>
+        <TouchableOpacity style={styles.secondaryButton} onPress={() => setShowSetTypeHelp(false)}><Text style={styles.secondaryText}>Close</Text></TouchableOpacity>
+      </WorkoutModalShell>
+      <Modal visible={Boolean(activeSetMenu) && !showSetTypeHelp} transparent animationType="fade" onRequestClose={closeSetMenu}>
         <View style={[styles.sheetBackdrop, { paddingBottom: insets.bottom + 16, paddingTop: insets.top + 16 }]}>
           <TouchableWithoutFeedback onPress={closeSetMenu} accessibilityLabel="Dismiss set options">
             <View style={StyleSheet.absoluteFill} />
@@ -4850,14 +4824,10 @@ export default function WorkoutLog() {
               <Text style={styles.modalTitle}>Set options</Text>
               <TouchableOpacity
                 style={styles.iconButton}
-                onPress={() =>
-                  showAppAlert(
-                    "Set types",
-                    "Warm-up: lighter prep set.\nNormal: standard working set.\nFailure: pushed to failure.\nDrop: reduce load and continue."
-                  )
-                }
+                onPress={() => setShowSetTypeHelp(true)}
+                accessibilityLabel="Explain set types"
               >
-                <Ionicons name="help-circle-outline" size={18} color="#cdd0e0" />
+                <Ionicons name="help-circle-outline" size={18} color={colors.muted} />
               </TouchableOpacity>
             </View>
             <Text style={styles.modalText}>Set type</Text>
@@ -4920,6 +4890,7 @@ export default function WorkoutLog() {
 
           </ScrollView>
         </GestureDetector>
+        {runningRest && keyboardHeight === 0 ? <View style={[styles.sourceRow, { borderTopWidth: 1, borderTopColor: colors.rule, paddingHorizontal: 20, paddingVertical: 8 }]}><View style={{ flex: 1 }}><Text style={styles.muted}>{runningRest.name}</Text><RestTimerText style={styles.sectionTitle} clock={restTimerByExercise[runningRest.id]} prefix="Rest " /></View><TouchableOpacity style={styles.textAction} onPress={() => restTimerByExercise[runningRest.id]?.running ? pauseRestTimer(runningRest.id) : startRestTimer(runningRest.id)}><Text style={styles.linkText}>{restTimerByExercise[runningRest.id]?.running ? "Pause" : "Resume"}</Text></TouchableOpacity><TouchableOpacity style={styles.textAction} onPress={() => resetRestTimer(runningRest.id)}><Text style={styles.linkText}>Skip</Text></TouchableOpacity></View> : null}
         </View>
       </KeyboardAvoidingView>
 
@@ -4946,10 +4917,10 @@ export default function WorkoutLog() {
   );
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: "#0d0d1a" },
+const createStyles = (colors: NotebookColors) => { const base = notebookSheet({
+  screen: { flex: 1, backgroundColor: colors.canvas },
   keyboardAvoiding: { flex: 1 },
-  container: { flex: 1, backgroundColor: "#0d0d1a" },
+  container: { flex: 1, backgroundColor: colors.canvas },
   scrollShell: { flex: 1 },
   content: { width: "100%", maxWidth: 760, alignSelf: "center", padding: 20, paddingTop: 8, paddingBottom: 140 },
   header: { width: "100%", maxWidth: 760, alignSelf: "center",
@@ -4964,29 +4935,29 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 8,
-      backgroundColor: "rgba(255,255,255,0.08)",
+      backgroundColor: colors.subtle,
       alignItems: "center",
       justifyContent: "center",
     },
   discardHeaderButton: {
-    borderColor: "rgba(255,122,122,0.6)",
+    borderColor: colors.danger,
     borderWidth: StyleSheet.hairlineWidth * 2,
-    backgroundColor: "rgba(255,122,122,0.15)",
+    backgroundColor: colors.danger,
   },
   headerSpacer: { width: 22 },
-  title: { color: "#fff", fontSize: 22, fontWeight: "800" },
+  title: { color: colors.ink, fontFamily: notebookFonts.editorial, fontSize: 22, fontWeight: "800" },
   card: {
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: colors.subtle,
     borderRadius: 16,
     padding: 16,
     marginTop: 12,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(255,255,255,0.08)",
+    borderColor: colors.rule,
   },
-  sectionTitle: { color: "#fff", fontSize: 16, fontWeight: "700", marginBottom: 10 },
+  sectionTitle: { color: colors.ink, fontSize: 16, fontWeight: "700", marginBottom: 10 },
   input: {
-    backgroundColor: "rgba(255,255,255,0.08)",
-    color: "#fff",
+    backgroundColor: colors.subtle,
+    color: colors.ink,
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 10,
@@ -4996,7 +4967,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "space-between",
-    backgroundColor: "#0d0d1a",
+    backgroundColor: colors.canvas,
     zIndex: 2,
     columnGap: 10,
     rowGap: 8,
@@ -5005,33 +4976,33 @@ const styles = StyleSheet.create({
   sessionActionButton: { flex: 1, marginTop: 0 },
   halfInput: { flexBasis: "48%", flexGrow: 1, minWidth: 120, marginBottom: 0 },
   primaryButton: {
-    backgroundColor: "#7b61ff",
+    backgroundColor: colors.primary,
     paddingVertical: 12,
     borderRadius: 12,
     alignItems: "center",
     marginTop: 8,
   },
-  primaryText: { color: "#fff", fontWeight: "700" },
+  primaryText: { color: colors.onPrimary, fontWeight: "700" },
   secondaryButton: {
-    backgroundColor: "#fff",
+    backgroundColor: colors.ink,
     paddingVertical: 12,
     borderRadius: 12,
     alignItems: "center",
   },
-  secondaryText: { color: "#7b61ff", fontWeight: "700" },
+  secondaryText: { color: colors.accent, fontWeight: "700" },
   disabled: { opacity: 0.5 },
-  muted: { color: "#a3a3b5" },
+  muted: { color: colors.muted },
   exerciseBlock: { marginTop: 8 },
   exerciseNameButton: { flex: 1, flexShrink: 1, marginLeft: 6 },
-  exerciseName: { color: "#fff", fontWeight: "700", marginBottom: 0 },
+  exerciseName: { color: colors.ink, fontWeight: "700", marginBottom: 0 },
   exerciseDemoThumbButton: {
     width: 38,
     height: 38,
     borderRadius: 8,
     overflow: "hidden",
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(255,255,255,0.2)",
-    backgroundColor: "rgba(255,255,255,0.06)",
+    borderColor: colors.rule,
+    backgroundColor: colors.subtle,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -5051,8 +5022,8 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 999,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(255,255,255,0.2)",
-    backgroundColor: "rgba(255,255,255,0.04)",
+    borderColor: colors.rule,
+    backgroundColor: colors.subtle,
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
@@ -5066,7 +5037,7 @@ const styles = StyleSheet.create({
     borderRadius: 0,
     textAlign: "left",
     fontSize: 12,
-    color: "#d8daec",
+    color: colors.ink,
   },
   restTimerInlineButton: {
     marginBottom: 0,
@@ -5075,13 +5046,13 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 999,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(255,255,255,0.2)",
-    backgroundColor: "rgba(255,255,255,0.04)",
+    borderColor: colors.rule,
+    backgroundColor: colors.subtle,
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
   },
-  restTimerInlineText: { color: "#d8daec", fontSize: 12, fontWeight: "700" },
+  restTimerInlineText: { color: colors.ink, fontSize: 12, fontWeight: "700" },
   durationFieldRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -5091,8 +5062,8 @@ const styles = StyleSheet.create({
   },
   durationFieldInput: {
     width: 88,
-    backgroundColor: "rgba(255,255,255,0.08)",
-    color: "#fff",
+    backgroundColor: colors.subtle,
+    color: colors.ink,
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 10,
@@ -5100,18 +5071,18 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: "800",
   },
-  durationFieldColon: { color: "#fff", fontSize: 28, fontWeight: "800" },
+  durationFieldColon: { color: colors.ink, fontSize: 28, fontWeight: "800" },
   durationFieldLabelRow: {
     flexDirection: "row",
     justifyContent: "center",
     gap: 36,
     marginBottom: 8,
   },
-  durationFieldLabel: { color: "#9aa1c3", fontSize: 12, fontWeight: "700" },
+  durationFieldLabel: { color: colors.muted, fontSize: 12, fontWeight: "700" },
   tempoSliderRow: { marginBottom: 10 },
-  tempoSliderLabel: { color: "#d8daec", marginBottom: 4, fontWeight: "600" },
+  tempoSliderLabel: { color: colors.ink, marginBottom: 4, fontWeight: "600" },
   tempoSlider: { width: "100%", height: 28 },
-  tempoSliderValue: { color: "#fff", fontWeight: "700", textAlign: "right" },
+  tempoSliderValue: { color: colors.ink, fontWeight: "700", textAlign: "right" },
   restCustomRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   restCustomInput: { flex: 1, marginBottom: 0, paddingVertical: 8 },
   restCustomApply: { paddingVertical: 10, paddingHorizontal: 14 },
@@ -5128,7 +5099,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom: 6,
   },
-  calendarWeekdayText: { color: "#9aa1c3", width: 34, textAlign: "center", fontWeight: "700" },
+  calendarWeekdayText: { color: colors.muted, width: 34, textAlign: "center", fontWeight: "700" },
   calendarDayButton: {
     width: 34,
     height: 34,
@@ -5137,10 +5108,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   calendarDayOutside: { opacity: 0.45 },
-  calendarDaySelected: { backgroundColor: "#7b61ff" },
-  calendarDayText: { color: "#cdd0e0", fontWeight: "600" },
-  calendarDayTextOutside: { color: "#7d84a8" },
-  calendarDayTextSelected: { color: "#fff", fontWeight: "700" },
+  calendarDaySelected: { backgroundColor: colors.primary },
+  calendarDayText: { color: colors.muted, fontWeight: "600" },
+  calendarDayTextOutside: { color: colors.muted },
+  calendarDayTextSelected: { color: colors.ink, fontWeight: "700" },
   setHeaderRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -5149,10 +5120,9 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   setHeaderRowTablet: { gap: 10 },
-  // Mirrors WorkoutSetListView.kt: 4px row inset, 24px set marker, 40px touch column,
-  // 84px last-set column, then a 6px inset before each editable field.
-  nativeSetHeaderRow: { gap: 0, paddingHorizontal: 4 },
-  setHeaderText: { color: "#9aa1c3", fontSize: 12, fontWeight: "700" },
+  // Mirrors the native notebook row: Set, 96px Last, three fields, then 44px Done.
+  nativeSetHeaderRow: { gap: 0, paddingHorizontal: 0 },
+  setHeaderText: { color: colors.muted, fontSize: 12, fontWeight: "700" },
   setHeaderSet: { width: 24, textAlign: "center" },
   setHeaderCheck: { width: 24, textAlign: "center" },
   cardioSetHeaderCheck: { width: 34 },
@@ -5172,14 +5142,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  setLabel: { color: "#cdd0e0", fontWeight: "700", fontSize: 13, width: 24, textAlign: "center" },
+  setLabel: { color: colors.muted, fontWeight: "700", fontSize: 13, width: 24, textAlign: "center" },
   setLabelTablet: { width: 28, fontSize: 15 },
   lastSetButton: { width: 84 },
-  lastSetText: { width: 84, color: "#aab0cc", fontSize: 11, lineHeight: 14 },
-  cardioTapValue: { color: "#fff", textAlign: "center", fontWeight: "700" },
+  lastSetText: { width: 84, color: colors.muted, fontSize: 11, lineHeight: 14 },
+  cardioTapValue: { color: colors.ink, textAlign: "center", fontWeight: "700" },
   cardioMetaRow: { marginTop: 8 },
-  cardioMetaLabel: { color: "#9aa1c3", fontSize: 12, fontWeight: "700", marginBottom: 6 },
-  distanceUnitSuffix: { color: "#cdd0e0", fontSize: 16, fontWeight: "700", marginLeft: 4 },
+  cardioMetaLabel: { color: colors.muted, fontSize: 12, fontWeight: "700", marginBottom: 6 },
+  distanceUnitSuffix: { color: colors.muted, fontSize: 16, fontWeight: "700", marginLeft: 4 },
   setInputsGroup: { flex: 1, flexDirection: "row", alignItems: "center", gap: 8 },
   setInputsGroupTablet: { flex: 1 },
   setInput: { marginBottom: 0, paddingVertical: 10, minHeight: 40 },
@@ -5199,45 +5169,45 @@ const styles = StyleSheet.create({
     height: 24,
     borderRadius: 6,
     borderWidth: 2,
-    borderColor: "#cdd0e0",
+    borderColor: colors.muted,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "transparent",
   },
   checkboxChecked: {
-    backgroundColor: "#7b61ff",
-    borderColor: "#7b61ff",
+    backgroundColor: colors.primary,
+    borderColor: colors.accent,
   },
-  cardioCheckboxMark: { color: "#0d0d1a", fontSize: 12, fontWeight: "700", lineHeight: 14 },
+  cardioCheckboxMark: { color: colors.onPrimary, fontSize: 12, fontWeight: "700", lineHeight: 14 },
   inlineUndoBanner: {
     marginTop: 10,
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderRadius: 12,
-    backgroundColor: "rgba(123,97,255,0.12)",
+    backgroundColor: colors.accentSoft,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(123,97,255,0.35)",
+    borderColor: colors.border,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 10,
   },
-  inlineUndoBannerText: { color: "#e8e7ff", fontSize: 13, fontWeight: "600", flex: 1 },
+  inlineUndoBannerText: { color: colors.ink, fontSize: 13, fontWeight: "600", flex: 1 },
   inlineUndoBannerAction: {
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 999,
-    backgroundColor: "rgba(123,97,255,0.22)",
+    backgroundColor: colors.accentSoft,
   },
-  inlineUndoBannerActionText: { color: "#fff", fontSize: 12, fontWeight: "800" },
-  replacementEmptyText: { color: "#9aa1c3", fontSize: 13, lineHeight: 19, paddingVertical: 12 },
+  inlineUndoBannerActionText: { color: colors.ink, fontSize: 12, fontWeight: "800" },
+  replacementEmptyText: { color: colors.muted, fontSize: 13, lineHeight: 19, paddingVertical: 12 },
   pickerCard: {
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: colors.subtle,
     borderRadius: 12,
     padding: 8,
     marginTop: 8,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(255,255,255,0.1)",
+    borderColor: colors.rule,
   },
   pickerRow: {
     paddingVertical: 10,
@@ -5247,7 +5217,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   pickerRowMain: { flex: 1, flexDirection: "row", alignItems: "center", gap: 8 },
-  pickerText: { color: "#fff", fontWeight: "600" },
+  pickerText: { color: colors.ink, fontWeight: "600" },
   exercisePickerLoading: {
     paddingVertical: 10,
     alignItems: "center",
@@ -5256,19 +5226,19 @@ const styles = StyleSheet.create({
   },
   customRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 8 },
   miniButton: {
-    backgroundColor: "#7b61ff",
+    backgroundColor: colors.primary,
     paddingVertical: 10,
     paddingHorizontal: 12,
     borderRadius: 10,
   },
-  miniButtonText: { color: "#fff", fontWeight: "700" },
+  miniButtonText: { color: colors.ink, fontWeight: "700" },
   emptyCard: {
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: colors.subtle,
     borderRadius: 16,
     padding: 16,
     marginTop: 12,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(255,255,255,0.08)",
+    borderColor: colors.rule,
   },
   routineActionRow: { flexDirection: "row", gap: 8, marginTop: 10 },
   routineActionButton: { flex: 1 },
@@ -5276,9 +5246,9 @@ const styles = StyleSheet.create({
     marginTop: 10,
     borderRadius: 12,
     padding: 10,
-    backgroundColor: "rgba(123,97,255,0.12)",
+    backgroundColor: colors.accentSoft,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(123,97,255,0.45)",
+    borderColor: colors.border,
     gap: 4,
   },
   feedbackBanner: {
@@ -5286,38 +5256,38 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    backgroundColor: "rgba(166,227,161,0.16)",
+    backgroundColor: colors.success,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(166,227,161,0.45)",
+    borderColor: colors.success,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     gap: 8,
   },
-  feedbackBannerText: { color: "#d7f5d3", fontSize: 12, fontWeight: "700", flex: 1 },
+  feedbackBannerText: { color: colors.ink, fontSize: 12, fontWeight: "700", flex: 1 },
   feedbackBannerAction: {
     borderRadius: 8,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(255,255,255,0.35)",
+    borderColor: colors.rule,
     paddingHorizontal: 10,
     paddingVertical: 6,
   },
-  feedbackBannerActionText: { color: "#fff", fontSize: 11, fontWeight: "700" },
+  feedbackBannerActionText: { color: colors.ink, fontSize: 11, fontWeight: "700" },
   recommendationCard: {
-    backgroundColor: "rgba(123,97,255,0.12)",
+    backgroundColor: colors.accentSoft,
     borderRadius: 12,
     padding: 12,
     marginTop: 10,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(123,97,255,0.4)",
+    borderColor: colors.border,
     gap: 4,
   },
-  recommendationLine: { color: "#d8daec", fontSize: 12, lineHeight: 18 },
+  recommendationLine: { color: colors.ink, fontSize: 12, lineHeight: 18 },
   routineCard: {
     borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(255,255,255,0.1)",
-    backgroundColor: "rgba(255,255,255,0.04)",
+    borderColor: colors.rule,
+    backgroundColor: colors.subtle,
     padding: 10,
     marginBottom: 8,
     gap: 8,
@@ -5328,7 +5298,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   routineUseButton: {
-    backgroundColor: "#7b61ff",
+    backgroundColor: colors.primary,
     borderRadius: 10,
     paddingVertical: 10,
     alignItems: "center",
@@ -5345,46 +5315,46 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(255,255,255,0.2)",
-    backgroundColor: "rgba(255,255,255,0.06)",
+    borderColor: colors.rule,
+    backgroundColor: colors.subtle,
   },
   toggleChipActive: {
-    backgroundColor: "#7b61ff",
-    borderColor: "#7b61ff",
+    backgroundColor: colors.primary,
+    borderColor: colors.accent,
   },
-  toggleText: { color: "#d8daec", fontWeight: "700" },
-  toggleTextActive: { color: "#0d0d1a" },
+  toggleText: { color: colors.ink, fontWeight: "700" },
+  toggleTextActive: { color: colors.onPrimary },
   groupChips: { flexDirection: "row", gap: 8, paddingVertical: 4 },
   groupChip: {
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(255,255,255,0.2)",
-    backgroundColor: "rgba(255,255,255,0.05)",
+    borderColor: colors.rule,
+    backgroundColor: colors.subtle,
   },
   groupChipActive: {
-    backgroundColor: "#7b61ff",
-    borderColor: "#7b61ff",
+    backgroundColor: colors.primary,
+    borderColor: colors.accent,
   },
-  groupChipText: { color: "#d8daec", fontWeight: "700" },
-  groupChipTextActive: { color: "#0d0d1a" },
+  groupChipText: { color: colors.ink, fontWeight: "700" },
+  groupChipTextActive: { color: colors.onPrimary },
   focusChipRow: { gap: 8, paddingTop: 10 },
   exerciseHistoryList: { maxHeight: 460 },
-  exerciseHistoryRow: { gap: 4, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "rgba(255,255,255,0.1)" },
+  exerciseHistoryRow: { gap: 4, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.rule },
   exerciseHistorySetList: { gap: 3 },
   exerciseHistoryDateRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  exerciseHistoryDate: { color: "#cdd0e0", fontSize: 12, fontWeight: "700" },
+  exerciseHistoryDate: { color: colors.muted, fontSize: 12, fontWeight: "700" },
   exerciseHistoryPrBadge: {
-    color: "#1b1400",
-    backgroundColor: "#fbbf24",
+    color: colors.ink,
+    backgroundColor: colors.accentSoft,
     borderRadius: 999,
     paddingHorizontal: 7,
     paddingVertical: 2,
     fontSize: 9,
     fontWeight: "900",
   },
-  exerciseHistorySets: { color: "#fff", fontSize: 13, lineHeight: 19 },
+  exerciseHistorySets: { color: colors.ink, fontSize: 13, lineHeight: 19 },
   exerciseHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -5399,7 +5369,7 @@ const styles = StyleSheet.create({
     width: 96,
   },
   swipeDeleteButton: {
-    backgroundColor: "rgba(248,113,113,0.95)",
+    backgroundColor: colors.danger,
     borderRadius: 10,
     width: 88,
     height: 42,
@@ -5409,11 +5379,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 6,
   },
-  swipeDeleteText: { color: "#fff", fontWeight: "700", fontSize: 12 },
+  swipeDeleteText: { color: colors.ink, fontWeight: "700", fontSize: 12 },
   iconButton: {
     padding: 6,
     borderRadius: 8,
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: colors.subtle,
   },
   actionRow: { flexDirection: "row", gap: 8, marginTop: 6 },
   setActionsRow: { flexDirection: "row", gap: 8, marginTop: 8 },
@@ -5425,24 +5395,24 @@ const styles = StyleSheet.create({
   },
   phaseRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 6 },
   phaseLink: { paddingHorizontal: 6, paddingVertical: 2 },
-  phaseLinkText: { color: "#7b61ff", fontWeight: "700" },
+  phaseLinkText: { color: colors.accent, fontWeight: "700" },
   modalBackdrop: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.6)",
+    backgroundColor: colors.overlay,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 24,
   },
   modalCard: {
-    backgroundColor: "#111427",
+    backgroundColor: colors.canvas,
     borderRadius: 16,
     padding: 20,
     width: "100%",
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(255,255,255,0.08)",
+    borderColor: colors.rule,
   },
-  modalTitle: { color: "#fff", fontSize: 18, fontWeight: "800", marginBottom: 8 },
-  modalText: { color: "#d8daec", marginBottom: 4 },
+  modalTitle: { color: colors.ink, fontFamily: notebookFonts.editorial, fontSize: 18, fontWeight: "800", marginBottom: 8 },
+  modalText: { color: colors.ink, marginBottom: 4 },
   recommendationLengthList: { gap: 8, marginTop: 12 },
   recommendationLengthOption: {
     minHeight: 70,
@@ -5450,20 +5420,20 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(255,255,255,0.16)",
-    backgroundColor: "rgba(255,255,255,0.04)",
+    borderColor: colors.rule,
+    backgroundColor: colors.subtle,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
   recommendationLengthOptionActive: {
-    borderColor: "#7b61ff",
-    backgroundColor: "rgba(123,97,255,0.16)",
+    borderColor: colors.accent,
+    backgroundColor: colors.accentSoft,
   },
-  recommendationLengthTitle: { color: "#fff", fontSize: 15, fontWeight: "800" },
-  recommendationLengthTitleActive: { color: "#c9c0ff" },
-  recommendationLengthDetail: { color: "#aeb2c8", fontSize: 13, marginTop: 3 },
-  recommendationLengthDetailActive: { color: "#d8daec" },
+  recommendationLengthTitle: { color: colors.ink, fontSize: 15, fontWeight: "800" },
+  recommendationLengthTitleActive: { color: colors.accent },
+  recommendationLengthDetail: { color: colors.muted, fontSize: 13, marginTop: 3 },
+  recommendationLengthDetailActive: { color: colors.ink },
   exerciseOptionRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -5471,7 +5441,7 @@ const styles = StyleSheet.create({
     minHeight: 46,
     paddingVertical: 6,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "rgba(255,255,255,0.1)",
+    borderBottomColor: colors.rule,
   },
   exerciseOptionUnits: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
   exerciseReorderRow: {
@@ -5480,7 +5450,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "rgba(255,255,255,0.1)",
+    borderBottomColor: colors.rule,
   },
   exerciseMoveRow: { flexDirection: "row", gap: 6, marginLeft: "auto" },
   exerciseMoveButton: {
@@ -5488,24 +5458,24 @@ const styles = StyleSheet.create({
     minHeight: 34,
     borderRadius: 10,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(255,255,255,0.2)",
-    backgroundColor: "rgba(255,255,255,0.04)",
+    borderColor: colors.rule,
+    backgroundColor: colors.subtle,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
   },
-  exerciseMoveText: { color: "#d8daec", fontSize: 13, fontWeight: "700" },
+  exerciseMoveText: { color: colors.ink, fontSize: 13, fontWeight: "700" },
   exerciseUnitChip: { paddingVertical: 6, paddingHorizontal: 10 },
-  exerciseOptionText: { color: "#d8daec", fontWeight: "700", fontSize: 14 },
+  exerciseOptionText: { color: colors.ink, fontWeight: "700", fontSize: 14 },
   demoImageRow: { flexDirection: "row", gap: 8, marginBottom: 10 },
   demoImage: { width: "48%", aspectRatio: 1, borderRadius: 10 },
-  modalErrorText: { color: "#ff9a9a", marginBottom: 8, fontWeight: "600" },
+  modalErrorText: { color: colors.danger, marginBottom: 8, fontWeight: "600" },
   modalActions: { flexDirection: "row", gap: 10, marginTop: 12 },
   modalActionButton: { flex: 1 },
   modalPrimaryButton: { marginTop: 0, paddingVertical: 12 },
   dangerButton: {
-    backgroundColor: "rgba(248,113,113,0.9)",
+    backgroundColor: colors.danger,
     paddingVertical: 12,
     borderRadius: 12,
     alignItems: "center",
@@ -5516,34 +5486,71 @@ const styles = StyleSheet.create({
     paddingHorizontal: 9,
     borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(255,255,255,0.3)",
-    backgroundColor: "rgba(255,255,255,0.05)",
+    borderColor: colors.rule,
+    backgroundColor: colors.subtle,
   },
-  answerChipActive: { backgroundColor: "#7b61ff", borderColor: "#7b61ff" },
-  answerText: { color: "#d8daec", fontWeight: "700", fontSize: 12 },
-  answerTextActive: { color: "#0d0d1a" },
+  answerChipActive: { backgroundColor: colors.primary, borderColor: colors.accent },
+  answerText: { color: colors.ink, fontWeight: "700", fontSize: 12 },
+  answerTextActive: { color: colors.onPrimary },
   baselineBanner: {
-    backgroundColor: "rgba(123,97,255,0.12)",
+    backgroundColor: colors.accentSoft,
     borderRadius: 12,
     padding: 12,
     marginTop: 10,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(123,97,255,0.4)",
+    borderColor: colors.border,
   },
-  baselineText: { color: "#fff", fontWeight: "700" },
-  baselineSub: { color: "#c9cde4", marginTop: 4 },
+  baselineText: { color: colors.ink, fontWeight: "700" },
+  baselineSub: { color: colors.muted, marginTop: 4 },
   sheetBackdrop: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
+    backgroundColor: colors.overlay,
     justifyContent: "flex-end",
   },
   sheetCard: {
     width: "100%",
-    backgroundColor: "#111427",
+    backgroundColor: colors.canvas,
     padding: 16,
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(255,255,255,0.08)",
+    borderColor: colors.rule,
   },
-});
+}); return { ...base, ...notebookSheet({
+  card: { backgroundColor: colors.canvas, borderRadius: 0, paddingVertical: 24, paddingHorizontal: 0, marginTop: 0, borderWidth: 0, borderTopWidth: 1, borderColor: colors.rule },
+  sectionTitle: { color: colors.ink, fontSize: 20, fontWeight: "600", marginBottom: 16 },
+  input: { backgroundColor: colors.surface, color: colors.ink, borderWidth: 1, borderColor: colors.border, borderRadius: 4, paddingHorizontal: 12, paddingVertical: 10, minHeight: 48, fontSize: 16, marginBottom: 10 },
+  primaryButton: { backgroundColor: colors.primary, minHeight: 48, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 8, alignItems: "center", justifyContent: "center", marginTop: 8 },
+  secondaryButton: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, minHeight: 48, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 8, alignItems: "center", justifyContent: "center" },
+  primaryText: { color: colors.onPrimary, fontWeight: "600", fontSize: 16 }, secondaryText: { color: colors.ink, fontWeight: "600", fontSize: 16 },
+  modalBackdrop: { flex: 1, backgroundColor: colors.overlay, justifyContent: "flex-end", paddingHorizontal: 0 },
+  modalCard: { width: "100%", maxWidth: 560, backgroundColor: colors.surface, borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 20, gap: 12 },
+  modalActions: { flexDirection: "column", gap: 12, marginTop: 20 }, modalActionButton: { flex: 0, width: "100%" },
+  exerciseOrdinal: { color: colors.muted, fontSize: 13, minWidth: 24 },
+  exerciseName: { color: colors.ink, fontWeight: "600", fontSize: 20 },
+  exerciseNameButton: { flex: 1, flexShrink: 1, marginLeft: 0, minHeight: 48, justifyContent: "center" },
+  iconButton: { minWidth: 44, minHeight: 44, alignItems: "center", justifyContent: "center" },
+  inlineTipRow: { flexDirection: "row", gap: 12, marginVertical: 4 },
+  restTimerInlineButton: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", minHeight: 44, gap: 6 },
+  restTimerInlineText: { color: colors.muted, fontSize: 13 },
+  exerciseMetaNotesSingle: { marginTop: 4, marginBottom: 8 }, noteLabel: { color: colors.muted, fontSize: 13, marginBottom: 4 },
+  emptyHeading: { paddingVertical: 24, gap: 12 }, sessionTitle: { color: colors.ink, fontFamily: notebookFonts.editorial, fontSize: 26, fontWeight: "600" },
+  sourceRow: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 8 },
+  textAction: { minHeight: 48, justifyContent: "center", paddingVertical: 8 }, linkText: { color: colors.accent, fontSize: 16, fontWeight: "600" },
+  setHeaderCheck: { width: 44, textAlign: "center" }, cardioSetHeaderCheck: { width: 44 },
+  checkboxHitbox: { minWidth: 44, minHeight: 44, alignItems: "center", justifyContent: "center" },
+  nativeSetHeaderCheck: { width: 44 }, nativeSetHeaderLast: { width: 96, marginLeft: 4 },
+  nativeSetHeaderInput: { marginLeft: 4 }, setColRpe: { flex: 1, textAlign: "center" },
+  checkbox: { width: 20, height: 20, borderWidth: 1, borderRadius: 4, borderColor: colors.border, backgroundColor: colors.surface, justifyContent: "center", alignItems: "center" },
+  checkboxChecked: { backgroundColor: colors.primary, borderColor: colors.primary }, cardioCheckboxMark: { color: colors.onPrimary, fontSize: 12, fontWeight: "700" },
+  answerTextActive: { color: colors.onPrimary }, groupChipTextActive: { color: colors.onPrimary },
+  sessionControls: { paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.rule },
+  sessionActionRow: { flexDirection: "row", gap: 16 },
+  sessionAction: { flex: 1, minHeight: 48, justifyContent: "center", paddingVertical: 8 },
+  sessionActionRight: { alignItems: "flex-end" },
+  routineMenuRow: { minHeight: 52, paddingVertical: 12, borderTopWidth: 1, borderTopColor: colors.rule, justifyContent: "center" },
+  activeSet: { backgroundColor: colors.accentSoft, borderLeftWidth: 2, borderLeftColor: colors.accent },
+  setHelp: { gap: 8, paddingVertical: 12 },
+  restCustomRow: { ...base.restCustomRow, marginTop: 20 },
+  durationFieldInput: { ...base.durationFieldInput, width: 112, minWidth: 88, flexShrink: 1, fontSize: 24, paddingHorizontal: 8, minHeight: 52 },
+}) }; };

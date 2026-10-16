@@ -12,6 +12,11 @@ type NativeSetRow = {
 };
 
 type WorkoutNativeSetRowsProps = {
+  activeSetIndex: number;
+  editingSuspended: boolean;
+  onActivate: (index: number) => void;
+  notebookColors?: Record<string, string>;
+  fontFamily?: string;
   style: ViewStyle;
   listKey: string;
   weightLabel: string;
@@ -27,6 +32,11 @@ type WorkoutNativeSetRowsProps = {
 
 /** Adapter between screen state and the Android-native resistance set list. */
 export function WorkoutNativeSetRows({
+  activeSetIndex,
+  editingSuspended,
+  onActivate,
+  notebookColors,
+  fontFamily,
   style,
   listKey,
   weightLabel,
@@ -41,6 +51,13 @@ export function WorkoutNativeSetRows({
 }: WorkoutNativeSetRowsProps) {
   return (
     <WorkoutSetList
+      activeSetIndex={activeSetIndex}
+      editingSuspended={editingSuspended}
+      onSetActivate={({ nativeEvent }) => {
+        if (Number.isInteger(nativeEvent.index) && nativeEvent.index >= 0 && nativeEvent.index < rows.length) onActivate(nativeEvent.index);
+      }}
+      notebookColors={notebookColors}
+      fontFamily={fontFamily}
       key={listKey}
       style={style}
       weightLabel={weightLabel}

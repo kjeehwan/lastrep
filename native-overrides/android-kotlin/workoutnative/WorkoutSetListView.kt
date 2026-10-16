@@ -3,7 +3,11 @@ package __PACKAGE__.workoutnative
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Rect
+import com.facebook.react.common.assets.ReactFontManager
+import com.facebook.react.bridge.ReadableMap
 import android.graphics.Paint
+import android.graphics.Path
 import android.graphics.RectF
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -16,9 +20,12 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
 import android.view.ViewGroup
+import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputMethodManager
 import android.widget.LinearLayout
 import android.widget.FrameLayout
 import android.widget.TextView
+import android.widget.ScrollView
 import androidx.appcompat.widget.AppCompatEditText
 import androidx.appcompat.widget.AppCompatTextView
 import androidx.core.view.setPadding
@@ -52,6 +59,8 @@ private data class WorkoutSetRowBinding(
 private data class ActiveWorkoutSetEditor(val position: Int, val field: String)
 
 class WorkoutSetListView(context: Context) : LinearLayout(context) {
+  private var activeSetIndex = -1
+  private var editingSuspended = false
   private val recyclerView = RecyclerView(context)
   private val adapter = WorkoutSetAdapter(::emitChange, ::emitToggleDone, ::emitSetLabelPress, ::emitLastPress)
   private val deletePaint = Paint().apply {
@@ -69,15 +78,65 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
     textAlign = Paint.Align.CENTER
   }
 
+  private var ink = Color.parseColor("#242720")
+  private var muted = Color.parseColor("#625F55")
+  private var surface = Color.parseColor("#FFFCF5")
+  private var border = Color.parseColor("#817B6E")
+  private var primary = Color.parseColor("#242720")
+  private var onPrimary = Color.parseColor("#FFFCF5")
+  private var accent = Color.parseColor("#A33F24")
+  private var accentSoft = Color.parseColor("#F3E4D8")
+  private var family = "NotebookSans"
+  private val largeText get() = resources.configuration.fontScale >= 1.5f
+  private fun notebookFace(): Typeface = ReactFontManager.getInstance().getTypeface(family, Typeface.NORMAL, context.assets)
+  fun setNotebookColors(colors: ReadableMap?) {
+    if (colors == null) return
+    fun color(key: String, fallback: Int) = if (colors.hasKey(key)) Color.parseColor(colors.getString(key)) else fallback
+    val next = listOf(color("ink", ink), color("muted", muted), color("surface", surface), color("border", border), color("primary", primary), color("onPrimary", onPrimary), color("accent", accent), color("accentSoft", accentSoft))
+    if (next == listOf(ink, muted, surface, border, primary, onPrimary, accent, accentSoft)) return
+    ink = next[0]; muted = next[1]; surface = next[2]; border = next[3]; primary = next[4]; onPrimary = next[5]
+    accent = next[6]; accentSoft = next[7]
+    adapter.notifyDataSetChanged()
+  }
+  fun setNotebookFont(value: String?) { if (value != null && family != value) { family = value; adapter.notifyDataSetChanged() } }
   var reactTagForEvents: Int = View.NO_ID
   var weightLabel: String = "Weight"
   var repsLabel: String = "Reps"
   var rpeLabel: String = "RPE"
 
+  fun setActiveSetIndex(value: Int) {
+    if (activeSetIndex == value) return
+    activeSetIndex = value
+    adapter.clearEditorOutside(value)
+    adapter.refreshHighlights()
+  }
+
+  fun setEditingSuspended(value: Boolean) {
+    if (editingSuspended == value) return
+    editingSuspended = value
+    if (value) {
+      adapter.clearEditorOutside(-1)
+      recyclerView.clearFocus()
+    }
+    recyclerView.descendantFocusability = if (value) ViewGroup.FOCUS_BLOCK_DESCENDANTS else ViewGroup.FOCUS_AFTER_DESCENDANTS
+  }
+
+  private fun activateSet(index: Int) {
+    if (editingSuspended || index < 0) return
+    setActiveSetIndex(index)
+    if (reactTagForEvents == View.NO_ID) return
+    val payload = Arguments.createMap().apply { putInt("index", index) }
+    (context as? com.facebook.react.bridge.ReactContext)?.getJSModule(RCTEventEmitter::class.java)?.receiveEvent(reactTagForEvents, "topSetActivate", payload)
+  }
+
   init {
     orientation = VERTICAL
+    viewTreeObserver.addOnGlobalLayoutListener { if (hasFocus()) post { keepEditorVisible() } }
     recyclerView.layoutManager = LinearLayoutManager(context, RecyclerView.VERTICAL, false)
     recyclerView.adapter = adapter
+    // Exact-field focus is owned here. RecyclerView's layout recovery otherwise
+    // chooses the first focusable child (Weight) after a confirmed Reps/RPE tap.
+    recyclerView.preserveFocusAfterLayout = false
     recyclerView.isNestedScrollingEnabled = false
     recyclerView.overScrollMode = RecyclerView.OVER_SCROLL_NEVER
     addView(
@@ -132,6 +191,22 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
       }
     )
     touchHelper.attachToRecyclerView(recyclerView)
+  }
+
+  private fun keepEditorVisible() {
+    if (!isAttachedToWindow || editingSuspended || !adapter.hasActiveEditor()) return
+    val input = findFocus() as? AppCompatEditText ?: return
+    if (!input.isAttachedToWindow) return
+    var ancestor = input.parent
+    while (ancestor != null && ancestor !is ScrollView) ancestor = ancestor.parent
+    val scroll = ancestor as? ScrollView ?: return
+    val location = IntArray(2); input.getLocationOnScreen(location)
+    val visible = Rect(); scroll.getGlobalVisibleRect(visible)
+    val window = Rect(); getWindowVisibleDisplayFrame(window)
+    val bottom = minOf(visible.bottom, window.bottom) - dp(16f)
+    val delta = location[1] + input.height - bottom
+    if (delta > 0) scroll.scrollTo(scroll.scrollX, scroll.scrollY + delta)
+    else if (location[1] < visible.top + dp(8f)) scroll.scrollTo(scroll.scrollX, (scroll.scrollY + location[1] - visible.top - dp(8f)).coerceAtLeast(0))
   }
 
   fun setItems(items: List<WorkoutSetItem>) {
@@ -211,6 +286,21 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
     private var rpeHint: String = "RPE"
     private var activeEditor: ActiveWorkoutSetEditor? = null
 
+    fun hasActiveEditor() = activeEditor != null
+
+    fun clearEditorOutside(index: Int) {
+      if (activeEditor?.position != index) {
+        activeEditor = null
+        recyclerView.clearFocus()
+      }
+    }
+
+    fun refreshHighlights() {
+      for (i in 0 until recyclerView.childCount) {
+        (recyclerView.getChildViewHolder(recyclerView.getChildAt(i)) as? WorkoutSetViewHolder)?.updateHighlight()
+      }
+    }
+
     fun setItems(next: List<WorkoutSetItem>) {
       if (items.size == next.size) {
         val changedIndices = mutableListOf<Int>()
@@ -248,6 +338,7 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
     }
 
     fun setColumnLabels(weight: String, reps: String, rpe: String) {
+      if (weightHint == weight && repsHint == reps && rpeHint == rpe) return
       weightHint = weight
       repsHint = reps
       rpeHint = rpe
@@ -265,8 +356,13 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
     override fun getItemCount(): Int = items.size
 
     private fun createRowView(context: Context): WorkoutSetRowBinding {
-      val root = LinearLayout(context).apply {
-        orientation = HORIZONTAL
+      val root = object : LinearLayout(context) {
+        override fun dispatchDraw(canvas: Canvas) {
+          super.dispatchDraw(canvas)
+          if (isSelected) canvas.drawRect(0f, 0f, dp(2f).toFloat(), height.toFloat(), Paint().apply { color = accent })
+        }
+      }.apply {
+        orientation = if (largeText) VERTICAL else HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
         descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
         layoutParams = RecyclerView.LayoutParams(
@@ -275,36 +371,44 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
         ).apply {
           bottomMargin = dp(4f)
         }
-        setPadding(dp(4f))
+        setPadding(0, dp(2f), 0, dp(2f))
       }
 
       val setLabel = TextView(context).apply {
-        setTextColor(Color.parseColor("#CDD0E0"))
+        setTextColor(muted)
         textSize = 13f
         gravity = Gravity.CENTER
-        layoutParams = LayoutParams(dp(24f), dp(32f))
+        layoutParams = LayoutParams(dp(24f), dp(44f))
       }
-      root.addView(setLabel)
+      val header = if (largeText) LinearLayout(context).apply { orientation = HORIZONTAL; gravity = Gravity.CENTER_VERTICAL } else root
+      header.addView(setLabel)
 
       val checkHitbox = FrameLayout(context).apply {
         // Keep the visible checkbox compact while providing a reliable 40dp hit target.
-        layoutParams = LayoutParams(dp(40f), dp(40f)).apply {
+        layoutParams = LayoutParams(dp(44f), dp(48f)).apply {
           marginEnd = dp(2f)
         }
       }
-      val check = AppCompatTextView(context).apply {
-        layoutParams = FrameLayout.LayoutParams(dp(24f), dp(24f), Gravity.CENTER)
+      val check = object : AppCompatTextView(context) {
+        override fun onDraw(canvas: Canvas) {
+          super.onDraw(canvas)
+          if (!isActivated) return
+          val scale = width / 20f
+          val path = Path().apply { moveTo(5f * scale, 10f * scale); lineTo(9f * scale, 14f * scale); lineTo(15f * scale, 6f * scale) }
+          canvas.drawPath(path, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = onPrimary; style = Paint.Style.STROKE; strokeWidth = 2f * scale; strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND })
+        }
+      }.apply {
+        layoutParams = FrameLayout.LayoutParams(dp(if (largeText) 36f else 20f), dp(if (largeText) 36f else 20f), Gravity.CENTER)
         gravity = Gravity.CENTER
         textSize = 12f
         setTypeface(typeface, Typeface.BOLD)
         setPadding(dp(2f))
       }
       checkHitbox.addView(check)
-      root.addView(checkHitbox)
 
       val last = TextView(context).apply {
-        setTextColor(Color.parseColor("#AAB0CC"))
-        textSize = 11f
+        setTextColor(muted)
+        textSize = 12f
         maxLines = 3
         minHeight = dp(40f)
         gravity = Gravity.CENTER_VERTICAL
@@ -312,7 +416,8 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
         isFocusable = true
         setLineSpacing(0f, 1.05f)
       }
-      root.addView(last, LayoutParams(dp(84f), LayoutParams.WRAP_CONTENT).apply { marginStart = dp(2f) })
+      header.addView(last, if (largeText) LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f) else LayoutParams(dp(96f), LayoutParams.WRAP_CONTENT).apply { marginStart = dp(4f) })
+      setLabel.typeface = notebookFace(); last.typeface = notebookFace()
 
       val weight = createInput(
         context,
@@ -326,29 +431,46 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
         InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
       )
 
-      root.addView(weight, LayoutParams(0, dp(40f), 1f).apply { marginStart = dp(6f) })
-      root.addView(reps, LayoutParams(0, dp(40f), 1f).apply { marginStart = dp(6f) })
-      root.addView(rpe, LayoutParams(0, dp(40f), 0.8f).apply { marginStart = dp(6f) })
+      if (largeText) {
+        header.addView(checkHitbox)
+        root.addView(header, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
+        for ((label, input) in listOf(weightHint to weight, repsHint to reps, (if (rpeHint == "0-4") "RIR" else "RPE") to rpe)) {
+          val line = LinearLayout(context).apply { orientation = HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(4f), 0, dp(4f)) }
+          val text = TextView(context).apply { this.text = label; textSize = 14f; setTextColor(muted); typeface = notebookFace() }
+          line.addView(text, LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f))
+          line.addView(input, LayoutParams(dp(140f), dp(64f)))
+          root.addView(line, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
+        }
+      } else {
+        root.addView(weight, LayoutParams(0, dp(48f), 1f).apply { marginStart = dp(4f) })
+        root.addView(reps, LayoutParams(0, dp(48f), 1f).apply { marginStart = dp(4f) })
+        root.addView(rpe, LayoutParams(0, dp(48f), 1f).apply { marginStart = dp(4f) })
+        root.addView(checkHitbox)
+      }
 
       return WorkoutSetRowBinding(root, setLabel, checkHitbox, check, last, weight, reps, rpe)
     }
 
     private fun createInput(context: Context, hint: String, inputType: Int): AppCompatEditText {
       val bg = GradientDrawable().apply {
-        setColor(Color.parseColor("#14FFFFFF"))
-        cornerRadius = dp(10f).toFloat()
+        setColor(surface)
+        setStroke(dp(1f), border)
+        cornerRadius = dp(4f).toFloat()
       }
       return AppCompatEditText(context).apply {
         this.hint = hint
-        setHintTextColor(Color.parseColor("#7A7A8C"))
-        setTextColor(Color.WHITE)
-        textSize = 14f
+        setHintTextColor(muted)
+        setTextColor(ink)
+        textSize = 16f
         gravity = Gravity.CENTER
         setSingleLine(true)
         this.inputType = inputType
+        typeface = notebookFace()
+        setSelectAllOnFocus(true)
+        imeOptions = imeOptions or EditorInfo.IME_FLAG_NO_EXTRACT_UI or EditorInfo.IME_FLAG_NO_FULLSCREEN
         includeFontPadding = false
         background = bg
-        setPadding(dp(8f), 0, dp(8f), 0)
+        setPadding(dp(3f), 0, dp(3f), 0)
       }
     }
 
@@ -359,21 +481,47 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
       private var rpeWatcher: TextWatcher? = null
       private var localDone: Boolean = false
       private var boundIndex: Int = -1
+      private val deferredTouches = mutableSetOf<String>()
+      private val draggedTouches = mutableSetOf<String>()
       private val inputTouchStarts = mutableMapOf<String, Pair<Float, Float>>()
 
       fun bind(position: Int, item: WorkoutSetItem) {
         boundIndex = position
+        updateHighlight()
+        binding.setLabel.setTextColor(muted); binding.last.setTextColor(muted)
+        for (input in listOf(binding.weight, binding.reps, binding.rpe)) {
+          input.setTextColor(ink); input.setHintTextColor(muted); input.typeface = notebookFace()
+          input.background = GradientDrawable().apply { setColor(surface); setStroke(dp(1f), border); cornerRadius = dp(4f).toFloat() }
+        }
         binding.setLabel.text = item.marker.ifBlank { (position + 1).toString() }
         binding.setLabel.setOnClickListener {
           if (boundIndex >= 0) onSetLabelPress(boundIndex)
         }
         binding.last.text = item.last.ifBlank { "-" }
+        binding.last.isEnabled = item.last.isNotBlank() && item.last != "-"
+        binding.last.contentDescription = if (binding.last.isEnabled) "Set ${position + 1}, copy Last: ${item.last}" else "Set ${position + 1}, no prior record"
+        binding.weight.contentDescription = "Set ${position + 1}, $weightHint"
+        binding.reps.contentDescription = "Set ${position + 1}, $repsHint"
+        binding.rpe.contentDescription = "Set ${position + 1}, ${if (rpeHint == "0-4") "RIR" else "RPE"}"
+        binding.checkHitbox.isFocusable = true
+        binding.checkHitbox.contentDescription = "Set ${position + 1} completion"
+        binding.checkHitbox.accessibilityDelegate = object : View.AccessibilityDelegate() {
+          override fun onInitializeAccessibilityNodeInfo(host: View, info: android.view.accessibility.AccessibilityNodeInfo) {
+            super.onInitializeAccessibilityNodeInfo(host, info)
+            info.className = "android.widget.CheckBox"
+            info.isCheckable = true
+            info.isChecked = localDone
+          }
+        }
         binding.last.setOnClickListener {
           if (boundIndex >= 0) onLastPress(boundIndex)
         }
         localDone = item.done
         applyCheckStyle(localDone)
         binding.checkHitbox.setOnClickListener {
+          activateSet(boundIndex)
+          activeEditor = null
+          recyclerView.clearFocus()
           localDone = !localDone
           applyCheckStyle(localDone)
           if (boundIndex >= 0) onToggleDone(boundIndex, localDone)
@@ -428,7 +576,7 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
             else -> binding.rpe
           }
           input.post {
-            if (activeEditor == editor && !input.hasFocus()) {
+            if (!editingSuspended && activeSetIndex == position && activeEditor == editor && boundIndex == position && bindingAdapterPosition == position && input.isAttachedToWindow && !input.hasFocus()) {
               input.requestFocus()
               input.setSelection(input.text?.length ?: 0)
             }
@@ -436,56 +584,83 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
         }
       }
 
+      fun updateHighlight() {
+        binding.root.isSelected = boundIndex >= 0 && boundIndex == activeSetIndex
+        binding.root.setBackgroundColor(if (binding.root.isSelected) accentSoft else Color.TRANSPARENT)
+        binding.root.invalidate()
+      }
+
       private fun bindFocusTracking(input: AppCompatEditText, field: String) {
         input.setOnFocusChangeListener { _, hasFocus ->
-          if (hasFocus && boundIndex >= 0) {
+          input.background = GradientDrawable().apply { setColor(surface); setStroke(dp(if (hasFocus) 2f else 1f), if (hasFocus) accent else border); cornerRadius = dp(4f).toFloat() }
+          if (hasFocus && !editingSuspended && activeSetIndex == boundIndex) {
             activeEditor = ActiveWorkoutSetEditor(boundIndex, field)
+            input.postDelayed({ keepEditorVisible() }, 120)
           } else if (!hasFocus && activeEditor == ActiveWorkoutSetEditor(boundIndex, field)) {
             activeEditor = null
           }
         }
-        input.setOnTouchListener { view, event ->
-          if (event.actionMasked == MotionEvent.ACTION_DOWN && boundIndex >= 0) {
-            activeEditor = ActiveWorkoutSetEditor(boundIndex, field)
-            // Claim the exact field before RecyclerView can intercept the gesture.
-            view.isFocusableInTouchMode = true
-            view.requestFocus()
-          }
-          handleInputTouch(view, event, field)
-        }
+        input.setOnTouchListener { view, event -> handleInputTouch(view as AppCompatEditText, event, field) }
       }
 
-      private fun handleInputTouch(view: View, event: MotionEvent, field: String): Boolean {
+      private fun handleInputTouch(input: AppCompatEditText, event: MotionEvent, field: String): Boolean {
+        if (editingSuspended) return true
         val slop = ViewConfiguration.get(context).scaledTouchSlop.toFloat()
         when (event.actionMasked) {
           MotionEvent.ACTION_DOWN -> {
-            inputTouchStarts[field] = event.x to event.y
-            view.parent?.requestDisallowInterceptTouchEvent(true)
+            inputTouchStarts[field] = event.rawX to event.rawY
+            draggedTouches.remove(field)
+            // Do not let TextView or RecyclerView focus an untouched field before a tap is confirmed.
+            if (!input.hasFocus()) deferredTouches.add(field)
+            input.parent?.requestDisallowInterceptTouchEvent(true)
           }
           MotionEvent.ACTION_MOVE -> {
             val start = inputTouchStarts[field] ?: return false
-            if (abs(event.x - start.first) > slop || abs(event.y - start.second) > slop) {
-              view.parent?.requestDisallowInterceptTouchEvent(false)
+            if (abs(event.rawX - start.first) > slop || abs(event.rawY - start.second) > slop) {
+              draggedTouches.add(field)
+              input.parent?.requestDisallowInterceptTouchEvent(false)
             }
           }
           MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+            val deferred = deferredTouches.remove(field)
+            val tapped = event.actionMasked == MotionEvent.ACTION_UP && !draggedTouches.remove(field)
             inputTouchStarts.remove(field)
-            view.parent?.requestDisallowInterceptTouchEvent(false)
+            input.parent?.requestDisallowInterceptTouchEvent(false)
+            if (tapped && boundIndex >= 0 && bindingAdapterPosition == boundIndex && input.isAttachedToWindow) {
+              activateSet(boundIndex)
+              activeEditor = ActiveWorkoutSetEditor(boundIndex, field)
+              if (deferred) {
+                input.isFocusableInTouchMode = true
+                input.requestFocus()
+                // Replay TextView's tap only after slop detection; scrolling must never open the keyboard.
+                val down = MotionEvent.obtain(event).apply { action = MotionEvent.ACTION_DOWN }
+                input.onTouchEvent(down)
+                down.recycle()
+                input.onTouchEvent(event)
+                input.selectAll()
+                (context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager)?.showSoftInput(input, InputMethodManager.SHOW_IMPLICIT)
+                input.postDelayed({ keepEditorVisible() }, 120)
+              }
+            }
+            if (deferred) return true
           }
         }
-        return false
+        return field in deferredTouches
       }
 
       private fun applyCheckStyle(done: Boolean) {
         val bg = GradientDrawable().apply {
           shape = GradientDrawable.RECTANGLE
-          cornerRadius = dp(6f).toFloat()
-          setStroke(dp(2f), if (done) Color.parseColor("#7B61FF") else Color.parseColor("#CDD0E0"))
-          setColor(if (done) Color.parseColor("#7B61FF") else Color.TRANSPARENT)
+          cornerRadius = dp(if (largeText) 6f else 4f).toFloat()
+          setStroke(dp(if (largeText) 2f else 1f), if (done) primary else border)
+          setColor(if (done) primary else surface)
         }
         binding.check.background = bg
-        binding.check.text = if (done) "\u2713" else ""
-        binding.check.setTextColor(if (done) Color.parseColor("#0D0D1A") else Color.TRANSPARENT)
+        binding.check.text = ""
+        // Row selection cascades to child isSelected; completion must be independent.
+        binding.check.isActivated = done
+        binding.check.invalidate()
+        binding.check.setTextColor(if (done) onPrimary else Color.TRANSPARENT)
       }
 
       private fun afterTextChanged(block: (String) -> Unit): TextWatcher =

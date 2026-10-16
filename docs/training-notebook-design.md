@@ -4,7 +4,10 @@ Version: 1.7 | Date: October 16, 2026
 
 Status: Workout, Home, Nutrition, Sleep, Profile and Settings browser design
 directions approved through iterative review. Shared rules below incorporate that
-feedback. No screen redesign is implemented in the native app or device-validated.
+feedback. Workout now has a native migration candidate on
+`feature/workout-notebook-ui`; native approval remains separate from the browser
+baseline. Other screens have not been migrated. See workout-notebook-migration.md
+for implementation boundaries and actual verification coverage.
 The initial Figma pair records an earlier Workout revision; the local browser
 prototype and decisions below capture the subsequent approved refinements.
 

@@ -1,5 +1,6 @@
 import React, { type ReactNode } from "react";
-import { Modal, TouchableWithoutFeedback, type ViewStyle } from "react-native";
+import { TouchableWithoutFeedback, type ViewStyle } from "react-native";
+import { NotebookModal as Modal } from "../../ui/notebook/NotebookModal";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { AdaptiveModalCard } from "../../ui/AdaptiveModalCard";
 import { KeyboardAwareModalFrame } from "../../ui/KeyboardAwareModalFrame";
@@ -9,7 +10,7 @@ type WorkoutModalShellProps = {
   children: ReactNode;
   backdropStyle: ViewStyle;
   cardStyle: ViewStyle;
-  onRequestClose?: () => void;
+  onRequestClose: () => void;
   dismissOnBackdropPress?: boolean;
 };
 

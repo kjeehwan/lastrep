@@ -1,3 +1,5 @@
+import { useNotebook, useNotebookStyles, notebookSheet } from "../../ui/notebook/Notebook";
+import type { NotebookColors } from "../../ui/notebook/tokens";
 import { AdaptiveModalCard } from "../../ui/AdaptiveModalCard";
 import React, { useState } from "react";
 import {
@@ -55,9 +57,12 @@ function ChoiceRow<T extends string>({
   onChange,
 }: {
   options: Option<T>[];
-  value: T;
+  value: T | null;
   onChange: (value: T) => void;
 }) {
+  const { fontsLoaded } = useNotebook();
+  const notebookStyles = useNotebookStyles(createNotebookStyles);
+  const styles = fontsLoaded ? notebookStyles : legacyStyles;
   return (
     <View style={styles.choiceRow}>
       {options.map((option) => {
@@ -77,29 +82,38 @@ function ChoiceRow<T extends string>({
 }
 
 export function TodayPlanContextModal({ visible, context, plan, saving, onClose, onSave }: Props) {
+  const { fontsLoaded } = useNotebook();
+  const notebookStyles = useNotebookStyles(createNotebookStyles);
+  const styles = fontsLoaded ? notebookStyles : legacyStyles;
   const insets = useSafeAreaInsets();
   const [painEnabled, setPainEnabled] = useState(Boolean(context?.pain));
-  const [painArea, setPainArea] = useState<PainArea>(context?.pain?.area ?? "shoulder");
-  const [painSide, setPainSide] = useState<PainSide>(
-    context?.pain?.side === "not_applicable" ? "left" : context?.pain?.side ?? "left"
-  );
-  const [painSeverity, setPainSeverity] = useState<PainSeverity>(context?.pain?.severity ?? "mild");
-  const [painTrigger, setPainTrigger] = useState<PainTrigger>(context?.pain?.trigger ?? "other");
+  const [painArea, setPainArea] = useState<PainArea | null>(context?.pain?.area ?? null);
+  const [painSide, setPainSide] = useState<PainSide | null>(context?.pain?.side === "not_applicable" ? null : context?.pain?.side ?? null);
+  const [painSeverity, setPainSeverity] = useState<PainSeverity | null>(context?.pain?.severity ?? null);
+  const [painTrigger, setPainTrigger] = useState<PainTrigger | null>(context?.pain?.trigger ?? null);
   const [painNote, setPainNote] = useState(context?.pain?.note ?? "");
   const [activityEnabled, setActivityEnabled] = useState(Boolean(context?.additionalActivity));
-  const [activityType, setActivityType] = useState<ActivityType>(context?.additionalActivity?.type ?? "long_walk_hike");
-  const [activityTiming, setActivityTiming] = useState<ActivityTiming>(context?.additionalActivity?.timing ?? "yesterday");
-  const [activityEffort, setActivityEffort] = useState<ActivityEffort>(context?.additionalActivity?.effort ?? "moderate");
-  const [activityDuration, setActivityDuration] = useState<ActivityDuration>(context?.additionalActivity?.duration ?? "1_to_2h");
+  const [activityType, setActivityType] = useState<ActivityType | null>(context?.additionalActivity?.type ?? null);
+  const [activityTiming, setActivityTiming] = useState<ActivityTiming | null>(context?.additionalActivity?.timing ?? null);
+  const [activityEffort, setActivityEffort] = useState<ActivityEffort | null>(context?.additionalActivity?.effort ?? null);
+  const [activityDuration, setActivityDuration] = useState<ActivityDuration | null>(context?.additionalActivity?.duration ?? null);
   const [note, setNote] = useState(context?.note ?? "");
 
+  const [validationError, setValidationError] = useState<string | null>(null);
   const selectedArea = PAIN_AREAS.find((item) => item.value === painArea);
 
   const handleSave = () => {
-    const pain = painEnabled
+    if (painEnabled && (!painArea || !painSeverity || !painTrigger || selectedArea?.sided && !painSide)) {
+      setValidationError("Choose the pain area, side (if shown), severity and movement trigger, or remove Pain or discomfort."); return;
+    }
+    if (activityEnabled && (!activityType || !activityTiming || !activityEffort || !activityDuration)) {
+      setValidationError("Choose the activity, timing, effort and duration, or remove Additional activity."); return;
+    }
+    setValidationError(null);
+    const pain = painEnabled && painArea && painSeverity && painTrigger
       ? {
           area: painArea,
-          side: selectedArea?.sided ? painSide : "not_applicable" as const,
+          side: selectedArea?.sided ? painSide ?? "not_applicable" : "not_applicable" as const,
           severity: painSeverity,
           trigger: painTrigger,
           note: painNote.trim().slice(0, 240) || null,
@@ -109,7 +123,7 @@ export function TodayPlanContextModal({ visible, context, plan, saving, onClose,
           ),
         }
       : null;
-    const additionalActivity = activityEnabled
+    const additionalActivity = activityEnabled && activityType && activityTiming && activityEffort && activityDuration
       ? {
           type: activityType,
           timing: activityTiming,
@@ -219,6 +233,7 @@ export function TodayPlanContextModal({ visible, context, plan, saving, onClose,
               multiline
             />
           </View>
+          {validationError ? <Text accessibilityRole="alert" style={styles.sectionHint}>{validationError}</Text> : null}
           <View style={styles.actions}>
             <TouchableOpacity style={styles.secondaryButton} onPress={onClose} disabled={saving}>
               <Text style={styles.secondaryText}>Cancel</Text>
@@ -233,7 +248,7 @@ export function TodayPlanContextModal({ visible, context, plan, saving, onClose,
   );
 }
 
-const styles = StyleSheet.create({
+const legacyStyles = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.62)", justifyContent: "flex-end" },
   dismissArea: { flex: 1 },
   sheet: {
@@ -275,4 +290,39 @@ const styles = StyleSheet.create({
   secondaryText: { color: "#d7daea", fontWeight: "800" },
   primaryText: { color: "#17120a", fontWeight: "900" },
   disabled: { opacity: 0.55 },
+});
+
+const createNotebookStyles = (colors: NotebookColors) => notebookSheet({
+ ...legacyStyles,
+ overlay: { ...legacyStyles.overlay, backgroundColor: colors.overlay },
+ dismissArea: { ...legacyStyles.dismissArea,  },
+ sheet: { ...legacyStyles.sheet, backgroundColor: colors.surface, borderColor: colors.rule, borderTopLeftRadius: 16, borderTopRightRadius: 16 },
+ handle: { ...legacyStyles.handle, backgroundColor: colors.rule },
+ title: { ...legacyStyles.title, color: colors.ink },
+ intro: { ...legacyStyles.intro, color: colors.muted },
+ content: { ...legacyStyles.content,  },
+ sectionHeader: { ...legacyStyles.sectionHeader,  },
+ sectionCopy: { ...legacyStyles.sectionCopy,  },
+ sectionTitle: { ...legacyStyles.sectionTitle, color: colors.ink },
+ sectionHint: { ...legacyStyles.sectionHint, color: colors.muted },
+ toggle: { ...legacyStyles.toggle, backgroundColor: colors.surface, borderColor: colors.border, minHeight: 44 },
+ toggleActive: { ...legacyStyles.toggleActive, backgroundColor: colors.accentSoft, borderColor: colors.accent },
+ toggleText: { ...legacyStyles.toggleText, color: colors.ink },
+ toggleTextActive: { ...legacyStyles.toggleTextActive, color: colors.accent },
+ fields: { ...legacyStyles.fields,  },
+ label: { ...legacyStyles.label, color: colors.muted },
+ choiceRow: { ...legacyStyles.choiceRow,  },
+ choiceChip: { ...legacyStyles.choiceChip, backgroundColor: colors.surface, borderColor: colors.border, minHeight: 44 },
+ choiceChipSelected: { ...legacyStyles.choiceChipSelected, backgroundColor: colors.accentSoft, borderColor: colors.accent },
+ choiceText: { ...legacyStyles.choiceText, color: colors.ink },
+ choiceTextSelected: { ...legacyStyles.choiceTextSelected, color: colors.accent },
+ input: { ...legacyStyles.input, backgroundColor: colors.surface, color: colors.ink, borderColor: colors.border, borderRadius: 4 },
+ noteInput: { ...legacyStyles.noteInput,  },
+ divider: { ...legacyStyles.divider, backgroundColor: colors.rule },
+ actions: { ...legacyStyles.actions,  },
+ secondaryButton: { ...legacyStyles.secondaryButton, backgroundColor: colors.surface, borderColor: colors.border, minHeight: 44 },
+ primaryButton: { ...legacyStyles.primaryButton, backgroundColor: colors.primary, borderRadius: 8, minHeight: 48 },
+ secondaryText: { ...legacyStyles.secondaryText, color: colors.ink },
+ primaryText: { ...legacyStyles.primaryText, color: colors.onPrimary },
+ disabled: { ...legacyStyles.disabled,  },
 });

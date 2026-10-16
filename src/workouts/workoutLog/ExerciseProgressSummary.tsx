@@ -1,5 +1,7 @@
+import { useNotebook, useNotebookStyles, notebookSheet } from "../../ui/notebook/Notebook";
+import { type NotebookColors } from "../../ui/notebook/tokens";
 import React, { memo } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import Svg, { Circle, Line, Polyline } from "react-native-svg";
 import type { ExerciseProgressInsights } from "../exerciseProgressInsights";
 import { formatEffort, type EffortScale } from "../effortScale";
@@ -17,6 +19,8 @@ const PAD_Y = 12;
 const formatKg = (value: number) => `${Math.round(value * 10) / 10} kg`;
 
 export const ExerciseProgressSummary = memo(function ExerciseProgressSummary({ insights, effortScale = "rpe" }: Props) {
+  const { colors } = useNotebook();
+  const styles = useNotebookStyles(createStyles);
   if (!insights.latest || !insights.best) {
     return (
       <View style={styles.emptyWrap}>
@@ -78,11 +82,11 @@ export const ExerciseProgressSummary = memo(function ExerciseProgressSummary({ i
           y1={HEIGHT - PAD_Y}
           x2={WIDTH - PAD_X}
           y2={HEIGHT - PAD_Y}
-          stroke="rgba(255,255,255,0.1)"
+          stroke={colors.rule}
           strokeWidth={1}
         />
         {nodes.length > 1 ? (
-          <Polyline points={polyline} fill="none" stroke="#60a5fa" strokeWidth={2.5} />
+          <Polyline points={polyline} fill="none" stroke={colors.accent} strokeWidth={2.5} />
         ) : null}
         {nodes.map((node) => (
           <Circle
@@ -109,23 +113,23 @@ export const ExerciseProgressSummary = memo(function ExerciseProgressSummary({ i
   );
 });
 
-const styles = StyleSheet.create({
-  wrap: { marginTop: 4, marginBottom: 12, borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.08)", paddingBottom: 14 },
+const createStyles = (colors: NotebookColors) => notebookSheet({
+  wrap: { marginTop: 4, marginBottom: 12, borderBottomWidth: 1, borderBottomColor: colors.rule, paddingBottom: 14 },
   emptyWrap: { paddingVertical: 12 },
-  emptyText: { color: "#9aa1c3", fontSize: 12, lineHeight: 17 },
+  emptyText: { color: colors.muted, fontSize: 12, lineHeight: 17 },
   summaryRow: { flexDirection: "row", gap: 8 },
-  summaryCell: { flex: 1, borderRadius: 12, backgroundColor: "rgba(255,255,255,0.05)", padding: 10 },
-  label: { color: "#9aa1c3", fontSize: 10, fontWeight: "700", textTransform: "uppercase" },
-  value: { color: "#fff", fontSize: 18, fontWeight: "900", marginTop: 4 },
-  caption: { color: "#838aa5", fontSize: 10, marginTop: 2 },
+  summaryCell: { flex: 1, borderRadius: 12, backgroundColor: colors.subtle, padding: 10 },
+  label: { color: colors.muted, fontSize: 10, fontWeight: "700", textTransform: "uppercase" },
+  value: { color: colors.ink, fontSize: 18, fontWeight: "900", marginTop: 4 },
+  caption: { color: colors.muted, fontSize: 10, marginTop: 2 },
   latestRow: { marginTop: 10, gap: 3 },
-  latestText: { color: "#d9ddf1", fontSize: 12, fontWeight: "700" },
-  changeText: { color: "#9aa1c3", fontSize: 11, fontWeight: "700" },
-  changeUp: { color: "#4ade80" },
-  changeDown: { color: "#fca5a5" },
-  chartTitle: { color: "#b7bdd6", fontSize: 11, fontWeight: "700", marginTop: 13 },
+  latestText: { color: colors.ink, fontSize: 12, fontWeight: "700" },
+  changeText: { color: colors.muted, fontSize: 11, fontWeight: "700" },
+  changeUp: { color: colors.success },
+  changeDown: { color: colors.danger },
+  chartTitle: { color: colors.muted, fontSize: 11, fontWeight: "700", marginTop: 13 },
   chart: { height: HEIGHT, width: "100%", marginTop: 2 },
   dateRow: { flexDirection: "row", justifyContent: "space-between", marginTop: -3 },
-  dateText: { color: "#7f859d", fontSize: 9, fontWeight: "600" },
-  methodText: { color: "#737991", fontSize: 10, lineHeight: 14, marginTop: 9 },
+  dateText: { color: colors.muted, fontSize: 9, fontWeight: "600" },
+  methodText: { color: colors.muted, fontSize: 10, lineHeight: 14, marginTop: 9 },
 });

@@ -1,8 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Tabs } from "expo-router";
+import { Tabs, usePathname } from "expo-router";
 import { onAuthStateChanged } from "firebase/auth";
 import React, { useEffect, useRef } from "react";
-import { TouchableOpacity, type TouchableOpacityProps } from "react-native";
+import { Text, TouchableOpacity, useColorScheme, useWindowDimensions, type TouchableOpacityProps } from "react-native";
+import { notebookDark, notebookPaper, notebookFonts } from "../../src/ui/notebook/tokens";
+import { NotebookTabIcon } from "../../src/ui/notebook/NotebookTabIcon";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { auth } from "../../src/config/firebaseConfig";
 import { useOfflineStatus } from "../../src/hooks/useOfflineStatus";
@@ -56,8 +58,11 @@ function createProfileTabLeaveListener(targetName: string) {
 }
 
 export default function TabsLayout() {
+  const notebook = usePathname().includes("/workout");
+  const paper = useColorScheme() === "dark" ? notebookDark : notebookPaper;
+  const { fontScale } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const bottomInset = Math.max(insets.bottom, 12);
+  const bottomInset = Math.max(insets.bottom, 12) + (notebook ? 8 : 0);
   const { isOffline } = useOfflineStatus();
   const inFlightRef = useRef(false);
   const syncTaskRef = useRef<{ cancel: () => void } | null>(null);
@@ -89,19 +94,22 @@ export default function TabsLayout() {
         headerShown: false,
         lazy: false,
         tabBarStyle: {
-          backgroundColor: "#0d0d1a",
-          borderTopColor: "rgba(255,255,255,0.08)",
-          height: 60 + bottomInset,
+          backgroundColor: notebook ? paper.canvas : "#0d0d1a",
+          borderTopColor: notebook ? paper.rule : "rgba(255,255,255,0.08)",
+          height: (notebook && fontScale >= 1.5 ? 40 + 28 * fontScale : 60) + bottomInset,
           paddingBottom: bottomInset,
           paddingTop: 8,
         },
-        tabBarActiveTintColor: "#7b61ff",
-        tabBarInactiveTintColor: "#888",
+        tabBarActiveTintColor: notebook ? paper.ink : "#7b61ff",
+        tabBarInactiveTintColor: notebook ? paper.muted : "#888",
+        tabBarLabelStyle: notebook ? { fontFamily: notebookFonts.body, fontSize: 11 } : undefined,
+        tabBarLabel: notebook && fontScale >= 1.5 ? ({ color }) => <Text style={{ fontFamily: notebookFonts.body, fontSize: 11, lineHeight: 14, textAlign: "center", color }}>{({ home: "Home", workout: "Work\nout", nutrition: "Nutri\ntion", "sleep/index": "Sleep", "profile/index": "Pro\nfile" } as Record<string, string>)[route.name]}</Text> : undefined,
         tabBarActiveBackgroundColor: "transparent",
         tabBarInactiveBackgroundColor: "transparent",
         // React Navigation permits nullable press handlers; TouchableOpacity does not.
         tabBarButton: (props) => <TouchableOpacity {...(props as TouchableOpacityProps)} activeOpacity={0.8} />,
         tabBarIcon: ({ color, size }) => {
+          if (notebook) return <NotebookTabIcon name={route.name} color={color} />;
           const icons: Record<string, keyof typeof Ionicons.glyphMap> = {
             home: "home-outline",
             nutrition: "restaurant-outline",

@@ -1,7 +1,10 @@
+import { useNotebook, useNotebookStyles, notebookSheet } from "../../ui/notebook/Notebook";
+import { notebookFonts, type NotebookColors } from "../../ui/notebook/tokens";
 import { AdaptiveModalCard } from "../../ui/AdaptiveModalCard";
 import { Ionicons } from "@expo/vector-icons";
 import React, { useState } from "react";
-import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { NotebookModal as Modal } from "../../ui/notebook/NotebookModal";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { convertAvailableWeightsUnit, normalizeAvailableWeights, type AvailableWeights } from "../availableWeights";
 
@@ -14,6 +17,8 @@ type Props = {
 };
 
 export function AvailableWeightsModal({ name, settings, defaultUnit, onClose, onSave }: Props) {
+  const { colors } = useNotebook();
+  const styles = useNotebookStyles(createStyles);
   const insets = useSafeAreaInsets();
   const [mode, setMode] = useState<"regular" | "custom">(settings?.mode ?? "regular");
   const [unit, setUnit] = useState(settings?.unit ?? defaultUnit);
@@ -59,7 +64,7 @@ export function AvailableWeightsModal({ name, settings, defaultUnit, onClose, on
       <KeyboardAvoidingView style={styles.overlay} behavior={Platform.OS === "ios" ? "padding" : "height"}>
         <Pressable style={StyleSheet.absoluteFill} onPress={() => { if (!saving) onClose(); }} accessibilityLabel="Close available weights" />
         <AdaptiveModalCard contentSized style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) }]}>
-          <View style={styles.heading}><Text style={styles.title}>Available weights</Text><Pressable disabled={saving} onPress={onClose} hitSlop={12} accessibilityLabel="Close"><Ionicons name="close" size={24} color="#fff" /></Pressable></View>
+          <View style={styles.heading}><Text style={styles.title}>Available weights</Text><Pressable disabled={saving} onPress={onClose} hitSlop={12} accessibilityLabel="Close"><Ionicons name="close" size={24} color={colors.ink} /></Pressable></View>
           <View style={styles.body}>
             <Text style={styles.exerciseName}>{name}</Text>
             <Text style={styles.hint}>Optional. Used for future suggestions; your current sets stay unchanged.</Text>
@@ -69,15 +74,15 @@ export function AvailableWeightsModal({ name, settings, defaultUnit, onClose, on
             {mode === "regular" ? (
               <>
                 <Text style={styles.label}>Starting weight ({unit})</Text>
-                <TextInput disableFullscreenUI style={styles.input} value={minimum} onChangeText={setMinimum} keyboardType="decimal-pad" placeholder="e.g. 20" placeholderTextColor="#858ba4" accessibilityLabel={`Starting weight in ${unit}`} />
+                <TextInput selectTextOnFocus disableFullscreenUI style={styles.input} value={minimum} onChangeText={setMinimum} keyboardType="decimal-pad" placeholder="e.g. 20" placeholderTextColor={colors.muted} accessibilityLabel={`Starting weight in ${unit}`} />
                 <Text style={styles.label}>Increment ({unit})</Text>
-                <TextInput disableFullscreenUI style={styles.input} value={increment} onChangeText={setIncrement} keyboardType="decimal-pad" placeholder="e.g. 2 or 2.5" placeholderTextColor="#858ba4" accessibilityLabel={`Weight increment in ${unit}`} />
+                <TextInput selectTextOnFocus disableFullscreenUI style={styles.input} value={increment} onChangeText={setIncrement} keyboardType="decimal-pad" placeholder="e.g. 2 or 2.5" placeholderTextColor={colors.muted} accessibilityLabel={`Weight increment in ${unit}`} />
                 <Text style={styles.hint}>For a barbell, use total weight including both sides. For dumbbells, use the weight of one dumbbell.</Text>
               </>
             ) : (
               <>
                 <Text style={styles.label}>Weights ({unit}), separated by commas</Text>
-                <TextInput disableFullscreenUI style={[styles.input, styles.list]} value={values} onChangeText={setValues} multiline textAlignVertical="top" placeholder="10, 12, 14, 17.5, 20" placeholderTextColor="#858ba4" accessibilityLabel={`Available weights in ${unit}`} />
+                <TextInput disableFullscreenUI style={[styles.input, styles.list]} value={values} onChangeText={setValues} multiline textAlignVertical="top" placeholder="10, 12, 14, 17.5, 20" placeholderTextColor={colors.muted} accessibilityLabel={`Available weights in ${unit}`} />
               </>
             )}
             {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -90,24 +95,24 @@ export function AvailableWeightsModal({ name, settings, defaultUnit, onClose, on
   );
 }
 
-const styles = StyleSheet.create({
-  overlay: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.6)" },
-  sheet: { width: "100%", maxHeight: "88%", backgroundColor: "#14182b", borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingTop: 20 },
+const createStyles = (colors: NotebookColors) => notebookSheet({
+  overlay: { flex: 1, justifyContent: "flex-end", backgroundColor: colors.overlay },
+  sheet: { width: "100%", maxHeight: "88%", backgroundColor: colors.canvas, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingTop: 20 },
   heading: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 14 },
-  title: { color: "#fff", fontSize: 20, fontWeight: "700" },
+  title: { color: colors.ink, fontFamily: notebookFonts.editorial, fontSize: 20, fontWeight: "700" },
   body: { gap: 12, paddingBottom: 18 },
-  exerciseName: { color: "#fff", fontSize: 16, fontWeight: "600" },
-  hint: { color: "#9aa1c3", fontSize: 13, lineHeight: 19 },
-  text: { color: "#fff", fontSize: 13, fontWeight: "600" },
+  exerciseName: { color: colors.ink, fontSize: 16, fontWeight: "600" },
+  hint: { color: colors.muted, fontSize: 13, lineHeight: 19 },
+  text: { color: colors.ink, fontSize: 13, fontWeight: "600" },
   row: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  chip: { backgroundColor: "#24283e", paddingHorizontal: 12, paddingVertical: 10, borderRadius: 10 },
-  active: { backgroundColor: "#7b61ff" },
-  label: { color: "#cdd0e0", fontSize: 13, fontWeight: "600" },
-  input: { color: "#fff", backgroundColor: "#24283e", borderRadius: 10, padding: 12, fontSize: 16 },
+  chip: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, minHeight: 44, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 8 },
+  active: { backgroundColor: colors.accentSoft, borderColor: colors.accent },
+  label: { color: colors.muted, fontSize: 13, fontWeight: "600" },
+  input: { color: colors.ink, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 4, padding: 12, fontSize: 16 },
   list: { minHeight: 95 },
-  error: { color: "#ffb8b8", fontSize: 13, lineHeight: 19 },
+  error: { color: colors.danger, fontSize: 13, lineHeight: 19 },
   clear: { paddingVertical: 10 },
-  link: { color: "#c9c0ff", fontSize: 13, fontWeight: "600" },
-  button: { backgroundColor: "#7b61ff", padding: 14, alignItems: "center", borderRadius: 12 },
-  buttonText: { color: "#fff", fontSize: 15, fontWeight: "700" },
+  link: { color: colors.accent, fontSize: 13, fontWeight: "600" },
+  button: { backgroundColor: colors.primary, padding: 14, alignItems: "center", borderRadius: 12 },
+  buttonText: { color: colors.onPrimary, fontSize: 15, fontWeight: "700" },
 });
