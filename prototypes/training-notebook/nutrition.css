@@ -1,0 +1,182 @@
+.nutrition-device{--protein:#4c6454;--carbs:#86643c;--fat:#666a70;--macro-text:#fffcf5}
+.nutrition-device.dark{--protein:#a8bea6;--carbs:#cdb78f;--fat:#b2b7be;--macro-text:#191a18}
+.nutrition-device .toolbar>div{display:grid;grid-template-columns:44px minmax(0,1fr) 44px;gap:12px}
+.nutrition-device .toolbar h2{font-size:calc(20px * var(--scale));text-align:center}
+.nutrition-device .toolbar .root-title{text-align:left;grid-column:1/3}
+.nutrition-device .toolbar .title-date{font-size:calc(13px * var(--scale));line-height:1.4;text-align:center;color:var(--secondary);margin-top:4px;display:block}
+.nutrition-device .toolbar .icon-button{min-width:44px;min-height:44px;width:44px}
+.nutrition-device .toolbar .icon-button svg{width:22px;height:22px}
+.nutrition-device .page-content{max-width:760px;padding-top:16px;padding-bottom:28px}
+.diary-date{display:grid;grid-template-columns:44px minmax(0,1fr) 44px;align-items:center;gap:8px;margin-bottom:16px}
+.nutrition-device .date-button{text-align:center;font-size:calc(16px * var(--scale));font-weight:600;line-height:1.35;min-height:48px}
+.diary-section{border-top:1px solid var(--rule);padding:20px 0}
+.nutrition-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+.nutrition-heading h3{font-size:calc(20px * var(--scale));line-height:1.3}
+.nutrition-device .nutrition-heading .btn.text{font-size:calc(14px * var(--scale));min-height:44px;white-space:nowrap}
+.amount-summary{margin:8px 0 24px}
+.amount-heading{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:12px}
+.amount-heading h3{font-size:calc(20px * var(--scale))}
+.amount-heading h3 small{font-size:calc(13px * var(--scale));font-weight:400;color:var(--secondary);margin-left:4px}
+.amount-remaining{font-size:calc(14px * var(--scale));color:var(--secondary);text-align:right}
+.amount-track{height:8px;background:var(--subtle);border-radius:2px;overflow:hidden}
+.amount-fill{height:100%;background:var(--ink)}.amount-fill.protein{background:var(--protein)}
+.amount-labels{position:relative;min-height:28px;margin-top:8px;font-size:calc(16px * var(--scale));font-variant-numeric:tabular-nums;line-height:1.4}
+.amount-consumed{position:absolute;left:0;white-space:nowrap;font-weight:600}
+.amount-target{position:absolute;right:0;color:var(--secondary);white-space:nowrap}
+.nutrition-device .composition-title{margin:0}
+.composition-caption{font-size:calc(13px * var(--scale));color:var(--secondary);margin:12px 0 8px}
+.macro-bar{display:flex;min-height:28px;background:var(--subtle);border-radius:3px;overflow:hidden}
+.macro-segment{display:flex;align-items:center;justify-content:center;color:var(--macro-text);font-size:calc(13px * var(--scale));font-weight:600;line-height:1.25;min-width:0}
+.macro-protein{background:var(--protein)}.macro-carbs{background:var(--carbs)}.macro-fat{background:var(--fat)}
+.macro-labels{display:grid;gap:0;margin-top:8px}
+.macro-label{font-size:calc(14px * var(--scale));text-align:center;white-space:nowrap}
+.macro-label.protein{color:var(--protein)}.macro-label.carbs{color:var(--carbs)}.macro-label.fat{color:var(--fat)}
+.macro-labels.fallback{grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:8px}
+.macro-labels.fallback .macro-label{white-space:normal}
+.macro-empty{font-size:calc(14px * var(--scale));color:var(--secondary);padding:8px 0}
+.meal-ledger-row{display:grid;grid-template-columns:52px minmax(0,1fr) auto;gap:12px;align-items:center;border-bottom:1px solid var(--rule);padding:16px 0;min-height:76px}
+.meal-time{font-size:calc(13px * var(--scale));color:var(--secondary);font-variant-numeric:tabular-nums;text-align:left;min-height:44px}
+.meal-ledger-row .meal-open{text-align:left;min-height:44px;min-width:0}
+.meal-ledger-row strong{font-size:calc(18px * var(--scale));font-weight:600;display:block;line-height:1.35}
+.meal-ledger-row small{font-size:calc(13px * var(--scale));color:var(--secondary);display:block;margin-top:4px;line-height:1.4}
+.meal-energy{font-size:calc(16px * var(--scale));font-weight:600;text-align:right;white-space:nowrap}
+.meal-energy small{font-weight:400}
+.meal-summary{border-bottom:1px solid var(--rule);padding-bottom:16px;margin-bottom:12px}
+.meal-summary strong{font-size:calc(28px * var(--scale));font-weight:600}
+.meal-summary .supporting{margin-top:8px}
+.meal-actions{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.meal-foods{margin:12px 0}
+.food-swipe{position:relative;border-bottom:1px solid var(--rule);overflow:hidden}
+.nutrition-device .swipe-delete{position:absolute;right:0;top:0;bottom:0;width:80px;background:var(--danger);color:var(--on-primary);font-size:calc(16px * var(--scale));font-weight:600}
+.food-row{position:relative;background:var(--canvas);display:grid;grid-template-columns:minmax(0,1fr) 44px;gap:8px;align-items:center;min-height:92px;padding:12px 0;touch-action:pan-y}
+.food-row.revealed{transform:translateX(-80px)}
+.food-copy{text-align:left;min-width:0;min-height:48px}
+.food-copy strong{display:block;font-size:calc(17px * var(--scale));line-height:1.35;font-weight:600}
+.food-copy small{display:block;font-size:calc(14px * var(--scale));color:var(--secondary);line-height:1.5;margin-top:4px}
+.nutrition-device .food-row .icon-button{min-width:44px}
+.meal-footer{display:grid;gap:12px;margin-top:20px}
+.nutrition-device .search-wrap input{font-size:calc(16px * var(--scale))}
+.search-tools{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:8px 0}
+.nutrition-device .search-tools .btn.text{font-size:calc(14px * var(--scale));gap:6px}
+.search-tools svg{width:16px;height:16px}
+.food-tabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;border-bottom:1px solid var(--rule);margin:8px 0 16px}
+.nutrition-device .food-tab{min-height:52px;font-size:calc(13px * var(--scale));padding:8px 2px;line-height:1.3;border-bottom:2px solid transparent;color:var(--secondary)}
+.nutrition-device .food-tab.active{color:var(--ink);border-bottom-color:var(--accent);font-weight:600}
+.food-result{display:grid;grid-template-columns:44px minmax(0,1fr) 44px;gap:8px;align-items:center;border-bottom:1px solid var(--rule);padding:12px 0}
+.food-result .food-copy small{font-size:calc(13px * var(--scale))}
+.nutrition-device .favorite{font-size:24px;min-width:44px;min-height:44px;color:var(--secondary)}
+.nutrition-device .favorite.selected{color:var(--accent)}
+.nutrition-device .favorite{display:flex;align-items:center;justify-content:center}
+.favorite svg{width:20px;height:20px}.favorite.selected svg{fill:var(--accent-soft)}
+.food-group-title{font-size:calc(13px * var(--scale));color:var(--secondary);padding:16px 0 4px;line-height:1.4}
+.nutrition-device .food-group-title{font-size:calc(13px * var(--scale))}
+.selected-food-chips{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 16px}
+.nutrition-device .selected-food-chip{border:1px solid var(--accent);border-radius:6px;background:var(--accent-soft);color:var(--accent);min-height:44px;padding:8px;font-size:calc(14px * var(--scale));display:flex;align-items:center;gap:8px;max-width:100%;text-align:left}
+.nutrition-device .selected-food-chip span{overflow-wrap:anywhere}
+.food-search-footer{flex-shrink:0;background:var(--surface);border-top:1px solid var(--rule);padding:8px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:64px}
+.nutrition-editor .sheet-body{gap:20px}
+.quantity-modes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.nutrition-device .quantity-mode{min-height:48px;border:1px solid var(--border);border-radius:6px;padding:8px 4px;font-size:calc(16px * var(--scale));line-height:1.3}
+.nutrition-device .quantity-mode.selected{color:var(--accent);border-color:var(--accent);background:var(--accent-soft)}
+.nutrition-device .quantity-mode:disabled{color:var(--secondary);border-color:var(--rule)}
+.quantity-field{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:12px}
+.quantity-field input{width:100%;text-align:left;font-size:calc(20px * var(--scale));min-height:56px}
+.quantity-field .quantity-unit{font-size:calc(16px * var(--scale));color:var(--secondary)}
+.nutrition-device .quantity-label{font-size:calc(14px * var(--scale));color:var(--secondary);display:block;margin-bottom:8px}
+.nutrition-facts{border:1px solid var(--rule);border-radius:8px;background:var(--surface);padding:16px;display:grid;gap:8px}
+.nutrition-device .nutrition-facts h3{font-size:calc(16px * var(--scale));margin-bottom:4px}
+.facts-line{display:flex;align-items:baseline;justify-content:space-between;gap:16px;font-size:calc(16px * var(--scale));line-height:1.5}
+.facts-line:first-of-type{border-bottom:1px solid var(--rule);padding-bottom:8px;margin-bottom:4px}
+.facts-line strong{font-weight:600;white-space:nowrap}
+.nutrition-device .sheet-body{gap:16px}
+.nutrition-device .sheet-footer{gap:12px}
+.nutrition-device .sheet-head{align-items:flex-start}
+.nutrition-device .nutrition-editor .sheet-body{gap:20px}
+.nutrition-editor .form-error:empty{display:none}
+.nutrition-device .editor-helper{font-size:calc(14px * var(--scale));line-height:1.5;color:var(--secondary)}
+.nutrition-device .nutrition-editor .sheet{width:min(100%,560px)}
+.empty-food{display:grid;gap:12px;padding:24px 0}
+.empty-food h3{font-size:calc(20px * var(--scale))}
+.recipe-row{display:grid;grid-template-columns:minmax(0,1fr) 44px;gap:12px;border-bottom:1px solid var(--rule);padding:16px 0;align-items:center}
+.recipe-row .food-copy small{font-size:calc(14px * var(--scale))}
+.scanner-illustration{min-height:180px;background:var(--subtle);border:1px solid var(--border);display:grid;place-items:center;position:relative;border-radius:8px}
+.scanner-illustration svg{width:180px;height:80px}
+.scanner-caption{position:absolute;bottom:12px;left:12px;right:12px;text-align:center;font-size:calc(13px * var(--scale));color:var(--secondary)}
+.nutrition-history{width:100%;border-collapse:collapse;font-size:calc(14px * var(--scale))}
+.nutrition-history th,.nutrition-history td{padding:12px 0;border-bottom:1px solid var(--rule);text-align:right;font-weight:400}
+.nutrition-history th:first-child,.nutrition-history td:first-child{text-align:left}
+.nutrition-history th{color:var(--secondary);font-size:calc(13px * var(--scale))}
+.nutrition-device .history-open{font-size:inherit;min-height:44px;color:var(--accent);text-align:left}
+.nutrition-notice{padding:12px;border-left:2px solid var(--warning);margin:8px 0 20px}
+.skeleton-line{height:20px;background:var(--subtle);margin:16px 0;border-radius:4px}.skeleton-block{height:120px;background:var(--subtle);margin:24px 0;border-radius:4px}
+.nutrition-device .tab-link{color:inherit;text-decoration:none}
+.nutrition-device .toast{bottom:88px}
+.nutrition-device .inline-undo{margin:12px 0}
+.large-text .nutrition-heading{align-items:flex-start;flex-wrap:wrap}
+.large-text .nutrition-heading h3{font-size:36px}
+.large-text .nutrition-heading .btn.text{font-size:28px;white-space:normal}
+.large-text .amount-heading{align-items:flex-start;flex-direction:column;gap:4px}
+.large-text .amount-remaining{text-align:left}
+.large-text .amount-labels{font-size:28px;min-height:44px}
+.large-text .macro-bar{min-height:44px}
+.large-text .macro-labels.fallback{grid-template-columns:1fr!important;gap:8px}
+.large-text .macro-label{font-size:28px;text-align:left}
+.large-text .meal-ledger-row{grid-template-columns:60px minmax(0,1fr);gap:12px}
+.large-text .meal-ledger-row .meal-energy{grid-column:2;text-align:left}
+.large-text .meal-time{font-size:24px}
+.large-text .meal-actions,.large-text .search-tools{flex-direction:column;align-items:stretch;gap:4px}
+.large-text .food-tabs{grid-template-columns:repeat(2,minmax(0,1fr))}
+.large-text .food-result{grid-template-columns:44px minmax(0,1fr);align-items:start}
+.large-text .food-result .favorite{grid-column:2;justify-self:start}
+.large-text .food-search-footer{flex-wrap:wrap}
+.large-text .food-search-footer .btn{width:100%}
+.large-text .quantity-modes{grid-template-columns:1fr}
+.large-text .quantity-field{grid-template-columns:minmax(0,1fr)}
+.large-text .quantity-field .quantity-unit{font-size:28px}
+.large-text .facts-line{font-size:28px;gap:8px;flex-wrap:wrap}
+.large-text .nutrition-history{font-size:24px}
+.large-text .nutrition-history th{font-size:20px}
+.large-text .nutrition-device .toolbar h2{font-size:32px}
+.large-text .swipe-delete{font-size:24px}
+@media(prefers-reduced-motion:no-preference){.food-row{transition:transform 140ms ease}}
+.macro-labels{display:block;position:relative;min-height:24px}
+.macro-labels .macro-label{position:absolute;top:0;white-space:nowrap}
+.macro-labels.fallback .macro-label{white-space:nowrap}
+.large-text .macro-labels{display:grid;grid-template-columns:1fr!important;gap:8px;min-height:0}
+.large-text .macro-labels .macro-label{position:static;white-space:normal}
+.nutrition-device .date-button{display:flex;align-items:center;justify-content:center;gap:8px}
+.date-button svg{width:16px;height:16px}
+.nutrition-calendar-toolbar{display:flex;justify-content:space-between;align-items:center;gap:8px;padding-top:12px}
+.nutrition-device .nutrition-calendar-toolbar h3{font-size:calc(20px * var(--scale))}
+.nutrition-calendar-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px 0}
+.nutrition-calendar-weekday{text-align:center;font-size:12px;color:var(--secondary);padding:8px 0}
+.nutrition-device .nutrition-calendar-day{min-width:0;min-height:44px;border:1px solid transparent;border-radius:6px;font-size:16px;position:relative}
+.nutrition-device .nutrition-calendar-day.today{border-color:var(--border)}
+.nutrition-device .nutrition-calendar-day.selected{background:var(--primary);color:var(--on-primary)}
+.nutrition-calendar-day.recorded::after{content:'';position:absolute;bottom:4px;left:calc(50% - 2px);width:4px;height:4px;border-radius:50%;background:currentColor}
+.nutrition-time-display{font-size:calc(30px * var(--scale));font-weight:600;text-align:center;font-variant-numeric:tabular-nums}
+.time-picker-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px}
+.time-picker-heading{display:block;font-size:calc(14px * var(--scale));color:var(--secondary);margin-bottom:8px;text-align:center}
+.time-options{height:176px;min-height:176px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;overscroll-behavior:contain}
+.nutrition-device .time-option{display:block;width:100%;min-height:44px;font-size:calc(20px * var(--scale));font-variant-numeric:tabular-nums}
+.nutrition-device .time-option.selected{background:var(--accent-soft);color:var(--accent);font-weight:600}
+.large-text .nutrition-calendar-day{font-size:24px;min-height:48px}
+.large-text .nutrition-calendar-weekday{font-size:16px}
+.large-text .nutrition-calendar-toolbar h3{font-size:28px}
+.large-text .time-option{min-height:64px;font-size:32px}
+.large-text .time-options{height:192px;min-height:192px}
+.large-text .meal-ledger-row .meal-time{grid-column:1;grid-row:1/span 2;align-self:stretch;text-align:center;display:flex;align-items:center;justify-content:center}
+.meal-ledger-actions{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.meal-ledger-row:has(.meal-reorder-controls){grid-template-columns:52px minmax(0,1fr) auto 88px}
+.nutrition-device{container-type:inline-size}
+@container(max-width:390px){.meal-ledger-row:has(.meal-reorder-controls){grid-template-columns:44px minmax(0,1fr) auto 88px;column-gap:8px}}
+.meal-reorder-controls{grid-column:4;display:flex;flex-direction:row;gap:0;align-items:center}
+.meal-reorder-controls .btn{width:44px;min-width:44px;min-height:44px;padding:0;display:flex;align-items:center;justify-content:center;border:0;border-radius:0;background:transparent;box-shadow:none;color:var(--secondary)}
+.meal-reorder-controls .btn:disabled{background:transparent;opacity:.3}
+.meal-reorder-controls .btn:hover{background:transparent;color:var(--ink)}
+.meal-reorder-controls svg{width:20px;height:20px}
+.large-text .meal-ledger-actions{gap:8px 16px}
+.large-text .meal-ledger-row:has(.meal-reorder-controls){grid-template-columns:60px minmax(0,1fr) 96px}
+.large-text .meal-reorder-controls{grid-column:3;grid-row:1/span 2;align-self:center}
+.large-text .meal-reorder-controls .btn{width:48px;min-width:48px;min-height:48px}
+.large-text .meal-reorder-controls svg{width:24px;height:24px}

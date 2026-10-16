@@ -1,9 +1,9 @@
 # Lastrep Training Notebook Design Specification
 
-Version: 1.3 | Date: October 16, 2026
+Version: 1.4 | Date: October 16, 2026
 
-Status: Workout and Home browser design directions approved through iterative
-review. Shared rules below incorporate that feedback. Neither screen redesign
+Status: Workout, Home and Nutrition browser design directions approved through
+iterative review. Shared rules below incorporate that feedback. No screen redesign
 is implemented in the native app or device-validated.
 The initial Figma pair records an earlier Workout revision; the local browser
 prototype and decisions below capture the subsequent approved refinements.
@@ -811,8 +811,8 @@ inventory before implementing any relocation.
 - Use narrow rules and section headings rather than six large floating meal cards.
 - Energy/protein consumed and target labels stay within bar bounds, share a
   baseline and do not overlap at zero or near target. Remaining is header text.
-- Macro colors: protein #276A73, carbs #8A5B19, fat #785075 on paper; dark-theme
-  counterparts #83C6CF, #E4BB76, #C7A2C2. Validate contrast of overlaid percentages;
+- Macro palette under review: protein #4C6454, carbs #86643C, fat #666A70 on paper;
+  dark counterparts #A8BEA6, #CDB78F, #B2B7BE. Validate overlaid percentage contrast;
   use ink/on-primary per segment rather than assuming white always works.
 - Match P/C/F gram labels to segment colors; percentages inside only where they
   fit at readable size. For narrow segments, place the percentage in an accessible
@@ -978,7 +978,7 @@ algorithms as part of applying the visual system.
 ## 16. Delivery sequence and decisions to validate
 
 1. Preserve the approved Workout/Home browser baseline and shared design rules.
-2. Mock up Nutrition using the same rules before native implementation.
+2. Review Nutrition mockups using the same rules before native implementation.
 3. Resolve remaining screen-specific design questions without changing verified
    logging, consent, billing or data semantics as part of visual cleanup.
 4. Implement Workout in an isolated branch, preserving verified behaviors.
@@ -1173,8 +1173,10 @@ actions, disconnected/saved, sparse/empty, loading/error, calendar/day details,
 phase selection, body-data add/edit/delete/validation, recovery check-in,
 readiness information, weekly detail, profile preview, dark and 200% text.
 
-Profile, Settings, Sleep and Nutrition destination dialogs explain their scope;
-they are not complete screen redesigns or substitutes for real permissions.
+Profile, Settings and Sleep destination dialogs explain their scope; they are
+not complete screen redesigns or substitutes for real permissions. Nutrition
+now links to its separate browser study (section 20); its fixture is not shared
+with Home's mock meal status.
 Most state is in memory only. Saved recovery check-ins are the exception:
 same-tab session storage shares ratings, discomfort, activity and daily notes
 with Workout's Today's inputs/Today's Plan. Reset example clears this saved context.
@@ -1205,5 +1207,138 @@ not a second list of potentially conflicting screen-only tokens.
 | Profile photo/name/description | Section 13: Home | Initial fallback; private recovery notes never become profile text |
 
 All future screen mockups must pass the section 16 checklist before being treated
-as consistent with this design baseline. Do not interpret the approved Home
-study as approval of an unbuilt full Profile, Settings, Nutrition or Sleep design.
+as consistent with this design baseline. Home approval does not approve other
+screens; Nutrition remains a separate review candidate, and full Profile,
+Settings and Sleep studies have not been built.
+
+## 20. Nutrition browser study: approved direction
+
+Created October 16, 2026. Open **http://127.0.0.1:4317/nutrition.html** with the
+same local server. Direction approved after iterative review. This is a browser
+design/interaction study, not an app
+implementation or an improvement to the actual nutrition database.
+
+The existing Nutrition diary, meal detail and food-search screens were inspected
+before composition. Preserve those logging behaviors, including custom meal
+sections/reordering, rather than assuming only the six initial slots are allowed.
+
+### Main diary and food-entry hierarchy
+
+1. Sticky Nutrition toolbar, followed by centered selected date with previous/next
+   controls. The date itself opens one Home-style month calendar; selecting a
+   day immediately shows that diary. No duplicate toolbar calendar, nested native
+   date field or View date confirmation. History rows can also select a date.
+2. Calories and protein summaries: remaining/above-target text, narrow progress
+   track, consumed and target values sharing a baseline below it. Units remain
+   in the heading, not repeatedly attached to the numbers beneath the track.
+3. Macro composition: Consumed and Recommended bars in P/C/F order, with matching
+   gram-label colors. Recommended comes from the profile fixture (170 g protein,
+   327.5 g carbs, 90 g fat, 2,800 kcal), not a newly generated dietary recommendation.
+4. Log meals is a ledger with a stable left logging-time column, flexible name
+   and right energy total. Empty sections show no invented time. Add meal creates
+   another named section. Reorder beside Log meals reveals side-by-side, unboxed up/down
+   chevrons to the right of each entry's calories; Done hides them. Use 20 outline
+   glyphs in 44 targets (24/48 at enlarged text), with explicit accessible labels
+   and disabled boundary chevrons. No visible button borders or filled boxes;
+   retain keyboard focus indicators.
+   Keep standard meal-row heights unchanged when reordering; controls occupy
+   the existing row rather than adding a new line. Enlarged text may still reflow
+   when necessary to retain readable names and full-sized tap targets.
+   Foods, logging times and names move together.
+   Empty meals open by tapping the meal name; omit a duplicate plus action.
+   Do not repeat rename/time/copy/save in a meal-screen menu when those actions
+   are already visible on the meal page; omit that redundant toolbar menu.
+5. A meal detail has its name centered above the date. Foods show actual amounts,
+   calories and P/C/F. Quantity/nutrition is available by tapping the food name.
+   Swipe deletion has an accessible options-menu alternative and inline Undo.
+   The options menu does not repeat editing: it offers Move to another meal,
+   Add/remove favorite (database foods), and Delete as a non-gesture alternative.
+   Moving food is a proposed feature in this study, not an existing native feature.
+6. Add food opens search, recent, favorites and saved-meal views. Source labels
+   distinguish reference-food examples from packaged-food examples; dry versus
+   cooked names remain explicit. Search selection and quantity review are separate.
+7. Search and logged edits use one quantity-editor shell. Data source, unit
+   controls, amount, equivalent summary, selected-amount nutrition and reference
+   serving have distinct spacing. Per-100-g values are progressively disclosed.
+
+### Geometry and data-truth rules exercised
+
+- Reuse paper/dark semantic tokens, Source fonts, 20 content insets and 760 maximum
+  content width. Header glyphs use 22 visuals inside 44 targets. Bottom tabs use
+  the approved barbell and the same 22-dp outline treatment as Home/Workout.
+- Amount tracks are 8 high. Default consumed/target labels are 16 and remain
+  within the track width. Clamp label placement before it collides with the
+  right-end target; do not clip a zero outside the track or overlap near targets.
+  At 200%, labels use 28 and remain separate. Above-target totals are not hidden
+  by the visually capped fill or labeled as negative remaining.
+- Macro composition uses energy ratios (4/4/9 kcal per gram), not gram fractions.
+  Rounded percentages total 100. Target protein remains 170 g in the fixture.
+  Protein progress uses the same protein color as the composition bar.
+- Bars are 28 high normally, 44 at enlarged text. Percentages appear inside a
+  segment only when readable (at least 15% width in this study). Otherwise its
+  percentage goes in the companion label. Do not duplicate percentages unnecessarily.
+  Wide-segment labels center beneath their own segment. Clamp narrow-segment
+  labels to the bar edges and shift only enough to prevent collisions (8 gap).
+  Do not move all labels to unrelated equal columns. Stack only if the combined
+  labels cannot fit. At 200%, use full-width legend rows.
+- Approved Nutrition palette: protein olive `#4C6454`, carbs brown `#86643C`,
+  fat slate `#666A70`; dark equivalents `#A8BEA6`, `#CDB78F`, `#B2B7BE`.
+  Percentage text is paper on light-mode bars and dark ink on dark-mode bars.
+  These deliberately restrained colors replace the more colorful first study.
+- The meal ledger uses a 52-wide time column and 12 gaps; empty sections expose
+  the tappable meal name rather than a duplicate plus or false zero-energy log. Reflow at enlarged text
+  instead of squeezing time, long custom names and numeric totals together.
+  At enlarged text, vertically center the time across the entire meal entry.
+- Logging time uses a notebook-styled hour/minute list picker, not a browser
+  time input. Save commits the draft; Cancel leaves the recorded time unchanged.
+  Each list supports arrow keys and one keyboard tab stop for its selected option.
+- On all three browser studies, the review-state selector preserves the original
+  order and groupings. On opening, scroll the current state to the top of the
+  popup without moving it in the sequence. Scroll upward for earlier states and
+  downward for later states. Support arrow keys, Home/End, Enter and Escape.
+- The same quantity-editor spacing applies to a newly searched food and a logged
+  food. Use 20 body gaps, 12 footer gaps, 56-high amount field, persistent Amount
+  label and an external unit. Hide an empty error slot rather than creating a
+  double gap. Actual selected nutrition updates while typing without replacing
+  the active input or rewriting intermediate decimal text.
+- Maintain canonical grams when switching display units. Reject invalid/nonpositive
+  amounts without changing the log. Zero-calorie foods disable calorie-based
+  quantity entry and explain that grams/servings remain available.
+- Confirm amount updates staging and the search-row summary. Only Add commits
+  the staged foods to this mock diary. A logged edit uses Save changes. Cancel
+  does neither. Adding another amount of an already logged food merges its grams;
+  the mock never silently replaces the previous recorded amount.
+- Saved meals are cloned templates. Deleting one leaves logged foods intact.
+  Copy previous meal names the actual source date and foods; it does not invent
+  a source when empty. Copied/reused foods use the fixture logging time (18:30).
+
+### Review states and boundaries
+
+There are 44 states covering main/empty/near/over-target/narrow macros, named/
+numbered/custom meals, loading/refresh error, meal detail/organization/add section,
+swipe/options, search/selection/loading/no matches/error/recent/favorites/saved,
+search/logged/zero-calorie/invalid quantity, manual entry, rename/time/save/copy,
+calendar/move-food, scanner/manual/request/denied/busy/missing/error, save error,
+dark and 200%.
+
+The barcode screen is a labeled static illustration. It never requests camera
+permission or opens a live camera. The sample code `5901234123457` resolves to
+illustrative milk through a cancellable local simulation; other valid-length
+inputs show missing product. Product missing, camera access off and network
+failure have distinct copy and usable manual-entry fallbacks.
+When permission can be requested, Allow camera leads to an explicitly labeled
+Android-permission simulation. When requests are blocked, Open camera settings
+leads to a labeled settings-handoff simulation. Manual entry works in either case.
+Neither simulation grants real permissions. Native implementation must check
+`canAskAgain`, open app settings when false, and recheck permission on return.
+
+All nutrition values, source names, barcode mappings and results are synthetic.
+They are not evidence of real database coverage, API reliability, camera behavior
+or nutrient accuracy. No app files, schemas, native dependencies, backend or
+permissions are changed. Food data stays in memory; it is not shared with Home's
+separate meal-status fixture. Energy-unit variants beyond kcal are not implemented
+in this browser candidate; existing native unit preferences must be preserved later.
+
+Review the main diary and shared quantity editor first, then meal reuse/search/
+barcode flows. Native keyboard, gestures and screen-reader testing remain required
+when an approved design is implemented in the app.

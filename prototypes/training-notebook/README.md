@@ -1,15 +1,68 @@
-# Training notebook / Workout prototype
+# Training notebook / Browser studies
 
 A standalone, dependency-free browser design study based on
-[`docs/training-notebook-design.md`](../../docs/training-notebook-design.md) v1.1.
-It recreates both approved Figma screens as HTML and includes 47 selectable
-Workout states. It does not replace any Lastrep application screen.
+[`docs/training-notebook-design.md`](../../docs/training-notebook-design.md).
+Workout, Home and Nutrition incorporate the approved review refinements.
+None replaces a Lastrep application screen.
 
 ## Open it
 
 **Home study:** after starting the server, open
 **http://127.0.0.1:4317/home.html**. The two studies link to one another from the
-review sidebar. Home has 25 example states; its design is pending review.
+review sidebar. Home has 25 example states; its design direction is approved.
+
+**Nutrition study:** **http://127.0.0.1:4317/nutrition.html**. It has 44 example
+states and shares the approved notebook typography, colors and control rules.
+All three studies are linked from their sidebars and available bottom-tab destinations.
+
+### Nutrition review paths
+
+1. Daily diary: review calories/protein bars, zero/near/over-target labels, macro
+   composition and the timed meal ledger. Recommended macros use the illustrative
+   profile targets, including 170 g protein. Percentages are calorie-based.
+2. Open a logged meal, tap its food and review the quantity editor. It starts in
+   grams at the recorded amount. Switching grams/calories/servings preserves the
+   equivalent amount; Cancel leaves the log unchanged. Selected-amount nutrition
+   and optional per-100-g facts are available in the same editor shell.
+3. Search foods, tap an item, edit and Confirm amount. The summary in the search
+   results must show the changed quantity. Add the selection to the meal; matching
+   foods merge their grams rather than silently replacing the previously logged amount.
+4. Rename a meal, change its logging time, add a custom meal section and try
+   Reorder beside Log meals. Unboxed up/down chevrons appear beside the calories; Done
+   hides them. Name, contents and time move together. The meal-page toolbar has
+   no redundant options menu.
+   Empty meals open from the meal name, without a duplicate plus button.
+   The workbench also previews named meals and Meals 1–6.
+5. Save a meal combination, reuse it from Saved meals, and delete its saved
+   template. Deleting a template must not delete food already logged. Copy previous
+   meal shows the source date and foods, adds rather than replaces, and uses the
+   fixture copying time of 18:30. Empty previous meals cannot be copied.
+6. Swipe a food left and Delete, or use its options menu. Undo restores the food
+   and logging time. Browser pointer simulation is not native gesture validation.
+   The menu avoids duplicate editing and offers Move to another meal, Favorite
+   (database foods) and accessible Delete. Move is a proposed native feature.
+7. Barcode scanner is a static layout, not a live camera. Simulate recognized
+   product or enter `5901234123457` to review the sample milk. Other 12–14-digit
+   inputs show Product not found. Camera-denied and connection-failure states
+   are separate. Manual food entry remains available without camera permission.
+   Allow camera and Open camera settings lead to explicitly labeled simulations,
+   never a real camera request or a claim that device permissions changed.
+8. Review dark, 200%, loading/error, narrow macros and empty states. The mockup
+   uses kcal and grams; do not infer that native energy-unit preferences are removed.
+9. Tap the diary date, then a calendar day: it selects immediately. There is no
+   duplicate toolbar calendar or nested browser date control. Time editing uses
+   styled hour/minute lists with Save/Cancel, rather than the browser time picker.
+
+The review-state selector preserves its original order on every study. It opens
+scrolled to the current state, with earlier states available by scrolling up.
+
+All food values, brands, serving sizes, search ordering and barcode mappings are
+illustrative. This study does not improve or verify the actual food database or
+coverage. No database, camera, nutrition API or network save is invoked. Its food
+diary state is in memory, separate from Home; resetting/reloading loses edits.
+The Home Log a meal preview can link here or separately simulate its Home action.
+
+Nutrition checks: `node --test prototypes/training-notebook/nutrition.verify.mjs`.
 
 From the repository root:
 

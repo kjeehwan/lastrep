@@ -1,3 +1,4 @@
+import { setReviewState } from './review-state-picker.mjs';
 import { readCheckIn, writeCheckIn, clearCheckIn, checkInFields } from './check-in.mjs';
 import { copy, fixture, catalog, exerciseFromCatalog, lastText, effortValue, guidanceChanges, moveExercise, summary, setUnit, states } from './model.mjs';
 
@@ -51,6 +52,7 @@ function makeState(id) {
 }
 
 function loadExample(id, useShared = false) {
+  setReviewState(document.querySelector('#example'), states.map(([group, id, title]) => [id, title, group]), id);
   chosen = id; s = makeState(id); const shared = useShared ? readCheckIn() : null; if (!useShared) clearCheckIn(); if (shared) Object.assign(s, shared); if (s.modal === 'context') s.contextBefore = structuredClone({ ratings: s.ratings, pain: s.pain, activity: s.activity, note: s.note }); lastInput = null; scale = $('#effort').value;
   size = id === 'compact' ? [360, 800] : id === 'landscape' ? [844, 390] : id === 'tablet' ? [800, 1280] : id === 'tablet-wide' ? [1280, 800] : [390, 844];
   theme = id === 'dark'; large = id === 'large'; compare = id === 'active';
@@ -290,7 +292,7 @@ $('#stage').addEventListener('click', async event => {
     case 'close': case 'outside': if (s.modal === 'saving') return; if (s.modal === 'context' && s.contextBefore) Object.assign(s, s.contextBefore); s.contextBefore = null; s.modal = ''; render(false); $('.interactive .toolbar .btn')?.focus({ preventScroll: true }); return;
     case 'hide-keyboard': s.keyboard = false; render(); $('.interactive .viewport')?.focus({ preventScroll: true }); return;
     case 'dismiss-toast': s.toast = ''; render(); return;
-    case 'tab': if (d.value !== 'Workout') toast('This study covers Workout only. Other app destinations are not implemented.'); return;
+    case 'tab': if (d.value === 'Home') location.href = './home.html'; else if (d.value === 'Nutrition') location.href = './nutrition.html'; else if (d.value !== 'Workout') toast('This destination is outside the current browser studies.'); return;
     case 'search': s.page = 'search'; s.keyboard = false; s.modal = ''; s.query = ''; s.searchMode = 'ready'; s.selected = []; render(false); return;
     case 'back-search': if (s.page === 'custom') { s.page = 'search'; } else { s.page = 'workout'; } s.keyboard = false; render(false); return;
     case 'clear-search': s.query = ''; s.searchMode = 'ready'; render(); return;

@@ -1,3 +1,4 @@
+import { setReviewState } from './review-state-picker.mjs';
 import { readCheckIn, writeCheckIn, clearCheckIn, checkInFields } from './check-in.mjs';
 import { TODAY, trendObservationDate, metrics, homeStates, homeFixture, observations, selectedObservation, displayValue, valuesForDate, phaseWeeks, changePhase, phaseOnDate, readiness, saveMeasurement, workoutDays, calendarCells } from './home-model.mjs';
 
@@ -23,6 +24,7 @@ const shortDate = date => new Date(`${date}T12:00:00`).toLocaleDateString('en-US
 let s, example = 'returning', size = [390, 844], dark = false, large = false, toastTimer;
 
 function choose(value, useShared = false) {
+  setReviewState(document.querySelector('#example'), homeStates.map(([id, title]) => [id, title]), value);
   example = value; s = homeFixture(value); dark = value === 'dark'; large = value === 'large';
   const shared = useShared ? readCheckIn() : null; if (!useShared) clearCheckIn(); if (shared) Object.assign(s, shared);
   $('#example').value = value; $('#dark').checked = dark; $('#large').checked = large; $('#unit').value = 'kg';
@@ -144,14 +146,14 @@ function modal() {
     case 'weekly': return trendDetail();
     case 'profile': return dialog('Profile', `<div class="profile-identity"><div class="profile-portrait" role="img" aria-label="Profile photo fallback: Daniel's initial">D</div><strong class="profile-name">Daniel</strong>${p('Training for steady progress, one session at a time.')}${p('Premium', 'chart-hint')}</div>${heading('Current phases')}<div class="phase-pair">${phaseButton('training', 'Training')}${phaseButton('diet', 'Diet')}</div>${p('The initial is the fallback for a missing profile photo. The description is user-provided profile text, not private recovery notes.', 'chart-hint')}`, btn('Back to Home', 'close', 'primary'));
     case 'health': return dialog('Health sync', `${p(s.connected ? 'Connected on this mock device.' : 'Not connected on this mock device.')}${p('Saved account records remain visible when sync is disconnected. Connecting is optional and requires the existing consent and permission flow in the real app.')}${p('This preview cannot grant permissions or read health data.', 'chart-hint')}`, btn('Back to Home', 'close', 'primary'));
-    case 'meal': return dialog('Log a meal', `${p('This action opens Nutrition at Log meals in the real app. The Nutrition notebook mockup is not built yet.')}${p('For this review, mark a meal as logged to see the conditional Home action disappear.')}`, btn('Mark meal logged in mock', 'meal-logged', 'primary') + btn('Back', 'close'));
+    case 'meal': return dialog('Log a meal', `${p('The Nutrition study has its own food diary fixture. Open it to review logging, or mark a meal logged in this Home fixture to review the conditional action disappearing.')}`, '<a class="btn primary" href="./nutrition.html">Review Nutrition study</a>' + btn('Mark meal logged in Home mock', 'meal-logged') + btn('Back', 'close'));
     case 'sleep': return dialog('Sleep', `${p(s.sleep == null ? 'No saved sleep data.' : 'Saved sleep · Oct 15, 2026 · 6.7 h')}${p(s.connected ? 'Sync connected on this mock device.' : 'Sync not connected. This saved account record remains available.')}${p('The Sleep screen itself is outside this Home design study.', 'chart-hint')}`, btn('Back', 'close', 'primary'));
     case 'settings': return dialog('Settings', p('Settings is outside this Home mockup. Existing subscription, legal and preference flows are retained for native implementation.'), btn('Back to Home', 'close', 'primary'));
     default: return '';
   }
 }
 function tabs() {
-  return `<nav class="bottom-tabs" aria-label="App destinations">${['Home', 'Workout', 'Nutrition', 'Sleep', 'Profile'].map(name => name === 'Workout' ? `<a class="tab home-tab-link" href="./">${icon('workout')}${name}</a>` : `<button class="tab ${name === 'Home' ? 'active' : ''}" ${name === 'Home' ? 'aria-current="page"' : ''} data-action="${name.toLowerCase()}">${icon(name.toLowerCase())}${name}</button>`).join('')}</nav>`;
+  return `<nav class="bottom-tabs" aria-label="App destinations">${['Home', 'Workout', 'Nutrition', 'Sleep', 'Profile'].map(name => ['Workout', 'Nutrition'].includes(name) ? `<a class="tab home-tab-link" href="${name === 'Workout' ? './' : './nutrition.html'}">${icon(name.toLowerCase())}${name}</a>` : `<button class="tab ${name === 'Home' ? 'active' : ''}" ${name === 'Home' ? 'aria-current="page"' : ''} data-action="${name.toLowerCase()}">${icon(name.toLowerCase())}${name}</button>`).join('')}</nav>`;
 }
 function render(preserve = true) {
   const old = $('.home-device .viewport'), scroll = old?.scrollTop ?? 0;
