@@ -37,6 +37,20 @@ service cloud.firestore {
         allow read, create, update, delete: if isOwnUser(uid);
       }
 
+      match /sleepSessions/{sessionId} {
+        allow read, delete: if isOwnUser(uid);
+        allow create, update: if isOwnUser(uid)
+          && request.resource.data.id == sessionId
+          && (request.resource.data.dateKey.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+              || (request.resource.data.dateKey == 'undated' && request.resource.data.kind == 'legacy'))
+          && request.resource.data.source in ['manual', 'health']
+          && request.resource.data.kind in ['session', 'duration', 'legacy']
+          && request.resource.data.hours is number
+          && request.resource.data.hours >= 0 && request.resource.data.hours <= 24
+          && request.resource.data.excluded is bool
+          && request.resource.data.providerDeleted is bool;
+      }
+
       match /workouts/{workoutId} {
         allow read, create, update, delete: if isOwnUser(uid);
       }

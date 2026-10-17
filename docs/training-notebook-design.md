@@ -1,16 +1,18 @@
 # Lastrep Training Notebook Design Specification
 
-Version: 1.14 | Date: October 17, 2026
+Version: 1.17 | Date: October 17, 2026
 
 Status: Workout, Home, Nutrition, Sleep, Profile and Settings browser design
 directions approved through iterative review. Shared rules below incorporate that
 feedback. Workout's native migration was approved and merged in PR #34. Home's
 native migration was approved after phone review and merged in PR #35 on
-October 17. Nutrition's native candidate is being reviewed separately on
-`feature/nutrition-notebook-ui`. Account-write checks remain separate from
-read-only visual acceptance. Sleep, Profile and Settings have not been migrated.
+October 17. Nutrition's native migration was approved and merged in PR #36.
+Sleep's native migration is approved on `feature/sleep-notebook-ui` after phone
+review, including deletion, overlap handling and bidirectional target sync.
+Account-write checks remain separate from read-only visual acceptance.
+Profile and Settings have not been migrated.
 See workout-notebook-migration.md, home-notebook-migration.md and
-nutrition-notebook-migration.md for implementation boundaries and actual
+nutrition-notebook-migration.md and sleep-notebook-migration.md for boundaries and actual
 verification coverage.
 The initial Figma pair records an earlier Workout revision; the local browser
 prototype and decisions below capture the subsequent approved refinements.
@@ -276,6 +278,22 @@ the heading lives inside it with 16 padding, matching other panels.
 For each panel/row, reserve a consistent 24-wide icon slot plus 12 gap before text.
 Items without icons omit the slot intentionally; unrelated icon glyph widths must
 not determine text alignment.
+
+### Divider ownership
+
+- Dividers separate adjacent items or sections; they are not decorative underlines.
+- In a list, draw row separators only between visible items. A single-item list
+  has no row separator, and the last visible item has no trailing separator.
+- Apply this after filtering, collapsing or excluding items, not using the raw
+  data count. Expanded and empty states must not leave orphan rules.
+- Let the next section's top rule, the surrounding panel border or the toolbar
+  divider own that boundary. Do not add another line from the preceding content
+  or first section to represent the same boundary.
+- Keep the normal section spacing when removing a duplicate line; do not replace
+  it with an extra border or tighten the layout to compensate.
+- Apply across sleep entries, meal/food rows, workout history and comparable
+  grouped lists. Preserve functional table borders and chart target/grid lines;
+  those communicate different information, not section boundaries.
 
 ### Buttons and inputs
 
@@ -1508,10 +1526,10 @@ scores. A session belongs to its wake date; the selected summary says Total for
    advice: e.g. 3 of 6 recorded days met your target; 1 day has no entry.
 8. Put the selected date and actual duration immediately above the chart, not
    only in the offscreen main summary. Missing nights say Not recorded there.
-   View records expands the newest five records with date, duration and source.
-   View 5 more appends the next five, or the actual remaining count; hide the
-   action when exhausted. Closing/reopening resets the list to five. Selecting
-   a record updates the main summary. No permanent extra chart is needed.
+   Native review removes View records and its duplicate record list: chart bars
+   already select the date and show its actual duration. Calendar navigation
+   remains available for other dates. Preserve the graph's viewport position
+   when selecting a date adds/removes session rows above it; never jump to sync.
 9. Health sync is a separate lower section: current-device connection, last sync
    on this device and the relevant Sync / Connect / Review action. Saved account
    data and source timestamps stay visible independently of that device state.
@@ -1575,7 +1593,7 @@ scores. A session belongs to its wake date; the selected summary says Total for
   dates/times when known, duration and its actual source. A split night from
   23:00–03:00 and 04:00–07:00 is two entries totaling 7 hours; 03:00–04:00 does
   not count. A 13:00–14:30 nap adds 1.5 hours, making the day's total 8.5 hours.
-- An old daily total is labeled Saved daily total / times unavailable. It is
+- An old daily total is labeled Older daily total / times unavailable. It is
   not counted as a reconstructed session. Adding a timed entry to an unknown-time
   total requires review rather than blindly summing unverifiable amounts.
 - New overlapping manual sessions open a review sheet before any mutation. Show
@@ -1631,6 +1649,64 @@ them. This is not a guarantee for every wearable. See the official
 Actual backend migration, permission/data safety review and device tests remain
 outside this browser-only batch. The mock does not implement provider pagination,
 change-token/deletion reconciliation, stage-aware aggregation or timezone/DST.
+
+### Native Sleep candidate (October 17)
+
+- Calendar weekday headers and date cells share explicit equal column widths;
+  do not let intrinsic one-/two-digit text widths determine column geometry.
+- The selected-date control already identifies the summary date; omit a second
+  Total for [date] label. Add sleep session is aligned to the content's left edge.
+- Do not show a View excluded entries action or an excluded-entry list on Sleep.
+  Hide superseded imported daily totals and excluded/provider-deleted sessions.
+  Preserve unmatched history: one same-date session does not prove a complete
+  replacement. Keep internal exclusion markers without presenting obsolete totals.
+  Label the daily total and selected graph value Time asleep when all counted
+  time has complete stages; otherwise show May include awake time.
+- History-chart selection is independent of the date being logged: bar taps
+  update the graph date, duration and weekly statistics only. Use the date/calendar
+  control to change the summary and session list; this resets graph selection.
+  Do not change above-chart content or scroll back programmatically on bar taps.
+- The native candidate implements a session ledger in owner-only
+  `users/{uid}/sleepSessions`, with atomic derived summaries for existing Home,
+  Profile and decision consumers. Do not rewrite legacy totals as timed sessions.
+  Preserve totals without a diary date as undated legacy entries requiring the
+  user to assign a date, rather than assuming their save date is their sleep date.
+- Stage-derived asleep duration and session-window duration are different values.
+  Only a complete, non-overlapping, known stage sequence can justify an asleep
+  duration. Partial/missing stages retain the session-duration label. A secondary
+  source must not fill time explicitly marked awake by the preferred source.
+- Manual Delete permanently removes the entry and updates summaries atomically;
+  confirmation states that deletion cannot be undone. Imported Exclude from totals
+  hides the session but retains its stable identity internally to prevent re-import.
+  Deleting a manual correction must not revive its excluded provider original.
+  Do not offer restoration on the ordinary Sleep screen. No action writes changes to
+  Health Connect. Reject removal if the entry changed since it was reviewed.
+  Confirmed overlap replacement must reject entries changed since review.
+- Timed entry uses actual local timestamps and persisted timezone/offset metadata,
+  not the browser's UTC fixture arithmetic. Nonexistent local DST times are
+  rejected. Ambiguous repeated times direct the user to duration-only entry.
+- The installed Health Connect adapter omits provider timezone offsets. Preserve
+  raw instants and known metadata; disclose local-time display when offsets are
+  unavailable. Preserve the existing diary allocation on re-import instead of
+  silently moving records when the user travels.
+- All entry, target, calendar, sync, detail, exclusion and setup popups use the
+  shared notebook shell, outside/Android Back dismissal, tab clearance and
+  keyboard-safe body/footer layout. Inputs select existing text on focus.
+- Target edits share `sleepSettings.targetHours` with Profile and update both
+  screens live without reload. Reconcile external changes into saved baselines
+  to avoid false unsaved-change prompts; preserve any unsaved field edits.
+  Sync status and
+  last-check time describe this device, not another device signed into the same
+  account. A successful empty check is not a new measurement; manual edits never
+  update health-sync time. Existing saved account records remain visible offline
+  and when device consent/permissions are absent.
+- The candidate uses the existing account's sleep-origin preference first,
+  manual corrections ahead of providers, and stable origin/ID ordering as a
+  fallback. Overlapping provider records remain visible with review/contribution
+  information. This is not claimed to reproduce Health Connect's system-wide
+  provider-priority aggregate.
+- Browser approval is not native write-flow approval. See the migration checkpoint
+  for completed emulator checks, read-only phone checks and remaining user tests.
 
 ### Review coverage and boundaries
 
