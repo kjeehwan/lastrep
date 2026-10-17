@@ -1,3 +1,10 @@
+import { ManualFoodEditor } from "@/src/nutrition/components/ManualFoodEditor";
+import { type ManualFood } from "@/src/nutrition/manualFood";
+import { NotebookHeader } from "@/src/ui/notebook/NotebookHeader";
+import { notebookSheet, useNotebookStyles } from "@/src/ui/notebook/Notebook";
+import { notebookFonts, type NotebookColors } from "@/src/ui/notebook/tokens";
+import { NotebookModal as Modal } from "@/src/ui/notebook/NotebookModal";
+import { nutritionPalette, useNutritionColors } from "@/src/nutrition/notebookPalette";
 import { AdaptiveModalCard } from "../../../../src/ui/AdaptiveModalCard";
 import { KeyboardAwareModalFrame } from "../../../../src/ui/KeyboardAwareModalFrame";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -9,9 +16,8 @@ import { Timestamp } from "firebase/firestore";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   BackHandler,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
+  AppState,
+  Linking,
   ScrollView,
   StyleSheet,
   Text,
@@ -39,8 +45,8 @@ import {
 } from "@/src/nutrition/quickLog";
 import { showAppDialog } from "@/src/ui/appDialog";
 import { NutritionFactsPreview } from "@/src/nutrition/components/NutritionFactsPreview";
-import { foodEditorStyles } from "@/src/nutrition/components/foodEditorStyles";
-import { quantityGrams, quantityValue, selectedFoodSummary } from "@/src/nutrition/foodQuantity";
+import { useFoodEditorStyles } from "@/src/nutrition/components/foodEditorStyles";
+import { quantityNutrition, quantityGrams, quantityValue, selectedFoodSummary } from "@/src/nutrition/foodQuantity";
 import { useMealLabels } from "@/src/nutrition/useMealLabels";
 import { initialMealTime, mealLabel, mealSectionId } from "@/src/nutrition/mealOrganization";
 
@@ -53,12 +59,6 @@ type SelectionDraft = {
 
 type BrowseTab = "search" | "recent" | "favorites" | "saved";
 type FavoriteEntry = { food: FoodItem };
-type NutritionPreview = {
-  calories: number;
-  proteinGrams: number;
-  carbGrams: number | null;
-  fatGrams: number | null;
-};
 
 const ENTRY_MODES: FoodEntryMode[] = ["grams", "calories", "servings"];
 const FAVORITES_KEY_PREFIX = "nutrition-food-favorites:v1:";
@@ -124,6 +124,10 @@ function normalizeServingInfo(label: string | null | undefined, servingGrams: nu
 }
 
 export default function MealSearchScreen() {
+  const colors = useNutritionColors();
+  const foodEditorStyles = useFoodEditorStyles();
+  const styles = useNotebookStyles(createStyles);
+
   const router = useRouter();
   const params = useLocalSearchParams<{ section?: string; date?: string }>();
   const section = decodeURIComponent(params.section ?? "Breakfast");
@@ -141,7 +145,7 @@ export default function MealSearchScreen() {
   );
 
   const [uid, setUid] = useState<string | null>(null);
-  const { labels } = useMealLabels(uid);
+  const { labels } = useMealLabels(uid, selectedDateKey);
   const [query, setQuery] = useState("");
   const [submittedQuery, setSubmittedQuery] = useState("");
   const [searchNonce, setSearchNonce] = useState(0);
@@ -149,14 +153,16 @@ export default function MealSearchScreen() {
   const [searching, setSearching] = useState(false);
   const [staged, setStaged] = useState<Record<string, SelectionDraft>>({});
   const [submitting, setSubmitting] = useState(false);
+  const [manualFoodVisible, setManualFoodVisible] = useState(false);
+  const [manualFoodMessage, setManualFoodMessage] = useState("");
   const [editorVisible, setEditorVisible] = useState(false);
   const [editorMode, setEditorMode] = useState<FoodEntryMode>("grams");
   const [editorValue, setEditorValue] = useState("100");
   const editorGramsRef = useRef<number | null>(null);
   const [editorFood, setEditorFood] = useState<FoodItem | null>(null);
   const [editorKey, setEditorKey] = useState<string | null>(null);
-  const [editorPreview, setEditorPreview] = useState("Enter a value");
-  const [editorNutrition, setEditorNutrition] = useState<NutritionPreview | null>(null);
+  const editorNutrition = useMemo(() => editorFood ? quantityNutrition(editorValue, editorMode, editorFood) : null, [editorFood, editorValue, editorMode]);
+  const editorPreview = editorNutrition ? `${Number(editorNutrition.grams.toFixed(2))}g / ${Math.round(editorNutrition.calories)} kcal / ${formatServingQuantity(editorNutrition.servings, "1 serving")}` : "Enter a positive amount";
   const [tab, setTab] = useState<BrowseTab>("search");
   const [recentMeals, setRecentMeals] = useState<NutritionMeal[]>([]);
   const [favorites, setFavorites] = useState<FavoriteEntry[]>([]);
@@ -167,7 +173,11 @@ export default function MealSearchScreen() {
   const [scannerBusy, setScannerBusy] = useState(false);
   const [scannerMessage, setScannerMessage] = useState("");
   const [manualBarcode, setManualBarcode] = useState("");
-  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
+  const [cameraPermission, requestCameraPermission, getCameraPermission] = useCameraPermissions();
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (state) => { if (state === "active") void getCameraPermission(); });
+    return () => subscription.remove();
+  }, [getCameraPermission]);
   const scannerLockedRef = useRef(false);
 
   const favoriteKey = uid ? `${FAVORITES_KEY_PREFIX}${uid}` : null;
@@ -317,41 +327,6 @@ export default function MealSearchScreen() {
       cancelled = true;
     };
   }, [submittedQuery, searchNonce]);
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      if (!editorFood) {
-        setEditorPreview("Enter a value");
-        setEditorNutrition(null);
-        return;
-      }
-      const foodDb = await getFoodDb();
-      const converted = foodDb.computeFromFood(editorFood, editorMode, editorValue);
-      if (cancelled) return;
-      if (!converted) {
-        setEditorPreview("Enter a value");
-        setEditorNutrition(null);
-        return;
-      }
-      const servingInfo = normalizeServingInfo(editorFood.servingLabel, editorFood.servingGrams);
-      setEditorPreview(
-        `${Number(converted.grams.toFixed(2))}g / ${Math.round(converted.calories)} kcal / ${formatServingQuantity(
-          converted.servings,
-          servingInfo
-        )}`
-      );
-      setEditorNutrition({
-        calories: converted.calories,
-        proteinGrams: converted.proteinGrams,
-        carbGrams: converted.carbGrams,
-        fatGrams: converted.fatGrams,
-      });
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [editorFood, editorMode, editorValue]);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -507,7 +482,6 @@ export default function MealSearchScreen() {
     setEditorKey(key);
     setEditorMode(mode);
     setEditorValue(value);
-    setEditorNutrition(null);
     setEditorVisible(true);
   };
 
@@ -516,12 +490,10 @@ export default function MealSearchScreen() {
     if (nextMode === "calories" && !(editorFood.caloriesPer100g > 0)) return;
     setEditorValue(quantityValue(editorGramsRef.current, nextMode, editorFood));
     setEditorMode(nextMode);
-    setEditorNutrition(null);
   };
 
   const handleEditorValueChange = (value: string) => {
     setEditorValue(value);
-    setEditorNutrition(null);
     editorGramsRef.current = editorFood ? quantityGrams(value, editorMode, editorFood) : null;
   };
 
@@ -602,19 +574,9 @@ export default function MealSearchScreen() {
     scannerLockedRef.current = false;
     setScannerMessage("");
     setManualBarcode("");
-    if (!cameraPermission?.granted) {
-      const result = await requestCameraPermission();
-      if (!result.granted) {
-        showAppDialog({
-          title: "Camera permission needed",
-          message: "Allow camera access to scan a food barcode. You can still enter it manually.",
-          buttons: [
-            { text: "Cancel", role: "cancel" },
-            { text: "Enter manually", onPress: () => setScannerVisible(true) },
-          ],
-        });
-        return;
-      }
+    setScannerVisible(true);
+    if (!cameraPermission?.granted && cameraPermission?.canAskAgain !== false) {
+      await requestCameraPermission();
     }
     setScannerVisible(true);
   };
@@ -658,6 +620,15 @@ export default function MealSearchScreen() {
         },
       ],
     });
+  };
+
+  const saveManualFood = async (food: ManualFood) => {
+    if (!uid) throw new Error("Not signed in");
+    const now = new Date();
+    await createMeal(uid, { ...food, source: null, mealSection: section,
+      loggedAt: Timestamp.fromDate(new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate(), now.getHours(), now.getMinutes())), updatedAt: Timestamp.now() });
+    if (stagedCount === 0) goToSection();
+    else setManualFoodMessage(`Added ${food.name} to ${mealLabel(section, labels)}. Your other selections are kept until you tap Add.`);
   };
 
   const commitStaged = async () => {
@@ -807,6 +778,7 @@ export default function MealSearchScreen() {
       goToSection();
     } catch (error) {
       console.log("Failed to commit staged foods", error);
+      showAppDialog({ title: "Could not add all foods", message: "Check the meal before trying again; some items may already have been saved.", buttons: [{ text: "OK" }] });
     } finally {
       setSubmitting(false);
     }
@@ -814,55 +786,47 @@ export default function MealSearchScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.iconBtn} onPress={goToSection}>
-          <Ionicons name="chevron-back" size={22} color="#fff" />
-        </TouchableOpacity>
-        <View style={{ flex: 1, alignItems: "center", paddingHorizontal: 8 }}>
-          <Text style={[styles.title, { textAlign: "center" }]}>Add to {mealLabel(section, labels)}</Text>
-          <Text style={[styles.subText, { textAlign: "center" }]}>{selectedDateKey}</Text>
-        </View>
-        <TouchableOpacity style={styles.nextBtn} onPress={commitStaged} disabled={submitting}>
-          <Text style={styles.nextText}>{submitting ? "Saving..." : "Next"}</Text>
-        </TouchableOpacity>
-      </View>
-
+      <NotebookHeader title={`Add to ${mealLabel(section, labels)}`} onBack={goToSection} action={submitting ? "Saving..." : `Add (${stagedCount})`} onAction={commitStaged} disabled={submitting || stagedCount === 0} />
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Search foods</Text>
+        <View style={[styles.card, { borderTopWidth: 0, paddingTop: 0 }]}>
+          <Text style={[styles.subText, { textAlign: "center" }]}>{(parseDateKey(selectedDateKey) ?? new Date()).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</Text>
           <View style={styles.searchInlineRow}>
-            <TextInput
+            <View style={[styles.input, { flex: 1, flexDirection: "row", alignItems: "center", paddingVertical: 0, paddingRight: 0 }]}><TextInput disableFullscreenUI
               value={query}
               onChangeText={setQuery}
-              style={[styles.input, styles.searchInput]}
+              style={[styles.searchInput, { color: colors.ink, fontFamily: notebookFonts.body, fontSize: 16, minHeight: 54, paddingVertical: 12 }]}
               placeholder="Search food"
-              placeholderTextColor="#7a7a8c"
+              placeholderTextColor={colors.muted}
               returnKeyType="search"
               onSubmitEditing={runSearch}
             />
             {query.length > 0 ? (
-              <TouchableOpacity style={styles.clearBtn} onPress={clearSearchState}>
-                <Ionicons name="close-circle" size={18} color="#cfd3f8" />
+              <TouchableOpacity accessibilityLabel="Clear food search" style={styles.clearBtn} onPress={clearSearchState}>
+                <Ionicons name="close-circle" size={18} color={colors.muted} />
               </TouchableOpacity>
             ) : null}
+            </View>
             <TouchableOpacity
+              accessibilityLabel="Search foods"
               style={[styles.searchIconBtn, !canSearch && styles.searchBtnDisabled]}
               onPress={runSearch}
               disabled={!canSearch}
             >
-              <Ionicons name="search" size={16} color="#fff" />
+              <Ionicons name="search" size={20} color={colors.ink} />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.searchIconBtn} onPress={() => void openScanner()}>
-              <Ionicons name="barcode-outline" size={18} color="#fff" />
+            <TouchableOpacity accessibilityLabel="Scan barcode" style={styles.searchIconBtn} onPress={() => void openScanner()}>
+              <Ionicons name="barcode-outline" size={20} color={colors.ink} />
             </TouchableOpacity>
           </View>
 
+          <TouchableOpacity style={styles.secondaryBtn} onPress={() => setManualFoodVisible(true)}><Text style={styles.secondaryBtnText}>Enter food manually</Text></TouchableOpacity>
+          {manualFoodMessage ? <Text accessibilityLiveRegion="polite" style={styles.subText}>{manualFoodMessage}</Text> : null}
           <View style={styles.tabRow}>
             <TouchableOpacity style={[styles.tabBtn, tab === "search" && styles.tabBtnActive]} onPress={() => setTab("search")}>
               <Text style={[styles.tabText, tab === "search" && styles.tabTextActive]}>Search</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.tabBtn, tab === "recent" && styles.tabBtnActive]} onPress={() => setTab("recent")}>
-              <Text style={[styles.tabText, tab === "recent" && styles.tabTextActive]}>Recently added</Text>
+              <Text style={[styles.tabText, tab === "recent" && styles.tabTextActive]}>Recent</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.tabBtn, tab === "favorites" && styles.tabBtnActive]} onPress={() => setTab("favorites")}>
               <Text style={[styles.tabText, tab === "favorites" && styles.tabTextActive]}>Favorites</Text>
@@ -882,7 +846,7 @@ export default function MealSearchScreen() {
                       {entry.food.name}
                     </Text>
                     <TouchableOpacity style={styles.selectedChipRemove} onPress={() => toggleStaged(entry.key, entry.food)}>
-                      <Ionicons name="close" size={14} color="#cfd3f8" />
+                      <Ionicons name="close" size={14} color={colors.muted} />
                     </TouchableOpacity>
                   </View>
                 ))}
@@ -903,20 +867,19 @@ export default function MealSearchScreen() {
               const favored = favoriteIds.has(item.id);
               return (
                 <TouchableOpacity key={item.id} style={styles.searchRow} onPress={() => openEditor(stageKey, item)}>
-                  <TouchableOpacity onPress={() => toggleStaged(stageKey, item)} style={styles.checkboxWrap}>
+                  <TouchableOpacity onPress={() => toggleStaged(stageKey, item)} accessibilityLabel={`Select ${item.name}`} style={styles.checkboxWrap}>
                     <Ionicons
                       name={selected ? "checkbox" : "square-outline"}
                       size={20}
-                      color={selected ? "#7b61ff" : "#cfd3f8"}
+                      color={selected ? colors.accent : colors.muted}
                     />
                   </TouchableOpacity>
                   <View style={styles.searchBody}>
                     <Text style={styles.searchTitle}>{item.name}</Text>
-                    <Text style={styles.subText}>{item.sourceType === "usda-generic" ? "USDA reference food" : item.id.startsWith("off-") ? "Open Food Facts product" : "USDA"}</Text>
                     <Text style={styles.subText}>{formatFoodHelper(item, staged[stageKey])}</Text>
                   </View>
                   <TouchableOpacity onPress={() => toggleFavorite(item)}>
-                    <Ionicons name={favored ? "star" : "star-outline"} size={18} color={favored ? "#ffd166" : "#cfd3f8"} />
+                    <Ionicons name={favored ? "star" : "star-outline"} size={18} color={favored ? colors.accent : colors.muted} />
                   </TouchableOpacity>
                 </TouchableOpacity>
               );
@@ -938,7 +901,7 @@ export default function MealSearchScreen() {
                         <Ionicons
                           name={selected ? "checkbox" : "square-outline"}
                           size={20}
-                          color={selected ? "#7b61ff" : "#cfd3f8"}
+                          color={selected ? colors.accent : colors.muted}
                         />
                       </TouchableOpacity>
                       <View style={styles.searchBody}>
@@ -946,7 +909,7 @@ export default function MealSearchScreen() {
                         <Text style={styles.subText}>{formatFoodHelper(food, staged[stageKey])}</Text>
                       </View>
                       <TouchableOpacity onPress={() => toggleFavorite(food)}>
-                        <Ionicons name={favored ? "star" : "star-outline"} size={18} color={favored ? "#ffd166" : "#cfd3f8"} />
+                        <Ionicons name={favored ? "star" : "star-outline"} size={18} color={favored ? "#ffd166" : colors.muted} />
                       </TouchableOpacity>
                     </TouchableOpacity>
                   );
@@ -967,7 +930,7 @@ export default function MealSearchScreen() {
                     <Ionicons
                       name={selected ? "checkbox" : "square-outline"}
                       size={20}
-                      color={selected ? "#7b61ff" : "#cfd3f8"}
+                      color={selected ? colors.accent : colors.muted}
                     />
                   </TouchableOpacity>
                   <View style={styles.searchBody}>
@@ -975,7 +938,7 @@ export default function MealSearchScreen() {
                     <Text style={styles.subText}>{formatFoodHelper(food, staged[stageKey])}</Text>
                   </View>
                   <TouchableOpacity onPress={() => toggleFavorite(food)}>
-                    <Ionicons name="star" size={18} color="#ffd166" />
+                    <Ionicons name="star" size={18} color={colors.accent} />
                   </TouchableOpacity>
                 </TouchableOpacity>
               );
@@ -1009,7 +972,7 @@ export default function MealSearchScreen() {
                     </Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.savedDeleteBtn} onPress={() => handleDeleteSavedMeal(savedMeal)}>
-                    <Ionicons name="trash-outline" size={17} color="#fda4af" />
+                    <Ionicons name="trash-outline" size={17} color={colors.danger} />
                   </TouchableOpacity>
                 </View>
               );
@@ -1022,9 +985,19 @@ export default function MealSearchScreen() {
         </View>
       </ScrollView>
 
+      {manualFoodVisible ? <ManualFoodEditor onClose={() => setManualFoodVisible(false)} onSave={saveManualFood} /> : null}
       <Modal visible={editorVisible} transparent animationType="fade" onRequestClose={() => setEditorVisible(false)}>
-        <KeyboardAwareModalFrame style={foodEditorStyles.backdrop}>
-          <AdaptiveModalCard contentSized style={foodEditorStyles.card}>
+        <KeyboardAwareModalFrame style={foodEditorStyles.backdrop} onDismiss={() => setEditorVisible(false)}>
+          <AdaptiveModalCard contentSized style={foodEditorStyles.card} focusPlacement="start" footer={
+              <View style={styles.modalActions}>
+                <TouchableOpacity style={styles.secondaryBtn} onPress={() => setEditorVisible(false)}>
+                  <Text style={styles.secondaryBtnText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.primaryBtn, !editorNutrition && { opacity: 0.45 }]} disabled={!editorNutrition} onPress={confirmEditor}>
+                  <Text style={styles.primaryBtnText}>Confirm</Text>
+                </TouchableOpacity>
+              </View>
+          }>
             <View style={foodEditorStyles.content}>
               <Text style={styles.modalTitle}>{editorFood?.name ?? "Edit"}</Text>
               <View style={styles.rowWrap}>
@@ -1041,8 +1014,10 @@ export default function MealSearchScreen() {
                   </TouchableOpacity>
                 ))}
               </View>
-              <TextInput
-                style={styles.input}
+              <View style={{ gap: 8 }}><Text style={styles.subText}>Amount</Text><View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}><TextInput disableFullscreenUI
+                style={[styles.input, { flex: 1 }]}
+                selectTextOnFocus
+                accessibilityLabel="Food amount"
                 value={editorValue}
                 onChangeText={handleEditorValueChange}
                 keyboardType="decimal-pad"
@@ -1055,26 +1030,19 @@ export default function MealSearchScreen() {
                       : "1 serving"
                     : "100"
                 }
-                placeholderTextColor="#7a7a8c"
-              />
-              {editorFood ? <Text style={styles.subText}>{editorPreview}</Text> : null}
-              {editorFood && editorNutrition ? (
+                placeholderTextColor={colors.muted}
+              /><Text style={styles.subText}>{editorMode === "grams" ? "g" : editorMode === "calories" ? "kcal" : "servings"}</Text></View></View>
+              {editorFood ? <Text style={[styles.subText, { minHeight: 42 }]}>{editorPreview}</Text> : null}
+              {editorFood ? (
                 <NutritionFactsPreview
-                  calories={editorNutrition.calories}
-                  proteinGrams={editorNutrition.proteinGrams}
-                  carbGrams={editorNutrition.carbGrams}
-                  fatGrams={editorNutrition.fatGrams}
+                  calories={editorNutrition?.calories ?? null}
+                  proteinGrams={editorNutrition?.proteinGrams ?? null}
+                  carbGrams={editorNutrition?.carbGrams ?? null}
+                  fatGrams={editorNutrition?.fatGrams ?? null}
                   reference={`Reference: ${normalizeServingInfo(editorFood.servingLabel, editorFood.servingGrams)} / ${Math.round(editorFood.servingGrams)}g`}
                 />
               ) : null}
-              <View style={styles.modalActions}>
-                <TouchableOpacity style={styles.secondaryBtn} onPress={() => setEditorVisible(false)}>
-                  <Text style={styles.secondaryBtnText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.primaryBtn, !editorNutrition && { opacity: 0.45 }]} disabled={!editorNutrition} onPress={confirmEditor}>
-                  <Text style={styles.primaryBtnText}>Confirm</Text>
-                </TouchableOpacity>
-              </View>
+
             </View>
           </AdaptiveModalCard>
         </KeyboardAwareModalFrame>
@@ -1086,19 +1054,15 @@ export default function MealSearchScreen() {
         animationType="fade"
         onRequestClose={() => setScannerVisible(false)}
       >
-        <KeyboardAvoidingView
-          style={styles.modalBackdrop}
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-          keyboardVerticalOffset={Platform.OS === "android" ? 24 : 0}
-        >
-          <AdaptiveModalCard contentSized style={styles.scannerCard}>
+        <KeyboardAwareModalFrame style={styles.modalBackdrop} onDismiss={() => setScannerVisible(false)}>
+          <AdaptiveModalCard contentSized style={styles.scannerCard} contentContainerStyle={{ gap: 16 }}>
             <View style={styles.scannerHeader}>
               <View style={styles.searchBody}>
                 <Text style={styles.modalTitle}>Scan packaged food</Text>
                 <Text style={styles.subText}>Center an EAN or UPC barcode in the frame.</Text>
               </View>
               <TouchableOpacity style={styles.iconBtn} onPress={() => setScannerVisible(false)}>
-                <Ionicons name="close" size={20} color="#fff" />
+                <Ionicons name="close" size={20} color={colors.ink} />
               </TouchableOpacity>
             </View>
             {cameraPermission?.granted ? (
@@ -1113,19 +1077,20 @@ export default function MealSearchScreen() {
               </View>
             ) : (
               <View style={styles.permissionPanel}>
-                <Ionicons name="camera-outline" size={28} color="#cfd3f8" />
-                <Text style={styles.subText}>Camera access is off. Enter the barcode below.</Text>
+                <Ionicons name="camera-outline" size={28} color={colors.muted} />
+                <Text style={styles.subText}>Camera access is off. Allow access to scan, or enter the barcode below.</Text>
+                <TouchableOpacity style={styles.secondaryBtn} onPress={() => cameraPermission?.canAskAgain === false ? void Linking.openSettings() : void requestCameraPermission()}><Text style={styles.secondaryBtnText}>{cameraPermission?.canAskAgain === false ? "Open camera settings" : "Allow camera access"}</Text></TouchableOpacity>
               </View>
             )}
-            {scannerMessage ? <Text style={styles.scannerMessage}>{scannerMessage}</Text> : null}
+            {scannerMessage ? <><Text style={styles.scannerMessage}>{scannerMessage}</Text><TouchableOpacity disabled={scannerBusy} style={styles.secondaryBtn} onPress={() => { setScannerVisible(false); setManualFoodVisible(true); }}><Text style={styles.secondaryBtnText}>Enter food manually</Text></TouchableOpacity></> : null}
             <View style={styles.searchInlineRow}>
-              <TextInput
+              <TextInput disableFullscreenUI
                 style={[styles.input, styles.searchInput]}
                 value={manualBarcode}
                 onChangeText={setManualBarcode}
                 keyboardType="number-pad"
                 placeholder="Enter barcode"
-                placeholderTextColor="#7a7a8c"
+                placeholderTextColor={colors.muted}
                 onSubmitEditing={() => void lookupBarcode(manualBarcode)}
               />
               <TouchableOpacity
@@ -1137,104 +1102,69 @@ export default function MealSearchScreen() {
               </TouchableOpacity>
             </View>
           </AdaptiveModalCard>
-        </KeyboardAvoidingView>
+        </KeyboardAwareModalFrame>
       </Modal>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#0d0d1a" },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 8,
-  },
-  iconBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.08)",
-  },
-  title: { color: "#fff", fontSize: 19, fontWeight: "800" },
+const createStyles = (baseColors: NotebookColors) => {
+  const colors = nutritionPalette(baseColors);
+  return notebookSheet({
+  safe: { flex: 1, backgroundColor: colors.canvas },
+  header: { width: "100%", maxWidth: 800, alignSelf: "center", flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: colors.rule },
+  iconBtn: { width: 44, minHeight: 44, alignItems: "center", justifyContent: "center" },
+  title: { color: colors.ink, fontSize: 20, fontWeight: "600", flexShrink: 1 },
   nextBtn: {
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.2)",
+    borderColor: colors.rule,
     paddingVertical: 6,
     paddingHorizontal: 10,
   },
-  nextText: { color: "#fff", fontSize: 13, fontWeight: "700" },
-  content: { padding: 16, gap: 12, paddingBottom: 120 },
-  card: {
-    backgroundColor: "rgba(255,255,255,0.06)",
-    borderRadius: 14,
-    padding: 14,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(255,255,255,0.08)",
-    gap: 10,
-  },
-  sectionTitle: { color: "#fff", fontSize: 15, fontWeight: "700" },
+  nextText: { color: colors.ink, fontSize: 13, fontWeight: "700" },
+  content: { width: "100%", maxWidth: 760, alignSelf: "center", paddingHorizontal: 20, paddingTop: 20, paddingBottom: 40, gap: 20 },
+  card: { backgroundColor: "transparent", borderRadius: 0, borderWidth: 0, borderTopWidth: 1, borderTopColor: colors.rule, paddingHorizontal: 0, paddingVertical: 20, gap: 12 },
+  sectionTitle: { color: colors.ink, fontSize: 20, fontWeight: "600" },
   searchInlineRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   searchInput: { flex: 1 },
-  clearBtn: { width: 30, height: 30, alignItems: "center", justifyContent: "center" },
+  clearBtn: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
   searchIconBtn: {
-    width: 34,
-    height: 34,
+    width: 44,
+    height: 44,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.2)",
-    backgroundColor: "rgba(255,255,255,0.08)",
+    borderColor: colors.rule,
+    backgroundColor: colors.subtle,
     alignItems: "center",
     justifyContent: "center",
   },
   tabRow: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
-  tabBtn: {
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.18)",
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    backgroundColor: "rgba(255,255,255,0.05)",
-  },
-  tabBtnActive: { borderColor: "#7b61ff", backgroundColor: "rgba(123,97,255,0.2)" },
-  tabText: { color: "#cfd3f8", fontSize: 12, fontWeight: "600" },
-  tabTextActive: { color: "#fff" },
-  input: {
-    backgroundColor: "rgba(255,255,255,0.08)",
-    borderColor: "rgba(255,255,255,0.15)",
-    borderWidth: 1,
-    borderRadius: 12,
-    color: "#fff",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
-  },
+  tabBtn: { flexGrow: 1, flexBasis: "20%", minWidth: 60, borderBottomWidth: 2, borderBottomColor: "transparent", minHeight: 48, paddingHorizontal: 4, paddingVertical: 10, alignItems: "center", justifyContent: "center" },
+  tabBtnActive: { borderBottomColor: colors.accent },
+  tabText: { fontSize: 14, textAlign: "center", color: colors.muted },
+  tabTextActive: { color: colors.ink },
+  input: { color: colors.ink, backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, borderRadius: 4, minHeight: 56, padding: 12, fontSize: 16 },
   searchBtnDisabled: { opacity: 0.45 },
   searchRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 8 },
-  checkboxWrap: { padding: 2 },
+  checkboxWrap: { minWidth: 44, minHeight: 44, alignItems: "center", justifyContent: "center" },
   searchBody: { flex: 1, gap: 1 },
-  searchTitle: { color: "#fff", fontSize: 14, fontWeight: "600" },
+  searchTitle: { color: colors.ink, fontSize: 14, fontWeight: "600" },
   savedMealRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 9 },
-  savedAddBtn: { borderRadius: 9, backgroundColor: "#7b61ff", paddingHorizontal: 12, paddingVertical: 8 },
-  savedAddText: { color: "#fff", fontSize: 12, fontWeight: "800" },
+  savedAddBtn: { borderRadius: 9, backgroundColor: colors.accent, paddingHorizontal: 12, paddingVertical: 8 },
+  savedAddText: { color: colors.onPrimary, fontSize: 12, fontWeight: "800" },
   savedDeleteBtn: { width: 34, height: 34, alignItems: "center", justifyContent: "center" },
   groupBlock: { gap: 4 },
-  groupTitle: { color: "#e6e9ff", fontSize: 12, fontWeight: "700", marginTop: 6 },
+  groupTitle: { color: colors.ink, fontSize: 12, fontWeight: "700", marginTop: 6 },
   selectedBlock: {
     gap: 8,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(255,255,255,0.14)",
+    borderColor: colors.rule,
     borderRadius: 10,
     padding: 8,
-    backgroundColor: "rgba(255,255,255,0.03)",
+    backgroundColor: colors.subtle,
   },
-  selectedTitle: { color: "#fff", fontSize: 12, fontWeight: "700" },
+  selectedTitle: { color: colors.ink, fontSize: 12, fontWeight: "700" },
   selectedWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   selectedChip: {
     flexDirection: "row",
@@ -1242,42 +1172,27 @@ const styles = StyleSheet.create({
     gap: 6,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.2)",
-    backgroundColor: "rgba(255,255,255,0.08)",
+    borderColor: colors.rule,
+    backgroundColor: colors.subtle,
     paddingVertical: 5,
     paddingLeft: 10,
     paddingRight: 6,
     maxWidth: "100%",
   },
-  selectedChipText: { color: "#fff", fontSize: 12, fontWeight: "600", maxWidth: 180 },
+  selectedChipText: { color: colors.ink, fontSize: 12, fontWeight: "600", maxWidth: 180 },
   selectedChipRemove: {
     width: 18,
     height: 18,
     borderRadius: 9,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(0,0,0,0.25)",
+    backgroundColor: colors.overlay,
   },
-  subText: { color: "#a5acc1", fontSize: 12, lineHeight: 16 },
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.55)",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 24,
-  },
-  scannerCard: {
-    width: "100%",
-    maxWidth: 460,
-    borderRadius: 18,
-    backgroundColor: "#171727",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    padding: 16,
-    gap: 12,
-  },
+  subText: { color: colors.muted, fontSize: 12, lineHeight: 16 },
+  modalBackdrop: { flex: 1, justifyContent: "center", alignItems: "center", padding: 20, backgroundColor: colors.overlay },
+  scannerCard: { width: "100%", maxWidth: 560, padding: 20, gap: 20, backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, borderRadius: 8 },
   scannerHeader: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
-  cameraFrame: { height: 250, borderRadius: 14, overflow: "hidden", backgroundColor: "#05050a" },
+  cameraFrame: { height: 250, borderRadius: 14, overflow: "hidden", backgroundColor: colors.subtle },
   scanGuide: {
     position: "absolute",
     left: 28,
@@ -1286,45 +1201,28 @@ const styles = StyleSheet.create({
     height: 78,
     borderRadius: 12,
     borderWidth: 2,
-    borderColor: "#f5b942",
+    borderColor: colors.accent,
   },
   permissionPanel: {
     height: 130,
     borderRadius: 14,
-    backgroundColor: "rgba(255,255,255,0.05)",
+    backgroundColor: colors.subtle,
     alignItems: "center",
     justifyContent: "center",
     padding: 16,
     gap: 8,
   },
-  scannerMessage: { color: "#f5c56f", fontSize: 12, lineHeight: 17 },
-  modalTitle: { color: "#fff", fontSize: 16, fontWeight: "800" },
+  scannerMessage: { color: colors.warning, fontSize: 12, lineHeight: 17 },
+  modalTitle: { color: colors.ink, fontFamily: notebookFonts.editorial, fontSize: 22, marginBottom: 8 },
   rowWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  chip: {
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.2)",
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    backgroundColor: "rgba(255,255,255,0.06)",
-  },
-  chipActive: { backgroundColor: "#fff", borderColor: "#7b61ff" },
-  chipText: { color: "#fff", fontSize: 12, fontWeight: "600" },
-  chipTextActive: { color: "#4a90e2", fontWeight: "700" },
-  modalActions: { flexDirection: "row", justifyContent: "flex-end", gap: 10, marginTop: 4 },
-  secondaryBtn: {
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.2)",
-    borderRadius: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-  },
-  secondaryBtnText: { color: "#fff", fontWeight: "600" },
-  primaryBtn: {
-    backgroundColor: "#7b61ff",
-    borderRadius: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-  },
-  primaryBtnText: { color: "#fff", fontWeight: "700" },
-});
+  chip: { borderWidth: 1, borderColor: colors.border, borderRadius: 4, minHeight: 44, paddingHorizontal: 12, paddingVertical: 10, justifyContent: "center" },
+  chipActive: { borderColor: colors.ink, backgroundColor: colors.subtle },
+  chipText: { color: colors.muted, fontSize: 16 },
+  chipTextActive: { color: colors.ink, fontSize: 16 },
+  modalActions: { flexDirection: "row", flexWrap: "wrap", gap: 12, justifyContent: "flex-end", marginTop: 12 },
+  secondaryBtn: { borderWidth: 1, borderColor: colors.border, minHeight: 48, borderRadius: 8, paddingVertical: 12, paddingHorizontal: 16, alignItems: "center", justifyContent: "center" },
+  secondaryBtnText: { color: colors.ink, fontSize: 16 },
+  primaryBtn: { backgroundColor: colors.primary, minHeight: 48, borderRadius: 8, paddingVertical: 12, paddingHorizontal: 16, alignItems: "center", justifyContent: "center" },
+  primaryBtnText: { color: colors.onPrimary, fontSize: 16, fontWeight: "600" }
+  });
+};

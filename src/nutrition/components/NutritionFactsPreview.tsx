@@ -1,5 +1,7 @@
+import { notebookSheet, useNotebookStyles } from "../../ui/notebook/Notebook";
+import { type NotebookColors } from "../../ui/notebook/tokens";
 import React from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Text, View, useWindowDimensions } from "react-native";
 
 type Props = {
   calories: number | null;
@@ -21,14 +23,16 @@ export function NutritionFactsPreview({
   fatGrams,
   reference,
 }: Props) {
+  const styles = useNotebookStyles(createStyles);
+  const large = useWindowDimensions().fontScale >= 1.5;
   return (
     <View style={styles.card}>
       <View style={styles.header}>
         <Text style={styles.title}>Nutrition for selected amount</Text>
         {reference ? <Text style={styles.reference}>{reference}</Text> : null}
       </View>
-      <View style={styles.row}>
-        <View style={styles.fact}>
+      <View style={[styles.row, large && { flexWrap: "wrap" }]}>
+        <View style={[styles.fact, large && { minWidth: 100 }]}>
           <Text style={styles.value}>
             {typeof calories === "number" && Number.isFinite(calories) ? Math.round(calories) : "-"}
           </Text>
@@ -51,20 +55,20 @@ export function NutritionFactsPreview({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: NotebookColors) => notebookSheet({
   card: {
-    borderRadius: 12,
+    borderRadius: 4,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    backgroundColor: "rgba(255,255,255,0.04)",
+    borderColor: colors.rule,
+    backgroundColor: colors.subtle,
     padding: 12,
     gap: 12,
   },
   header: { gap: 3 },
-  title: { color: "#fff", fontSize: 13, fontWeight: "800" },
-  reference: { color: "#9098ae", fontSize: 10, lineHeight: 14 },
+  title: { color: colors.ink, fontSize: 13, fontWeight: "800" },
+  reference: { color: colors.muted, fontSize: 14, lineHeight: 14 },
   row: { flexDirection: "row", gap: 8 },
   fact: { flex: 1, minWidth: 0, alignItems: "center", gap: 2 },
-  value: { color: "#fff", fontSize: 14, fontWeight: "800" },
-  label: { color: "#a5acc1", fontSize: 10, fontWeight: "600" },
+  value: { color: colors.ink, fontSize: 14, fontWeight: "800" },
+  label: { color: colors.muted, fontSize: 10, fontWeight: "600" },
 });

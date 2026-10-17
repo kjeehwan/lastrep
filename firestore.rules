@@ -23,6 +23,16 @@ service cloud.firestore {
         allow read, create, update, delete: if isOwnUser(uid);
       }
 
+      match /nutritionDays/{dateKey} {
+        allow read, delete: if isOwnUser(uid) && dateKey.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$');
+        allow create, update: if isOwnUser(uid)
+          && dateKey.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+          && request.resource.data.keys().hasOnly(['mealNames', 'updatedAt'])
+          && request.resource.data.mealNames is map
+          && request.resource.data.mealNames.size() <= 60
+          && request.resource.data.updatedAt is timestamp;
+      }
+
       match /nutritionSavedMeals/{savedMealId} {
         allow read, create, update, delete: if isOwnUser(uid);
       }

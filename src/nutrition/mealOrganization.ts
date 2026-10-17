@@ -33,6 +33,11 @@ export function mealSectionId(meal: Pick<NutritionMeal, "mealSection">): string 
   return meal.mealSection?.trim() || DEFAULT_MEAL_IDS[0];
 }
 
+export function dateMealLabels(defaults: MealLabels, names: unknown): MealLabels {
+  const overrides = normalizeMealLabels({ names }).names;
+  return { ...defaults, names: { ...defaults.names, ...overrides } };
+}
+
 export function validMealMinutes(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value >= 0 && value < 1440;
 }

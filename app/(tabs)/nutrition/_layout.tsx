@@ -1,7 +1,10 @@
 import { Stack } from "expo-router";
 import React from "react";
+import { NotebookProvider } from "../../../src/ui/notebook/Notebook";
+import { useNotebookStatusBar } from "../../../src/ui/notebook/useNotebookStatusBar";
 
-export default function NutritionLayout() {
+function NutritionRoutes() {
+  useNotebookStatusBar();
   return (
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="index" />
@@ -10,4 +13,6 @@ export default function NutritionLayout() {
     </Stack>
   );
 }
+
+export default function NutritionLayout() { return <NotebookProvider><NutritionRoutes /></NotebookProvider>; }
 
