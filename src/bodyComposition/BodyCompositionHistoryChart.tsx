@@ -1,5 +1,7 @@
 import React, { memo, useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { useNotebook, useNotebookStyles, notebookSheet } from "../ui/notebook/Notebook";
+import type { NotebookColors } from "../ui/notebook/tokens";
 import Svg, { Circle, Line, Polyline, Text as SvgText } from "react-native-svg";
 import type { BodyCompositionHistoryEntry } from "../contracts";
 import {
@@ -60,6 +62,13 @@ export const BodyCompositionHistoryChart = memo(function BodyCompositionHistoryC
   initialRecordedAtMs,
   onSelectionChange,
 }: Props) {
+  const { colors, fontsLoaded } = useNotebook();
+  const notebookStyles = useNotebookStyles(createNotebookStyles);
+  const styles = fontsLoaded ? notebookStyles : legacyStyles;
+  const { fontScale } = useWindowDimensions();
+  const graphScale = fontsLoaded ? Math.min(2, Math.max(1, fontScale)) : 1;
+  const chartHeight = HEIGHT * graphScale;
+  const pointSpacing = POINT_SPACING * graphScale;
   const [metric, setMetric] = useState<BodyCompositionMetric>(initialMetric);
   const points = useMemo(() => getBodyCompositionHistoryPoints(history, metric), [history, metric]);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
@@ -89,20 +98,20 @@ export const BodyCompositionHistoryChart = memo(function BodyCompositionHistoryC
     const valueRange = Math.max(1, max - min);
 
     const nextNodes = points.map((point, index) => {
-      const x = points.length === 1 ? WIDTH / 2 : PAD_X + index * POINT_SPACING;
+      const x = points.length === 1 ? WIDTH * graphScale / 2 : PAD_X * graphScale + index * pointSpacing;
       return {
         ...point,
         x,
-        y: PAD_TOP + (1 - (point.value - min) / valueRange) * (HEIGHT - PAD_TOP - PAD_BOTTOM),
+        y: (PAD_TOP + (1 - (point.value - min) / valueRange) * (HEIGHT - PAD_TOP - PAD_BOTTOM)) * graphScale,
         index,
       };
     });
 
     return {
       nodes: nextNodes,
-      chartWidth: Math.max(WIDTH, (nextNodes.at(-1)?.x ?? WIDTH / 2) + PAD_X),
+      chartWidth: Math.max(WIDTH * graphScale, (nextNodes.at(-1)?.x ?? WIDTH / 2) + PAD_X * graphScale),
     };
-  }, [isPercent, points]);
+  }, [isPercent, points, graphScale, pointSpacing]);
 
   const polyline = nodes.map((node) => `${node.x},${node.y}`).join(" ");
   const legacyPresent = hasLegacyMuscleMassHistory(history);
@@ -143,25 +152,25 @@ export const BodyCompositionHistoryChart = memo(function BodyCompositionHistoryC
             contentContainerStyle={styles.chartScrollContent}
             onContentSizeChange={() => {
               const index = points.findIndex((point) => point.recordedAtMs === initialRecordedAtMs);
-              if (index >= 0) chartScrollRef.current?.scrollTo({ x: Math.max(0, index * POINT_SPACING - WIDTH / 2), animated: false });
+              if (index >= 0) chartScrollRef.current?.scrollTo({ x: Math.max(0, index * pointSpacing - WIDTH / 2), animated: false });
               else chartScrollRef.current?.scrollToEnd({ animated: false });
             }}
           >
             <View style={{ width: chartWidth }}>
-              <Svg width={chartWidth} height={HEIGHT} style={styles.chart}>
+              <Svg width={chartWidth} height={chartHeight}>
                 <Line
                   x1={PAD_X}
-                  y1={HEIGHT - PAD_BOTTOM}
+                  y1={chartHeight - PAD_BOTTOM * graphScale}
                   x2={chartWidth - PAD_X}
-                  y2={HEIGHT - PAD_BOTTOM}
-                  stroke="rgba(255,255,255,0.12)"
+                  y2={chartHeight - PAD_BOTTOM * graphScale}
+                  stroke={fontsLoaded ? colors.rule : "rgba(255,255,255,0.12)"}
                   strokeWidth={1}
                 />
                 {nodes.length > 1 ? (
                   <Polyline
                     points={polyline}
                     fill="none"
-                    stroke="rgba(96,165,250,0.65)"
+                    stroke={fontsLoaded ? colors.muted : "rgba(96,165,250,0.65)"}
                     strokeWidth={2}
                     strokeDasharray="4 4"
                   />
@@ -171,15 +180,15 @@ export const BodyCompositionHistoryChart = memo(function BodyCompositionHistoryC
                     <Circle
                       cx={node.x}
                       cy={node.y}
-                      r={18}
+                      r={(fontsLoaded ? 22 : 18) * graphScale}
                       fill="transparent"
                       onPress={() => setSelectedKey(node.key)}
                     />
                     <Circle
                       cx={node.x}
                       cy={node.y}
-                      r={node.key === selected?.key ? 6 : 4}
-                      fill={node.key === selected?.key ? "#fbbf24" : "#60a5fa"}
+                      r={(node.key === selected?.key ? 6 : 4) * graphScale}
+                      fill={fontsLoaded ? node.key === selected?.key ? colors.accent : colors.ink : node.key === selected?.key ? "#fbbf24" : "#60a5fa"}
                       pointerEvents="none"
                     />
                   </React.Fragment>
@@ -188,9 +197,10 @@ export const BodyCompositionHistoryChart = memo(function BodyCompositionHistoryC
                   <SvgText
                     key={`date-${node.key}`}
                     x={node.x}
-                    y={HEIGHT - 8}
-                    fill="#8f95af"
-                    fontSize={10}
+                    y={chartHeight - 8 * graphScale}
+                    fill={fontsLoaded ? colors.muted : "#8f95af"}
+                    fontFamily={fontsLoaded ? "NotebookSans" : undefined}
+                    fontSize={(fontsLoaded ? 13 : 10) * graphScale}
                     fontWeight="600"
                     textAnchor="middle"
                     pointerEvents="none"
@@ -216,7 +226,7 @@ export const BodyCompositionHistoryChart = memo(function BodyCompositionHistoryC
   );
 });
 
-const styles = StyleSheet.create({
+const legacyStyles = StyleSheet.create({
   wrap: { marginTop: 18, borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.08)", paddingTop: 16 },
   heading: { color: "#fff", fontSize: 15, fontWeight: "800", marginBottom: 10 },
   metricRow: { flexDirection: "row", flexWrap: "wrap", gap: 7 },
@@ -240,4 +250,20 @@ const styles = StyleSheet.create({
   hint: { color: "#7f859d", fontSize: 10, lineHeight: 14, marginTop: 12 },
   emptyText: { color: "#9aa1c3", fontSize: 12, lineHeight: 18, marginTop: 18 },
   legacyNote: { color: "#d8b86e", fontSize: 11, lineHeight: 16, marginTop: 12 },
+});
+
+const createNotebookStyles = (colors: NotebookColors) => notebookSheet({
+  ...legacyStyles,
+  wrap: { ...legacyStyles.wrap, borderTopColor: colors.rule },
+  heading: { color: colors.ink, fontSize: 20, fontWeight: "600" },
+  metricRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  metricChip: { minHeight: 44, paddingHorizontal: 4, paddingVertical: 8, borderBottomWidth: 2, borderBottomColor: "transparent" },
+  metricChipActive: { borderBottomColor: colors.accent },
+  metricChipText: { color: colors.muted, fontSize: 14, fontWeight: "600" },
+  metricChipTextActive: { color: colors.ink },
+  selectedValue: { color: colors.ink, fontSize: 28, fontWeight: "600" },
+  selectedMeta: { color: colors.muted, fontSize: 14, marginTop: 4 },
+  hint: { color: colors.muted, fontSize: 13, marginTop: 12 },
+  emptyText: { color: colors.muted, fontSize: 14, marginTop: 16 },
+  legacyNote: { color: colors.muted, fontSize: 13, marginTop: 12 },
 });

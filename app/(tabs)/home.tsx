@@ -1,6 +1,16 @@
+import { PopupBackdrop } from "../../src/ui/PopupBackdrop";
+import { NotebookProvider, useNotebook, useNotebookStyles, notebookSheet } from "../../src/ui/notebook/Notebook";
+import { notebookFonts, type NotebookColors } from "../../src/ui/notebook/tokens";
+import { NotebookModal as Modal } from "../../src/ui/notebook/NotebookModal";
+import { NotebookUtilityIcon } from "../../src/ui/notebook/NotebookUtilityIcon";
+import { useNotebookStatusBar } from "../../src/ui/notebook/useNotebookStatusBar";
+import { mondayCalendarMatrix, draftWorkoutSummary } from "../../src/home/notebookPresentation";
+import { HomeWorkoutComparison } from "../../src/home/HomeWorkoutComparison";
+import { HomeDailyComparison } from "../../src/home/HomeDailyComparison";
+import { HomeRecoverySheet } from "../../src/home/HomeRecoverySheet";
+import { TodayPlanContextModal } from "../../src/services/decision/TodayPlanContextModal";
 import { Ionicons } from "@expo/vector-icons";
 import LastrepLogo from "../../components/LastrepLogo";
-import Slider from "@react-native-community/slider";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ProfilePhoto } from "../../src/profile/ProfilePhoto";
 import { profilePhotoReference } from "../../src/profile/profilePhotoReference";
@@ -16,6 +26,8 @@ import { formatEffort, resolveEffortScale, type EffortScale } from "../../src/wo
 import { Href, Redirect, useFocusEffect, useRouter } from "expo-router";
 import { onAuthStateChanged } from "firebase/auth";
 import {
+  updateDoc,
+  deleteField,
   addDoc,
   collection,
   deleteDoc,
@@ -30,14 +42,14 @@ import {
 } from "firebase/firestore";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  ActivityIndicator,
+  useWindowDimensions,
   BackHandler,
-  Modal,
   Platform,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
-  TouchableWithoutFeedback,
   View,
 } from "react-native";
 import { auth, db } from "../../src/config/firebaseConfig";
@@ -56,7 +68,7 @@ import {
   type ChartPoint,
   type ChartRange,
 } from "../../src/components/charts/TrendCharts";
-import { showAppAlert, showAppDialog } from "../../src/ui/appDialog";
+import { showAppDialog } from "../../src/ui/appDialog";
 import { getUserData } from "../../src/userData";
 import {
   getSleepProfile,
@@ -64,8 +76,11 @@ import {
 } from "../../src/sleep/sleep";
 import {
   parseWorkoutDraftPlan,
+  normalizeDailyDecisionContext,
+  getDailyContextSummary,
 } from "../../src/services/decision/todayPlanContext";
 import type {
+  DailyDecisionContext,
   DietPhase,
   PlannedWorkoutSummary,
   TrainingPhase,
@@ -75,7 +90,6 @@ import { scheduleAfterInteractions } from "../../src/utils/scheduleAfterInteract
 import { isExpectedOfflineError } from "../../src/utils/networkErrors";
 import {
   computeWeeklyWorkoutMetrics,
-  getCalendarMatrix,
   getDaySummaryMap,
   getWorkoutSetCount,
   getWorkoutVolumeKg,
@@ -100,7 +114,7 @@ const isTrainingPhase = (value: string): value is TrainingPhase =>
   TRAINING_PHASES.includes(value as TrainingPhase);
 const isDietPhase = (value: string): value is DietPhase => DIET_PHASES.includes(value as DietPhase);
 
-const WEEKDAY_LABELS = ["S", "M", "T", "W", "T", "F", "S"] as const;
+const WEEKDAY_LABELS = ["M", "T", "W", "T", "F", "S", "S"] as const;
 const MONTH_LABELS = [
   "January",
   "February",
@@ -149,6 +163,9 @@ type ReadinessHistoryRecord = {
 };
 
 const KG_TO_LBS = 2.20462;
+const HEATMAP_CELL_SIZE = 44;
+const HEATMAP_CELL_GAP = 4;
+const HEATMAP_WEEK_WIDTH = HEATMAP_CELL_SIZE + HEATMAP_CELL_GAP;
 const KCAL_TO_KJ = 4.184;
 const isWeightUnit = (value: unknown): value is WeightUnit => value === "kg" || value === "lbs";
 const isEnergyUnit = (value: unknown): value is EnergyUnit => value === "kcal" || value === "kJ";
@@ -175,9 +192,18 @@ const convertKgToUnit = (valueKg: number, unit: WeightUnit): number =>
 const convertKcalToUnit = (valueKcal: number, unit: EnergyUnit): number =>
   unit === "kJ" ? valueKcal * KCAL_TO_KJ : valueKcal;
 
-export default function Home() {
+export default function HomeRoute() { return <NotebookProvider><Home /></NotebookProvider>; }
+
+function Home() {
+  const { colors } = useNotebook();
+  const styles = useNotebookStyles(createStyles);
+  const { fontScale } = useWindowDimensions();
+  const largeText = fontScale >= 1.5;
+  useNotebookStatusBar();
+  const [info, setInfo] = useState<{ title: string; message?: string } | null>(null);
+  const showAppAlert = (title: string, message?: string) => setInfo({ title, message });
   const router = useRouter();
-  const workoutsHeatmapScrollRef = React.useRef<ScrollView | null>(null);
+  const trendsRef = useRef<HomeTrendHandle>(null);
   const [redirectTo, setRedirectTo] = useState<Href | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [uid, setUid] = useState<string | null>(null);
@@ -190,6 +216,10 @@ export default function Home() {
   const [profileDescription, setProfileDescription] = useState<string | null>(null);
   const [showFirstTimeBanner, setShowFirstTimeBanner] = useState(false);
 
+  const [hasRecoveryCheckIn, setHasRecoveryCheckIn] = useState(false);
+  const [rawDailyContext, setRawDailyContext] = useState<unknown>(null);
+  const [contextVisible, setContextVisible] = useState(false);
+  const [contextSaving, setContextSaving] = useState(false);
   const [soreness, setSoreness] = useState(4);
   const [fatigue, setFatigue] = useState(4);
   const [motivation, setMotivation] = useState(6);
@@ -210,13 +240,6 @@ export default function Home() {
   const [returnToCalendar, setReturnToCalendar] = useState(false);
   const [phaseHistory, setPhaseHistory] = useState<{ training: unknown; diet: unknown }>({ training: [], diet: [] });
   const [showDayModal, setShowDayModal] = useState(false);
-  const [activeDashboardMetric, setActiveDashboardMetric] = useState<DashboardMetricKey | null>(
-    null
-  );
-  const [hideRestDaysInVolume, setHideRestDaysInVolume] = useState(false);
-  const [truncateZeroDaysInCalories, setTruncateZeroDaysInCalories] = useState(false);
-  const [hideZeroDaysInSleep, setHideZeroDaysInSleep] = useState(false);
-  const [dashboardRange, setDashboardRange] = useState<ChartRange>(7);
   const [calendarMonth, setCalendarMonth] = useState(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
@@ -260,6 +283,10 @@ export default function Home() {
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (user) => {
+      setRawDailyContext(null);
+      setHasRecoveryCheckIn(false);
+      setContextVisible(false);
+      setShowAdjustInputsModal(false);
       recoveryInputsHydratedRef.current = null;
       setWorkoutHistoryStatus(null);
       setShowFirstTimeBanner(false);
@@ -309,6 +336,7 @@ export default function Home() {
       doc(db, "users", uid),
       (snap) => {
         const data: any = snap.data();
+        setRawDailyContext(data?.todayPlanContext ?? null);
         setBodyHistory(normalizeBodyCompositionHistory(data?.[USER_BODY_COMPOSITION_FIELD]?.history));
         setBodyHistoryLoaded(true);
         setBodyHistoryError(false);
@@ -361,6 +389,7 @@ export default function Home() {
         if (!active) return;
         const parsed = raw ? JSON.parse(raw) : {};
         recoveryInputsHydratedRef.current = uid;
+        setHasRecoveryCheckIn(Boolean(raw));
         setSoreness(typeof parsed.soreness === "number" ? parsed.soreness : 4);
         setFatigue(typeof parsed.fatigue === "number" ? parsed.fatigue : 4);
         setMotivation(typeof parsed.motivation === "number" ? parsed.motivation : 6);
@@ -373,7 +402,7 @@ export default function Home() {
 
   useEffect(() => {
     const save = async () => {
-      if (!uid || recoveryInputsHydratedRef.current !== uid) return;
+      if (!uid || !hasRecoveryCheckIn || recoveryInputsHydratedRef.current !== uid) return;
       const key = `${HOME_INPUTS_KEY_PREFIX}:${uid}`;
       try {
         await AsyncStorage.setItem(
@@ -389,7 +418,7 @@ export default function Home() {
       }
     };
     void save();
-  }, [uid, soreness, fatigue, motivation]);
+  }, [uid, soreness, fatigue, motivation, hasRecoveryCheckIn]);
 
   useFocusEffect(useCallback(() => {
     let active = true;
@@ -751,7 +780,7 @@ export default function Home() {
 
   const daySummaryMap = useMemo(() => getDaySummaryMap(workouts), [workouts]);
   const selectedDaySummary = daySummaryMap.get(selectedDateKey) ?? null;
-  const calendarMatrix = useMemo(() => getCalendarMatrix(calendarMonth), [calendarMonth]);
+  const calendarMatrix = useMemo(() => mondayCalendarMatrix(calendarMonth), [calendarMonth]);
   const visibleCalendarWeeks = useMemo(
     () =>
       calendarMatrix.filter((week) =>
@@ -782,54 +811,6 @@ export default function Home() {
         : null,
     [selectedDateKey, workoutCountByDate, workoutProgram]
   );
-
-  const dashboardGraphTitle = useMemo(() => {
-    switch (activeDashboardMetric) {
-      case "workouts":
-        return "Workouts";
-      case "volume":
-        return `Volume (${weightUnit})`;
-      case "adherence":
-        return "Adherence Trend";
-      case "calories":
-        return `Calories (${energyUnit})`;
-      case "sleep":
-        return "Sleep (hours)";
-      case "recovery":
-        return "Recovery Readiness";
-      case "recovery_sleep":
-        return "Recovery - Sleep";
-      case "recovery_soreness":
-        return "Recovery - Soreness";
-      case "recovery_fatigue":
-        return "Recovery - Fatigue";
-      case "recovery_motivation":
-        return "Recovery - Motivation";
-      default:
-        return "";
-    }
-  }, [activeDashboardMetric, weightUnit, energyUnit]);
-
-  const dashboardGraphUnit = useMemo(() => {
-    switch (activeDashboardMetric) {
-      case "volume":
-        return weightUnit;
-      case "calories":
-        return energyUnit;
-      case "sleep":
-      case "recovery_sleep":
-        return "h";
-      case "adherence":
-      case "recovery":
-        return "%";
-      case "recovery_soreness":
-      case "recovery_fatigue":
-      case "recovery_motivation":
-        return "/10";
-      default:
-        return "";
-    }
-  }, [activeDashboardMetric, weightUnit, energyUnit]);
 
   const recoveryReadiness = useMemo(() => {
     const sleepRatio =
@@ -914,11 +895,6 @@ export default function Home() {
     return points;
   }, [workouts, weightUnit]);
 
-  const volumeDailyHistory = useMemo(
-    () => (hideRestDaysInVolume ? volumeDailyHistoryAll.filter((point) => point.value > 0) : volumeDailyHistoryAll),
-    [hideRestDaysInVolume, volumeDailyHistoryAll]
-  );
-
   const workoutsHeatmap = useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -982,93 +958,6 @@ export default function Home() {
     const highCut = pickPercentile(0.66);
     return { weeks, monthLabels, lowCut, highCut };
   }, [workouts]);
-
-  useEffect(() => {
-    if (activeDashboardMetric !== "workouts") return;
-    const timer = setTimeout(() => {
-      workoutsHeatmapScrollRef.current?.scrollToEnd({ animated: false });
-    }, 0);
-    return () => clearTimeout(timer);
-  }, [activeDashboardMetric, workoutsHeatmap.weeks.length]);
-
-  const dashboardGraphData = useMemo<ChartPoint[]>(() => {
-    switch (activeDashboardMetric) {
-      case "workouts":
-        return workoutsWeeklyHistory;
-      case "volume":
-        return volumeDailyHistory;
-      case "adherence":
-        return nutritionAdherenceHistory;
-      case "calories":
-        return truncateZeroDaysInCalories
-          ? nutritionCalorieHistory.filter((point) => point.value > 0)
-          : nutritionCalorieHistory;
-      case "sleep":
-        return hideZeroDaysInSleep ? sleepHistory.filter((point) => point.value > 0) : sleepHistory;
-      case "recovery_sleep":
-        return sleepHistory;
-      case "recovery_soreness":
-        return hideZeroDaysInSleep ? sorenessHistory.filter((point) => point.value > 0) : sorenessHistory;
-      case "recovery_fatigue":
-        return hideZeroDaysInSleep ? fatigueHistory.filter((point) => point.value > 0) : fatigueHistory;
-      case "recovery_motivation":
-        return hideZeroDaysInSleep ? motivationHistory.filter((point) => point.value > 0) : motivationHistory;
-      case "recovery":
-        return [
-          { key: "sleep", label: "Sleep", value: Math.round(recoveryReadiness.sleepRatio * 100) },
-          { key: "soreness", label: "Soreness", value: Math.round(recoveryReadiness.sorenessScore * 100) },
-          { key: "fatigue", label: "Fatigue", value: Math.round(recoveryReadiness.fatigueScore * 100) },
-          { key: "motivation", label: "Motivation", value: Math.round(recoveryReadiness.motivationScore * 100) },
-        ];
-      default:
-        return [];
-    }
-  }, [
-    activeDashboardMetric,
-    nutritionAdherenceHistory,
-    nutritionCalorieHistory,
-    sleepHistory,
-    recoveryReadiness.fatigueScore,
-    recoveryReadiness.motivationScore,
-    recoveryReadiness.sleepRatio,
-    recoveryReadiness.sorenessScore,
-    truncateZeroDaysInCalories,
-    hideZeroDaysInSleep,
-    volumeDailyHistory,
-    workoutsWeeklyHistory,
-    sorenessHistory,
-    fatigueHistory,
-    motivationHistory,
-  ]);
-
-  const dashboardGraphDataScoped = useMemo(() => {
-    if (
-      activeDashboardMetric === "adherence"
-    ) {
-      return dashboardGraphData.slice(-dashboardRange);
-    }
-    return dashboardGraphData;
-  }, [activeDashboardMetric, dashboardGraphData, dashboardRange]);
-
-  const renderMiniTrendStrip = useCallback((points: ChartPoint[], color: string) => {
-    if (!points.length) {
-      return <View style={styles.miniTrendRow} />;
-    }
-    const scoped = points.slice(-7);
-    const max = Math.max(1, ...scoped.map((p) => p.value));
-    return (
-      <View style={styles.miniTrendRow}>
-        {scoped.map((point) => {
-          const h = Math.max(3, Math.round((point.value / max) * 18));
-          return (
-            <View key={point.key} style={styles.miniTrendCell}>
-              <View style={[styles.miniTrendBar, { height: h, backgroundColor: color }]} />
-            </View>
-          );
-        })}
-      </View>
-    );
-  }, []);
 
   const formatWorkoutsDelta = useCallback((current: number, previous: number) => {
     if (!Number.isFinite(current) || !Number.isFinite(previous)) return { text: "-", tone: "neutral" as const };
@@ -1254,75 +1143,32 @@ export default function Home() {
     router.push("/(tabs)/workout/log?createRoutine=1" as Href);
   };
 
+  const contextPlan: PlannedWorkoutSummary = workoutDraftPlan ?? { source: "none", title: null, exerciseNames: [] };
+  const dailyContext = normalizeDailyDecisionContext(rawDailyContext, contextPlan, new Date(nowMs));
   const shouldShowFirstTimeBanner = showFirstTimeBanner && workoutHistoryStatus?.uid === uid && !workoutHistoryStatus.hasWorkouts;
 
   return (
     <SafeAreaView style={styles.container} edges={["top", "left", "right"]}>
       <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <View style={styles.headerTopRow}>
-            <LastrepLogo variant="header" />
-            <View style={styles.iconContainer}>
-              <TouchableOpacity onPress={() => calendarRef.current?.open()}>
-                <Ionicons name="calendar-outline" size={26} color="#fff" />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => router.push("/settings" as Href)} style={{ marginLeft: 12 }}>
-                <Ionicons name="settings-outline" size={28} color="#fff" />
-              </TouchableOpacity>
-            </View>
-          </View>
-          <TouchableOpacity
-            style={styles.userRow}
-            activeOpacity={0.85}
-            onPress={() => setShowProfileModal(true)}
-          >
-            {profilePhotoUri ? (
-              <ProfilePhoto uid={uid} reference={profilePhotoUri} initial={(userNickname ?? "L").charAt(0).toUpperCase()} style={styles.headerAvatar} contentFit="cover" />
-            ) : (
-              <View style={[styles.headerAvatar, styles.headerAvatarPlaceholder]}>
-                <Text style={styles.headerAvatarInitial}>
-                  {(userNickname ?? "L").trim().charAt(0).toUpperCase() || "L"}
-                </Text>
-              </View>
-            )}
-            <Text style={styles.userName}>{userNickname ?? "Lifter"}</Text>
-            <View
-              style={[
-                styles.entitlementBadge,
-                entitlement.state === "active"
-                  ? styles.entitlementBadgeActive
-                  : entitlement.state === "inactive"
-                    ? styles.entitlementBadgeInactive
-                    : styles.entitlementBadgeLoading,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.entitlementBadgeText,
-                  entitlement.state === "active"
-                    ? styles.entitlementBadgeTextActive
-                    : styles.entitlementBadgeTextMuted,
-                ]}
-              >
-                {entitlement.state === "active"
-                  ? "Premium"
-                  : entitlement.state === "inactive"
-                    ? "Free"
-                    : "Checking"}
-              </Text>
-            </View>
+        <LastrepLogo variant="header" />
+        <View style={styles.iconContainer}>
+          <TouchableOpacity style={styles.headerUtility} accessibilityRole="button" accessibilityLabel="Open calendar" onPress={() => calendarRef.current?.open()}><NotebookUtilityIcon name="calendar" color={colors.ink} /></TouchableOpacity>
+          <TouchableOpacity style={styles.headerUtility} accessibilityRole="button" accessibilityLabel="Open settings" onPress={() => router.push("/settings" as Href)}><NotebookUtilityIcon name="settings" color={colors.ink} /></TouchableOpacity>
+          <TouchableOpacity style={styles.headerUtility} accessibilityRole="button" accessibilityLabel={`View profile, ${userNickname ?? "Lifter"}`} onPress={() => setShowProfileModal(true)}>
+            {uid && profilePhotoUri ? <ProfilePhoto uid={uid} reference={profilePhotoUri} initial={(userNickname ?? "L").charAt(0).toUpperCase()} style={styles.headerAvatar} contentFit="cover" /> : <View style={[styles.headerAvatar, styles.headerAvatarPlaceholder]}><Text style={styles.headerAvatarInitial}>{(userNickname ?? "L").charAt(0).toUpperCase()}</Text></View>}
           </TouchableOpacity>
         </View>
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={styles.homePhaseRow}>
+        <View style={styles.pageHeading}><Text style={styles.noticeSub}>{new Date(nowMs).toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}</Text><Text style={styles.pageTitle}>Your daily record.</Text></View>
+        <View style={[styles.homePhaseRow, largeText && { flexDirection: "column" }]}>
           {(['trainingPhase', 'dietPhase'] as const).map((key) => {
             const training = key === 'trainingPhase';
             const week = training ? trainingPhaseWeek : dietPhaseWeek;
             return <TouchableOpacity key={key} accessibilityRole="button" accessibilityLabel={training ? 'Change training phase' : 'Change diet phase'} disabled={!bodyHistoryLoaded || phaseSaving} style={styles.homePhaseSelector} onPress={() => setPhasePicker(key)}>
               <Text style={styles.phaseSelectorLabel}>{training ? 'Training' : 'Diet'}</Text>
-              <View style={styles.phaseSelectorValueRow}><Text style={styles.phaseSelectorValue}>{training ? trainingPhase : dietPhase}</Text><Ionicons name="chevron-down" size={14} color="#98a0b3" /></View>
+              <View style={styles.phaseSelectorValueRow}><Text style={styles.phaseSelectorValue}>{training ? trainingPhase : dietPhase}</Text><Ionicons name="chevron-down" size={14} color={colors.muted} /></View>
               {week != null ? <Text style={styles.phaseSelectorWeek}>Week {week}</Text> : null}
             </TouchableOpacity>;
           })}
@@ -1334,7 +1180,7 @@ export default function Home() {
               <View style={styles.firstTimeBannerHeader}>
                 <Text style={styles.cardHeading}>Get Started</Text>
                 <TouchableOpacity onPress={() => void dismissFirstTimeBanner()} style={styles.firstTimeDismiss} accessibilityLabel="Dismiss Get Started" accessibilityRole="button">
-                  <Ionicons name="close" size={16} color="#cfd3eb" />
+                  <Ionicons name="close" size={16} color={colors.muted} />
                 </TouchableOpacity>
               </View>
               <Text style={[styles.cardText, styles.firstTimeBannerText]}>
@@ -1359,15 +1205,12 @@ export default function Home() {
         ) : null}
 
         <View style={styles.section}>
-          <TouchableOpacity style={styles.card} onPress={() => void openWorkoutLog()} accessibilityRole="button">
-            <View style={styles.workoutShortcutRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.sectionTitle}>{workoutDraftPlan ? "Continue workout" : "Start workout"}</Text>
-                <Text style={styles.cardText}>{workoutDraftPlan?.title ?? "Choose a routine or build today's workout"}</Text>
-              </View>
-              <Ionicons name="arrow-forward" size={22} color="#fbbf24" />
-            </View>
-          </TouchableOpacity>
+          {!shouldShowFirstTimeBanner ? <View style={styles.workoutSection}>
+            <Text style={styles.noticeSub}>{workoutDraftPlan ? "Your workout" : "Your next session"}</Text>
+            <Text style={styles.workoutTitle}>{workoutDraftPlan?.title || "Start a workout"}</Text>
+            <Text style={styles.cardText}>{draftWorkoutSummary(workoutDraftPlan)}</Text>
+            <TouchableOpacity style={styles.primaryButtonWide} onPress={() => void openWorkoutLog()} accessibilityRole="button"><Text style={styles.primaryText}>{workoutDraftPlan ? "Continue workout" : "Start workout"}</Text></TouchableOpacity>
+          </View> : null}
             {homeContextLoaded &&
             healthSyncStatusLoaded &&
             (nutritionSnapshot.todayCalories === 0 || healthSyncNeedsAttention) ? (
@@ -1384,13 +1227,13 @@ export default function Home() {
                     }
                   >
                     <View style={styles.contextActionIcon}>
-                      <Ionicons name="restaurant-outline" size={17} color="#fbbf24" />
+                      <Ionicons name="restaurant-outline" size={17} color={colors.accent} />
                     </View>
                     <View style={styles.contextActionCopy}>
                       <Text style={styles.contextActionLabel}>Log a meal</Text>
                       <Text style={styles.contextActionHint}>No nutrition recorded today</Text>
                     </View>
-                    <Ionicons name="chevron-forward" size={17} color="#737991" />
+                    <Ionicons name="chevron-forward" size={17} color={colors.muted} />
                   </TouchableOpacity>
                 ) : null}
                 {healthSyncNeedsAttention ? (
@@ -1404,13 +1247,13 @@ export default function Home() {
                     }
                   >
                     <View style={styles.contextActionIcon}>
-                      <Ionicons name="heart-outline" size={17} color="#60a5fa" />
+                      <Ionicons name="heart-outline" size={17} color={colors.muted} />
                     </View>
                     <View style={styles.contextActionCopy}>
                       <Text style={styles.contextActionLabel}>Connect health data</Text>
                       <Text style={styles.contextActionHint}>Sleep permission is not connected</Text>
                     </View>
-                    <Ionicons name="chevron-forward" size={17} color="#737991" />
+                    <Ionicons name="chevron-forward" size={17} color={colors.muted} />
                   </TouchableOpacity>
                 ) : null}
               </View>
@@ -1441,7 +1284,7 @@ export default function Home() {
         </View>
 
         <View style={styles.section}>
-          <View style={styles.card}>
+          <View style={[styles.card, styles.outlinedPanel]}>
             <View style={styles.sectionHeaderRow}>
               <Text style={styles.cardHeading}>Readiness</Text>
               <TouchableOpacity
@@ -1453,16 +1296,16 @@ export default function Home() {
                   )
                 }
               >
-                <Ionicons name="information-circle-outline" size={16} color="#cdd1ea" />
+                <Ionicons name="information-circle-outline" size={16} color={colors.muted} />
               </TouchableOpacity>
             </View>
-            <Text style={styles.metricValue}>{recoveryReadiness.score}%</Text>
-            <Text style={styles.metricSub}>{recoveryReadiness.label} based on sleep, soreness, fatigue, motivation</Text>
+            <Text style={styles.metricValue}>{hasRecoveryCheckIn && sleepSnapshot.averageSleepHours != null ? `${recoveryReadiness.score}%` : "Not enough information yet"}</Text>
+            <Text style={styles.metricSub}>{hasRecoveryCheckIn && sleepSnapshot.averageSleepHours != null ? `${recoveryReadiness.label}. A recovery summary, not a workout prescription.` : "Recorded sleep and a recovery check-in help complete this summary."}</Text>
             <TouchableOpacity style={styles.todayPlanLinkButton} onPress={() => setShowAdjustInputsModal(true)}><Text style={styles.todayPlanLinkText}>Edit recovery check-in</Text></TouchableOpacity>
-            <View style={[styles.metricRow, styles.metricRowWrap]}>
+            <View style={[styles.metricRow, styles.metricRowWrap, largeText && { flexDirection: "column" }]}>
               <TouchableOpacity
                 style={[styles.metricChip, styles.metricChipCompact, styles.metricChipQuarter]}
-                onPress={() => setActiveDashboardMetric("recovery_sleep")}
+                onPress={() => trendsRef.current?.open("recovery_sleep")}
               >
                 <Text style={styles.metricLabel}>Sleep</Text>
                 <Text style={styles.metricValueSmall}>
@@ -1471,24 +1314,24 @@ export default function Home() {
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.metricChip, styles.metricChipCompact, styles.metricChipQuarter]}
-                onPress={() => setActiveDashboardMetric("recovery_soreness")}
+                onPress={() => trendsRef.current?.open("recovery_soreness")}
               >
                 <Text style={styles.metricLabel}>Soreness</Text>
-                <Text style={styles.metricValueSmall}>{soreness}/10</Text>
+                <Text style={styles.metricValueSmall}>{hasRecoveryCheckIn ? `${soreness}/10` : "Not recorded"}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.metricChip, styles.metricChipCompact, styles.metricChipQuarter]}
-                onPress={() => setActiveDashboardMetric("recovery_fatigue")}
+                onPress={() => trendsRef.current?.open("recovery_fatigue")}
               >
                 <Text style={styles.metricLabel}>Fatigue</Text>
-                <Text style={styles.metricValueSmall}>{fatigue}/10</Text>
+                <Text style={styles.metricValueSmall}>{hasRecoveryCheckIn ? `${fatigue}/10` : "Not recorded"}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.metricChip, styles.metricChipCompact, styles.metricChipQuarter]}
-                onPress={() => setActiveDashboardMetric("recovery_motivation")}
+                onPress={() => trendsRef.current?.open("recovery_motivation")}
               >
                 <Text style={styles.metricLabel}>Motivation</Text>
-                <Text style={styles.metricValueSmall}>{motivation}/10</Text>
+                <Text style={styles.metricValueSmall}>{hasRecoveryCheckIn ? `${motivation}/10` : "Not recorded"}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1500,45 +1343,17 @@ export default function Home() {
               <Text style={styles.cardHeading}>Weekly Trends</Text>
               <TouchableOpacity
                 style={styles.snapshotInfoBtn}
-                onPress={() => showAppAlert("Snapshot change", "Each change is compared against the previous week.")}
+                onPress={() => showAppAlert("Snapshot change", "The last 7 days are compared with the previous 7 days. Only recorded data is included.")}
               >
-                <Ionicons name="information-circle-outline" size={16} color="#cdd1ea" />
+                <Ionicons name="information-circle-outline" size={16} color={colors.muted} />
               </TouchableOpacity>
             </View>
-            <View style={styles.metricRow}>
-              <TouchableOpacity style={styles.metricChip} onPress={() => setActiveDashboardMetric("workouts")}>
-                <Text style={styles.metricLabelTitle}>Workouts</Text>
-                <Text style={styles.metricValue}>{weeklyMetrics.workoutsThisWeek}</Text>
-                <Text style={[styles.metricDeltaInline, weeklyDeltas.workouts.tone === "up" ? styles.metricDeltaUp : weeklyDeltas.workouts.tone === "down" ? styles.metricDeltaDown : styles.metricDeltaNeutral]}>{weeklyDeltas.workouts.text}</Text>
-                {renderMiniTrendStrip(workoutsWeeklyHistory, "#60a5fa")}
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.metricChip} onPress={() => setActiveDashboardMetric("volume")}>
-                <Text style={styles.metricLabelTitle}>{`Volume (${weightUnit})`}</Text>
-                <Text style={styles.metricValue}>
-                  {Math.round(convertKgToUnit(weeklyMetrics.avgVolumeThisWeek, weightUnit))}
-                </Text>
-                <Text style={[styles.metricDeltaInline, weeklyDeltas.volume.tone === "up" ? styles.metricDeltaUp : weeklyDeltas.volume.tone === "down" ? styles.metricDeltaDown : styles.metricDeltaNeutral]}>{weeklyDeltas.volume.text}</Text>
-                {renderMiniTrendStrip(volumeDailyHistory, "#a78bfa")}
-              </TouchableOpacity>
-            </View>
-            <View style={styles.metricRow}>
-              <TouchableOpacity style={styles.metricChip} onPress={() => setActiveDashboardMetric("calories")}>
-                <Text style={styles.metricLabelTitle}>{`Calories (${energyUnit})`}</Text>
-                <Text style={styles.metricValue}>
-                  {nutritionSnapshot.averageCalories == null ? "-" : `${Math.round(convertKcalToUnit(nutritionSnapshot.averageCalories, energyUnit))}`}
-                </Text>
-                <Text style={[styles.metricDeltaInline, weeklyDeltas.calories.tone === "up" ? styles.metricDeltaUp : weeklyDeltas.calories.tone === "down" ? styles.metricDeltaDown : styles.metricDeltaNeutral]}>{weeklyDeltas.calories.text}</Text>
-                {renderMiniTrendStrip(nutritionCalorieHistory, "#fbbf24")}
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.metricChip} onPress={() => setActiveDashboardMetric("sleep")}>
-                <Text style={styles.metricLabelTitle}>Sleep (hours)</Text>
-                <Text style={styles.metricValue}>
-                  {sleepSnapshot.averageSleepHours == null ? "-" : `${sleepSnapshot.averageSleepHours}`}
-                </Text>
-                <Text style={[styles.metricDeltaInline, weeklyDeltas.sleep.tone === "up" ? styles.metricDeltaUp : weeklyDeltas.sleep.tone === "down" ? styles.metricDeltaDown : styles.metricDeltaNeutral]}>{weeklyDeltas.sleep.text}</Text>
-                {renderMiniTrendStrip(sleepHistory, "#4ade80")}
-              </TouchableOpacity>
-            </View>
+            {[
+              { key: "workouts" as const, label: "Workouts", value: String(weeklyMetrics.workoutsThisWeek), detail: weeklyDeltas.workouts.text },
+              { key: "volume" as const, label: "Avg. session volume", value: weeklyMetrics.workoutsThisWeek ? `${Math.round(convertKgToUnit(weeklyMetrics.avgVolumeThisWeek, weightUnit))} ${weightUnit}` : "Not recorded", detail: weeklyDeltas.volume.text },
+              { key: "calories" as const, label: "Avg. logged calories", value: nutritionSnapshot.averageCalories == null ? "Not recorded" : `${Math.round(convertKcalToUnit(nutritionSnapshot.averageCalories, energyUnit))} ${energyUnit}`, detail: weeklyDeltas.calories.text },
+              { key: "sleep" as const, label: "Avg. recorded sleep", value: sleepSnapshot.averageSleepHours == null ? "Not recorded" : `${sleepSnapshot.averageSleepHours} h`, detail: weeklyDeltas.sleep.text },
+            ].map((row) => <TouchableOpacity key={row.key} style={[styles.weeklyRow, largeText && { flexDirection: "column", alignItems: "stretch" }]} accessibilityRole="button" onPress={() => trendsRef.current?.open(row.key)}><View style={{ flex: 1 }}><Text style={styles.weeklyLabel}>{row.label}</Text><Text style={styles.noticeSub}>Last 7 days / {row.detail}</Text></View><Text style={styles.weeklyValue}>{row.value}</Text><Ionicons name="chevron-forward" size={16} color={colors.muted} /></TouchableOpacity>)}
             {workoutsLoading ? <Text style={styles.cardText}>Refreshing snapshot...</Text> : null}
             {insightsError ? <Text style={styles.noticeSub}>{insightsError}</Text> : null}
           </View>
@@ -1546,32 +1361,33 @@ export default function Home() {
 
       </ScrollView>
 
+      <Modal visible={info != null} transparent animationType="fade" onRequestClose={() => setInfo(null)}><PopupBackdrop style={styles.modalBackdrop} onClose={() => setInfo(null)}><AdaptiveModalCard contentSized style={styles.modalCard}><Text style={styles.modalTitle}>{info?.title}</Text>{info?.message ? <Text style={styles.cardText}>{info.message}</Text> : null}<TouchableOpacity style={[styles.secondaryButtonWide, { marginTop: 20 }]} onPress={() => setInfo(null)}><Text style={styles.secondaryButtonText}>Close</Text></TouchableOpacity></AdaptiveModalCard></PopupBackdrop></Modal>
       {showMeasurementSheet && uid ? <AddMeasurementSheet key={`${uid}:${editingMeasurement?.entry.recordedAt?.toMillis() ?? "new"}:${editingMeasurement?.entry.source ?? "manual"}`} uid={uid} entry={editingMeasurement?.entry} history={bodyHistory} weightUnit={weightUnit} onClose={() => setShowMeasurementSheet(false)} onDeleted={() => { setSelectedMeasurementPoint(null); setMeasurementChart((previous) => ({ ...previous, revision: previous.revision + 1, recordedAtMs: editingMeasurement?.entry.recordedAt?.toMillis() })); }} onSaved={(input, editedEntry) => {
         const metric: BodyCompositionMetric = input.weightKg != null ? "weight" : input.bodyFatPercent != null ? "bodyFat" : input.leanBodyMassKg != null ? "leanBodyMass" : "skeletalMuscleMass";
         setMeasurementChart((previous) => ({ metric: editedEntry ? editingMeasurement?.metric ?? metric : metric, revision: previous.revision + 1, recordedAtMs: editedEntry?.recordedAt?.toMillis() }));
       }} /> : null}
       <Modal visible={phasePicker != null} transparent animationType="fade" onRequestClose={() => { if (!phaseSaving) setPhasePicker(null); }}>
-        <View style={styles.modalBackdrop}>
+        <PopupBackdrop style={styles.modalBackdrop} onClose={() => { if (!phaseSaving) setPhasePicker(null); }}>
           <AdaptiveModalCard contentSized style={styles.modalCard}>
             <Text style={styles.modalTitle}>{phasePicker === 'trainingPhase' ? 'Training phase' : 'Diet phase'}</Text>
             <Text style={styles.noticeSub}>Switching starts the new phase at Week 1.</Text>
             {(phasePicker === 'trainingPhase' ? TRAINING_PHASES : DIET_PHASES).map((phase) => {
               const selected = phase === (phasePicker === 'trainingPhase' ? trainingPhase : dietPhase);
-              return <TouchableOpacity key={phase} accessibilityRole="button" accessibilityState={{ selected }} disabled={phaseSaving} style={[styles.phasePickerOption, selected && styles.phaseChoiceActive]} onPress={() => { if (phasePicker) void changePhase(phasePicker, phase); }}><Text style={styles.phaseChoiceText}>{phase}</Text>{selected ? <Ionicons name="checkmark" size={20} color="#cbbfff" /> : null}</TouchableOpacity>;
+              return <TouchableOpacity key={phase} accessibilityRole="button" accessibilityState={{ selected }} disabled={phaseSaving} style={[styles.phasePickerOption, selected && styles.phaseChoiceActive]} onPress={() => { if (phasePicker) void changePhase(phasePicker, phase); }}><Text style={styles.phaseChoiceText}>{phase}</Text>{selected ? <Ionicons name="checkmark" size={20} color={colors.ink} /> : null}</TouchableOpacity>;
             })}
-            {phaseSaving ? <Text style={styles.noticeSub}>Saving...</Text> : null}
+            <View style={styles.phaseStatus}><Text accessibilityLiveRegion="polite" style={styles.noticeSub}>{phaseSaving ? "Saving..." : " "}</Text></View>
             <TouchableOpacity disabled={phaseSaving} style={[styles.secondaryButtonWide, { marginTop: 16 }]} onPress={() => setPhasePicker(null)}><Text style={styles.phaseChoiceText}>Cancel</Text></TouchableOpacity>
           </AdaptiveModalCard>
-        </View>
+        </PopupBackdrop>
       </Modal>
 
       <CalendarOverlay ref={calendarRef}>
-        <View style={styles.modalBackdrop}>
+        <PopupBackdrop style={styles.modalBackdrop} onClose={() => calendarRef.current?.close()}>
           <AdaptiveModalCard contentSized style={styles.modalCard}>
             <View style={[styles.calendarModalHeaderRow, { marginBottom: 16 }]}>
               <Text style={styles.modalTitle}>Calendar</Text>
               <TouchableOpacity onPress={() => calendarRef.current?.close()} style={styles.calendarCloseButton}>
-                <Ionicons name="close" size={18} color="#fff" />
+                <Ionicons name="close" size={18} color={colors.ink} />
               </TouchableOpacity>
             </View>
             <View style={styles.calendarHeaderRow}>
@@ -1583,7 +1399,7 @@ export default function Home() {
                   )
                 }
               >
-                <Ionicons name="chevron-back" size={18} color="#fff" />
+                <Ionicons name="chevron-back" size={18} color={colors.ink} />
               </TouchableOpacity>
               <Text style={styles.calendarMonthText}>
                 {MONTH_LABELS[calendarMonth.getMonth()]} {calendarMonth.getFullYear()}
@@ -1596,7 +1412,7 @@ export default function Home() {
                   )
                 }
               >
-                <Ionicons name="chevron-forward" size={18} color="#fff" />
+                <Ionicons name="chevron-forward" size={18} color={colors.ink} />
               </TouchableOpacity>
             </View>
 
@@ -1691,158 +1507,13 @@ export default function Home() {
               </View>
             ) : null}
           </AdaptiveModalCard>
-        </View>
+        </PopupBackdrop>
       </CalendarOverlay>
 
-      <Modal visible={activeDashboardMetric != null} transparent animationType="fade" onRequestClose={() => setActiveDashboardMetric(null)}>
-        <TouchableWithoutFeedback onPress={() => setActiveDashboardMetric(null)}>
-          <View style={styles.modalBackdrop}>
-            <TouchableWithoutFeedback onPress={() => {}}>
-              <View style={styles.modalCard}>
-            <View style={styles.calendarModalHeaderRow}>
-              <Text style={styles.modalTitle}>{dashboardGraphTitle}</Text>
-              <TouchableOpacity onPress={() => setActiveDashboardMetric(null)} style={styles.calendarCloseButton}>
-                <Ionicons name="close" size={18} color="#fff" />
-              </TouchableOpacity>
-            </View>
-            {activeDashboardMetric === "adherence" ? (
-              <ChartRangeSelector value={dashboardRange} onChange={setDashboardRange} />
-            ) : activeDashboardMetric === "volume" ? (
-              <TouchableOpacity
-                style={styles.chartToggleButton}
-                onPress={() => setHideRestDaysInVolume((prev) => !prev)}
-              >
-                <Text style={styles.chartToggleButtonText}>
-                  {hideRestDaysInVolume ? "Show zero days" : "Hide zero days"}
-                </Text>
-              </TouchableOpacity>
-            ) : activeDashboardMetric === "calories" ? (
-              <TouchableOpacity
-                style={styles.chartToggleButton}
-                onPress={() => setTruncateZeroDaysInCalories((prev) => !prev)}
-              >
-                <Text style={styles.chartToggleButtonText}>
-                  {truncateZeroDaysInCalories ? "Show zero days" : "Hide zero days"}
-                </Text>
-              </TouchableOpacity>
-            ) : activeDashboardMetric === "sleep" || activeDashboardMetric === "recovery_sleep" || activeDashboardMetric === "recovery_soreness" || activeDashboardMetric === "recovery_fatigue" || activeDashboardMetric === "recovery_motivation" ? (
-              <TouchableOpacity
-                style={styles.chartToggleButton}
-                onPress={() => setHideZeroDaysInSleep((prev) => !prev)}
-              >
-                <Text style={styles.chartToggleButtonText}>
-                  {hideZeroDaysInSleep ? "Show zero days" : "Hide zero days"}
-                </Text>
-              </TouchableOpacity>
-            ) : (
-              <View style={styles.chartRangeSpacer} />
-            )}
-            {activeDashboardMetric === "workouts" ? (
-              workoutsHeatmap.weeks.length === 0 ? (
-                <Text style={styles.cardText}>No data yet.</Text>
-              ) : (
-                <View style={styles.heatmapWrap}>
-                  <View style={styles.heatmapLegendRow}>
-                    <Text style={styles.noticeSub}>Rest</Text>
-                    <View style={[styles.heatmapLegendBox, styles.heatmapLevel0]} />
-                    <View style={[styles.heatmapLegendBox, styles.heatmapLevel1]} />
-                    <View style={[styles.heatmapLegendBox, styles.heatmapLevel2]} />
-                    <View style={[styles.heatmapLegendBox, styles.heatmapLevel3]} />
-                    <Text style={styles.noticeSub}>High volume</Text>
-                  </View>
-                  <View style={styles.heatmapBodyRow}>
-                    <View style={styles.heatmapYAxis}>
-                      {["M", "", "W", "", "F", "", "S"].map((label, index) => (
-                        <View key={`heatmap-y-${index}`} style={styles.heatmapYAxisSlot}>
-                          <Text style={styles.heatmapYAxisLabel}>{label}</Text>
-                        </View>
-                      ))}
-                    </View>
-                    <ScrollView
-                      ref={workoutsHeatmapScrollRef}
-                      horizontal
-                      showsHorizontalScrollIndicator={false}
-                      contentContainerStyle={styles.heatmapScrollContent}
-                    >
-                      <View>
-                        <View style={styles.heatmapMonthHeader}>
-                          <View
-                            style={[
-                              styles.heatmapMonthLabelsTrack,
-                              { width: Math.max(16, workoutsHeatmap.weeks.length * 16) },
-                            ]}
-                          >
-                            {workoutsHeatmap.monthLabels.map((m) => (
-                              <Text
-                                key={`${m.weekIndex}-${m.label}`}
-                                style={[styles.heatmapMonthLabel, { left: m.weekIndex * 16 - 10 }]}
-                              >
-                                {m.label}
-                              </Text>
-                            ))}
-                          </View>
-                        </View>
-                        <View style={styles.heatmapGrid}>
-                          {workoutsHeatmap.weeks.map((week, weekIndex) => (
-                            <View key={`wk-${weekIndex}`} style={styles.heatmapWeekCol}>
-                              {week.map((cell) => {
-                                const level =
-                                  !cell.inRange
-                                    ? -1
-                                    : cell.volumeKg <= 0
-                                    ? 0
-                                    : cell.volumeKg <= workoutsHeatmap.lowCut
-                                    ? 1
-                                    : cell.volumeKg <= workoutsHeatmap.highCut
-                                    ? 2
-                                    : 3;
-                                return (
-                                  <TouchableOpacity
-                                    key={cell.key}
-                                    style={[
-                                      styles.heatmapCell,
-                                      level < 0
-                                        ? styles.heatmapFuture
-                                        : level === 0
-                                        ? styles.heatmapLevel0
-                                        : level === 1
-                                        ? styles.heatmapLevel1
-                                        : level === 2
-                                        ? styles.heatmapLevel2
-                                        : styles.heatmapLevel3,
-                                    ]}
-                                    onPress={() => {
-                                      setSelectedDateKey(cell.key);
-                                      setReturnToCalendar(false);
-                                      setShowDayModal(true);
-                                    }}
-                                  />
-                                );
-                              })}
-                            </View>
-                          ))}
-                        </View>
-                      </View>
-                    </ScrollView>
-                  </View>
-                </View>
-              )
-            ) : dashboardGraphDataScoped.length === 0 ? (
-              <Text style={styles.cardText}>No data yet.</Text>
-            ) : (
-              <BarChart
-                points={dashboardGraphDataScoped}
-                unit={dashboardGraphUnit}
-              />
-            )}
-              </View>
-            </TouchableWithoutFeedback>
-          </View>
-        </TouchableWithoutFeedback>
-      </Modal>
+      <HomeTrendOverlay ref={trendsRef} workouts={workouts} nowMs={nowMs} weightUnit={weightUnit} energyUnit={energyUnit} workoutsWeeklyHistory={workoutsWeeklyHistory} volumeDailyHistoryAll={volumeDailyHistoryAll} nutritionAdherenceHistory={nutritionAdherenceHistory} nutritionCalorieHistory={nutritionCalorieHistory} sleepHistory={sleepHistory} sorenessHistory={sorenessHistory} fatigueHistory={fatigueHistory} motivationHistory={motivationHistory} recoveryReadiness={recoveryReadiness} workoutsHeatmap={workoutsHeatmap} onDay={(key) => { setSelectedDateKey(key); setReturnToCalendar(false); setShowDayModal(true); }} />
 
       <Modal visible={showDayModal} transparent animationType="fade" onRequestClose={closeDayDetails}>
-        <View style={styles.modalBackdrop}>
+        <PopupBackdrop style={styles.modalBackdrop} onClose={closeDayDetails}>
           <AdaptiveModalCard contentSized style={styles.modalCard}>
             <Text style={styles.modalTitle}>{selectedDayWorkouts.length ? "Workout Day" : "Rest Day"}</Text>
             <Text style={styles.noticeSub}>{selectedDateKey}</Text>
@@ -1908,14 +1579,12 @@ export default function Home() {
               <Text style={styles.primaryText}>Close</Text>
             </TouchableOpacity>
           </AdaptiveModalCard>
-        </View>
+        </PopupBackdrop>
       </Modal>
 
       <Modal visible={showProfileModal} transparent animationType="fade" onRequestClose={() => setShowProfileModal(false)}>
-        <TouchableWithoutFeedback onPress={() => setShowProfileModal(false)}>
-          <View style={styles.modalBackdrop}>
-            <TouchableWithoutFeedback onPress={() => {}}>
-              <View style={styles.profileModalCard}>
+          <PopupBackdrop style={[styles.modalBackdrop, { justifyContent: "center", paddingHorizontal: 20 }]} onClose={() => setShowProfileModal(false)}>
+              <AdaptiveModalCard contentSized style={styles.profileModalCard} contentContainerStyle={{ alignItems: "center", gap: 14 }}>
                 {profilePhotoUri ? (
                   <ProfilePhoto
                     uid={uid}
@@ -1932,6 +1601,7 @@ export default function Home() {
                   </View>
                 )}
                 <Text style={styles.profileModalName}>{userNickname ?? "Lifter"}</Text>
+                <View style={[styles.entitlementBadge, { alignSelf: "center" }, entitlement.state === "active" ? styles.entitlementBadgeActive : styles.entitlementBadgeInactive]}><Text style={[styles.entitlementBadgeText, entitlement.state === "active" ? styles.entitlementBadgeTextActive : styles.entitlementBadgeTextMuted]}>{entitlement.state === "active" ? "Premium" : entitlement.state === "inactive" ? "Free" : "Checking"}</Text></View>
                 {profileDescription ? (
                   <Text style={styles.profileModalDescription}>{profileDescription}</Text>
                 ) : (
@@ -1939,62 +1609,16 @@ export default function Home() {
                     No description added yet.
                   </Text>
                 )}
-              </View>
-            </TouchableWithoutFeedback>
-          </View>
-        </TouchableWithoutFeedback>
+              </AdaptiveModalCard>
+          </PopupBackdrop>
       </Modal>
 
-      <Modal visible={showAdjustInputsModal} transparent animationType="fade" onRequestClose={() => setShowAdjustInputsModal(false)}>
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Adjust inputs</Text>
-
-            <Text style={styles.label}>Soreness: {soreness}</Text>
-            <Slider
-              value={soreness}
-              onValueChange={(v: number) => setSoreness(Math.round(v))}
-              minimumValue={0}
-              maximumValue={10}
-              step={1}
-              minimumTrackTintColor="#7b61ff"
-              maximumTrackTintColor="#555"
-              thumbTintColor="#fff"
-            />
-
-            <Text style={styles.label}>Fatigue: {fatigue}</Text>
-            <Slider
-              value={fatigue}
-              onValueChange={(v: number) => setFatigue(Math.round(v))}
-              minimumValue={0}
-              maximumValue={10}
-              step={1}
-              minimumTrackTintColor="#7b61ff"
-              maximumTrackTintColor="#555"
-              thumbTintColor="#fff"
-            />
-
-            <Text style={styles.label}>Motivation: {motivation}</Text>
-            <Slider
-              value={motivation}
-              onValueChange={(v: number) => setMotivation(Math.round(v))}
-              minimumValue={0}
-              maximumValue={10}
-              step={1}
-              minimumTrackTintColor="#7b61ff"
-              maximumTrackTintColor="#555"
-              thumbTintColor="#fff"
-            />
-
-            <TouchableOpacity
-              style={[styles.primaryButtonWide, { marginTop: 8 }]}
-              onPress={() => setShowAdjustInputsModal(false)}
-            >
-              <Text style={styles.primaryText}>Done</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+      {showAdjustInputsModal ? <HomeRecoverySheet initial={{ soreness, fatigue, motivation }} contextSummary={getDailyContextSummary(dailyContext)} onContext={() => setContextVisible(true)} onClose={() => setShowAdjustInputsModal(false)} onSave={async (value) => {
+        if (!uid) return;
+        await AsyncStorage.setItem(`${HOME_INPUTS_KEY_PREFIX}:${uid}`, JSON.stringify(value));
+        setHasRecoveryCheckIn(true); setSoreness(value.soreness); setFatigue(value.fatigue); setMotivation(value.motivation); setShowAdjustInputsModal(false);
+      }} /> : null}
+      {contextVisible ? <TodayPlanContextModal key={`${uid}:${dailyContext?.dateKey ?? "new"}`} visible context={dailyContext} plan={contextPlan} saving={contextSaving} onClose={() => setContextVisible(false)} onSave={(context: DailyDecisionContext) => { if (!uid || contextSaving) return; setContextSaving(true); const updatedAt = Timestamp.now(); void updateDoc(doc(db, "users", uid), { todayPlanContext: { ...context, updatedAt }, activePainContext: context.pain ? { ...context.pain, updatedAt } : deleteField() }).then(() => setContextVisible(false)).catch(() => showAppAlert("Context not saved", "Please try again.")).finally(() => setContextSaving(false)); }} /> : null}
 
 
 
@@ -2002,10 +1626,310 @@ export default function Home() {
   );
 }
 
-const styles = StyleSheet.create({
+type HomeTrendHandle = { open: (metric: DashboardMetricKey) => void };
+type HomeTrendProps = {
+  workouts: WorkoutSummary[]; nowMs: number; weightUnit: WeightUnit; energyUnit: EnergyUnit;
+  workoutsWeeklyHistory: ChartPoint[]; volumeDailyHistoryAll: ChartPoint[];
+  nutritionAdherenceHistory: ChartPoint[]; nutritionCalorieHistory: ChartPoint[];
+  sleepHistory: ChartPoint[]; sorenessHistory: ChartPoint[]; fatigueHistory: ChartPoint[]; motivationHistory: ChartPoint[];
+  recoveryReadiness: { sleepRatio: number; sorenessScore: number; fatigueScore: number; motivationScore: number };
+  workoutsHeatmap: { weeks: { key: string; date: Date; volumeKg: number; inRange: boolean }[][]; monthLabels: { weekIndex: number; label: string }[]; lowCut: number; highCut: number };
+  onDay: (key: string) => void;
+};
+const HomeTrendOverlay = React.forwardRef<HomeTrendHandle, HomeTrendProps>(function HomeTrendOverlay({ workouts, nowMs, weightUnit, energyUnit, workoutsWeeklyHistory, volumeDailyHistoryAll, nutritionAdherenceHistory, nutritionCalorieHistory, sleepHistory, sorenessHistory, fatigueHistory, motivationHistory, recoveryReadiness, workoutsHeatmap, onDay }, ref) {
+  const { colors } = useNotebook();
+  const styles = useNotebookStyles(createStyles);
+  const heatmapHeaderHeight = Math.ceil(22 * Math.max(1, useWindowDimensions().fontScale));
+  const workoutsHeatmapScrollRef = useRef<ScrollView>(null);
+  const [contentReady, setContentReady] = useState(false);
+  const [activeDashboardMetric, setActiveDashboardMetric] = useState<DashboardMetricKey | null>(
+    null
+  );
+  const [hideRestDaysInVolume, setHideRestDaysInVolume] = useState(false);
+  const [truncateZeroDaysInCalories, setTruncateZeroDaysInCalories] = useState(false);
+  const [hideZeroDaysInSleep, setHideZeroDaysInSleep] = useState(false);
+  const [dashboardRange, setDashboardRange] = useState<ChartRange>(7);
+
+  const close = () => { setActiveDashboardMetric(null); setContentReady(false); };
+  React.useImperativeHandle(ref, () => ({ open(metric) { setContentReady(false); setActiveDashboardMetric(metric); } }), []);
+  const dashboardGraphTitle = useMemo(() => {
+    switch (activeDashboardMetric) {
+      case "workouts":
+        return "Workouts";
+      case "volume":
+        return `Volume (${weightUnit})`;
+      case "adherence":
+        return "Adherence Trend";
+      case "calories":
+        return `Calories (${energyUnit})`;
+      case "sleep":
+        return "Sleep (hours)";
+      case "recovery":
+        return "Recovery Readiness";
+      case "recovery_sleep":
+        return "Recovery - Sleep";
+      case "recovery_soreness":
+        return "Recovery - Soreness";
+      case "recovery_fatigue":
+        return "Recovery - Fatigue";
+      case "recovery_motivation":
+        return "Recovery - Motivation";
+      default:
+        return "";
+    }
+  }, [activeDashboardMetric, weightUnit, energyUnit]);
+
+  const dashboardGraphUnit = useMemo(() => {
+    switch (activeDashboardMetric) {
+      case "volume":
+        return weightUnit;
+      case "calories":
+        return energyUnit;
+      case "sleep":
+      case "recovery_sleep":
+        return "h";
+      case "adherence":
+      case "recovery":
+        return "%";
+      case "recovery_soreness":
+      case "recovery_fatigue":
+      case "recovery_motivation":
+        return "/10";
+      default:
+        return "";
+    }
+  }, [activeDashboardMetric, weightUnit, energyUnit]);
+
+  const volumeDailyHistory = useMemo(
+    () => (hideRestDaysInVolume ? volumeDailyHistoryAll.filter((point) => point.value > 0) : volumeDailyHistoryAll),
+    [hideRestDaysInVolume, volumeDailyHistoryAll]
+  );
+
+  useEffect(() => {
+    if (activeDashboardMetric !== "workouts") return;
+    const timer = setTimeout(() => {
+      workoutsHeatmapScrollRef.current?.scrollToEnd({ animated: false });
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [activeDashboardMetric, contentReady, workoutsHeatmap.weeks.length]);
+
+  const dashboardGraphData = useMemo<ChartPoint[]>(() => {
+    switch (activeDashboardMetric) {
+      case "workouts":
+        return workoutsWeeklyHistory;
+      case "volume":
+        return volumeDailyHistory;
+      case "adherence":
+        return nutritionAdherenceHistory;
+      case "calories":
+        return truncateZeroDaysInCalories
+          ? nutritionCalorieHistory.filter((point) => point.value > 0)
+          : nutritionCalorieHistory;
+      case "sleep":
+        return hideZeroDaysInSleep ? sleepHistory.filter((point) => point.value > 0) : sleepHistory;
+      case "recovery_sleep":
+        return sleepHistory;
+      case "recovery_soreness":
+        return hideZeroDaysInSleep ? sorenessHistory.filter((point) => point.value > 0) : sorenessHistory;
+      case "recovery_fatigue":
+        return hideZeroDaysInSleep ? fatigueHistory.filter((point) => point.value > 0) : fatigueHistory;
+      case "recovery_motivation":
+        return hideZeroDaysInSleep ? motivationHistory.filter((point) => point.value > 0) : motivationHistory;
+      case "recovery":
+        return [
+          { key: "sleep", label: "Sleep", value: Math.round(recoveryReadiness.sleepRatio * 100) },
+          { key: "soreness", label: "Soreness", value: Math.round(recoveryReadiness.sorenessScore * 100) },
+          { key: "fatigue", label: "Fatigue", value: Math.round(recoveryReadiness.fatigueScore * 100) },
+          { key: "motivation", label: "Motivation", value: Math.round(recoveryReadiness.motivationScore * 100) },
+        ];
+      default:
+        return [];
+    }
+  }, [
+    activeDashboardMetric,
+    nutritionAdherenceHistory,
+    nutritionCalorieHistory,
+    sleepHistory,
+    recoveryReadiness.fatigueScore,
+    recoveryReadiness.motivationScore,
+    recoveryReadiness.sleepRatio,
+    recoveryReadiness.sorenessScore,
+    truncateZeroDaysInCalories,
+    hideZeroDaysInSleep,
+    volumeDailyHistory,
+    workoutsWeeklyHistory,
+    sorenessHistory,
+    fatigueHistory,
+    motivationHistory,
+  ]);
+
+  const dashboardGraphDataScoped = useMemo(() => {
+    if (
+      activeDashboardMetric === "adherence"
+    ) {
+      return dashboardGraphData.slice(-dashboardRange);
+    }
+    return dashboardGraphData;
+  }, [activeDashboardMetric, dashboardGraphData, dashboardRange]);
+
+
+
+  if (!activeDashboardMetric) return null;
+  return (<Modal visible transparent animationType="none" onShow={() => setContentReady(true)} onRequestClose={close}>
+        <PopupBackdrop style={styles.modalBackdrop} onClose={close}>
+              <AdaptiveModalCard contentSized style={styles.modalCard}>
+            <View style={styles.calendarModalHeaderRow}>
+              <Text style={styles.modalTitle}>{dashboardGraphTitle}</Text>
+              <TouchableOpacity onPress={close} style={styles.calendarCloseButton}>
+                <Ionicons name="close" size={18} color={colors.ink} />
+              </TouchableOpacity>
+            </View>
+            {contentReady ? <>
+            {activeDashboardMetric === "adherence" ? (
+              <ChartRangeSelector value={dashboardRange} onChange={setDashboardRange} />
+            ) : activeDashboardMetric === "volume" ? (
+              <TouchableOpacity
+                style={styles.chartToggleButton}
+                onPress={() => setHideRestDaysInVolume((prev) => !prev)}
+              >
+                <Text style={styles.chartToggleButtonText}>
+                  {hideRestDaysInVolume ? "Show zero days" : "Hide zero days"}
+                </Text>
+              </TouchableOpacity>
+            ) : activeDashboardMetric === "calories" ? (
+              <TouchableOpacity
+                style={styles.chartToggleButton}
+                onPress={() => setTruncateZeroDaysInCalories((prev) => !prev)}
+              >
+                <Text style={styles.chartToggleButtonText}>
+                  {truncateZeroDaysInCalories ? "Show zero days" : "Hide zero days"}
+                </Text>
+              </TouchableOpacity>
+            ) : activeDashboardMetric === "sleep" || activeDashboardMetric === "recovery_sleep" || activeDashboardMetric === "recovery_soreness" || activeDashboardMetric === "recovery_fatigue" || activeDashboardMetric === "recovery_motivation" ? (
+              <TouchableOpacity
+                style={styles.chartToggleButton}
+                onPress={() => setHideZeroDaysInSleep((prev) => !prev)}
+              >
+                <Text style={styles.chartToggleButtonText}>
+                  {hideZeroDaysInSleep ? "Show zero days" : "Hide zero days"}
+                </Text>
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.chartRangeSpacer} />
+            )}
+            {activeDashboardMetric === "workouts" ? (
+              workoutsHeatmap.weeks.length === 0 ? (
+                <Text style={styles.cardText}>No data yet.</Text>
+              ) : (
+                <View style={styles.heatmapWrap}>
+                  <View style={styles.heatmapLegendRow}>
+                    <Text style={styles.noticeSub}>Rest</Text>
+                    <View style={[styles.heatmapLegendBox, styles.heatmapLevel0]} />
+                    <View style={[styles.heatmapLegendBox, styles.heatmapLevel1]} />
+                    <View style={[styles.heatmapLegendBox, styles.heatmapLevel2]} />
+                    <View style={[styles.heatmapLegendBox, styles.heatmapLevel3]} />
+                    <Text style={styles.noticeSub}>High volume</Text>
+                  </View>
+                  <View style={styles.heatmapBodyRow}>
+                    <View style={[styles.heatmapYAxis, { paddingTop: heatmapHeaderHeight }]}>
+                      {["M", "T", "W", "T", "F", "S", "S"].map((label, index) => (
+                        <View key={`heatmap-y-${index}`} style={styles.heatmapYAxisSlot}>
+                          <Text style={styles.heatmapYAxisLabel}>{label}</Text>
+                        </View>
+                      ))}
+                    </View>
+                    <ScrollView
+                      ref={workoutsHeatmapScrollRef}
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      onContentSizeChange={() => workoutsHeatmapScrollRef.current?.scrollToEnd({ animated: false })}
+                      contentContainerStyle={styles.heatmapScrollContent}
+                    >
+                      <View>
+                        <View style={styles.heatmapMonthHeader}>
+                          <View
+                            style={[
+                              styles.heatmapMonthLabelsTrack,
+                              { width: Math.max(HEATMAP_WEEK_WIDTH, workoutsHeatmap.weeks.length * HEATMAP_WEEK_WIDTH), height: heatmapHeaderHeight },
+                            ]}
+                          >
+                            {workoutsHeatmap.monthLabels.map((m) => (
+                              <Text
+                                key={`${m.weekIndex}-${m.label}`}
+                                style={[styles.heatmapMonthLabel, { left: m.weekIndex * HEATMAP_WEEK_WIDTH }]}
+                              >
+                                {m.label}
+                              </Text>
+                            ))}
+                          </View>
+                        </View>
+                        <View style={styles.heatmapGrid}>
+                          {workoutsHeatmap.weeks.map((week, weekIndex) => (
+                            <View key={`wk-${weekIndex}`} style={styles.heatmapWeekCol}>
+                              {week.map((cell) => {
+                                const level =
+                                  !cell.inRange
+                                    ? -1
+                                    : cell.volumeKg <= 0
+                                    ? 0
+                                    : cell.volumeKg <= workoutsHeatmap.lowCut
+                                    ? 1
+                                    : cell.volumeKg <= workoutsHeatmap.highCut
+                                    ? 2
+                                    : 3;
+                                return (
+                                  <TouchableOpacity
+                                    key={cell.key}
+                                    accessibilityRole="button"
+                                    accessibilityLabel={`${cell.key}, ${Math.round(convertKgToUnit(cell.volumeKg, weightUnit))} ${weightUnit} workout volume`}
+                                    disabled={!cell.inRange}
+                                    style={[
+                                      styles.heatmapCell,
+                                      level < 0
+                                        ? styles.heatmapFuture
+                                        : level === 0
+                                        ? styles.heatmapLevel0
+                                        : level === 1
+                                        ? styles.heatmapLevel1
+                                        : level === 2
+                                        ? styles.heatmapLevel2
+                                        : styles.heatmapLevel3,
+                                    ]}
+                                    onPress={() => {
+                                      onDay(cell.key);
+                                    }}
+                                  />
+                                );
+                              })}
+                            </View>
+                          ))}
+                        </View>
+                      </View>
+                    </ScrollView>
+                  </View>
+                </View>
+              )
+            ) : dashboardGraphDataScoped.length === 0 ? (
+              <Text style={styles.cardText}>No data yet.</Text>
+            ) : (
+              <BarChart
+                key={activeDashboardMetric}
+                points={dashboardGraphDataScoped}
+                unit={dashboardGraphUnit}
+              />
+            )}
+            {activeDashboardMetric === "workouts" || activeDashboardMetric === "volume" ? <HomeWorkoutComparison workouts={workouts} nowMs={nowMs} weightUnit={weightUnit} showVolume={activeDashboardMetric === "volume"} /> : null}
+            {activeDashboardMetric === "calories" || activeDashboardMetric === "sleep" ? <HomeDailyComparison points={activeDashboardMetric === "calories" ? nutritionCalorieHistory : sleepHistory} nowMs={nowMs} unit={activeDashboardMetric === "calories" ? energyUnit : "h"} /> : null}
+            </> : <ActivityIndicator accessibilityLabel="Loading trend" color={colors.accent} style={{ marginVertical: 24 }} />}
+              </AdaptiveModalCard>
+            </PopupBackdrop>
+      </Modal>);
+});
+
+const createStyles = (colors: NotebookColors) => { const base = notebookSheet({
   container: {
     flex: 1,
-    backgroundColor: "#0d0d1a",
+    backgroundColor: colors.canvas,
     paddingHorizontal: 20,
     paddingTop: 12,
   },
@@ -2028,19 +1952,19 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 18,
-    backgroundColor: "rgba(255,255,255,0.1)",
+    backgroundColor: colors.rule,
   },
   headerAvatarPlaceholder: {
     alignItems: "center",
     justifyContent: "center",
   },
   headerAvatarInitial: {
-    color: "#fff",
+    color: colors.ink,
     fontSize: 24,
     fontWeight: "800",
   },
   userName: {
-    color: "#fff",
+    color: colors.ink,
     fontSize: 18,
     fontWeight: "800",
   },
@@ -2057,23 +1981,23 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   entitlementBadgeActive: {
-    backgroundColor: "#a6e3a1",
+    backgroundColor: colors.accentSoft,
   },
   entitlementBadgeInactive: {
-    backgroundColor: "rgba(255,255,255,0.14)",
+    backgroundColor: colors.rule,
   },
   entitlementBadgeLoading: {
-    backgroundColor: "rgba(255,255,255,0.08)",
+    backgroundColor: colors.rule,
   },
   entitlementBadgeText: {
     fontSize: 11,
     fontWeight: "800",
   },
   entitlementBadgeTextActive: {
-    color: "#0d0d1a",
+    color: colors.canvas,
   },
   entitlementBadgeTextMuted: {
-    color: "#fff",
+    color: colors.ink,
   },
   iconContainer: {
     flexDirection: "row",
@@ -2086,7 +2010,7 @@ const styles = StyleSheet.create({
     marginTop: 20,
   },
   sectionTitle: {
-    color: "#fff",
+    color: colors.ink,
     fontSize: 20,
     fontWeight: "800",
     marginBottom: 10,
@@ -2097,7 +2021,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
   },
-  cardHeading: { color: "#fff", fontSize: 20, fontWeight: "800", flexShrink: 1 },
+  cardHeading: { color: colors.ink, fontSize: 20, fontWeight: "800", flexShrink: 1 },
   snapshotInfoBtn: {
     width: 24,
     height: 24,
@@ -2106,11 +2030,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   card: {
-    backgroundColor: "rgba(255,255,255,0.05)",
+    backgroundColor: colors.rule,
     borderRadius: 16,
     padding: 20,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(255,255,255,0.08)",
+    borderColor: colors.rule,
     gap: 12,
   },
   firstTimeBannerCard: {
@@ -2132,7 +2056,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.08)",
+    backgroundColor: colors.rule,
   },
   firstTimeActions: {
     flexDirection: "row",
@@ -2152,15 +2076,15 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.08)",
+    backgroundColor: colors.rule,
   },
-  calendarMonthText: { color: "#fff", fontSize: 16, fontWeight: "800" },
+  calendarMonthText: { color: colors.ink, fontSize: 16, fontWeight: "800" },
   calendarWeekdayRow: {
     flexDirection: "row",
     justifyContent: "space-between",
   },
   calendarWeekdayText: {
-    color: "#8f96b8",
+    color: colors.muted,
     width: "14.28%",
     textAlign: "center",
     fontWeight: "700",
@@ -2171,16 +2095,15 @@ const styles = StyleSheet.create({
     justifyContent: "flex-start",
   },
   homePhaseRow: { flexDirection: 'row', gap: 10, marginBottom: 4 },
-  homePhaseSelector: { flex: 1, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.04)' },
-  phaseSelectorLabel: { color: '#98a0b3', fontSize: 12, marginBottom: 4 },
+  homePhaseSelector: { flex: 1, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12, backgroundColor: colors.rule },
+  phaseSelectorLabel: { color: colors.muted, fontSize: 12, marginBottom: 4 },
   phaseSelectorValueRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 6 },
-  phaseSelectorValue: { flexShrink: 1, color: '#fff', fontSize: 14, fontWeight: '600' },
-  phaseSelectorWeek: { color: '#98a0b3', fontSize: 12, marginTop: 4 },
-  phasePickerOption: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 14, borderRadius: 10, marginTop: 8, backgroundColor: 'rgba(255,255,255,0.06)' },
+  phaseSelectorValue: { flexShrink: 1, color: colors.ink, fontSize: 14, fontWeight: '600' },
+  phaseSelectorWeek: { color: colors.muted, fontSize: 12, marginTop: 4 },
   calendarPhaseLabels: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginVertical: 8 },
   addDataButton: { paddingHorizontal: 8, paddingVertical: 10 },
-  addDataText: { color: '#cbbfff', fontSize: 14, fontWeight: '600' },
-  calendarDetailsButton: { paddingVertical: 12, alignItems: 'center', borderRadius: 10, backgroundColor: 'rgba(123,97,255,0.2)' },
+  addDataText: { color: colors.ink, fontSize: 14, fontWeight: '600' },
+  calendarDetailsButton: { paddingVertical: 12, alignItems: 'center', borderRadius: 10, backgroundColor: colors.accentSoft },
   calendarDayCell: {
     width: "14.2857%",
     aspectRatio: 1,
@@ -2192,39 +2115,41 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   calendarDayCellSelected: {
-    backgroundColor: "rgba(123,97,255,0.25)",
+    backgroundColor: colors.accentSoft,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(123,97,255,0.8)",
+    borderColor: colors.accentSoft,
   },
   calendarDayCellOutOfMonth: {
-    backgroundColor: "rgba(255,255,255,0.02)",
+    backgroundColor: colors.rule,
   },
   calendarDayCellToday: {
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(255,255,255,0.28)",
+    borderColor: colors.rule,
   },
-  calendarDayText: { color: "#d8daec", fontWeight: "700", fontSize: 15 },
-  calendarDayTextMuted: { color: "#767c9a" },
-  calendarDayTextSelected: { color: "#fff" },
+  calendarDayText: { color: colors.muted, fontWeight: "700", fontSize: 15 },
+  calendarDayTextMuted: { color: colors.muted },
+  calendarDayTextSelected: { color: colors.ink },
   calendarWorkoutDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: "#7b61ff",
+    backgroundColor: colors.accent,
   },
   calendarWorkoutDotHidden: {
     opacity: 0,
   },
   calendarProgramTag: {
-    color: "#cdd1ea",
+    color: colors.muted,
     fontSize: 9,
     fontWeight: "800",
     marginTop: 1,
   },
   phaseChoiceRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginVertical: 10 },
-  phaseChoice: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.06)' },
-  phaseChoiceActive: { backgroundColor: 'rgba(123,97,255,0.3)', borderWidth: 1, borderColor: '#7b61ff' },
-  phaseChoiceText: { color: '#fff', fontWeight: '600' },
+  phaseChoice: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10, backgroundColor: colors.rule },
+  phasePickerOption: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 14, borderRadius: 0, borderBottomWidth: 1, borderBottomColor: colors.rule, backgroundColor: "transparent" },
+  phaseChoiceActive: { backgroundColor: colors.subtle, borderBottomColor: colors.ink },
+  phaseStatus: { paddingTop: 12, minHeight: 36 },
+  phaseChoiceText: { color: colors.ink, fontWeight: '600' },
   phaseTracks: {
     width: "100%",
     gap: 2,
@@ -2247,14 +2172,14 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 7,
-    backgroundColor: "rgba(255,255,255,0.04)",
+    backgroundColor: colors.rule,
   },
   phasePillDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
   },
-  phaseWeekText: { color: "#cdd1ea", fontSize: 13, fontWeight: "600" },
+  phaseWeekText: { color: colors.muted, fontSize: 13, fontWeight: "600" },
   metricRow: {
     flexDirection: "row",
     gap: 10,
@@ -2265,7 +2190,7 @@ const styles = StyleSheet.create({
   metricChip: {
     flex: 1,
     minHeight: 116,
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: colors.rule,
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 12,
@@ -2280,21 +2205,21 @@ const styles = StyleSheet.create({
     flexGrow: 0,
   },
   metricLabel: {
-    color: "#9aa1c3",
+    color: colors.muted,
     fontSize: 11,
     fontWeight: "700",
     textTransform: "uppercase",
   },
-  metricValue: { color: "#fff", fontSize: 20, fontWeight: "800" },
+  metricValue: { color: colors.ink, fontSize: 20, fontWeight: "800" },
   metricValueRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
-  metricLabelTitle: { color: "#9aa1c3", fontSize: 11, fontWeight: "700" },
-  metricValueSmall: { color: "#fff", fontSize: 16, fontWeight: "800" },
-  metricSub: { color: "#aeb3ce", fontSize: 11, lineHeight: 15, minHeight: 30 },
+  metricLabelTitle: { color: colors.muted, fontSize: 11, fontWeight: "700" },
+  metricValueSmall: { color: colors.ink, fontSize: 16, fontWeight: "800" },
+  metricSub: { color: colors.muted, fontSize: 11, lineHeight: 15, minHeight: 30 },
   metricDelta: { fontSize: 11, fontWeight: "700", minHeight: 16 },
   metricDeltaInline: { fontSize: 11, fontWeight: "700", marginTop: -1 },
-  metricDeltaUp: { color: "#4ade80" },
-  metricDeltaDown: { color: "#f87171" },
-  metricDeltaNeutral: { color: "#9aa1c3" },
+  metricDeltaUp: { color: colors.muted },
+  metricDeltaDown: { color: colors.danger },
+  metricDeltaNeutral: { color: colors.muted },
   miniTrendRow: {
     marginTop: "auto",
     paddingTop: 8,
@@ -2323,27 +2248,27 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingVertical: 10,
     alignItems: "center",
-    backgroundColor: "rgba(123,97,255,0.25)",
+    backgroundColor: colors.accentSoft,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(123,97,255,0.8)",
+    borderColor: colors.accentSoft,
   },
   devButtonDanger: {
-    backgroundColor: "rgba(248,113,113,0.22)",
-    borderColor: "rgba(248,113,113,0.7)",
+    backgroundColor: colors.rule,
+    borderColor: colors.rule,
   },
-  devButtonText: { color: "#fff", fontWeight: "700", fontSize: 12 },
-  label: { color: "#cfcfe6", fontSize: 14, fontWeight: "600" },
+  devButtonText: { color: colors.ink, fontWeight: "700", fontSize: 12 },
+  label: { color: colors.muted, fontSize: 14, fontWeight: "600" },
   secondaryButtonWide: {
     borderRadius: 12,
     paddingVertical: 12,
     alignItems: "center",
     borderWidth: StyleSheet.hairlineWidth * 2,
-    borderColor: "rgba(255,255,255,0.3)",
-    backgroundColor: "rgba(255,255,255,0.05)",
+    borderColor: colors.rule,
+    backgroundColor: colors.rule,
   },
-  secondaryButtonText: { color: "#fff", fontWeight: "700" },
+  secondaryButtonText: { color: colors.ink, fontWeight: "700" },
   primaryButtonWide: {
-    backgroundColor: "#7b61ff",
+    backgroundColor: colors.accent,
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: "center",
@@ -2365,39 +2290,39 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: colors.rule,
   },
   contextActionCopy: { flex: 1 },
-  contextActionLabel: { color: "#fff", fontSize: 13, fontWeight: "800" },
-  contextActionHint: { color: "#858ba4", fontSize: 11, marginTop: 2 },
+  contextActionLabel: { color: colors.ink, fontSize: 13, fontWeight: "800" },
+  contextActionHint: { color: colors.muted, fontSize: 11, marginTop: 2 },
   primaryText: {
-    color: "#fff",
+    color: colors.ink,
     fontWeight: "700",
   },
   disabled: { opacity: 0.6 },
-  cardText: { color: "#aaa", fontSize: 15 },
+  cardText: { color: colors.muted, fontSize: 15 },
   stalePlanText: {
-    color: "#fbbf24",
+    color: colors.accent,
     fontSize: 13,
     lineHeight: 18,
     marginBottom: 10,
   },
   notice: {
-    backgroundColor: "rgba(255,255,255,0.08)",
+    backgroundColor: colors.rule,
     borderRadius: 12,
     padding: 12,
     gap: 6,
   },
-  noticeText: { color: "#fff", fontWeight: "700" },
-  noticeSub: { color: "#9aa1c3", fontSize: 12 },
+  noticeText: { color: colors.ink, fontWeight: "700" },
+  noticeSub: { color: colors.muted, fontSize: 12 },
   paywallButton: {
-    borderColor: "rgba(255,255,255,0.3)",
+    borderColor: colors.rule,
     borderWidth: StyleSheet.hairlineWidth * 2,
     borderRadius: 10,
     paddingVertical: 10,
     alignItems: "center",
   },
-  paywallText: { color: "#fff", fontWeight: "700" },
+  paywallText: { color: colors.ink, fontWeight: "700" },
   workoutShortcutRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -2405,80 +2330,80 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   todayPlanMetaCopy: { flex: 1 },
-  todayPlanMetaLabel: { color: "#858ba4", fontSize: 11, fontWeight: "800", textTransform: "uppercase" },
-  todayPlanMetaValue: { color: "#f2f3fb", fontSize: 15, fontWeight: "800", marginTop: 3 },
+  todayPlanMetaLabel: { color: colors.muted, fontSize: 11, fontWeight: "800", textTransform: "uppercase" },
+  todayPlanMetaValue: { color: colors.muted, fontSize: 15, fontWeight: "800", marginTop: 3 },
   todayPlanLinkButton: {
     borderRadius: 999,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(255,255,255,0.22)",
+    borderColor: colors.rule,
     paddingHorizontal: 12,
     paddingVertical: 7,
   },
-  todayPlanLinkText: { color: "#c9c0ff", fontSize: 12, fontWeight: "800" },
-  decisionTitle: { color: "#fff", fontSize: 22, fontWeight: "800" },
-  decisionHeadline: { color: "#f4f5ff", fontSize: 17, lineHeight: 22, fontWeight: "800" },
-  decisionAction: { color: "#d8daec", fontSize: 14, lineHeight: 20 },
+  todayPlanLinkText: { color: colors.accent, fontSize: 12, fontWeight: "800" },
+  decisionTitle: { color: colors.ink, fontSize: 22, fontWeight: "800" },
+  decisionHeadline: { color: colors.muted, fontSize: 17, lineHeight: 22, fontWeight: "800" },
+  decisionAction: { color: colors.muted, fontSize: 14, lineHeight: 20 },
   bulletList: { gap: 6 },
-  bulletItem: { color: "#aeb2c8", fontSize: 13, lineHeight: 19 },
+  bulletItem: { color: colors.muted, fontSize: 13, lineHeight: 19 },
   cautionBox: {
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 8,
     borderRadius: 12,
-    backgroundColor: "rgba(245,158,11,0.1)",
+    backgroundColor: colors.rule,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(245,158,11,0.35)",
+    borderColor: colors.rule,
     padding: 11,
   },
-  cautionText: { color: "#fde68a", fontSize: 12, lineHeight: 17, flex: 1 },
+  cautionText: { color: colors.warning, fontSize: 12, lineHeight: 17, flex: 1 },
   exercisePlanList: {
     gap: 9,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: "rgba(255,255,255,0.1)",
+    borderTopColor: colors.rule,
     paddingTop: 12,
   },
-  exercisePlanTitle: { color: "#f2f3fb", fontSize: 13, fontWeight: "800" },
+  exercisePlanTitle: { color: colors.muted, fontSize: 13, fontWeight: "800" },
   exercisePlanRow: {
     borderRadius: 12,
-    backgroundColor: "rgba(255,255,255,0.045)",
+    backgroundColor: colors.rule,
     paddingHorizontal: 11,
     paddingVertical: 10,
     gap: 4,
   },
   exercisePlanHeader: { gap: 3 },
-  exercisePlanName: { color: "#f4f5ff", fontSize: 13, fontWeight: "800" },
-  exercisePlanPrescription: { color: "#9dd7bd", fontSize: 12, fontWeight: "800" },
-  exercisePlanPrescriptionWarning: { color: "#fbbf24" },
-  exercisePlanReason: { color: "#9aa1b8", fontSize: 11, lineHeight: 16 },
-  exercisePlanSharedReason: { color: "#b8bed2", fontSize: 12, lineHeight: 17 },
+  exercisePlanName: { color: colors.muted, fontSize: 13, fontWeight: "800" },
+  exercisePlanPrescription: { color: colors.muted, fontSize: 12, fontWeight: "800" },
+  exercisePlanPrescriptionWarning: { color: colors.accent },
+  exercisePlanReason: { color: colors.muted, fontSize: 11, lineHeight: 16 },
+  exercisePlanSharedReason: { color: colors.muted, fontSize: 12, lineHeight: 17 },
   applyPlanButton: {
     alignItems: "center",
     borderRadius: 12,
-    backgroundColor: "#7b61ff",
+    backgroundColor: colors.accent,
     paddingVertical: 11,
     marginTop: 2,
   },
-  applyPlanButtonText: { color: "#fff", fontSize: 13, fontWeight: "800" },
+  applyPlanButtonText: { color: colors.ink, fontSize: 13, fontWeight: "800" },
   todayContextRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
     borderRadius: 12,
-    backgroundColor: "rgba(255,255,255,0.045)",
+    backgroundColor: colors.rule,
     paddingHorizontal: 11,
     paddingVertical: 10,
   },
   todayContextIcon: { width: 28, height: 28, alignItems: "center", justifyContent: "center" },
   todayContextCopy: { flex: 1 },
-  todayContextTitle: { color: "#f0f1fa", fontSize: 13, fontWeight: "800" },
-  todayContextSummary: { color: "#858ba4", fontSize: 11, lineHeight: 15, marginTop: 2 },
+  todayContextTitle: { color: colors.muted, fontSize: 13, fontWeight: "800" },
+  todayContextSummary: { color: colors.muted, fontSize: 11, lineHeight: 15, marginTop: 2 },
   adjustRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  adjustText: { color: "#9aa1c3", fontSize: 13 },
+  adjustText: { color: colors.muted, fontSize: 13 },
   helpIcon: { paddingHorizontal: 4, paddingVertical: 2 },
-  helpText: { color: "#9aa1c3", fontSize: 12 },
+  helpText: { color: colors.muted, fontSize: 12 },
   modalBackdrop: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.6)",
+    backgroundColor: colors.overlay,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 24,
@@ -2486,10 +2411,10 @@ const styles = StyleSheet.create({
   profileModalCard: {
     width: "100%",
     maxWidth: 360,
-    backgroundColor: "#161625",
+    backgroundColor: colors.muted,
     borderRadius: 24,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(255,255,255,0.12)",
+    borderColor: colors.rule,
     alignItems: "center",
     paddingHorizontal: 24,
     paddingVertical: 28,
@@ -2499,38 +2424,38 @@ const styles = StyleSheet.create({
     width: 148,
     height: 148,
     borderRadius: 40,
-    backgroundColor: "rgba(255,255,255,0.1)",
+    backgroundColor: colors.rule,
   },
   profileModalInitial: {
-    color: "#fff",
+    color: colors.ink,
     fontSize: 52,
     fontWeight: "800",
   },
   profileModalName: {
-    color: "#fff",
+    color: colors.ink,
     fontSize: 24,
     fontWeight: "800",
     textAlign: "center",
   },
   profileModalDescription: {
-    color: "#d5d9ea",
+    color: colors.muted,
     fontSize: 15,
     lineHeight: 22,
     textAlign: "center",
   },
   profileModalDescriptionMuted: {
-    color: "#8e96ad",
+    color: colors.muted,
     fontSize: 14,
     lineHeight: 21,
     textAlign: "center",
   },
   modalCard: {
     width: "100%",
-    backgroundColor: "#111427",
+    backgroundColor: colors.surface,
     borderRadius: 16,
     padding: 18,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(255,255,255,0.08)",
+    borderColor: colors.rule,
     gap: 8,
   },
   calendarModalHeaderRow: {
@@ -2544,7 +2469,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.08)",
+    backgroundColor: colors.rule,
   },
   graphContainer: {
     flexDirection: "row",
@@ -2562,23 +2487,23 @@ const styles = StyleSheet.create({
   graphBar: {
     width: "85%",
     borderRadius: 8,
-    backgroundColor: "#7b61ff",
+    backgroundColor: colors.accent,
     minHeight: 8,
   },
   graphValueText: {
-    color: "#d8daec",
+    color: colors.muted,
     fontSize: 11,
     fontWeight: "700",
     textAlign: "center",
   },
   graphLabelText: {
-    color: "#9aa1c3",
+    color: colors.muted,
     fontSize: 10,
     fontWeight: "600",
     textAlign: "center",
   },
   heatmapWrap: { gap: 10, marginTop: 6 },
-  heatmapLegendRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  heatmapLegendRow: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 6 },
   heatmapLegendBox: { width: 12, height: 12, borderRadius: 3 },
   heatmapMonthHeader: { flexDirection: "row", alignItems: "center" },
   heatmapAxisSpacer: { width: 16 },
@@ -2587,54 +2512,87 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: 0,
     width: 32,
-    color: "#9aa1c3",
+    color: colors.muted,
     fontSize: 10,
     fontWeight: "700",
     textAlign: "center",
   },
   heatmapScrollContent: { paddingVertical: 2, paddingRight: 10 },
   heatmapBodyRow: { flexDirection: "row", alignItems: "flex-start", gap: 6 },
-  heatmapYAxis: { width: 12, paddingTop: 18, gap: 4 },
-  heatmapYAxisSlot: { height: 12, justifyContent: "center", alignItems: "center" },
-  heatmapYAxisLabel: { color: "#9aa1c3", fontSize: 9, fontWeight: "700", lineHeight: 10, textAlign: "center" },
-  heatmapGrid: { flexDirection: "row", gap: 4 },
-  heatmapWeekCol: { gap: 4 },
+  heatmapYAxis: { width: 20, paddingTop: 22, gap: HEATMAP_CELL_GAP },
+  heatmapYAxisSlot: { height: HEATMAP_CELL_SIZE, justifyContent: "center", alignItems: "center" },
+  heatmapYAxisLabel: { color: colors.muted, fontSize: 9, fontWeight: "700", lineHeight: 10, textAlign: "center" },
+  heatmapGrid: { flexDirection: "row", gap: HEATMAP_CELL_GAP },
+  heatmapWeekCol: { gap: HEATMAP_CELL_GAP },
   heatmapCell: {
-    width: 12,
-    height: 12,
+    width: HEATMAP_CELL_SIZE,
+    height: HEATMAP_CELL_SIZE,
     borderRadius: 3,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(255,255,255,0.08)",
+    borderColor: colors.rule,
   },
-  heatmapFuture: { backgroundColor: "rgba(255,255,255,0.02)" },
-  heatmapLevel0: { backgroundColor: "rgba(255,255,255,0.08)" },
-  heatmapLevel1: { backgroundColor: "rgba(96,165,250,0.45)" },
-  heatmapLevel2: { backgroundColor: "rgba(96,165,250,0.7)" },
-  heatmapLevel3: { backgroundColor: "#60a5fa" },
+  heatmapFuture: { backgroundColor: colors.rule },
+  heatmapLevel0: { backgroundColor: colors.rule },
+  heatmapLevel1: { backgroundColor: colors.accentSoft },
+  heatmapLevel2: { backgroundColor: colors.accentSoft },
+  heatmapLevel3: { backgroundColor: colors.muted },
   dayModalScroll: {
     maxHeight: 320,
     marginTop: 6,
   },
   dayWorkoutCard: {
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: colors.rule,
     borderRadius: 12,
     padding: 12,
     gap: 4,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(255,255,255,0.08)",
+    borderColor: colors.rule,
   },
-  dayWorkoutTitle: { color: "#fff", fontSize: 14, fontWeight: "700" },
+  dayWorkoutTitle: { color: colors.ink, fontSize: 14, fontWeight: "700" },
   dayExerciseBlock: { marginTop: 8, gap: 2 },
-  dayExerciseName: { color: "#d8daec", fontSize: 13, fontWeight: "700" },
-  modalTitle: { color: "#fff", fontSize: 18, fontWeight: "800", marginBottom: 4 },
+  dayExerciseName: { color: colors.muted, fontSize: 13, fontWeight: "700" },
+  modalTitle: { color: colors.ink, fontSize: 18, fontWeight: "800", marginBottom: 4 },
   chartRangeSpacer: { height: 34 },
   chartToggleButton: {
     alignSelf: "flex-start",
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(255,255,255,0.28)",
+    borderColor: colors.rule,
     borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 6,
   },
-  chartToggleButtonText: { color: "#d8daec", fontSize: 12, fontWeight: "700" },
-});
+  chartToggleButtonText: { color: colors.muted, fontSize: 12, fontWeight: "700" },
+}); return { ...base, ...notebookSheet({
+  container: { flex: 1, backgroundColor: colors.canvas },
+  header: { width: "100%", maxWidth: 760, alignSelf: "center", flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 8, paddingHorizontal: 20, paddingTop: 8, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: colors.rule },
+  iconContainer: { flexDirection: "row", alignItems: "center", gap: 4 }, headerUtility: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
+  headerAvatar: { width: 40, height: 40, borderRadius: 20, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
+  scrollContent: { width: "100%", maxWidth: 760, alignSelf: "center", paddingHorizontal: 20, paddingTop: 20, paddingBottom: 40 },
+  pageHeading: { gap: 4, marginBottom: 16 }, pageTitle: { color: colors.ink, fontFamily: notebookFonts.editorial, fontSize: 28, lineHeight: 36 },
+  homePhaseRow: { flexDirection: "row", borderTopWidth: 1, borderBottomWidth: 1, borderColor: colors.rule, marginBottom: 20 },
+  homePhaseSelector: { flex: 1, paddingVertical: 12, paddingHorizontal: 12, backgroundColor: "transparent", minHeight: 80, gap: 4 },
+  section: { marginTop: 0 }, card: { backgroundColor: "transparent", borderRadius: 0, borderWidth: 0, borderTopWidth: 1, borderTopColor: colors.rule, paddingHorizontal: 0, paddingVertical: 20, gap: 12 },
+  outlinedPanel: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.rule, borderRadius: 8, paddingHorizontal: 16, paddingVertical: 16, marginVertical: 16 },
+  contextActions: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.rule, borderRadius: 8, paddingHorizontal: 16, paddingVertical: 16, marginVertical: 20 },
+  cardHeading: { color: colors.ink, fontSize: 20, fontWeight: "600", flexShrink: 1 }, sectionTitle: { color: colors.ink, fontSize: 20, fontWeight: "600" },
+  workoutSection: { borderLeftWidth: 3, borderLeftColor: colors.accent, paddingLeft: 16, paddingVertical: 4, gap: 8, marginBottom: 24 },
+  workoutTitle: { color: colors.ink, fontFamily: notebookFonts.editorial, fontSize: 26, lineHeight: 32 },
+  primaryButtonWide: { backgroundColor: colors.primary, minHeight: 48, borderRadius: 8, padding: 12, alignItems: "center", justifyContent: "center", marginTop: 16 }, primaryText: { color: colors.onPrimary, fontSize: 16, fontWeight: "600" },
+  secondaryButtonWide: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, minHeight: 48, borderRadius: 8, padding: 12, alignItems: "center", justifyContent: "center" }, secondaryButtonText: { color: colors.ink, fontSize: 16, fontWeight: "600" },
+  metricValue: { color: colors.ink, fontSize: 28, fontWeight: "600" }, metricChip: { flex: 1, backgroundColor: "transparent", borderWidth: 0, borderRadius: 0, paddingHorizontal: 4, paddingVertical: 12, minHeight: 64 },
+  metricChipQuarter: { flexBasis: "42%", flexGrow: 1 }, metricRowWrap: { flexWrap: "wrap" }, metricSub: { color: colors.muted, fontSize: 14 },
+  weeklyRow: { flexDirection: "row", alignItems: "center", gap: 12, borderBottomWidth: 1, borderBottomColor: colors.rule, minHeight: 72, paddingVertical: 12 }, weeklyLabel: { color: colors.ink, fontSize: 16, fontWeight: "600" }, weeklyValue: { color: colors.ink, fontSize: 18, fontWeight: "600", flexShrink: 1 },
+  snapshotInfoBtn: { minWidth: 44, minHeight: 44, alignItems: "center", justifyContent: "center" },
+  firstTimeBannerCard: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.rule, borderRadius: 8, paddingHorizontal: 16, paddingVertical: 16, marginBottom: 20 },
+  todayPlanLinkButton: { minHeight: 48, justifyContent: "center", backgroundColor: "transparent", borderWidth: 0, paddingHorizontal: 0 }, todayPlanLinkText: { color: colors.accent, fontSize: 16, fontWeight: "600" },
+  modalBackdrop: { flex: 1, backgroundColor: colors.overlay, justifyContent: "flex-end" }, modalCard: { width: "100%", maxWidth: 560, backgroundColor: colors.surface, borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 20 },
+  profileModalCard: { ...base.profileModalCard, backgroundColor: colors.surface, borderColor: colors.rule, borderRadius: 8 },
+  modalTitle: { color: colors.ink, fontFamily: notebookFonts.editorial, fontSize: 22, fontWeight: "600", marginBottom: 16 },
+  calendarCloseButton: { minWidth: 44, minHeight: 44, alignItems: "center", justifyContent: "center" }, calendarNavButton: { minWidth: 44, minHeight: 44, alignItems: "center", justifyContent: "center" },
+  calendarDayCellSelected: { backgroundColor: colors.primary }, calendarDayTextSelected: { color: colors.onPrimary }, calendarDayCellToday: { borderWidth: 1, borderColor: colors.accent }, calendarWorkoutDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: colors.accent },
+  phaseChoiceActive: { backgroundColor: colors.subtle, borderBottomColor: colors.ink },
+  firstTimeActions: { flexDirection: "column", gap: 12 }, firstTimeActionButton: { flex: 0 },
+  entitlementBadgeActive: { backgroundColor: colors.accentSoft }, entitlementBadgeTextActive: { color: colors.accent },
+  metricDeltaUp: { color: colors.muted }, metricDeltaDown: { color: colors.muted }, metricDeltaNeutral: { color: colors.muted },
+  heatmapLevel0: { backgroundColor: colors.subtle }, heatmapLevel1: { backgroundColor: colors.rule }, heatmapLevel2: { backgroundColor: colors.muted }, heatmapLevel3: { backgroundColor: colors.accent },
+}) }; };

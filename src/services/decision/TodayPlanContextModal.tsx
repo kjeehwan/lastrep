@@ -1,5 +1,6 @@
 import { useNotebook, useNotebookStyles, notebookSheet } from "../../ui/notebook/Notebook";
 import type { NotebookColors } from "../../ui/notebook/tokens";
+import { NotebookModal } from "../../ui/notebook/NotebookModal";
 import { AdaptiveModalCard } from "../../ui/AdaptiveModalCard";
 import React, { useState } from "react";
 import {
@@ -83,6 +84,7 @@ function ChoiceRow<T extends string>({
 
 export function TodayPlanContextModal({ visible, context, plan, saving, onClose, onSave }: Props) {
   const { fontsLoaded } = useNotebook();
+  const Surface = fontsLoaded ? NotebookModal : Modal;
   const notebookStyles = useNotebookStyles(createNotebookStyles);
   const styles = fontsLoaded ? notebookStyles : legacyStyles;
   const insets = useSafeAreaInsets();
@@ -144,7 +146,7 @@ export function TodayPlanContextModal({ visible, context, plan, saving, onClose,
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Surface visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <KeyboardAvoidingView
         style={styles.overlay}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -244,7 +246,7 @@ export function TodayPlanContextModal({ visible, context, plan, saving, onClose,
           </View>
         </AdaptiveModalCard>
       </KeyboardAvoidingView>
-    </Modal>
+    </Surface>
   );
 }
 
