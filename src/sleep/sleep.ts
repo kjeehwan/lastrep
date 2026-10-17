@@ -1,5 +1,9 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { mutateSleepJournal } from "./sleepJournal";
+import { commitManualSleep, deriveSleepDays, emptySleepEntry, sleepDateKey, validateSleepHours } from "./sleepSessionModel";
+import { providerSleepEntry, readAllSleepPages, reconcileHealthSleep, type ProviderSleepRecord } from "./healthSleepImport";
 import { Platform } from "react-native";
-import { doc, getDoc, setDoc, Timestamp } from "firebase/firestore";
+import { collection, doc, getDoc, Timestamp } from "firebase/firestore";
 import { db } from "../config/firebaseConfig";
 import {
   SdkAvailabilityStatus,
@@ -45,27 +49,7 @@ const LASTREP_ANDROID_PACKAGES = ["com.kjeehwan.lastrep.dev", "com.kjeehwan.last
 const loadHealthConnect = async (): Promise<HealthConnectModule> =>
   import("react-native-health-connect");
 
-const asIso = (date: Date) => date.toISOString();
 
-const getSleepWindow = (now = new Date()) => {
-  const start = new Date(now);
-  start.setDate(start.getDate() - 1);
-  start.setHours(18, 0, 0, 0);
-
-  const end = new Date(now);
-  end.setHours(Math.min(now.getHours(), 12), now.getMinutes(), 0, 0);
-  if (end <= start) {
-    end.setTime(now.getTime());
-  }
-
-  return { start, end };
-};
-
-const getOverlapMs = (aStartMs: number, aEndMs: number, bStartMs: number, bEndMs: number) => {
-  const start = Math.max(aStartMs, bStartMs);
-  const end = Math.min(aEndMs, bEndMs);
-  return Math.max(0, end - start);
-};
 
 const normalizeSleepHours = (value: unknown): number | null => {
   if (typeof value !== "number" || !Number.isFinite(value)) return null;
@@ -104,98 +88,7 @@ const normalizeRecentNightlyHours = (value: unknown): SleepNightlySummary[] => {
     .slice(0, SLEEP_HISTORY_DAYS);
 };
 
-const roundSleepHours = (value: number) => Math.round(value * 10) / 10;
-const inferOriginLabel = (originAppPackage: string | null): string | null => {
-  if (!originAppPackage) return null;
-  if (originAppPackage.includes("shealth")) return "Samsung Health / Galaxy Watch";
-  if (originAppPackage.includes("google.android.apps.fitness")) return "Google Fit";
-  return "Health Connect";
-};
 
-const formatDateKey = (date: Date) =>
-  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
-    date.getDate()
-  ).padStart(2, "0")}`;
-
-const upsertRecentNightlySummary = (
-  summaries: SleepNightlySummary[],
-  next: SleepNightlySummary
-): SleepNightlySummary[] => {
-  const map = new Map<string, SleepNightlySummary>();
-  for (const item of summaries) {
-    map.set(item.dateKey, item);
-  }
-  map.set(next.dateKey, next);
-  return Array.from(map.values())
-    .sort((a, b) => b.dateKey.localeCompare(a.dateKey))
-    .slice(0, SLEEP_HISTORY_DAYS);
-};
-
-const getRecentHealthNightlySummaries = async (
-  healthConnect: HealthConnectModule,
-  now: Date
-): Promise<SleepNightlySummary[]> => {
-  const start = new Date(now);
-  start.setDate(start.getDate() - SLEEP_HISTORY_DAYS);
-  start.setHours(0, 0, 0, 0);
-
-  const records = await healthConnect.readRecords("SleepSession", {
-    timeRangeFilter: {
-      operator: "between",
-      startTime: asIso(start),
-      endTime: asIso(now),
-    },
-    ascendingOrder: false,
-  });
-
-  const grouped = new Map<string, { totalMs: number; latestEndMs: number }>();
-  for (const record of records.records) {
-    const startMs = new Date(record.startTime).getTime();
-    const endMs = new Date(record.endTime).getTime();
-    if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) continue;
-    const dateKey = formatDateKey(new Date(endMs));
-    const existing = grouped.get(dateKey);
-    const totalMs = (existing?.totalMs ?? 0) + (endMs - startMs);
-    const latestEndMs = Math.max(existing?.latestEndMs ?? 0, endMs);
-    grouped.set(dateKey, { totalMs, latestEndMs });
-  }
-
-  return Array.from(grouped.entries())
-    .map(([dateKey, row]) => ({
-      dateKey,
-      sleepHours: roundSleepHours(row.totalMs / (60 * 60 * 1000)),
-      source: "health" as const,
-      recordedAt: Timestamp.fromMillis(row.latestEndMs),
-    }))
-    .filter((row) => row.sleepHours > 0)
-    .sort((a, b) => b.dateKey.localeCompare(a.dateKey))
-    .slice(0, SLEEP_HISTORY_DAYS);
-};
-
-const saveHealthSleepSample = async (
-  uid: string,
-  sleepHours: number,
-  sampleRecordedAt: Timestamp,
-  syncedAt: Timestamp,
-  recentNightlyHours: SleepNightlySummary[],
-  originAppPackage: string | null
-) => {
-  await setDoc(
-    doc(db, USERS_COLLECTION, uid),
-    {
-      [USER_SLEEP_PROFILE_FIELD]: {
-        [SLEEP_PROFILE_FIELDS.latestSleepHours]: sleepHours,
-        [SLEEP_PROFILE_FIELDS.source]: "health",
-        [SLEEP_PROFILE_FIELDS.sampleRecordedAt]: sampleRecordedAt,
-        [SLEEP_PROFILE_FIELDS.lastSyncedAt]: syncedAt,
-        [SLEEP_PROFILE_FIELDS.recentNightlyHours]: recentNightlyHours,
-        [SLEEP_PROFILE_FIELDS.originAppPackage]: originAppPackage,
-        [SLEEP_PROFILE_FIELDS.originLabel]: inferOriginLabel(originAppPackage),
-      },
-    },
-    { merge: true }
-  );
-};
 
 export const buildSleepProfile = (
   latestSleepHours: number | null,
@@ -218,13 +111,14 @@ export const buildSleepProfile = (
 export const getSleepProfile = async (uid: string): Promise<SleepProfile> => {
   const snapshot = await getDoc(doc(db, USERS_COLLECTION, uid));
   const data = snapshot.data()?.[USER_SLEEP_PROFILE_FIELD] as Record<string, unknown> | undefined;
+  const summary = data?.journalSummary && typeof data.journalSummary === "object" ? data.journalSummary as Record<string, unknown> : data;
 
   return buildSleepProfile(
-    normalizeSleepHours(data?.[SLEEP_PROFILE_FIELDS.latestSleepHours]),
-    normalizeSource(data?.[SLEEP_PROFILE_FIELDS.source]),
-    normalizeTimestamp(data?.[SLEEP_PROFILE_FIELDS.sampleRecordedAt]),
+    normalizeSleepHours(summary?.[SLEEP_PROFILE_FIELDS.latestSleepHours]),
+    normalizeSource(summary?.[SLEEP_PROFILE_FIELDS.source]),
+    normalizeTimestamp(summary?.[SLEEP_PROFILE_FIELDS.sampleRecordedAt]),
     normalizeTimestamp(data?.[SLEEP_PROFILE_FIELDS.lastSyncedAt]),
-    normalizeRecentNightlyHours(data?.[SLEEP_PROFILE_FIELDS.recentNightlyHours]),
+    normalizeRecentNightlyHours(summary?.[SLEEP_PROFILE_FIELDS.recentNightlyHours]),
     normalizeString(data?.[SLEEP_PROFILE_FIELDS.originAppPackage]),
     normalizeString(data?.[SLEEP_PROFILE_FIELDS.originLabel])
   );
@@ -232,6 +126,7 @@ export const getSleepProfile = async (uid: string): Promise<SleepProfile> => {
 
 export const getHealthConnectAvailability = async (): Promise<HealthConnectAvailability> => {
   if (Platform.OS !== "android") return "unsupported";
+  if (Number(Platform.Version) < 28) return "unsupported";
   const healthConnect = await loadHealthConnect();
   const sdkStatus = await healthConnect.getSdkStatus();
 
@@ -315,100 +210,72 @@ export const openHealthConnectAppPermissionsScreen = async (): Promise<boolean> 
   }
 };
 
-export const syncSleepFromHealthConnect = async (
-  uid: string,
-  now = new Date()
-): Promise<SleepSyncResult> => {
+const syncInFlight = new Map<string, Promise<SleepSyncResult>>();
+export const syncSleepFromHealthConnect = (uid: string, now = new Date()): Promise<SleepSyncResult> => {
+  const pending = syncInFlight.get(uid);
+  if (pending) return pending;
+  const task = importHealthSleep(uid, now).finally(() => syncInFlight.delete(uid));
+  syncInFlight.set(uid, task);
+  return task;
+};
+async function importHealthSleep(uid: string, now: Date): Promise<SleepSyncResult> {
   if (Platform.OS !== "android") return { status: "unsupported" };
-
   try {
+    if (!(await hasHealthSyncConsent(uid))) return { status: "permission_denied" };
     const availability = await getHealthConnectAvailability();
     if (availability === "provider_update_required") return { status: "provider_update_required" };
     if (availability !== "available") return { status: "unavailable" };
-
-    const healthConnect = await loadHealthConnect();
-    await healthConnect.initialize();
-    const hasPermission = await hasHealthSleepPermission();
-    if (!hasPermission) return { status: "permission_denied" };
-
-    const { start, end } = getSleepWindow(now);
-    const records = await healthConnect.readRecords("SleepSession", {
-      timeRangeFilter: {
-        operator: "between",
-        startTime: asIso(start),
-        endTime: asIso(end),
-      },
-      ascendingOrder: false,
-    });
-
-    if (!records.records.length) {
-      console.log("[sleep_sync]", {
-        event: "no_data",
-        windowStart: start.toISOString(),
-        windowEnd: end.toISOString(),
-      });
-      return { status: "no_data" };
-    }
-
-    const startMs = start.getTime();
-    const endMs = end.getTime();
-    let totalSleepMs = 0;
-    let latestRecordEndMs: number | null = null;
-    let latestRecordOriginPackage: string | null = null;
-
-    for (const record of records.records) {
-      const recordStartMs = new Date(record.startTime).getTime();
-      const recordEndMs = new Date(record.endTime).getTime();
-      totalSleepMs += getOverlapMs(recordStartMs, recordEndMs, startMs, endMs);
-      if (latestRecordEndMs == null || recordEndMs > latestRecordEndMs) {
-        latestRecordEndMs = recordEndMs;
-        latestRecordOriginPackage = normalizeString(
-          (record as { metadata?: { dataOrigin?: string } }).metadata?.dataOrigin
-        );
-      }
-    }
-
-    if (totalSleepMs <= 0 || latestRecordEndMs == null) {
-      return { status: "no_data" };
-    }
-
-    const sleepHours = roundSleepHours(totalSleepMs / (60 * 60 * 1000));
-    const sampleRecordedAt = Timestamp.fromMillis(latestRecordEndMs);
-    const syncedAt = Timestamp.fromDate(now);
-    const recentNightlyHours = await getRecentHealthNightlySummaries(healthConnect, now);
-
-    await saveHealthSleepSample(
-      uid,
-      sleepHours,
-      sampleRecordedAt,
-      syncedAt,
-      recentNightlyHours,
-      latestRecordOriginPackage
-    );
-
-    console.log("[sleep_sync]", {
-      event: "sync_success",
-      source: "health",
-      sleepHours,
-      sampleRecordedAt: sampleRecordedAt.toDate().toISOString(),
-      syncedAt: syncedAt.toDate().toISOString(),
-      recordCount: records.records.length,
-    });
-
-    return {
-      status: "success",
-      sleepHours,
-      sampleRecordedAt,
+    if (!(await hasHealthSleepPermission())) return { status: "permission_denied" };
+    const health = await loadHealthConnect();
+    await health.initialize();
+    const deviceKey = "sleep-import-device-v1";
+    let device = await AsyncStorage.getItem(deviceKey);
+    if (!device) { device = doc(collection(db, "_ids")).id; await AsyncStorage.setItem(deviceKey, device); }
+    const tokenKey = "sleep-changes-v1:" + uid + ":" + device;
+    let token = await AsyncStorage.getItem(tokenKey);
+    const authorize = async () => {
+      if (!(await hasHealthSyncConsent(uid)) || !(await hasHealthSleepPermission())) throw Error("Sleep access was removed. No data was imported.");
     };
+    // Establish a change cursor BEFORE the full read; replay is idempotent by provider identity.
+    let changes = await health.getChanges(token ? { changesToken: token } : { recordTypes: ["SleepSession"] });
+    const fullRead = !token || changes.changesTokenExpired;
+    if (changes.changesTokenExpired) { changes = await health.getChanges({ recordTypes: ["SleepSession"] }); token = null; }
+    const start = new Date(now); start.setDate(start.getDate() - SLEEP_HISTORY_DAYS); start.setHours(0, 0, 0, 0);
+    const records: ProviderSleepRecord[] = [];
+    if (fullRead) records.push(...await readAllSleepPages(async (pageToken) => {
+      await authorize();
+      return health.readRecords("SleepSession", { timeRangeFilter: { operator: "between", startTime: start.toISOString(), endTime: now.toISOString() }, ascendingOrder: false, ...(pageToken ? { pageToken } : {}) });
+    }));
+    const deleted: string[] = [], seenTokens = new Set<string>();
+    while (true) {
+      if (changes.changesTokenExpired) throw Error("Health Connect history changed during sync. Please retry.");
+      for (const item of changes.upsertionChanges) {
+        if ("startTime" in item.record && "endTime" in item.record) records.push(item.record as ProviderSleepRecord);
+      }
+      deleted.push(...changes.deletionChanges.map((item) => item.recordId));
+      token = changes.nextChangesToken;
+      if (!changes.hasMore) break;
+      if (seenTokens.has(token)) throw Error("Health Connect repeated a changes page. Please retry.");
+      seenTokens.add(token); await authorize(); changes = await health.getChanges({ changesToken: token });
+    }
+    const incoming = [...new Map(records.filter((record) => Date.parse(record.endTime) <= now.getTime() && Date.parse(record.endTime) >= start.getTime()).map((record) => {
+      const row = providerSleepEntry(record, device!); return [row.id, row] as const;
+    })).values()];
+    // Upserts followed by deletion in one feed must finish deleted.
+    const imported = incoming.filter((entry) => !deleted.includes(entry.providerId!));
+    const previous = await getSleepProfile(uid);
+    const origin = previous.originAppPackage ?? imported[0]?.origin ?? null;
+    const next = await mutateSleepJournal(uid, (entries) => reconcileHealthSleep(entries, imported, deleted, device!, fullRead ? { start: start.getTime(), end: now.getTime() } : undefined), { syncedAt: now, origin, authorize });
+    await AsyncStorage.setItem(tokenKey, token!);
+    await AsyncStorage.setItem(`sleep-last-check:${uid}`, now.toISOString());
+    const latest = deriveSleepDays(next, origin).days[0];
+    if (!incoming.length && !deleted.length) return { status: "no_data" };
+    if (!latest) return { status: "no_data" };
+    return { status: "success", sleepHours: latest.hours, sampleRecordedAt: Timestamp.fromMillis(latest.recordedAtMs ?? now.getTime()) };
   } catch (error) {
-    const message = (error as { message?: string })?.message ?? "Failed to sync sleep data.";
-    console.log("[sleep_sync]", {
-      event: "sync_error",
-      message,
-    });
-    return { status: "error", message };
+    return { status: "error", message: (error as Error)?.message ?? "Could not sync sleep. Saved records are unchanged." };
   }
-};
+}
 
 export const autoSyncSleepFromHealthConnectIfEligible = async (
   uid: string,
@@ -425,9 +292,9 @@ export const autoSyncSleepFromHealthConnectIfEligible = async (
     const hasPermission = await hasHealthSleepPermission();
     if (!hasPermission) return "skipped";
 
-    const profile = await getSleepProfile(uid);
     const minIntervalMinutes = options?.minIntervalMinutes ?? 30;
-    const lastSyncedAt = profile.lastSyncedAt?.toDate() ?? null;
+    const savedCheck = await AsyncStorage.getItem(`sleep-last-check:${uid}`);
+    const lastSyncedAt = savedCheck ? new Date(savedCheck) : null;
     if (lastSyncedAt) {
       const minutesSinceLastSync = (Date.now() - lastSyncedAt.getTime()) / (60 * 1000);
       if (minutesSinceLastSync < minIntervalMinutes) return "skipped";
@@ -440,52 +307,13 @@ export const autoSyncSleepFromHealthConnectIfEligible = async (
   }
 };
 
-export const saveManualSleepSample = async (
-  uid: string,
-  sleepHours: number,
-  now = new Date()
-): Promise<void> => {
-  const dateKey = formatDateKey(now);
-  await saveManualSleepForDateKey(uid, sleepHours, dateKey, now);
+export const saveManualSleepSample = async (uid: string, hours: number, now = new Date()): Promise<void> => {
+  await saveManualSleepForDateKey(uid, hours, sleepDateKey(now), now);
 };
-
-export const saveManualSleepForDateKey = async (
-  uid: string,
-  sleepHours: number,
-  dateKey: string,
-  now = new Date()
-): Promise<void> => {
-  const nowTimestamp = Timestamp.fromDate(now);
-  const roundedHours = roundSleepHours(sleepHours);
-  const profile = await getSleepProfile(uid);
-  const manualSummary: SleepNightlySummary = {
-    dateKey,
-    sleepHours: roundedHours,
-    source: "manual",
-    recordedAt: nowTimestamp,
-  };
-  const recentNightlyHours = upsertRecentNightlySummary(profile.recentNightlyHours, manualSummary);
-  await setDoc(
-    doc(db, USERS_COLLECTION, uid),
-    {
-      [USER_SLEEP_PROFILE_FIELD]: {
-        [SLEEP_PROFILE_FIELDS.latestSleepHours]: roundedHours,
-        [SLEEP_PROFILE_FIELDS.source]: "manual",
-        [SLEEP_PROFILE_FIELDS.sampleRecordedAt]: nowTimestamp,
-        [SLEEP_PROFILE_FIELDS.lastSyncedAt]: nowTimestamp,
-        [SLEEP_PROFILE_FIELDS.recentNightlyHours]: recentNightlyHours,
-        [SLEEP_PROFILE_FIELDS.originAppPackage]: null,
-        [SLEEP_PROFILE_FIELDS.originLabel]: null,
-      },
-    },
-    { merge: true }
-  );
-  console.log("[sleep_sync]", {
-    event: "manual_override_set",
-    dateKey,
-    sleepHours: roundedHours,
-    source: "manual",
-  });
+export const saveManualSleepForDateKey = async (uid: string, hours: number, dateKey: string, now = new Date()): Promise<void> => {
+  validateSleepHours(String(hours));
+  const entry = emptySleepEntry(doc(collection(db, "_ids")).id, dateKey, hours, now);
+  await mutateSleepJournal(uid, (entries) => commitManualSleep(entries, entry, null));
 };
 
 export const getSleepSampleAgeHours = (

@@ -72,6 +72,7 @@ import {
 } from "../../../src/sleep/sleep";
 import { getUserData } from "../../../src/userData";
 import { scheduleAfterInteractions } from "../../../src/utils/scheduleAfterInteractions";
+import { reconcileSleepTargetDraft } from "../../../src/sleep/sleepTargetDraft";
 
 const goals = [
   { key: "buildMuscle", label: "Build Muscle" },
@@ -337,6 +338,12 @@ export default function ProfileIndex() {
       const baseline = JSON.parse(initialSnapshotRef.current) as ProfileSnapshot;
       const local = JSON.parse(latestSnapshotRef.current) as ProfileSnapshot;
       let changed = false;
+      const sleepTarget = reconcileSleepTargetDraft(baseline.sleepTargetHours, local.sleepTargetHours, data.sleepSettings?.targetHours);
+      if (sleepTarget.baseline !== baseline.sleepTargetHours) {
+        setSleepTargetHours(sleepTarget.draft);
+        baseline.sleepTargetHours = sleepTarget.baseline;
+        changed = true;
+      }
       const remoteLabels = normalizeMealLabels(data.mealLabels);
       const reconciled = reconcileMealLabelDraft(baseline.mealLabels, local.mealLabels, remoteLabels);
       if (JSON.stringify(reconciled.baseline) !== JSON.stringify(baseline.mealLabels)) {

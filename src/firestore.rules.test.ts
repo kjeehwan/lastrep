@@ -243,6 +243,24 @@ describeIfFirestoreEmulator("firestore entitlement rules", () => {
     await assertSucceeds(deleteDoc(savedRef));
   });
 
+  it("allows only the owner to store valid sleep sessions", async () => {
+    const alice = testEnv.authenticatedContext("alice").firestore();
+    const path = [USERS_COLLECTION, "alice", "sleepSessions", "session-one"] as const;
+    const row = { id: "session-one", dateKey: "2026-10-17", source: "manual", kind: "duration", hours: 7.5, excluded: false, providerDeleted: false };
+    await assertSucceeds(setDoc(doc(alice, ...path), row));
+    await assertSucceeds(getDoc(doc(alice, ...path)));
+    const bob = testEnv.authenticatedContext("bob").firestore();
+    await assertFails(getDoc(doc(bob, ...path)));
+    await assertFails(setDoc(doc(bob, ...path), row));
+    await assertFails(updateDoc(doc(bob, ...path), { hours: 6 }));
+    await assertFails(deleteDoc(doc(bob, ...path)));
+    await assertFails(getDoc(doc(testEnv.unauthenticatedContext().firestore(), ...path)));
+    await assertFails(setDoc(doc(alice, ...path), { ...row, id: "different" }));
+    await assertFails(setDoc(doc(alice, ...path), { ...row, hours: 25 }));
+    await assertSucceeds(updateDoc(doc(alice, ...path), { excluded: true }));
+    await assertSucceeds(deleteDoc(doc(alice, ...path)));
+  });
+
   it.each(["workouts", "routines"])(
     "allows only the owner to manage %s",
     async (subcollection) => {
