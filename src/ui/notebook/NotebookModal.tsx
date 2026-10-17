@@ -1,13 +1,26 @@
-import React from "react";
-import { Modal, View, type ModalProps } from "react-native";
+import React, { useContext, useEffect, useState } from "react";
+import { Keyboard, Modal, Pressable, StyleSheet, View, type ModalProps } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { BottomTabBarHeightContext } from "expo-router/js-tabs";
+import { popupBottomSpace } from "./popupGeometry";
 
 /** Keep every notebook sheet inside system bars, including Android three-button navigation. */
 type NotebookModalProps = Omit<ModalProps, "onRequestClose"> & {
   onRequestClose: NonNullable<ModalProps["onRequestClose"]>;
+  dismissOnBackdropPress?: boolean;
 };
 
-export function NotebookModal({ children, ...props }: NotebookModalProps) {
+export function NotebookModal({ children, dismissOnBackdropPress = true, ...props }: NotebookModalProps) {
   const insets = useSafeAreaInsets();
-  return <Modal {...props}><View style={{ flex: 1, paddingTop: insets.top, paddingBottom: insets.bottom, paddingLeft: insets.left, paddingRight: insets.right }}>{children}</View></Modal>;
+  const tabs = useContext(BottomTabBarHeightContext);
+  const [keyboardVisible, setKeyboardVisible] = useState(Keyboard.isVisible());
+  useEffect(() => {
+    const show = Keyboard.addListener("keyboardDidShow", () => setKeyboardVisible(true));
+    const hide = Keyboard.addListener("keyboardDidHide", () => setKeyboardVisible(false));
+    return () => { show.remove(); hide.remove(); };
+  }, []);
+  return <Modal {...props}><View style={{ flex: 1 }}>
+    {dismissOnBackdropPress ? <Pressable style={StyleSheet.absoluteFill} accessibilityRole="button" accessibilityLabel="Dismiss popup outside content" onPress={props.onRequestClose} /> : null}
+    <View pointerEvents="box-none" style={{ flex: 1, paddingTop: insets.top, paddingBottom: popupBottomSpace(insets.bottom, tabs, keyboardVisible), paddingLeft: insets.left, paddingRight: insets.right }}>{children}</View>
+  </View></Modal>;
 }

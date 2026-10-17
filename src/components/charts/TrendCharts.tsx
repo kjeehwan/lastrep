@@ -1,6 +1,9 @@
-import React, { memo, useEffect, useMemo, useRef, useState } from "react";
-import { LayoutChangeEvent, NativeScrollEvent, NativeSyntheticEvent, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useNotebook, useNotebookStyles, notebookSheet } from "../../ui/notebook/Notebook";
+import type { NotebookColors } from "../../ui/notebook/tokens";
+import React, { memo, useMemo, useState } from "react";
+import { FlatList, LayoutChangeEvent, NativeScrollEvent, NativeSyntheticEvent, Pressable, StyleSheet, Text, View } from "react-native";
 import Svg, { Circle, Line, Polyline } from "react-native-svg";
+import { barViewportRange } from "./barViewport";
 
 export type ChartPoint = {
   key: string;
@@ -31,6 +34,7 @@ export const ChartRangeSelector = memo(function ChartRangeSelector({
   value,
   onChange,
 }: RangeSelectorProps) {
+  const { styles } = useChartAppearance();
   return (
     <View style={styles.rangeRow}>
       {CHART_RANGE_OPTIONS.map((option) => (
@@ -54,6 +58,7 @@ type EmptyStateProps = {
 };
 
 export function ChartEmptyState({ loading = false, text = "No data yet." }: EmptyStateProps) {
+  const { styles } = useChartAppearance();
   return <Text style={styles.emptyText}>{loading ? "Loading..." : text}</Text>;
 }
 
@@ -76,19 +81,15 @@ export const BarChart = memo(function BarChart({
   averageInRightLane = false,
   averageLabelText,
 }: BarChartProps) {
-  const scrollRef = useRef<ScrollView | null>(null);
+  const { styles, palette } = useChartAppearance();
   const [scrollX, setScrollX] = useState(0);
   const [viewportWidth, setViewportWidth] = useState(0);
   const shouldScroll = points.length > 8;
+  const newestFirst = useMemo(() => points.slice().reverse(), [points]);
   const max = useMemo(() => Math.max(1, ...points.map((point) => point.value, 0)), [points]);
   const dynamicVisibleMax = useMemo(() => {
     if (!shouldScroll || viewportWidth <= 0 || points.length === 0) return max;
-    const cellWidth = 46;
-    const gap = 6;
-    const slot = cellWidth + gap;
-    const visibleCount = Math.max(1, Math.ceil((viewportWidth + gap) / slot));
-    const startIndex = Math.max(0, Math.floor(scrollX / slot));
-    const endIndex = Math.min(points.length, startIndex + visibleCount);
+    const { start: startIndex, end: endIndex } = barViewportRange(points.length, scrollX, viewportWidth);
     let localMax = 1;
     for (let i = startIndex; i < endIndex; i += 1) {
       localMax = Math.max(localMax, points[i]?.value ?? 0);
@@ -108,14 +109,6 @@ export const BarChart = memo(function BarChart({
   const avgLaneWidth = averageInRightLane ? 42 : 0;
   const avgLabel =
     averageLabelText ?? `Avg ${Math.round(average ?? 0)}${unit ? ` ${unit}` : ""}`;
-
-  useEffect(() => {
-    if (!shouldScroll) return;
-    const timer = setTimeout(() => {
-      scrollRef.current?.scrollToEnd({ animated: false });
-    }, 0);
-    return () => clearTimeout(timer);
-  }, [shouldScroll, points]);
 
   const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     setScrollX(event.nativeEvent.contentOffset.x);
@@ -142,22 +135,28 @@ export const BarChart = memo(function BarChart({
         <View style={styles.barStageRow}>
           <View style={styles.barStageBars}>
             {shouldScroll ? (
-              <ScrollView
-                ref={scrollRef}
+              <FlatList
+                data={newestFirst}
+                inverted
                 horizontal
+                keyExtractor={(point) => point.key}
+                getItemLayout={(_data, index) => ({ length: 46, offset: index * 52, index })}
+                ItemSeparatorComponent={BarSeparator}
+                initialNumToRender={12}
+                maxToRenderPerBatch={12}
+                windowSize={5}
+                removeClippedSubviews={false}
+                style={{ height: chartHeight }}
                 onLayout={handleViewportLayout}
                 onScroll={handleScroll}
                 scrollEventThrottle={16}
                 showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.barScrollContent}
-              >
-                <View style={[styles.barRowScroll, { height: chartHeight }]}>
-                  {points.map((point) => {
+                renderItem={({ item: point }) => {
                     const selected = selectedKey != null && selectedKey === point.key;
                     const rawHeight = (point.value / scaledMax) * barTrackHeight;
                     const barHeight = Math.max(8, Math.min(barTrackHeight, Number.isFinite(rawHeight) ? rawHeight : 8));
                     return (
-                      <Pressable key={point.key} style={styles.barCellScroll} onPress={() => onSelect?.(point.key)}>
+                      <Pressable style={[styles.barCellScroll, { height: chartHeight }]} onPress={() => onSelect?.(point.key)}>
                         <Text style={styles.valueText}>
                           {Math.round(point.value)}
                         </Text>
@@ -167,19 +166,18 @@ export const BarChart = memo(function BarChart({
                             {
                               height: barHeight,
                               backgroundColor: selected
-                                ? CHART_COLORS.selected
+                                ? palette.selected
                                 : onSelect
-                                ? CHART_COLORS.bar
-                                : CHART_COLORS.barMuted,
+                                ? palette.bar
+                                : palette.barMuted,
                             },
                           ]}
                         />
                         <Text style={[styles.xLabel, selected && styles.xLabelSelected]}>{point.label}</Text>
                       </Pressable>
                     );
-                  })}
-                </View>
-              </ScrollView>
+                  }}
+              />
             ) : (
               <View style={[styles.barRow, { height: chartHeight }]}>
                 {points.map((point) => {
@@ -197,10 +195,10 @@ export const BarChart = memo(function BarChart({
                           {
                             height: barHeight,
                             backgroundColor: selected
-                              ? CHART_COLORS.selected
+                              ? palette.selected
                               : onSelect
-                              ? CHART_COLORS.bar
-                              : CHART_COLORS.barMuted,
+                              ? palette.bar
+                              : palette.barMuted,
                           },
                         ]}
                       />
@@ -232,6 +230,8 @@ export const BarChart = memo(function BarChart({
   );
 });
 
+function BarSeparator() { return <View style={{ width: 6 }} />; }
+
 type LineChartProps = {
   points: ChartPoint[];
   average?: number | null;
@@ -239,6 +239,7 @@ type LineChartProps = {
 };
 
 export const LineChart = memo(function LineChart({ points, average = null, unit }: LineChartProps) {
+  const { styles, palette } = useChartAppearance();
   const width = 320;
   const height = 150;
   const padX = 12;
@@ -270,7 +271,7 @@ export const LineChart = memo(function LineChart({ points, average = null, unit 
           y1={height - padBottom}
           x2={width - padX}
           y2={height - padBottom}
-          stroke={CHART_COLORS.grid}
+          stroke={palette.grid}
           strokeWidth={1}
         />
         {avgY != null ? (
@@ -279,14 +280,14 @@ export const LineChart = memo(function LineChart({ points, average = null, unit 
             y1={avgY}
             x2={width - padX}
             y2={avgY}
-            stroke={CHART_COLORS.avg}
+            stroke={palette.avg}
             strokeDasharray="3 3"
             strokeWidth={1.5}
           />
         ) : null}
-        <Polyline points={polylinePoints} fill="none" stroke={CHART_COLORS.line} strokeWidth={2.5} />
+        <Polyline points={polylinePoints} fill="none" stroke={palette.line} strokeWidth={2.5} />
         {nodes.map((node) => (
-          <Circle key={node.key} cx={node.x} cy={node.y} r={3} fill={CHART_COLORS.line} />
+          <Circle key={node.key} cx={node.x} cy={node.y} r={3} fill={palette.line} />
         ))}
       </Svg>
       {avgY != null ? (
@@ -306,7 +307,7 @@ export const LineChart = memo(function LineChart({ points, average = null, unit 
   );
 });
 
-const styles = StyleSheet.create({
+const legacyStyles = StyleSheet.create({
   rangeRow: { flexDirection: "row", gap: 8 },
   rangeChip: {
     borderRadius: 999,
@@ -336,8 +337,6 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   avgLabel: { color: CHART_COLORS.avg, fontSize: 11, fontWeight: "700", marginBottom: 4 },
-  barScrollContent: { paddingRight: 6 },
-  barRowScroll: { flexDirection: "row", alignItems: "flex-end", gap: 6 },
   barRow: { flexDirection: "row", alignItems: "flex-end", gap: 6 },
   barCellScroll: { width: 46, alignItems: "center", justifyContent: "flex-end", gap: 4 },
   barCell: { flex: 1, alignItems: "center", justifyContent: "flex-end", gap: 4 },
@@ -347,4 +346,20 @@ const styles = StyleSheet.create({
   xLabelSelected: { color: "#fff" },
   lineSvg: { height: 170, width: "100%" },
   labelsRow: { flexDirection: "row", justifyContent: "space-between", gap: 4, marginTop: 4 },
+});
+
+function useChartAppearance() {
+  const { colors, fontsLoaded } = useNotebook();
+  const notebookStyles = useNotebookStyles(createNotebookStyles);
+  const palette = useMemo(() => fontsLoaded ? { bar: colors.ink, barMuted: colors.muted, selected: colors.accent, line: colors.ink, avg: colors.accent, text: colors.ink, muted: colors.muted, grid: colors.rule } : CHART_COLORS, [colors, fontsLoaded]);
+  return { styles: fontsLoaded ? notebookStyles : legacyStyles, palette };
+}
+const createNotebookStyles = (colors: NotebookColors) => notebookSheet({
+  ...legacyStyles,
+  rangeChip: { ...legacyStyles.rangeChip, borderColor: colors.border, backgroundColor: colors.surface, borderRadius: 4, minHeight: 44, justifyContent: "center" },
+  rangeChipActive: { borderColor: colors.accent, backgroundColor: colors.accentSoft },
+  rangeChipText: { color: colors.muted, fontSize: 14, fontWeight: "600" }, rangeChipTextActive: { color: colors.ink },
+  emptyText: { color: colors.muted, fontSize: 14 }, avgLine: { ...legacyStyles.avgLine, borderTopColor: colors.accent },
+  avgLabel: { color: colors.accent, fontSize: 13, fontWeight: "600" }, valueText: { color: colors.ink, fontSize: 13, fontWeight: "600" },
+  xLabel: { color: colors.muted, fontSize: 13, textAlign: "center" }, xLabelSelected: { color: colors.ink }, bar: { ...legacyStyles.bar, borderRadius: 2 },
 });

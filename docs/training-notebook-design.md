@@ -1,13 +1,15 @@
 # Lastrep Training Notebook Design Specification
 
-Version: 1.7 | Date: October 16, 2026
+Version: 1.9 | Date: October 17, 2026
 
 Status: Workout, Home, Nutrition, Sleep, Profile and Settings browser design
 directions approved through iterative review. Shared rules below incorporate that
-feedback. Workout now has a native migration candidate on
-`feature/workout-notebook-ui`; native approval remains separate from the browser
-baseline. Other screens have not been migrated. See workout-notebook-migration.md
-for implementation boundaries and actual verification coverage.
+feedback. Workout's native migration was approved and merged in PR #34. Home's
+native migration was approved for merge on October 17 after phone review and
+iterative corrections. Account-write checks remain separate from read-only
+visual acceptance. Other screens have not been migrated. See
+workout-notebook-migration.md and home-notebook-migration.md for implementation
+boundaries and actual verification coverage.
 The initial Figma pair records an earlier Workout revision; the local browser
 prototype and decisions below capture the subsequent approved refinements.
 
@@ -678,6 +680,22 @@ states honestly; do not invent a smooth trend from one record.
   necessary), with an internal scroll area rather than empty tall sheets.
 - Heading/Close is outside body scrolling where practical. Actions remain
   reachable. Android Back and outside tap dismiss non-destructive sheets.
+- Popup cards stay above the persistent bottom tab bar, with 12 dp clearance;
+  use the actual tab-bar height, including its safe area, rather than adding
+  the Android inset twice. With the keyboard open, reserve keyboard space
+  instead of also reserving hidden tabs. Tall content scrolls within the card.
+- Backdrop dismiss targets are siblings of the card, never touchable ancestors
+  around its content. Touching text, whitespace, charts or inputs inside a card
+  must not dismiss it. Outside dismissal never saves or applies changes and
+  must respect an in-flight save guard.
+- Loading/saving status gets a reserved layout slot or replaces button copy;
+  do not move choices and Cancel when status text appears.
+- Filtering a chart updates its existing viewport without blanking, remounting
+  or delayed corrective scrolling. Date histories start at their newest records
+  and retain chronological visual order. Prefer a windowed, right-anchored list
+  over rendering the entire history and jumping after it becomes visible.
+- Profile preview content is centered within the card's scroll content, not
+  merely on its outer container. Badges hug their text rather than stretching.
 - If unsaved work would be lost, use explicit discard handling consistent with
   existing behavior. Do not pretend that every modal is swipe-dismissable today.
 - Gesture dismissal, if added, must not compete with form scrolling or cause
@@ -1179,6 +1197,18 @@ design fixtures, not production analytics verification.
 - Choosing another phase starts week 1 today; choosing the current phase does
   not reset its start. Saved phases are shared with the Profile browser study.
   Historical calendar phase labels are not rewritten by today's phase change.
+- Phase-picker rows are contiguous: no top margin or rounded inset that leaves
+  a sliver between a selected fill and the preceding horizontal rule.
+- Weekly detail puts its graph first, then Last 7 days / Previous 7 days. Workout
+  and volume compare actual sessions; calories and sleep show daily date/value
+  rows, coverage and explicitly labeled recorded-day averages. Missing chart
+  placeholders must not be presented as measured zero values. Existing Home
+  overview calculations are unchanged; do not silently relabel their denominator.
+- The workout contribution grid uses 44-dp day squares with 4-dp gaps, scrolling
+  horizontally to older weeks and opening at the newest weeks. Keep month labels
+  and all seven weekday labels (M T W T F S S) aligned to that geometry. Do not
+  rely on users inferring unlabeled rows. Future/out-of-range days are
+  disabled. A day tap opens its actual details, not an edit or save action.
 - At 200%: reflow phases, chart tabs, readiness inputs and measurement fields;
   enlarge chart rendering 2x and scroll to the selected point. Modal content
   scrolls independently while Close and footer actions stay reachable.

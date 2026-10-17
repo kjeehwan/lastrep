@@ -58,7 +58,8 @@ function createProfileTabLeaveListener(targetName: string) {
 }
 
 export default function TabsLayout() {
-  const notebook = usePathname().includes("/workout");
+  const pathname = usePathname();
+  const notebook = pathname.includes("/workout") || pathname === "/home";
   const paper = useColorScheme() === "dark" ? notebookDark : notebookPaper;
   const { fontScale } = useWindowDimensions();
   const insets = useSafeAreaInsets();

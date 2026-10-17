@@ -11,7 +11,7 @@ describe("Workout native prebuild parity", () => {
       expect(readFileSync(path, "utf8")).toContain("NotebookModal as Modal");
     }
     const modal = readFileSync("src/ui/notebook/NotebookModal.tsx", "utf8");
-    expect(modal).toContain("paddingBottom: insets.bottom");
+    expect(modal).toContain("paddingBottom: popupBottomSpace(insets.bottom, tabs, keyboardVisible)");
     expect(modal).toContain("paddingLeft: insets.left");
   });
   it("uses the same notebook checkbox geometry and focus feedback in native rows", () => {

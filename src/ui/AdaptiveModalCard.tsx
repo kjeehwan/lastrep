@@ -2,13 +2,19 @@ import React, { useCallback, useEffect, useRef, useState, type ReactNode } from 
 import { Keyboard, ScrollView, StyleSheet, TextInput, View, useWindowDimensions, type ScrollViewProps, type StyleProp, type TextInputProps, type ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { focusedInputScrollOffset, modalViewportHeight } from "./keyboardViewport";
+import { BottomTabBarHeightContext } from "expo-router/js-tabs";
+import { useNotebook } from "./notebook/Notebook";
+import { popupBottomSpace } from "./notebook/popupGeometry";
 
 /** Keeps dialog content reachable in short landscape and resized windows. */
-export function AdaptiveModalCard({ children, style, contentSized = false }: {
+export function AdaptiveModalCard({ children, style, contentSized = false, contentContainerStyle }: {
   children: ReactNode;
   style?: StyleProp<ViewStyle>;
   contentSized?: boolean;
+  contentContainerStyle?: StyleProp<ViewStyle>;
 }) {
+  const tabs = React.useContext(BottomTabBarHeightContext);
+  const { fontsLoaded } = useNotebook();
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const [keyboardTop, setKeyboardTop] = useState<number | null>(() => Keyboard.metrics()?.screenY ?? null);
@@ -48,7 +54,7 @@ export function AdaptiveModalCard({ children, style, contentSized = false }: {
     const hide = Keyboard.addListener("keyboardDidHide", () => setKeyboardTop(null));
     return () => { show.remove(); change.remove(); hide.remove(); };
   }, []);
-  const windowHeight = modalViewportHeight(height, keyboardTop, insets.top, insets.bottom);
+  const windowHeight = modalViewportHeight(height, keyboardTop, insets.top, fontsLoaded ? popupBottomSpace(insets.bottom, tabs, keyboardTop != null) : insets.bottom);
   const requestedHeight = StyleSheet.flatten(style)?.maxHeight;
   const availableHeight = Math.min(windowHeight, contentSized && typeof requestedHeight === "number" ? requestedHeight : Infinity);
   useEffect(() => {
@@ -82,6 +88,7 @@ export function AdaptiveModalCard({ children, style, contentSized = false }: {
   return (
     <View style={[style, { maxHeight: availableHeight, maxWidth, alignSelf: "center" }]}>
       <ScrollView ref={scrollRef} keyboardShouldPersistTaps="handled" nestedScrollEnabled
+        contentContainerStyle={contentContainerStyle}
         onLayout={scheduleFocusVisibility} onContentSizeChange={scheduleFocusVisibility}
         scrollEventThrottle={16} onScroll={(event) => { scrollOffset.current = event.nativeEvent.contentOffset.y; }}
         style={{ flexShrink: 1, ...(contentSized ? { flexGrow: 0 } : {}) }}>

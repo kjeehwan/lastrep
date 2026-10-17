@@ -1,5 +1,5 @@
 import React, { type ReactNode } from "react";
-import { TouchableWithoutFeedback, type ViewStyle } from "react-native";
+import { Pressable, StyleSheet, type ViewStyle } from "react-native";
 import { NotebookModal as Modal } from "../../ui/notebook/NotebookModal";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { AdaptiveModalCard } from "../../ui/AdaptiveModalCard";
@@ -21,18 +21,15 @@ export function WorkoutModalShell({
   backdropStyle,
   cardStyle,
   onRequestClose,
-  dismissOnBackdropPress = false,
+  dismissOnBackdropPress = true,
 }: WorkoutModalShellProps) {
   const card = <AdaptiveModalCard style={cardStyle}>{children}</AdaptiveModalCard>;
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onRequestClose}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onRequestClose} dismissOnBackdropPress={dismissOnBackdropPress}>
       <KeyboardAwareModalFrame>
       <SafeAreaView style={backdropStyle}>
-        {dismissOnBackdropPress && onRequestClose ? (
-          <TouchableWithoutFeedback onPress={onRequestClose}>{card}</TouchableWithoutFeedback>
-        ) : (
-          card
-        )}
+        {dismissOnBackdropPress ? <Pressable style={StyleSheet.absoluteFill} accessibilityRole="button" accessibilityLabel="Dismiss popup" onPress={onRequestClose} /> : null}
+        {card}
       </SafeAreaView>
       </KeyboardAwareModalFrame>
     </Modal>

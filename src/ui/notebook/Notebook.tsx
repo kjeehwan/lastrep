@@ -14,7 +14,7 @@ export function NotebookProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo(() => ({ colors: dark ? notebookDark : notebookPaper, fontsLoaded: loaded }), [dark, loaded]);
   // A failed font load must not prevent users from reaching their workout.
   if (error && __DEV__) console.warn("Notebook fonts unavailable", error.message);
-  return <NotebookContext.Provider value={value}>{!loaded && !error ? <View style={{ flex: 1, backgroundColor: value.colors.canvas, justifyContent: "center" }}><ActivityIndicator color={value.colors.accent} accessibilityLabel="Loading Workout" /></View> : children}</NotebookContext.Provider>;
+  return <NotebookContext.Provider value={value}>{!loaded && !error ? <View style={{ flex: 1, backgroundColor: value.colors.canvas, justifyContent: "center" }}><ActivityIndicator color={value.colors.accent} accessibilityLabel="Loading screen" /></View> : children}</NotebookContext.Provider>;
 }
 export const useNotebook = () => useContext(NotebookContext);
 export function useNotebookStyles<T>(factory: (colors: NotebookColors) => T): T {
