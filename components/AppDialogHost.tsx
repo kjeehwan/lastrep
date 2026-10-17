@@ -1,12 +1,20 @@
 import React, { useEffect, useState } from "react";
-import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from "react-native";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { usePathname } from "expo-router";
+import { BottomTabBarHeightContext } from "expo-router/js-tabs";
+import { NotebookProvider } from "../src/ui/notebook/Notebook";
+import { NotebookAppDialog } from "../src/ui/notebook/NotebookAppDialog";
+import { notebookTabBarHeight, usesNotebookDesign } from "../src/ui/notebook/navigationGeometry";
 import { registerAppDialogPresenter, type AppDialogButton, type AppDialogOptions } from "../src/ui/appDialog";
 
 const DEFAULT_BUTTONS: AppDialogButton[] = [{ text: "OK", role: "default" }];
 
 export default function AppDialogHost() {
   const [dialog, setDialog] = useState<AppDialogOptions | null>(null);
+  const pathname = usePathname();
+  const insets = useSafeAreaInsets();
+  const { fontScale } = useWindowDimensions();
 
   useEffect(() => {
     registerAppDialogPresenter((options) => {
@@ -18,6 +26,10 @@ export default function AppDialogHost() {
   }, []);
 
   if (!dialog) return null;
+
+  if (usesNotebookDesign(pathname)) return <BottomTabBarHeightContext.Provider value={notebookTabBarHeight(insets.bottom, fontScale)}>
+    <NotebookProvider><NotebookAppDialog dialog={dialog} onClose={() => setDialog(null)} /></NotebookProvider>
+  </BottomTabBarHeightContext.Provider>;
 
   const buttons = dialog.buttons?.length ? dialog.buttons : DEFAULT_BUTTONS;
   const isVerticalLayout = dialog.buttonLayout === "vertical";

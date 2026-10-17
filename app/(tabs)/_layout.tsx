@@ -1,3 +1,4 @@
+import { notebookTabBarHeight, usesNotebookDesign } from "../../src/ui/notebook/navigationGeometry";
 import { Ionicons } from "@expo/vector-icons";
 import { Tabs, usePathname } from "expo-router";
 import { onAuthStateChanged } from "firebase/auth";
@@ -59,7 +60,7 @@ function createProfileTabLeaveListener(targetName: string) {
 
 export default function TabsLayout() {
   const pathname = usePathname();
-  const notebook = pathname.includes("/workout") || pathname === "/home";
+  const notebook = usesNotebookDesign(pathname);
   const paper = useColorScheme() === "dark" ? notebookDark : notebookPaper;
   const { fontScale } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -97,7 +98,7 @@ export default function TabsLayout() {
         tabBarStyle: {
           backgroundColor: notebook ? paper.canvas : "#0d0d1a",
           borderTopColor: notebook ? paper.rule : "rgba(255,255,255,0.08)",
-          height: (notebook && fontScale >= 1.5 ? 40 + 28 * fontScale : 60) + bottomInset,
+          height: notebook ? notebookTabBarHeight(insets.bottom, fontScale) : 60 + bottomInset,
           paddingBottom: bottomInset,
           paddingTop: 8,
         },

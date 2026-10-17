@@ -1,7 +1,7 @@
 import { Timestamp } from "firebase/firestore";
 import { describe, expect, it } from "vitest";
 import type { NutritionMeal } from "../contracts";
-import { DEFAULT_MEAL_IDS, formatMealTime, initialMealTime, mealLabel, mealSectionId, normalizeMealLabels, parseMealTime, reconcileMealLabelDraft, sectionMealTime } from "./mealOrganization";
+import { dateMealLabels, DEFAULT_MEAL_IDS, formatMealTime, initialMealTime, mealLabel, mealSectionId, normalizeMealLabels, parseMealTime, reconcileMealLabelDraft, sectionMealTime } from "./mealOrganization";
 
 function entry(minutes?: number | null, hour = 8): NutritionMeal {
   const timestamp = Timestamp.fromDate(new Date(2026, 9, 15, hour));
@@ -79,5 +79,19 @@ describe("meal time", () => {
     expect(parseMealTime(" 8:05 ")).toBe(485);
     expect(parseMealTime("00:00")).toBe(0);
     for (const value of ["24:00", "12:60", "-1:00", "3:4", "", "1230"]) expect(parseMealTime(value)).toBeNull();
+  });
+});
+
+
+describe("date-specific meal names", () => {
+  it("overrides only the selected date and preserves defaults and stable IDs", () => {
+    const defaults = normalizeMealLabels({ names: { Breakfast: "Morning meal", Lunch: "Lunch" } });
+    const monday = dateMealLabels(defaults, { Breakfast: "First breakfast" });
+    const tuesday = dateMealLabels(defaults, {});
+    expect(mealLabel("Breakfast", monday)).toBe("First breakfast");
+    expect(mealLabel("Breakfast", tuesday)).toBe("Morning meal");
+    expect(mealLabel("Lunch", monday)).toBe("Lunch");
+    expect(defaults.names.Breakfast).toBe("Morning meal");
+    expect(dateMealLabels(defaults, { Breakfast: " " })).toEqual(defaults);
   });
 });

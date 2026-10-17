@@ -1,22 +1,12 @@
-import { StyleSheet } from "react-native";
+import { useNotebookStyles } from "../../ui/notebook/Notebook";
+import type { NotebookColors } from "../../ui/notebook/tokens";
 
-// Both entry points edit the same food quantities and should share their shell.
-export const foodEditorStyles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.55)",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 24,
-  },
-  card: {
-    width: "100%",
-    maxWidth: 420,
-    borderRadius: 16,
-    backgroundColor: "#171727",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.1)",
-    padding: 16,
-  },
-  content: { gap: 16 },
+const createStyles = (colors: NotebookColors) => ({
+  backdrop: { flex: 1 as const, backgroundColor: colors.overlay, alignItems: "center" as const, justifyContent: "center" as const, padding: 20 },
+  card: { width: "100%" as const, maxWidth: 560, borderRadius: 8, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, padding: 20 },
+  content: { gap: 20 },
 });
+
+export function useFoodEditorStyles() {
+  return useNotebookStyles(createStyles);
+}

@@ -6,7 +6,7 @@ import {
   initializeTestEnvironment,
   RulesTestEnvironment,
 } from "@firebase/rules-unit-testing";
-import { Timestamp, deleteDoc, doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
+import { Timestamp, FieldPath, deleteDoc, doc, getDoc, setDoc, updateDoc, writeBatch } from "firebase/firestore";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import {
@@ -64,6 +64,26 @@ describeIfFirestoreEmulator("firestore entitlement rules", () => {
 
   afterAll(async () => {
     await testEnv.cleanup();
+  });
+
+  it("isolates date-specific meal names by owner and validates metadata shape", async () => {
+    const alice = testEnv.authenticatedContext("alice").firestore();
+    const bob = testEnv.authenticatedContext("bob").firestore();
+    const record = { mealNames: { Breakfast: "First breakfast" }, updatedAt: Timestamp.now() };
+    await assertSucceeds(setDoc(doc(alice, "users", "alice", "nutritionDays", "2026-10-17"), record));
+    await assertSucceeds(getDoc(doc(alice, "users", "alice", "nutritionDays", "2026-10-17")));
+    await assertSucceeds(setDoc(doc(alice, "users", "alice"), { mealLabels: { mode: "numbered", names: { Lunch: "Midday" } } }));
+    const batch = writeBatch(alice);
+    batch.set(doc(alice, "users", "alice", "nutritionDays", "2026-10-18"), { ...record, mealNames: { Breakfast: "Early" } });
+    batch.update(doc(alice, "users", "alice"), new FieldPath("mealLabels", "names", "Breakfast"), "Early");
+    await assertSucceeds(batch.commit());
+    expect((await getDoc(doc(alice, "users", "alice"))).data()?.mealLabels).toEqual({ mode: "numbered", names: { Lunch: "Midday", Breakfast: "Early" } });
+    expect((await getDoc(doc(alice, "users", "alice", "nutritionDays", "2026-10-17"))).data()?.mealNames.Breakfast).toBe("First breakfast");
+    await assertFails(getDoc(doc(bob, "users", "alice", "nutritionDays", "2026-10-17")));
+    await assertFails(setDoc(doc(bob, "users", "alice", "nutritionDays", "2026-10-17"), record));
+    await assertFails(setDoc(doc(alice, "users", "alice", "nutritionDays", "invalid"), record));
+    await assertFails(setDoc(doc(alice, "users", "alice", "nutritionDays", "2026-10-18"), { ...record, entitlement: true }));
+    await assertFails(setDoc(doc(alice, "users", "alice", "nutritionDays", "2026-10-19"), { ...record, mealNames: [] }));
   });
 
   it("documents the emulator-only dev override policy", () => {

@@ -1,15 +1,17 @@
 # Lastrep Training Notebook Design Specification
 
-Version: 1.9 | Date: October 17, 2026
+Version: 1.14 | Date: October 17, 2026
 
 Status: Workout, Home, Nutrition, Sleep, Profile and Settings browser design
 directions approved through iterative review. Shared rules below incorporate that
 feedback. Workout's native migration was approved and merged in PR #34. Home's
-native migration was approved for merge on October 17 after phone review and
-iterative corrections. Account-write checks remain separate from read-only
-visual acceptance. Other screens have not been migrated. See
-workout-notebook-migration.md and home-notebook-migration.md for implementation
-boundaries and actual verification coverage.
+native migration was approved after phone review and merged in PR #35 on
+October 17. Nutrition's native candidate is being reviewed separately on
+`feature/nutrition-notebook-ui`. Account-write checks remain separate from
+read-only visual acceptance. Sleep, Profile and Settings have not been migrated.
+See workout-notebook-migration.md, home-notebook-migration.md and
+nutrition-notebook-migration.md for implementation boundaries and actual
+verification coverage.
 The initial Figma pair records an earlier Workout revision; the local browser
 prototype and decisions below capture the subsequent approved refinements.
 
@@ -1284,8 +1286,8 @@ sections/reordering, rather than assuming only the six initial slots are allowed
    327.5 g carbs, 90 g fat, 2,800 kcal), not a newly generated dietary recommendation.
 4. Log meals is a ledger with a stable left logging-time column, flexible name
    and right energy total. Empty sections show no invented time. Add meal creates
-   another named section. Reorder beside Log meals reveals side-by-side, unboxed up/down
-   chevrons to the right of each entry's calories; Done hides them. Use 20 outline
+   another named section. Always display vertically stacked, unboxed up/down
+   chevrons to the right of each entry's calories; no Reorder/Done gate. Use 20 outline
    glyphs in 44 targets (24/48 at enlarged text), with explicit accessible labels
    and disabled boundary chevrons. No visible button borders or filled boxes;
    retain keyboard focus indicators.
@@ -1298,12 +1300,12 @@ sections/reordering, rather than assuming only the six initial slots are allowed
    are already visible on the meal page; omit that redundant toolbar menu.
 5. A meal detail has its name centered above the date. Foods show actual amounts,
    calories and P/C/F. Quantity/nutrition is available by tapping the food name.
-   Swipe deletion has an accessible options-menu alternative and inline Undo.
-   The options menu does not repeat editing: it offers Move to another meal,
-   Add/remove favorite (database foods), and Delete as a non-gesture alternative.
-   Moving food is a proposed feature in this study, not an existing native feature.
-6. Add food opens search, recent, favorites and saved-meal views. Source labels
-   distinguish reference-food examples from packaged-food examples; dry versus
+   Swipe deletion retains inline Undo and a screen-reader Delete action.
+   Supported foods have a visible favorite star and a direct Move icon on the row.
+   Do not hide favorites or a single Move action in a three-dot menu. Move opens
+   a ruled destination list with an unboxed Cancel action. Long press opens delete
+   confirmation as a further fallback, without another visible Delete button.
+6. Add food opens search, recent, favorites and saved-meal views. Do not show provider/source labels in result rows; dry versus
    cooked names remain explicit. Search selection and quantity review are separate.
 7. Search and logged edits use one quantity-editor shell. Data source, unit
    controls, amount, equivalent summary, selected-amount nutrition and reference
@@ -1359,6 +1361,63 @@ sections/reordering, rather than assuming only the six initial slots are allowed
 - Saved meals are cloned templates. Deleting one leaves logged foods intact.
   Copy previous meal names the actual source date and foods; it does not invent
   a source when empty. Copied/reused foods use the fixture logging time (18:30).
+
+### Native Nutrition review refinements (October 17)
+
+- Nutrition uses a fork-and-knife outline, not the earlier apple symbol.
+- Keep only one divider below a subpage toolbar. The first content section must
+  not add a second top rule. Later ledger sections retain their own separators.
+- Center the muted, human-readable date on Add to meal. Clear search belongs
+  inside the input border at the trailing end, with a 44 dp target.
+- Meal ledgers use equal padding and no extra gap between ruled meal rows.
+  Keep three columns: time, meal content, and vertically stacked reorder arrows.
+  Center time and arrows vertically across the complete meal entry. Within the
+  middle column, align meal name and calories on the first row, P/C/F on the
+  second right-aligned beneath calories. On that second row, place an item
+  count and caret below the name: `2 items`. Meals start collapsed; the count
+  toggles an inline small-font food list without navigating. Keep meal-name
+  navigation separate from expansion, with a 44 dp expansion target and an
+  accessible expanded state. Omit the
+  last meal's bottom rule so it does not duplicate the section divider.
+  Bullets must not enter the time or arrow
+  columns. At enlarged text allow the heading to wrap rather than shrink it.
+- Quantity-editor actions stay outside the scrolling body above the keyboard.
+  On amount focus, scroll the amount toward the top; retain scrolling for
+  short landscape windows and enlarged text rather than hiding controls.
+- Swipe delete shows a dustbin icon without duplicate Delete text; keep an
+  explicit accessibility label and at least a 48 dp action target. Match the
+  favorite and move icons: 20 dp outline with 1.5 dp stroke. Use a compact
+  48 dp-wide delete button, not a text-sized action box.
+- Accent-filled actions use the contrasting theme foreground: dark text on
+  light coral in dark mode, light text on dark rust in light mode.
+- Shared confirmations, success notices and errors on notebook screens must use
+  the same sheet, fonts, colors, outside/Back dismissal and tab clearance as
+  screen-owned popups. Do not leave the shared alert host in the old design.
+- Copy meal names its actual behavior: the nearest earlier instance of that
+  meal is appended, never substituted for existing food. Saved-template success
+  feedback states the path: destination meal > Add items > Saved meals > Add.
+- Swipe foregrounds must be opaque throughout the gesture so action icons cannot
+  show through the delete background. Match confirmation and swipe delete
+  foreground colors: dark ink on light coral, light paper on dark red.
+- Source/provider labels are omitted from food rows; preserve underlying source
+  records and nutrition references without adding provenance clutter.
+- The off state of optional switches must have a contrasting thumb/track and
+  a visible outline; it must not disappear into the sheet background.
+- Keep the selected-amount minicard mounted while changing units, typing or
+  clearing an amount. Derive nutrition synchronously from the available
+  reference data, not through a database load or an empty intermediate render.
+  Invalid amounts show dashes in the same card and cannot be saved.
+- Long-press Delete uses the notebook confirmation sheet, Android Back/outside
+  cancellation, a destructive action, and the existing Undo flow.
+- Selected-amount facts occupy four equal columns at ordinary text size.
+  Reflow at enlarged text rather than forcing a tiny font.
+- Rename applies only to the selected date by default. An initially off
+  Use as default for other dates switch updates the account default explicitly;
+  saved overrides on other dates take precedence and are not rewritten.
+- Chart selection highlights locally without waiting for navigation or history
+  refetches. Reserve measured/scaled width and height for target-line labels.
+
+These native review decisions supersede corresponding earlier browser states.
 
 ### Review states and boundaries
 

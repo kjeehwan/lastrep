@@ -7,11 +7,13 @@ import { useNotebook } from "./notebook/Notebook";
 import { popupBottomSpace } from "./notebook/popupGeometry";
 
 /** Keeps dialog content reachable in short landscape and resized windows. */
-export function AdaptiveModalCard({ children, style, contentSized = false, contentContainerStyle }: {
+export function AdaptiveModalCard({ children, style, contentSized = false, contentContainerStyle, footer, focusPlacement = "visible" }: {
   children: ReactNode;
   style?: StyleProp<ViewStyle>;
   contentSized?: boolean;
   contentContainerStyle?: StyleProp<ViewStyle>;
+  footer?: ReactNode;
+  focusPlacement?: "visible" | "start";
 }) {
   const tabs = React.useContext(BottomTabBarHeightContext);
   const { fontsLoaded } = useNotebook();
@@ -31,11 +33,13 @@ export function AdaptiveModalCard({ children, style, contentSized = false, conte
     viewport.measureInWindow((_x, top, _width, viewportHeight) => {
       input.measureInWindow((_inputX, inputTop, _inputWidth, inputHeight) => {
         if (input !== TextInput.State.currentlyFocusedInput() || scroll !== scrollRef.current || viewportHeight <= 0 || inputHeight <= 0) return;
-        const offset = focusedInputScrollOffset(scrollOffset.current, top, viewportHeight, inputTop, inputHeight);
+        const offset = focusPlacement === "start"
+          ? Math.max(0, scrollOffset.current + inputTop - top - 12)
+          : focusedInputScrollOffset(scrollOffset.current, top, viewportHeight, inputTop, inputHeight);
         if (Math.abs(offset - scrollOffset.current) > 1) scroll.scrollTo({ y: offset, animated: false });
       });
     });
-  }, []);
+  }, [focusPlacement]);
   const scheduleFocusVisibility = useCallback(() => {
     if (pendingFrame.current !== null) cancelAnimationFrame(pendingFrame.current);
     pendingFrame.current = requestAnimationFrame(() => {
@@ -94,6 +98,7 @@ export function AdaptiveModalCard({ children, style, contentSized = false, conte
         style={{ flexShrink: 1, ...(contentSized ? { flexGrow: 0 } : {}) }}>
         {focusAware(content)}
       </ScrollView>
+      {footer ? <View style={{ paddingTop: 12, flexShrink: 0 }}>{footer}</View> : null}
     </View>
   );
 }

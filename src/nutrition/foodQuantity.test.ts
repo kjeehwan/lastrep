@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Timestamp } from "firebase/firestore";
 import type { NutritionMeal } from "../contracts";
-import { quantityGrams, quantityValue, recordedMealGrams, selectedFoodSummary } from "./foodQuantity";
+import { quantityNutrition, quantityGrams, quantityValue, recordedMealGrams, selectedFoodSummary } from "./foodQuantity";
 
 const density = { servingGrams: 164, caloriesPer100g: 116 };
 function oatmeal(source: Partial<NonNullable<NutritionMeal["source"]>> = {}, calories = 190): NutritionMeal {
@@ -62,5 +62,24 @@ describe("food editor quantities", () => {
     expect(recordedMealGrams(zero)).toBe(330);
     expect(quantityGrams("100", "calories", zero.source!)).toBeNull();
     expect(recordedMealGrams(oatmeal({ caloriesPer100g: 0, mode: null, value: null }, 0))).toBeNull();
+  });
+});
+
+
+describe("synchronous food preview", () => {
+  const source = { servingGrams: 100, caloriesPer100g: 200, proteinPer100g: 10, carbsPer100g: 20, fatPer100g: 5 };
+  it("updates immediately and consistently across quantity units", () => {
+    expect(quantityNutrition("200", "grams", source)).toEqual(quantityNutrition("400", "calories", source));
+    expect(quantityNutrition("200", "grams", source)).toEqual(quantityNutrition("2", "servings", source));
+    expect(quantityNutrition("20.", "grams", source)?.calories).toBe(40);
+    expect(quantityNutrition("20.5", "grams", source)?.proteinGrams).toBeCloseTo(2.05);
+  });
+  it("returns empty values for invalid amounts without inventing facts", () => {
+    expect(quantityNutrition("", "grams", source)).toBeNull();
+    expect(quantityNutrition("0", "grams", source)).toBeNull();
+    expect(quantityNutrition("abc", "grams", source)).toBeNull();
+    expect(quantityNutrition("100", "grams", { ...source, carbsPer100g: null })?.carbGrams).toBeNull();
+    expect(quantityNutrition("100", "grams", { ...source, caloriesPer100g: 0 })?.calories).toBe(0);
+    expect(quantityNutrition("1", "calories", { ...source, caloriesPer100g: 0 })).toBeNull();
   });
 });

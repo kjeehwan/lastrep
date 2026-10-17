@@ -2,7 +2,23 @@ import type { NutritionMeal } from "../contracts";
 import type { FoodEntryMode } from "./foodDb";
 
 type Density = { servingGrams?: number | null; caloriesPer100g?: number | null };
+type NutritionDensity = Density & { proteinPer100g?: number | null; carbsPer100g?: number | null; fatPer100g?: number | null };
 const positive = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value) && value > 0;
+
+/** Quantity edits must not wait for the search database or remove the facts card. */
+export function quantityNutrition(value: string, mode: FoodEntryMode, source: NutritionDensity) {
+  const grams = quantityGrams(value, mode, source);
+  const calories = source.caloriesPer100g;
+  const protein = source.proteinPer100g;
+  if (grams == null || !positive(source.servingGrams) || typeof calories !== "number" || !Number.isFinite(calories) || calories < 0 || typeof protein !== "number" || !Number.isFinite(protein) || protein < 0) return null;
+  const factor = grams / 100;
+  return {
+    grams, servings: grams / source.servingGrams, calories: calories * factor,
+    proteinGrams: protein * factor,
+    carbGrams: typeof source.carbsPer100g === "number" && Number.isFinite(source.carbsPer100g) ? source.carbsPer100g * factor : null,
+    fatGrams: typeof source.fatPer100g === "number" && Number.isFinite(source.fatPer100g) ? source.fatPer100g * factor : null,
+  };
+}
 
 export function quantityGrams(value: string, mode: FoodEntryMode, density: Density): number | null {
   const amount = Number(value);
