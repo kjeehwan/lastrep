@@ -44,6 +44,17 @@ export async function stageProfilePhoto(uid: string, uri: string): Promise<strin
   return data.path;
 }
 
+/** Only for a photo-only save; mixed edits retain stage / other writes / commit. */
+export async function saveProfilePhotoOnly(uid: string, uri: string): Promise<string> {
+  const path = await stageProfilePhoto(uid, uri);
+  try {
+    return await commitProfilePhoto(uid, path);
+  } catch (error) {
+    await discardProfilePhotoUpload(uid, path).catch(() => undefined);
+    throw error;
+  }
+}
+
 export async function commitProfilePhoto(uid: string, path: string | null): Promise<string> {
   requireAccount(uid);
   await callable("commitProfilePhoto", { path });

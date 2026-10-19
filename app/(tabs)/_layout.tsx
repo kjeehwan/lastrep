@@ -30,9 +30,10 @@ function createProfileTabLeaveListener(targetName: string) {
       showAppDialog({
         title: "Unsaved changes",
         message: "You have unsaved changes. Save before leaving?",
+        buttonLayout: "vertical",
         buttons: [
           {
-            text: "Save",
+            text: "Save and leave",
             role: "default",
             onPress: () => {
               void (async () => {
@@ -44,14 +45,14 @@ function createProfileTabLeaveListener(targetName: string) {
             },
           },
           {
-            text: "Discard",
+            text: "Discard and leave",
             role: "destructive",
             onPress: () => {
               guard.discard?.();
               navigation.navigate(targetName);
             },
           },
-          { text: "Cancel", role: "cancel" },
+          { text: "Keep editing", role: "cancel" },
         ],
       });
     },
