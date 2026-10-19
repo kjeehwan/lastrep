@@ -1,6 +1,6 @@
 # Lastrep Training Notebook Design Specification
 
-Version: 1.17 | Date: October 17, 2026
+Version: 1.18 | Date: October 19, 2026
 
 Status: Workout, Home, Nutrition, Sleep, Profile and Settings browser design
 directions approved through iterative review. Shared rules below incorporate that
@@ -10,7 +10,10 @@ October 17. Nutrition's native migration was approved and merged in PR #36.
 Sleep's native migration is approved on `feature/sleep-notebook-ui` after phone
 review, including deletion, overlap handling and bidirectional target sync.
 Account-write checks remain separate from read-only visual acceptance.
-Profile and Settings have not been migrated.
+Profile has an uncommitted native candidate on `feature/profile-notebook-ui`,
+with user-approved presentation, Save/reopen, photo persistence and landscape
+keyboard behavior. Reduced-motion and focused feedback follow-ups remain;
+Settings has not been migrated.
 See workout-notebook-migration.md, home-notebook-migration.md and
 nutrition-notebook-migration.md and sleep-notebook-migration.md for boundaries and actual
 verification coverage.
@@ -198,7 +201,7 @@ alignment slot does not mean that every glyph inside it is 24 wide.
 | icon-annotation | 20 x 20 | 24 x 24, or omit decorative icon when reflowing | Guidance/context row, never instead of its label |
 | icon-row | 20 x 20 | 24 x 24 | 24-wide alignment slot + 12 gap at default size |
 | icon-close | 28 x 28 visual bounds | 36 x 36 visual bounds | 48 x 48; 56 x 56 at 200% |
-| help-glyph | Same 16-sp type as field title; circle 20 x 20 | Same 28-sp title type; circle 32 x 32 | Centered 44 x 44; 48 x 48 at 200% |
+| help-glyph | 16 x 16 information-circle-outline | 16 x 16 | Centered 44 x 44; retain space when labels reflow |
 | completion-box | 20 x 20; check 16 x 16 | 36 x 36; check 28 x 28 | Dense row: 44 x 48; enlarged row: min 64 high |
 | chart-observation | Radius 4 | Radius 8 | Minimum 44-diameter selection region; show date/value outside plot |
 
@@ -231,7 +234,7 @@ alignment slot does not mean that every glyph inside it is 24 wide.
 | Settings | Three adjustment sliders; do not retain the earlier small irregular gear | Home header and equivalent Settings entries |
 | Workout | Single-stroke loaded barbell; larger plates nearest the grip, smaller outside | Same drawing on every bottom tab bar |
 | Tempo | Existing outline speedometer plus the word Tempo | Resistance/bodyweight exercise controls, not cardio |
-| Help | Circled question mark using the field title's font, weight, size and ink color | Inline definitions, not decorative badges |
+| Help | Shared circled information outline, muted ink, via NotebookInfoButton | Inline definitions and Home Readiness/Weekly Trends explanations, not decorative badges |
 | Completion | Square checkbox; do not replace cardio completion with a different large button | Set and cardio completion |
 
 The approved small barbell is a documented optical exception: shaft stroke 1.5,
@@ -321,6 +324,8 @@ not determine text alignment.
   targets and equal visible gaps for a row of unequal-length labeled actions,
   such as Demo / Rest 02:00 / Tempo 3-0-1-0. Minimum gap 12; do not squeeze
   the Tempo label or remove its icon to force equal-width button boxes.
+- Related binary unit/effort choices use equal-width cells within each group.
+  This does not change the content-sized Workout Demo / Rest / Tempo toolbar.
 - Related text and action rows share first-line alignment, even if the text wraps.
   Do not vertically center Change against a multiline routine name or Review
   against a multiline guidance label. Match line height and top padding.
@@ -346,12 +351,17 @@ not determine text alignment.
 - Left-align typed values and placeholders. An empty field starts with its cursor
   at the left. On first focus, select an existing numeric value for replacement
   with the active selection end at the right; do not reselect on each keystroke,
-  render or subsequent caret-placement tap. Keep units
+  render or subsequent caret-placement tap. On native Android, schedule initial
+  focus after the modal's shown event and disable repeated select-all once the
+  first focus is handled; do not leave a repeat-select flag active while typing.
+  Keep units
   outside the input with a small fixed gap; units must never overlap editable text.
 - Preserve the parent screen's scroll position when opening or closing editors,
   including Save, Done, Cancel and help sheets. Keep the focused field above the
   keyboard and re-check visibility after rotation or keyboard-size changes.
   Browser viewport checks do not replace native phone/IME testing.
+- Profile reveals only the obscured portion of the focused input; do not force
+  every input to the top. Focus scrolling may animate when reduced motion is off.
 - Definitions use the shared help glyph immediately after the relevant title,
   vertically centered. Its correctly centered target occupies real layout space;
   leave the input/unit columns aligned rather than moving them for each title.
@@ -704,6 +714,8 @@ states honestly; do not invent a smooth trend from one record.
   use the actual tab-bar height, including its safe area, rather than adding
   the Android inset twice. With the keyboard open, reserve keyboard space
   instead of also reserving hidden tabs. Tall content scrolls within the card.
+- Detached/floating sheets round all four corners, including Today's Plan,
+  Workout input sheets and available weights; do not leave square bottom corners.
 - Backdrop dismiss targets are siblings of the card, never touchable ancestors
   around its content. Touching text, whitespace, charts or inputs inside a card
   must not dismiss it. Outside dismissal never saves or applies changes and
@@ -757,6 +769,9 @@ a particular dense history view is explicitly designed otherwise.
   by content, not only by device-name detection.
 - With keyboard open, the focused field must automatically become visible and
   remain visible after rotation. Manual scrolling is fallback, not the target UX.
+- In short keyboard windows or enlarged text, a fixed footer must not consume the
+  entire editor. Move actions into the scrollable body when needed so an active
+  field remains visible and actions remain reachable. Retain Android Back dismissal.
 - Preserve selection, caret, raw input string and exercise order through rotation.
 - Android native inputs disable fullscreen/extract editing; the actual workout
   remains visible instead of becoming a white system editor.
@@ -800,8 +815,8 @@ a particular dense history view is explicitly designed otherwise.
   wrap. Actions remain top-aligned and right-aligned, never vertically centered
   against a multiline label. Enlarge supporting control icons to 24 and give
   stacked sets a small internal inset so fields do not touch completed shading edges.
-- At 200%, related metadata/actions use 28/40 first-line alignment. Help uses the
-  same 28-sp font as the enlarged field title. Two-column comparisons and phase
+- At 200%, related metadata/actions use 28/40 first-line alignment. Help retains
+  the shared information icon and its full target. Two-column comparisons and phase
   selectors stack; a set becomes an intentional labeled form, not a broken table.
 - Larger fonts do not excuse displaced controls. Inspect label/action baselines,
   checkboxes, focus outlines, chart selection and modal footer reachability at
@@ -824,6 +839,9 @@ a particular dense history view is explicitly designed otherwise.
 - Destructive and success dialogs stack full-width buttons with 8-12 spacing,
   readable labels and no horizontal three-button squeeze.
 - Inline validation is next to the affected field. Network errors retain inputs.
+- Explicit Profile sync results use a polite live region and become fully visible
+  above the bottom tabs, including multiline/no-data results. Coordinate reveal
+  with settled scroll-content size; preserve ordinary page scrolling afterward.
 - Loading does not briefly show first-user empty states to returning users.
 - A skeleton represents pending data, not an assertion that no records exist.
 - Never show internal SDK/build instructions, package hashes or developer setup
@@ -1208,7 +1226,7 @@ design fixtures, not production analytics verification.
 - Save normalizes display units to kg, preserves other values for that date and
   exposes one latest daily observation. Delete confirms all data on the named
   date; it does not claim to delete records in a connected health service.
-- Lean and skeletal muscle definitions live behind individual question-mark
+- Lean and skeletal muscle definitions live behind individual circled information
   controls. They are distinct metrics; no legacy generic muscle value is relabeled.
 - Calendar uses Monday-first columns, today outline, recorded-workout dot and
   selected-day ink fill. Month controls have space below the dialog title.
@@ -1738,7 +1756,8 @@ Reflow at 200% rather than reducing type or shrinking controls.
 ### Profile hierarchy and editing contract
 
 1. Header: Back to Home, Profile, Save. Save is disabled when clean or loading.
-2. Identity: photo/initial, nickname, description and illustrative access label.
+2. Identity: photo/initial, nickname, access badge, then description. The native
+   badge reflects real entitlement; loading displays Checking access.
    Edit opens a focused sheet. Photo selection is nested within identity editing.
    Cancel restores the previously staged identity, including its photo.
 3. Training: training phase, diet phase and days available per week. Do not add
@@ -1746,6 +1765,9 @@ Reflow at 200% rather than reducing type or shrinking controls.
    for this experienced-lifter audience without competing preference fields.
    Changing a phase stages Week 1; its start/history changes only on Save.
    Selecting the saved phase again must not restart its week count.
+   Keep the complete phase/week value visible: one line when it fits, wrapping
+   on narrow screens and stacked at enlarged text without shrinking type.
+   In phase editors, the week and save/start explanation are separate paragraphs.
 4. Units: weight, height, food energy and one global RPE/RIR preference. Effort is
    stored canonically as RPE in the Workout fixture; display conversion is not
    a rewrite of exercise history. Body masses remain canonical kg.
@@ -1761,7 +1783,7 @@ Reflow at 200% rather than reducing type or shrinking controls.
    selection's active end at the right. Empty fields start at position zero.
    Do not repeatedly select while typing or prevent a later tap from placing the
    caret. Apply this numeric-entry behavior across the browser studies. Keep
-   help glyphs in the label's type/ink, centered in the shared help target.
+   the shared circled information icon centered in its own help target.
    Scroll focused fields into view and re-check after viewport/keyboard changes;
    the browser prototype's visual-viewport handling is not proof of native IME
    avoidance. Native implementation requires phone checks in both orientations.
@@ -1787,6 +1809,13 @@ Discard and leave, or Keep editing, stacked with readable full-width labels.
 Failed/offline saves retain edits and do not mutate the saved baseline. Inline
 validation explains the field problem. The browser's own tab-close/navigation
 controls are not a substitute for testing native unsaved-change guards.
+Profile has one contextual offline notice, driven by connectivity rather than
+persisted as a save result. Blocked Save must not duplicate that notice; it clears
+on reconnection without clearing the draft. Keep the shared dismissible bottom
+offline banner on Profile as on other screens; it has a separate app-wide role.
+An unavailable initial profile is not a generic new account: explain that saved
+details have not loaded and keep Save disabled. Retry when connectivity/server
+data becomes available, while preserving drafts for an already-loaded profile.
 
 ### Health state and disclosure
 
@@ -1795,6 +1824,11 @@ timestamps independent. Supported data describes capability, not access.
 Disconnected/revoked access must not hide previously saved records or fabricate
 new sync timestamps. Sleep permission can be ready while body access is absent;
 the partial-body fixture explains that lean mass is missing.
+Sync now stays on Profile when permissions are missing and explains how to
+restore access. It must not automatically open permission/settings screens.
+Permission navigation requires an explicit permissions or Connect/Reconnect action.
+An unchanged sleep import says `No new sleep data found.`; do not imply existing
+saved sleep records are absent.
 
 Connect opens the optional-health disclosure, then a separately labeled simulated
 permission sheet. Cancel must not connect. Managing permissions alone does not
