@@ -14,6 +14,23 @@
 - Replacement/removal deletes the previous image. Failed cleanup is marked for retry; abandoned uploads are cleaned after 24 hours by a daily scheduled function (normally within 24-48 hours, subject to failures).
 - Account deletion blocks new photo operations, deletes the user's Storage prefix, then deletes Firestore and Authentication data. In-flight uploads check the deletion flag and remove themselves.
 
+## Profile save optimization (October 19)
+
+- Profile now skips unchanged general preferences, sleep target and nutrition
+  target writes. Mixed edits retain their existing validation and stage/write/commit
+  order; failed saves retain drafts. Photo removal still uses the existing commit.
+- Photo-only replacements use the existing authenticated stage/commit calls,
+  without unrelated preference writes. Failed commit attempts best-effort discard
+  the staged upload; cleanup failure does not replace the original save error.
+- Native interruption/retry passed against that backend: connection loss during
+  an upload request reported failure without a commit; the retained draft saved
+  on retry and its cloud photo loaded after restarting the app.
+- An optional one-call upload/commit and normalized-image-cache optimization was
+  prepared and tested locally, then separated into an ignored local patch before
+  committing the Profile migration. It is not included in this branch's source
+  or deployed. Reintroducing it requires code review, an explicitly authorized
+  `stageProfilePhoto` deployment, and fresh native persistence/failure/timing checks.
+
 ## Deployment prerequisites
 
 Read-only checks on October 12, 2026 confirmed that `lastrep-ebac5.firebasestorage.app` exists in `ASIA-NORTHEAST3`, billing is enabled, and bucket IAM has no `allUsers`/`allAuthenticatedUsers` bindings. At that time uniform bucket-level access was disabled, and uploads explicitly used a private object ACL. On October 13, 2026 the bucket was migrated to uniform access with public access prevention enforced, as recorded below.

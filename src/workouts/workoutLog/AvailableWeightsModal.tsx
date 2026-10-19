@@ -97,7 +97,7 @@ export function AvailableWeightsModal({ name, settings, defaultUnit, onClose, on
 
 const createStyles = (colors: NotebookColors) => notebookSheet({
   overlay: { flex: 1, justifyContent: "flex-end", backgroundColor: colors.overlay },
-  sheet: { width: "100%", maxHeight: "88%", backgroundColor: colors.canvas, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingTop: 20 },
+  sheet: { width: "100%", maxHeight: "88%", backgroundColor: colors.canvas, borderRadius: 24, paddingHorizontal: 20, paddingTop: 20 },
   heading: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 14 },
   title: { color: colors.ink, fontFamily: notebookFonts.editorial, fontSize: 20, fontWeight: "700" },
   body: { gap: 12, paddingBottom: 18 },

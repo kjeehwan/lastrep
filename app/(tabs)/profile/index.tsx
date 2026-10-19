@@ -1,11 +1,18 @@
-import { Ionicons } from "@expo/vector-icons";
-import { MealPreferencesCard } from "../../../src/nutrition/components/MealOrganizationControls";
+import { NotebookProvider, useNotebook } from "../../../src/ui/notebook/Notebook";
+import { NotebookHeader } from "../../../src/ui/notebook/NotebookHeader";
+import { useNotebookStatusBar } from "../../../src/ui/notebook/useNotebookStatusBar";
+import { notebookFonts, type NotebookColors } from "../../../src/ui/notebook/tokens";
+import { cancelProfileSection, profileMeasurementChanged, validateProfileEditor, type ProfileEditor } from "../../../src/profile/profileNotebookDraft";
+import { ProfileText, ProfileAction, ProfileSection, ProfileRow, ProfileField, ProfileChoices, ProfileSheet } from "../../../src/profile/ProfileNotebookControls";
+import { useEntitlement } from "../../../src/hooks/useEntitlement";
+
 import { normalizeMealLabels, reconcileMealLabelDraft, type MealLabels } from "../../../src/nutrition/mealOrganization";
 import { resolveEffortScale, type EffortScale } from "../../../src/workouts/effortScale";
 import Slider from "@react-native-community/slider";
 import { ProfilePhoto } from "../../../src/profile/ProfilePhoto";
 import { cloudPhotoPath, profilePhotoReference, snapshotWithPhoto } from "../../../src/profile/profilePhotoReference";
-import { stageProfilePhoto, commitProfilePhoto, discardProfilePhotoUpload } from "../../../src/profile/profilePhotos";
+import { stageProfilePhoto, saveProfilePhotoOnly, commitProfilePhoto, discardProfilePhotoUpload } from "../../../src/profile/profilePhotos";
+import { profileSaveSections } from "../../../src/profile/profileSaveSections";
 import * as ImagePicker from "expo-image-picker";
 import { Href, Redirect, useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { onAuthStateChanged } from "firebase/auth";
@@ -14,18 +21,15 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   BackHandler,
   Linking,
-  Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
-  TouchableOpacity,
-  TouchableWithoutFeedback,
   useWindowDimensions,
   View,
 } from "react-native";
-import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { auth, db } from "../../../src/config/firebaseConfig";
 import { phaseWeek, saveUserPhases } from "../../../src/profile/phaseState";
 import { useNow } from "../../../src/hooks/useNow";
@@ -73,13 +77,9 @@ import {
 import { getUserData } from "../../../src/userData";
 import { scheduleAfterInteractions } from "../../../src/utils/scheduleAfterInteractions";
 import { reconcileSleepTargetDraft } from "../../../src/sleep/sleepTargetDraft";
+import { isExpectedOfflineError } from "../../../src/utils/networkErrors";
+import { runProfileRefresh, shouldRetryProfileLoad } from "../../../src/profile/profileRefresh";
 
-const goals = [
-  { key: "buildMuscle", label: "Build Muscle" },
-  { key: "loseFat", label: "Lose Fat" },
-  { key: "getStronger", label: "Get Stronger" },
-  { key: "improveFitness", label: "Improve Fitness" },
-];
 const TRAINING_PHASES: TrainingPhase[] = ["Hypertrophy", "Strength", "Power"];
 const DIET_PHASES: DietPhase[] = ["Cut", "Maintain", "Bulk"];
 const isTrainingPhase = (value: unknown): value is TrainingPhase =>
@@ -129,6 +129,7 @@ type ProfileSnapshot = {
   bodyWeight: string;
   bodyFatPercent: string;
   muscleMass: string;
+  leanMass: string;
   tdeeAge: string;
   tdeeHeightCm: string;
   tdeeSex: TdeeSex;
@@ -172,14 +173,25 @@ const formatBodyCompositionSource = (
 };
 
 // Phase 2A: keep only nickname + goal for prompts; remove body metrics
-export default function ProfileIndex() {
+export default function ProfileIndex() { return <NotebookProvider><ProfileContent /></NotebookProvider>; }
+function ProfileContent() {
+  useNotebookStatusBar();
+  const { colors } = useNotebook();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const [editor, setEditor] = useState<{ section: ProfileEditor; before: string; focus?: string } | null>(null);
+  const [editorError, setEditorError] = useState<string | null>(null);
+  const [help, setHelp] = useState<string | null>(null);
+  const [historyVisible, setHistoryVisible] = useState(false);
   const router = useRouter();
   const navigation = useNavigation();
-  const insets = useSafeAreaInsets();
-  const { height: windowHeight } = useWindowDimensions();
+
+  const { fontScale } = useWindowDimensions();
   const params = useLocalSearchParams<{ from?: string; openHealth?: string }>();
   const returnTo = typeof params.from === "string" && params.from.startsWith("/") ? params.from : null;
-  const { isOffline } = useOfflineStatus();
+  const { isOffline, ready: networkReady } = useOfflineStatus();
+  const loadedProfileUidRef = useRef<string | null>(null);
+  const [profileLoadFailed, setProfileLoadFailed] = useState(false);
+  const [profileLoadAttempt, setProfileLoadAttempt] = useState(0);
   const [uid, setUid] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [goal, setGoal] = useState("");
@@ -217,6 +229,28 @@ export default function ProfileIndex() {
   const [healthConsentVisible, setHealthConsentVisible] = useState(false);
   const openedHealthFromRouteRef = useRef<string | null>(null);
   const profileScrollRef = useRef<ScrollView>(null);
+  const pendingHealthFeedbackRef = useRef(false);
+  const feedbackFrameRef = useRef<number | null>(null);
+  const revealHealthFeedback = useCallback(() => {
+    if (!pendingHealthFeedbackRef.current) return;
+    if (feedbackFrameRef.current !== null) cancelAnimationFrame(feedbackFrameRef.current);
+    // Let both the feedback view and the ScrollView's native content size settle.
+    feedbackFrameRef.current = requestAnimationFrame(() => {
+      feedbackFrameRef.current = requestAnimationFrame(() => {
+        feedbackFrameRef.current = null;
+        if (!pendingHealthFeedbackRef.current) return;
+        pendingHealthFeedbackRef.current = false;
+        profileScrollRef.current?.scrollToEnd({ animated: true });
+      });
+    });
+  }, []);
+  useEffect(() => {
+    pendingHealthFeedbackRef.current = !!healthFeedback;
+    revealHealthFeedback();
+    return () => {
+      if (feedbackFrameRef.current !== null) cancelAnimationFrame(feedbackFrameRef.current);
+    };
+  }, [healthFeedback, revealHealthFeedback]);
   const healthSyncYRef = useRef(0);
   const [saveFeedback, setSaveFeedback] = useState<string | null>(null);
   const [redirectTo, setRedirectTo] = useState<Href | null>(null);
@@ -233,6 +267,7 @@ export default function ProfileIndex() {
   const [bodyWeight, setBodyWeight] = useState("");
   const [bodyFatPercent, setBodyFatPercent] = useState("");
   const [muscleMass, setMuscleMass] = useState("");
+  const [leanMass, setLeanMass] = useState("");
   const [tdeeAge, setTdeeAge] = useState("");
   const [tdeeHeightCm, setTdeeHeightCm] = useState("");
   const [tdeeSex, setTdeeSex] = useState<TdeeSex>("male");
@@ -297,6 +332,7 @@ export default function ProfileIndex() {
         bodyWeight: bodyWeight.trim(),
         bodyFatPercent: bodyFatPercent.trim(),
         muscleMass: muscleMass.trim(),
+        leanMass: leanMass.trim(),
         tdeeAge: tdeeAge.trim(),
         tdeeHeightCm: tdeeHeightCm.trim(),
         tdeeSex,
@@ -323,6 +359,7 @@ export default function ProfileIndex() {
       bodyWeight,
       bodyFatPercent,
       muscleMass,
+      leanMass,
       tdeeAge,
       tdeeHeightCm,
       tdeeSex,
@@ -332,9 +369,13 @@ export default function ProfileIndex() {
 
   useEffect(() => {
     if (!uid) return;
-    return onSnapshot(doc(db, 'users', uid), (snap) => {
+    return onSnapshot(doc(db, 'users', uid), { includeMetadataChanges: true }, (snap) => {
       const data = snap.data();
-      if (!data || !initialSnapshotRef.current || !latestSnapshotRef.current) return;
+      if (!data) return;
+      if (shouldRetryProfileLoad(loadedProfileUidRef.current, uid, initialSnapshotRef.current != null, snap.metadata.fromCache)) {
+        setProfileLoadAttempt((attempt) => attempt + 1);
+      }
+      if (!initialSnapshotRef.current || !latestSnapshotRef.current) return;
       const baseline = JSON.parse(initialSnapshotRef.current) as ProfileSnapshot;
       const local = JSON.parse(latestSnapshotRef.current) as ProfileSnapshot;
       let changed = false;
@@ -422,6 +463,7 @@ export default function ProfileIndex() {
       setBodyWeight(formatWeightForUnit(effective.weightKg, unit));
       setBodyFatPercent(formatPercent(effective.bodyFatPercent));
       setMuscleMass(formatWeightForUnit(effective.skeletalMuscleMassKg, unit));
+      setLeanMass(formatWeightForUnit(effective.leanBodyMassKg, unit));
     },
     []
   );
@@ -449,6 +491,7 @@ export default function ProfileIndex() {
       if (typeof parsed.bodyWeight === "string") setBodyWeight(parsed.bodyWeight);
       if (typeof parsed.bodyFatPercent === "string") setBodyFatPercent(parsed.bodyFatPercent);
       if (typeof parsed.muscleMass === "string") setMuscleMass(parsed.muscleMass);
+      if (typeof parsed.leanMass === "string") setLeanMass(parsed.leanMass);
       if (typeof parsed.tdeeAge === "string") setTdeeAge(parsed.tdeeAge);
       if (typeof parsed.tdeeHeightCm === "string") setTdeeHeightCm(parsed.tdeeHeightCm);
       if (parsed.tdeeSex === "female" || parsed.tdeeSex === "male") setTdeeSex(parsed.tdeeSex);
@@ -504,7 +547,10 @@ export default function ProfileIndex() {
       const shouldRebase =
         rebaseIfClean && initialSnapshotRef.current === latestSnapshotRef.current;
       const profile = await getBodyCompositionProfile(userId);
-      applyBodyCompositionState(profile, unit);
+      if (rebaseIfClean && !shouldRebase) {
+        setBodyCompositionProfile(profile);
+        setBodyCompositionEffective(getEffectiveBodyCompositionSnapshot(profile));
+      } else applyBodyCompositionState(profile, unit);
       if (shouldRebase) {
         scheduleAfterInteractions(() => setInitialSnapshot(latestSnapshotRef.current));
       }
@@ -513,19 +559,34 @@ export default function ProfileIndex() {
   );
 
   useEffect(() => {
+    let cancelled = false;
     const unsub = onAuthStateChanged(auth, async (user) => {
       if (!user) {
+        loadedProfileUidRef.current = null;
         setRedirectTo("/auth/sign-in");
         return;
       }
+      // Connectivity retries only an unfinished initial load, never an existing draft.
+      if (loadedProfileUidRef.current === user.uid) return;
+      initialSnapshotRef.current = null;
+      setInitialSnapshot(null);
       setHealthConsentLoaded(false);
       setUid(user.uid);
+      if (!networkReady || isOffline) {
+        setProfileLoadFailed(true);
+        setLoading(false);
+        return;
+      }
+      setLoading(true);
+      setProfileLoadFailed(false);
       try {
         const [data, sleepProfile, compositionProfile] = await Promise.all([
           getUserData(user.uid),
           getSleepProfile(user.uid),
           getBodyCompositionProfile(user.uid),
         ]);
+        if (cancelled || auth.currentUser?.uid !== user.uid) return;
+        if (!data) throw new Error("Profile data could not be loaded.");
         setLastSleepSyncLabel(
           sleepProfile.lastSyncedAt
             ? sleepProfile.lastSyncedAt.toDate().toLocaleString()
@@ -605,15 +666,17 @@ export default function ProfileIndex() {
           setTdeeActivity(savedTdeeProfile.activity as TdeeActivity);
         }
         applyBodyCompositionState(compositionProfile, resolvedWeightUnit);
+        loadedProfileUidRef.current = user.uid;
       } catch (e) {
-        console.log("Error fetching user data", e);
+        if (cancelled) return;
+        setProfileLoadFailed(true);
+        if (!isExpectedOfflineError(e)) console.log("Could not load Profile", e);
       } finally {
-        await refreshHealthConnectStatus();
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     });
-    return unsub;
-  }, [applyBodyCompositionState, refreshHealthConnectStatus]);
+    return () => { cancelled = true; unsub(); };
+  }, [applyBodyCompositionState, refreshHealthConnectStatus, isOffline, networkReady, profileLoadAttempt]);
 
   useEffect(() => {
     if (!uid) return;
@@ -639,10 +702,10 @@ export default function ProfileIndex() {
 
   useFocusEffect(
     useCallback(() => {
+      if (!uid || !networkReady || isOffline) return;
       if (Date.now() - lastProfileHealthRefreshAtRef.current >= 60_000) {
         profileFocusTaskRef.current?.cancel();
-        profileFocusTaskRef.current = scheduleAfterInteractions(async () => {
-          lastProfileHealthRefreshAtRef.current = Date.now();
+        profileFocusTaskRef.current = scheduleAfterInteractions(() => runProfileRefresh(async () => {
           await refreshHealthConnectStatus();
           if (!uid) return;
           const samsungAutoSyncResult = await autoSyncBodyCompositionFromSamsungHealthIfEligible(uid, {
@@ -668,19 +731,20 @@ export default function ProfileIndex() {
               ? sleepProfile.sampleRecordedAt.toDate().toLocaleString()
               : "No saved data"
           );
-        });
+          lastProfileHealthRefreshAtRef.current = Date.now();
+        }, (error) => console.log("Could not refresh Profile health data", error)));
       }
       return () => profileFocusTaskRef.current?.cancel();
-    }, [refreshBodyComposition, refreshHealthConnectStatus, uid, weightUnit])
+    }, [refreshBodyComposition, refreshHealthConnectStatus, uid, weightUnit, isOffline, networkReady])
   );
 
   useEffect(() => {
-    if (!loading && initialSnapshot == null) {
+    if (!loading && !profileLoadFailed && initialSnapshot == null) {
       // Wait until all initial profile and auto-sync state updates settle before enabling the leave guard.
       const task = scheduleAfterInteractions(() => setInitialSnapshot(latestSnapshotRef.current));
       return task.cancel;
     }
-  }, [loading, initialSnapshot, currentSnapshot]);
+  }, [loading, profileLoadFailed, initialSnapshot, currentSnapshot]);
 
   const healthConnectMessage = () => {
     if (!healthConsentAccepted) {
@@ -721,6 +785,10 @@ export default function ProfileIndex() {
   };
 
   const handleOpenPlayStore = async () => {
+    if (Platform.OS === "android" && Number(Platform.Version) >= 34) {
+      try { await Linking.sendIntent("android.health.connect.action.HEALTH_HOME_SETTINGS"); return; }
+      catch { /* Fall back to provider installation/update guidance. */ }
+    }
     const url = "https://play.google.com/store/apps/details?id=com.google.android.apps.healthdata";
     const supported = await Linking.canOpenURL(url);
     if (!supported) {
@@ -863,11 +931,11 @@ export default function ProfileIndex() {
     if (!uid) return;
     try {
       await clearHealthSyncConsent(uid);
+      setHealthConsentAccepted(false);
+      setHealthFeedback("Disconnected on this device. Previously saved records are kept.");
     } catch (error) {
       console.log("Failed to clear health sync consent", error);
-    } finally {
-      setHealthConsentAccepted(false);
-      setHealthFeedback(null);
+      setHealthFeedback("Could not disconnect. Try again; the connection state is unchanged.");
     }
   }, [uid]);
 
@@ -882,7 +950,7 @@ export default function ProfileIndex() {
     showAppDialog({
       title: "Disconnect health sync",
       message:
-        "Lastrep can stop using connected health data now. If you also want to remove access at the source, open Health Connect permissions.",
+        "Stop future health-data reads on this device. Previously saved account records will remain. To revoke device permissions too, use Health Connect permissions separately.",
       buttonLayout: "vertical",
       buttons: [
         {
@@ -892,16 +960,10 @@ export default function ProfileIndex() {
             void clearHealthConsentAccepted();
           },
         },
-        {
-          text: "Open Health Connect",
-          onPress: () => {
-            void handleManageHealthPermissions();
-          },
-        },
         { text: "Cancel", role: "cancel" },
       ],
     });
-  }, [clearHealthConsentAccepted, handleManageHealthPermissions]);
+  }, [clearHealthConsentAccepted]);
 
   const applyEnergyUnit = (nextUnit: EnergyUnit) => {
     if (nextUnit === energyUnit) return;
@@ -930,6 +992,7 @@ export default function ProfileIndex() {
     };
     setBodyWeight((previous) => convertText(previous));
     setMuscleMass((previous) => convertText(previous));
+    setLeanMass((previous) => convertText(previous));
     setWeightUnit(nextUnit);
   };
 
@@ -982,14 +1045,10 @@ export default function ProfileIndex() {
       }
 
       if (!sleepGranted && !samsungBodyGranted && !healthConnectBodyGrantedNext) {
-        const opened =
-          (await openHealthConnectAppPermissionsScreen()) ||
-          (await openHealthConnectDataManagementScreen());
         setHealthFeedback(
-          opened
-            ? "Permissions are required before syncing sleep or body composition."
-            : "Unable to open Health Connect settings on this device."
+          "Permissions are required before syncing sleep or body composition. Use Health Connect permissions to review access, then try again."
         );
+        await refreshHealthConnectStatus();
         return;
       }
 
@@ -1023,7 +1082,7 @@ export default function ProfileIndex() {
       if (sleepResult.status === "success") {
         messages.push("Sleep synced.");
       } else if (sleepResult.status === "no_data") {
-        messages.push("No sleep data found.");
+        messages.push("No new sleep data found.");
       } else if (sleepResult.status === "permission_denied") {
         messages.push("Sleep permission missing.");
       } else if (sleepResult.status === "error") {
@@ -1055,6 +1114,10 @@ export default function ProfileIndex() {
 
   const save = useCallback(async (): Promise<boolean> => {
     if (!uid || savingProfileRef.current) return false;
+    // The connectivity-driven notice owns offline feedback; do not persist it as a save result.
+    if (isOffline) return false;
+    const validationError = (["body", "nutrition", "sleep", "tdee"] as const).map((section) => validateProfileEditor(section, buildSnapshot(), initialSnapshot ?? undefined)).find(Boolean);
+    if (validationError) { showAppAlert("Check your entries", validationError); return false; }
     setSaveFeedback(null);
     const fields = [
       { label: "Cut", value: cutCalories },
@@ -1110,6 +1173,9 @@ export default function ProfileIndex() {
     const parsedBodyFat = parseOptionalBodyMetric(bodyFatPercent, "Body fat %");
     if (Number.isNaN(parsedBodyFat)) return false;
     const parsedMuscleMass = parseOptionalBodyMetric(muscleMass, "Muscle mass");
+    const parsedLeanMass = parseOptionalBodyMetric(leanMass, "Lean body mass");
+    if (Number.isNaN(parsedLeanMass)) return false;
+    const nextLeanMassKg = parsedLeanMass == null ? null : convertWeightUnitToKg(parsedLeanMass, weightUnit);
     if (Number.isNaN(parsedMuscleMass)) return false;
     const nextWeightKg =
       typeof parsedWeight === "number" ? convertWeightUnitToKg(parsedWeight, weightUnit) : null;
@@ -1132,13 +1198,20 @@ export default function ProfileIndex() {
     const previousPhoto = initialSnapshot ? (JSON.parse(initialSnapshot) as ProfileSnapshot).profilePhotoUri : "";
     const needsPhotoCommit = !cloudPhotoPath(profilePhotoUri) && (!!profilePhotoUri || previousPhoto !== profilePhotoUri);
     let savedPhotoReference = profilePhotoUri;
+    const sectionsToSave = profileSaveSections(buildSnapshot(), initialSnapshot);
     savingProfileRef.current = true;
     setSavingProfile(true);
     try {
       if (needsPhotoCommit && profilePhotoUri) {
         setSaveFeedback("Uploading photo...");
-        stagedPhotoPath = await stageProfilePhoto(uid, profilePhotoUri);
+        if (sectionsToSave.photoOnly) {
+          savedPhotoReference = await saveProfilePhotoOnly(uid, profilePhotoUri);
+          photoCommitted = true;
+        } else {
+          stagedPhotoPath = await stageProfilePhoto(uid, profilePhotoUri);
+        }
       }
+      setSaveFeedback("Saving profile...");
       const profilePayload: Record<string, unknown> = {
         goal,
         nickname: nickname.trim(),
@@ -1158,17 +1231,19 @@ export default function ProfileIndex() {
         ...(trainingPhase !== initialTrainingPhase ? { trainingPhase } : {}),
         ...(dietPhase !== initialDietPhase ? { dietPhase } : {}),
       };
-      const savedPhases = await saveUserPhases(uid, phaseChanges, profilePayload);
+      const savedPhases = sectionsToSave.profile
+        ? await saveUserPhases(uid, phaseChanges, profilePayload)
+        : null;
       if (initialSnapshot && JSON.stringify(normalizeMealLabels((JSON.parse(initialSnapshot) as ProfileSnapshot).mealLabels)) !== JSON.stringify(normalizeMealLabels(mealLabels))) {
         // Replace the map, rather than deep-merge names that a reset removed.
         await updateDoc(doc(db, "users", uid), { mealLabels: normalizeMealLabels(mealLabels) });
       }
-      await setDoc(
+      if (sectionsToSave.sleep) await setDoc(
         doc(db, "users", uid),
         { sleepSettings: { targetHours: Math.round(parsedSleepTarget * 10) / 10 } },
         { merge: true }
       );
-      await saveNutritionProfile(
+      if (sectionsToSave.nutrition) await saveNutritionProfile(
         uid,
         parsedTargets,
         parsedProteinTarget == null ? null : Math.round(parsedProteinTarget)
@@ -1177,38 +1252,43 @@ export default function ProfileIndex() {
         weightKg?: number | null;
         bodyFatPercent?: number | null;
         skeletalMuscleMassKg?: number | null;
+        leanBodyMassKg?: number | null;
       } = {};
-      const hasMetricChanged = (nextValue: number | null, currentValue: number | null) =>
-        typeof nextValue === "number" &&
-        (typeof currentValue !== "number" || Math.abs(nextValue - currentValue) > 0.05);
+      const savedDraft = initialSnapshot ? JSON.parse(initialSnapshot) as ProfileSnapshot : null;
+      const hasMetricChanged = (field: "bodyWeight" | "bodyFatPercent" | "muscleMass" | "leanMass", raw: string) =>
+        profileMeasurementChanged(raw, savedDraft?.[field], savedDraft?.weightUnit ?? weightUnit, weightUnit, field !== "bodyFatPercent");
       if (
-        hasMetricChanged(nextWeightKg, bodyCompositionEffective.weightKg)
+        hasMetricChanged("bodyWeight", bodyWeight)
       ) {
         bodyCompositionUpdates.weightKg = nextWeightKg;
       }
-      if (hasMetricChanged(parsedBodyFat, bodyCompositionEffective.bodyFatPercent)) {
+      if (hasMetricChanged("bodyFatPercent", bodyFatPercent)) {
         bodyCompositionUpdates.bodyFatPercent = parsedBodyFat;
       }
-      if (hasMetricChanged(nextMuscleMassKg, bodyCompositionEffective.skeletalMuscleMassKg)) {
+      if (hasMetricChanged("muscleMass", muscleMass)) {
         bodyCompositionUpdates.skeletalMuscleMassKg = nextMuscleMassKg;
       }
+      if (hasMetricChanged("leanMass", leanMass)) bodyCompositionUpdates.leanBodyMassKg = nextLeanMassKg;
       if (Object.keys(bodyCompositionUpdates).length > 0) {
         await saveManualBodyCompositionEntry(uid, bodyCompositionUpdates);
         await refreshBodyComposition(uid, weightUnit);
       }
-      if (needsPhotoCommit) {
+      if (needsPhotoCommit && !photoCommitted) {
+        setSaveFeedback("Finalizing photo...");
         savedPhotoReference = await commitProfilePhoto(uid, stagedPhotoPath);
         photoCommitted = true;
-        setProfilePhotoUri(savedPhotoReference);
       }
+      if (needsPhotoCommit) setProfilePhotoUri(savedPhotoReference);
       setInitialTrainingPhase(trainingPhase);
       setInitialDietPhase(dietPhase);
-      setCurrentTrainingPhaseStartedAt(
-        savedPhases.trainingPhaseStartedAt instanceof Timestamp ? savedPhases.trainingPhaseStartedAt : null
-      );
-      setCurrentDietPhaseStartedAt(
-        savedPhases.dietPhaseStartedAt instanceof Timestamp ? savedPhases.dietPhaseStartedAt : null
-      );
+      if (savedPhases) {
+        setCurrentTrainingPhaseStartedAt(
+          savedPhases.trainingPhaseStartedAt instanceof Timestamp ? savedPhases.trainingPhaseStartedAt : null
+        );
+        setCurrentDietPhaseStartedAt(
+          savedPhases.dietPhaseStartedAt instanceof Timestamp ? savedPhases.dietPhaseStartedAt : null
+        );
+      }
       setSaveFeedback("Changes saved.");
       setInitialSnapshot(snapshotWithPhoto(buildSnapshot(), savedPhotoReference));
       return true;
@@ -1226,6 +1306,7 @@ export default function ProfileIndex() {
     }
   }, [
     uid,
+    isOffline,
     cutCalories,
     maintainCalories,
     bulkCalories,
@@ -1249,13 +1330,11 @@ export default function ProfileIndex() {
     bodyWeight,
     bodyFatPercent,
     muscleMass,
+    leanMass,
     tdeeAge,
     tdeeHeightCm,
     tdeeSex,
     tdeeActivity,
-    bodyCompositionEffective.weightKg,
-    bodyCompositionEffective.bodyFatPercent,
-    bodyCompositionEffective.skeletalMuscleMassKg,
     buildSnapshot,
     refreshBodyComposition,
   ]);
@@ -1282,9 +1361,10 @@ export default function ProfileIndex() {
     showAppDialog({
       title: "Unsaved changes",
       message: "You have unsaved changes. Save before leaving?",
+      buttonLayout: "vertical",
       buttons: [
         {
-          text: "Save",
+          text: "Save and leave",
           role: "default",
           onPress: () => {
             void (async () => {
@@ -1294,7 +1374,7 @@ export default function ProfileIndex() {
           },
         },
         {
-          text: "Discard",
+          text: "Discard and leave",
           role: "destructive",
           onPress: () => {
             if (initialSnapshot) {
@@ -1303,7 +1383,7 @@ export default function ProfileIndex() {
             navigateBack(destination);
           },
         },
-        { text: "Cancel", role: "cancel" },
+        { text: "Keep editing", role: "cancel" },
       ],
     });
   }, [hasUnsavedChanges, initialSnapshot, navigateBack, restoreFromSnapshot, save]);
@@ -1368,9 +1448,10 @@ export default function ProfileIndex() {
         showAppDialog({
           title: "Unsaved changes",
           message: "You have unsaved changes. Save before leaving?",
+      buttonLayout: "vertical",
           buttons: [
             {
-              text: "Save",
+              text: "Save and leave",
               role: "default",
               onPress: () => {
                 blurPromptOpenRef.current = false;
@@ -1383,7 +1464,7 @@ export default function ProfileIndex() {
               },
             },
             {
-              text: "Discard",
+              text: "Discard and leave",
               role: "destructive",
               onPress: () => {
                 blurPromptOpenRef.current = false;
@@ -1395,7 +1476,7 @@ export default function ProfileIndex() {
               },
             },
             {
-              text: "Cancel",
+              text: "Keep editing",
               role: "cancel",
               onPress: () => {
                 blurPromptOpenRef.current = false;
@@ -1468,931 +1549,142 @@ export default function ProfileIndex() {
   const visibleBodyCompositionHistory = bodyHistoryExpanded
     ? bodyCompositionHistory.slice(0, 8)
     : bodyCompositionHistory.slice(0, 3);
+  const entitlement = useEntitlement(!!uid, uid);
+  const openEditor = (section: ProfileEditor, focus?: string) => {
+    setEditorError(null);
+    setEditor({ section, focus, before: buildSnapshot() });
+  };
+  const cancelEditor = () => {
+    if (!editor) return;
+    restoreFromSnapshot(cancelProfileSection(buildSnapshot(), editor.before, editor.section));
+    if (editor.section === "tdee") setSaveFeedback(null);
+    setEditor(null); setEditorError(null); setPhotoActionMenuVisible(false);
+  };
+  const acceptEditor = () => {
+    if (!editor) return;
+    const error = validateProfileEditor(editor.section, buildSnapshot(), editor.before);
+    if (error) { setEditorError(error); return; }
+    setEditor(null); setEditorError(null);
+  };
+  const phaseLabel = (kind: "training" | "diet") => {
+    const changed = kind === "training" ? trainingPhase !== initialTrainingPhase : dietPhase !== initialDietPhase;
+    const start = kind === "training" ? currentTrainingPhaseStartedAt : currentDietPhaseStartedAt;
+    return changed ? "Week 1 on save" : start ? `Week ${phaseWeek(start.toMillis(), phaseNowMs)}` : "Start date not recorded";
+  };
+  const displayValue = (raw: string, unit: string) => raw.trim() ? `${raw} ${unit}` : "Not recorded";
+  const titles: Record<ProfileEditor, string> = { identity: "Profile identity", training: "Training phase", diet: "Diet phase", availability: "Days available", units: "Units and effort", body: "Body composition", tdee: "TDEE calculator", nutrition: "Nutrition targets", sleep: "Sleep target" };
+  const metricField = (label: string, value: string, onChangeText: (text: string) => void, unit: string, placeholder: string) => <ProfileField key={label} inline label={label} value={value} onChangeText={onChangeText} unit={unit} placeholder={placeholder} keyboardType="decimal-pad" autoFocus={editor?.focus === label} />;
+  const healthRows = [
+    ["Status", healthConnectionStatus], ["Supported data", "Sleep, Body composition"],
+    ["Sleep", displayedSleepStatus], ["Body composition", displayedBodyStatus],
+    [sleepSyncRowLabel, displayedLastSleepSyncLabel], [bodySyncRowLabel, displayedLastBodySyncLabel],
+  ];
   if (redirectTo) return <Redirect href={redirectTo} />;
-  if (loading) {
-    return (
-      <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
-        <Text style={styles.loadingText}>Loading...</Text>
-      </SafeAreaView>
-    );
-  }
-
-  return (
-    <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={handleGoBack} disabled={savingProfile}>
-          <Ionicons name="chevron-back" size={22} color="#fff" />
-        </TouchableOpacity>
-        <Text style={styles.title}>Profile</Text>
-        <View style={styles.headerSpacer} />
+  return <SafeAreaView style={{ flex: 1, backgroundColor: colors.canvas }} edges={["top", "left", "right"]}>
+    <NotebookHeader title="Profile" onBack={() => { if (!savingProfile) handleGoBack(); }} action={savingProfile ? "Saving..." : "Save"} onAction={() => void save()} disabled={loading || savingProfile || !hasUnsavedChanges || initialSnapshot == null} />
+    {loading ? <ProfileText>Loading profile...</ProfileText> : profileLoadFailed ? <View style={{ padding: 20, gap: 12 }}><ProfileText muted>Your saved profile has not loaded. Reconnect to load it; no changes have been saved.</ProfileText><ProfileAction label="Retry" disabled={isOffline || !networkReady} onPress={() => setProfileLoadAttempt((attempt) => attempt + 1)} /></View> : <ScrollView ref={profileScrollRef} onContentSizeChange={revealHealthFeedback} pointerEvents={savingProfile ? "none" : "auto"} keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 20, paddingBottom: 56, gap: 28, width: "100%", maxWidth: 800, alignSelf: "center" }}>
+      {isOffline ? <Text accessibilityLiveRegion="polite" style={styles.helperText}>Offline. Your edits stay here; reconnect before saving.</Text> : saveFeedback ? <Text accessibilityLiveRegion="polite" style={styles.helperText}>{saveFeedback}</Text> : null}
+      <ProfileSection first title="Identity" action={<ProfileAction label="Edit" onPress={() => openEditor("identity")} />}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 20 }}>
+          <ProfilePhoto fallbackBackgroundColor={colors.subtle} fallbackTextColor={colors.ink} fallbackFontFamily={notebookFonts.semibold} uid={uid} reference={profilePhotoUri} initial={nickname.trim().charAt(0).toUpperCase() || "L"} style={{ width: 72, height: 72, borderRadius: 36, backgroundColor: colors.subtle }} contentFit="cover" />
+          <View style={{ flex: 1, gap: 8 }}><Text style={{ fontFamily: notebookFonts.editorial, fontSize: 28, color: colors.ink }}>{nickname.trim() || "Your profile"}</Text><Text style={{ fontFamily: notebookFonts.semibold, fontSize: 13, color: colors.ink, alignSelf: "flex-start", borderWidth: 1, borderColor: colors.border, borderRadius: 4, paddingHorizontal: 8, paddingVertical: 4 }}>{entitlement.state === "loading" ? "Checking access" : entitlement.isSubscribed ? "Premium" : "Free"}</Text>{profileDescription ? <ProfileText muted>{profileDescription}</ProfileText> : null}</View>
+        </View>
+      </ProfileSection>
+      <ProfileSection title="Training">
+        <ProfileRow wideValue label="Training phase" value={`${trainingPhase} / ${phaseLabel("training")}`} onPress={() => openEditor("training")} />
+        <ProfileRow wideValue label="Diet phase" value={`${dietPhase} / ${phaseLabel("diet")}`} onPress={() => openEditor("diet")} />
+        <ProfileRow label="Availability" value={`${availabilityDays} days / week`} onPress={() => openEditor("availability")} />
+      </ProfileSection>
+      <ProfileSection title="Units">
+        <ProfileRow label="Exercise effort" value={effortScale.toUpperCase()} onPress={() => openEditor("units")} />
+        <ProfileRow label="Weight" value={weightUnit} onPress={() => openEditor("units")} />
+        <ProfileRow label="Height" value={heightUnit} onPress={() => openEditor("units")} />
+        <ProfileRow label="Food energy" value={energyUnit} onPress={() => openEditor("units")} />
+      </ProfileSection>
+      <ProfileSection title="Body composition">
+        <ProfileRow label="Weight" value={displayValue(bodyWeight, weightUnit)} onPress={() => openEditor("body", "Weight")} />
+        <ProfileRow label="Body fat" value={displayValue(bodyFatPercent, "%")} onPress={() => openEditor("body", "Body fat")} />
+        <ProfileRow label="Lean body mass" value={displayValue(leanMass, weightUnit)} onPress={() => openEditor("body", "Lean body mass")} help={() => setHelp("Lean body mass is your body weight excluding fat. It includes muscle, organs, bones and water; it is not skeletal muscle mass.")} />
+        <ProfileRow label="Skeletal muscle" value={displayValue(muscleMass, weightUnit)} onPress={() => openEditor("body", "Skeletal muscle")} help={() => setHelp("Skeletal muscle mass is the mass of muscles that move your skeleton. It is only part of lean body mass and must not be inferred from a lean-mass reading.")} />
+        <ProfileText muted>{latestBodyCompositionSource} / {latestBodyCompositionLabel}</ProfileText>
+        {typeof bodyCompositionEffective.legacyMuscleMassKg === "number" ? <ProfileText muted>Older muscle value: {formatWeightForUnit(bodyCompositionEffective.legacyMuscleMassKg, weightUnit)} {weightUnit}. Type unverified; not used as lean or skeletal muscle.</ProfileText> : null}
+        <ProfileAction label="View body history" onPress={() => setHistoryVisible(true)} />
+      </ProfileSection>
+      <ProfileSection title="TDEE calculator">
+        <ProfileText muted>{tdeeEstimateKcal == null ? "Estimate maintenance calories using your weight, height, age and activity." : `Estimated maintenance / ${Math.round(convertEnergyValue(tdeeEstimateKcal, "kcal", energyUnit))} ${energyUnit} per day`}</ProfileText>
+        <ProfileAction label="Calculate" onPress={() => openEditor("tdee")} />
+      </ProfileSection>
+      <ProfileSection title="Nutrition targets">
+        <ProfileRow label="Cut" value={displayValue(cutCalories, energyUnit)} onPress={() => openEditor("nutrition")} />
+        <ProfileRow label="Maintain" value={displayValue(maintainCalories, energyUnit)} onPress={() => openEditor("nutrition")} />
+        <ProfileRow label="Bulk" value={displayValue(bulkCalories, energyUnit)} onPress={() => openEditor("nutrition")} />
+        <ProfileRow label="Protein" value={displayValue(proteinTargetGrams, "g / day")} onPress={() => openEditor("nutrition")} />
+      </ProfileSection>
+      <ProfileSection title="Sleep target"><ProfileRow label="Daily target" value={`${sleepTargetHours} hours`} onPress={() => openEditor("sleep")} /></ProfileSection>
+      <View onLayout={(event) => { healthSyncYRef.current = event.nativeEvent.layout.y; }}>
+        <ProfileSection title="Health sync">
+          {healthRows.map(([label, value]) => <View key={label} style={{ flexDirection: fontScale >= 1.5 ? "column" : "row", gap: 8, paddingVertical: 6 }}><View style={{ flex: 1 }}><ProfileText>{label}</ProfileText></View><View style={{ flex: 1.4 }}><ProfileText muted>{value}</ProfileText></View></View>)}
+          <ProfileText muted>{healthConnectMessage()}</ProfileText>
+          <ProfileAction label={healthPrimaryButtonLabel} primary disabled={healthLoading} onPress={shouldShowConnectAction ? handleOpenHealthConsent : handleSyncHealthConnectData} />
+          {healthConsentAccepted ? <><ProfileAction label="Health Connect permissions" disabled={healthLoading} onPress={handleManageHealthPermissions} /><ProfileAction label="Disconnect" disabled={healthLoading} onPress={handleDisconnectHealth} /></> : null}
+          {healthAvailability === "provider_update_required" || healthAvailability === "unavailable" ? <ProfileAction label="Set up Health Connect" disabled={healthLoading} onPress={handleOpenPlayStore} /> : null}
+          {healthFeedback ? <View accessibilityLiveRegion="polite" onLayout={revealHealthFeedback}><ProfileText muted>{healthFeedback}</ProfileText></View> : null}
+        </ProfileSection>
       </View>
-      <ScrollView
-        pointerEvents={savingProfile ? "none" : "auto"}
-        ref={profileScrollRef}
-        style={styles.container}
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
-      >
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Profile identity</Text>
-          <View style={styles.identityRow}>
-            <View style={styles.profilePhotoWrap}>
-              {profilePhotoUri ? (
-                <ProfilePhoto uid={uid} reference={profilePhotoUri} initial={nickname.trim().charAt(0).toUpperCase() || "L"} style={styles.profilePhoto} contentFit="cover" />
-              ) : (
-                <View style={[styles.profilePhoto, styles.profilePhotoPlaceholder]}>
-                  <Ionicons name="person" size={28} color="#d8daec" />
-                </View>
-              )}
-              <TouchableOpacity
-                style={styles.profilePhotoAction}
-                onPress={() => setPhotoActionMenuVisible(true)}
-                activeOpacity={0.85}
-              >
-                <Ionicons name="camera" size={15} color="#eef1ff" />
-              </TouchableOpacity>
-            </View>
-          </View>
-          <Text style={styles.targetLabel}>Nickname</Text>
-          <TextInput
-            placeholder="Your nickname"
-            placeholderTextColor="#7a7a8c"
-            style={styles.input}
-            value={nickname}
-            onChangeText={setNickname}
-          />
-          <Text style={styles.targetLabel}>Description</Text>
-          <TextInput
-            placeholder="Short description"
-            placeholderTextColor="#7a7a8c"
-            style={[styles.input, styles.multilineInput]}
-            value={profileDescription}
-            onChangeText={setProfileDescription}
-            multiline
-            textAlignVertical="top"
-            maxLength={160}
-          />
-        </View>
-
-        <Modal
-          visible={photoActionMenuVisible}
-          transparent
-          animationType="fade"
-          onRequestClose={() => setPhotoActionMenuVisible(false)}
-        >
-          <Pressable style={styles.photoActionOverlay} onPress={() => setPhotoActionMenuVisible(false)}>
-            <Pressable style={styles.photoActionSheet} onPress={(event) => event.stopPropagation()}>
-              <TouchableOpacity style={styles.photoActionItem} onPress={handlePickProfilePhoto}>
-                <Ionicons name={profilePhotoUri ? "image-outline" : "camera-outline"} size={18} color="#f4f7ff" />
-                <Text style={styles.photoActionItemText}>
-                  {profilePhotoUri ? "Change photo" : "Add photo"}
-                </Text>
-              </TouchableOpacity>
-              {profilePhotoUri ? (
-                <TouchableOpacity style={styles.photoActionItem} onPress={handleRemoveProfilePhoto}>
-                  <Ionicons name="trash-outline" size={18} color="#ffb4b4" />
-                  <Text style={[styles.photoActionItemText, styles.photoActionDeleteText]}>Remove photo</Text>
-                </TouchableOpacity>
-              ) : null}
-            </Pressable>
-          </Pressable>
-        </Modal>
-
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Goal</Text>
-          <View style={styles.row}>
-            {goals.map((g) => (
-              <TouchableOpacity
-                key={g.key}
-                onPress={() => setGoal(g.key)}
-                style={[styles.chip, goal === g.key && styles.chipActive]}
-              >
-                <Text style={[styles.chipText, goal === g.key && styles.chipTextActive]}>
-                  {g.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Training phase</Text>
-          <Text style={styles.helperText}>{trainingPhase !== initialTrainingPhase ? "Week 1 starts when saved" : currentTrainingPhaseStartedAt ? `Week ${phaseWeek(currentTrainingPhaseStartedAt.toMillis(), phaseNowMs)}` : "Start date not recorded"}</Text>
-          <View style={styles.row}>
-            {TRAINING_PHASES.map((phase) => (
-              <TouchableOpacity
-                key={phase}
-                onPress={() => setTrainingPhase(phase)}
-                style={[styles.chip, trainingPhase === phase && styles.chipActive]}
-              >
-                <Text style={[styles.chipText, trainingPhase === phase && styles.chipTextActive]}>
-                  {phase}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Diet phase</Text>
-          <Text style={styles.helperText}>{dietPhase !== initialDietPhase ? "Week 1 starts when saved" : currentDietPhaseStartedAt ? `Week ${phaseWeek(currentDietPhaseStartedAt.toMillis(), phaseNowMs)}` : "Start date not recorded"}</Text>
-          <View style={styles.row}>
-            {DIET_PHASES.map((phase) => (
-              <TouchableOpacity
-                key={phase}
-                onPress={() => setDietPhase(phase)}
-                style={[styles.chip, dietPhase === phase && styles.chipActive]}
-              >
-                <Text style={[styles.chipText, dietPhase === phase && styles.chipTextActive]}>
-                  {phase}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Availability</Text>
-          <Text style={styles.availabilityValue}>{availabilityDays} days / week</Text>
-          <Slider
-            value={availabilityDays}
-            minimumValue={1}
-            maximumValue={7}
-            step={1}
-            minimumTrackTintColor="#7b61ff"
-            maximumTrackTintColor="rgba(255,255,255,0.35)"
-            thumbTintColor="#fff"
-            onValueChange={(value: number) => setAvailabilityDays(Math.round(value))}
-          />
-          <View style={styles.availabilityTicksRow}>
-            {[1, 2, 3, 4, 5, 6, 7].map((day) => (
-              <View key={`availability-${day}`} style={styles.availabilityTickCol}>
-                <View
-                  style={[
-                    styles.availabilityTick,
-                    day === availabilityDays && styles.availabilityTickActive,
-                  ]}
-                />
-                <Text
-                  style={[
-                    styles.availabilityTickLabel,
-                    day === availabilityDays && styles.availabilityTickLabelActive,
-                  ]}
-                >
-                  {day}
-                </Text>
-              </View>
-            ))}
-          </View>
-        </View>
-
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Units</Text>
-          <Text style={styles.targetLabel}>Exercise effort</Text>
-          <View style={styles.row}>
-            {(["rpe", "rir"] as EffortScale[]).map((scale) => (
-              <TouchableOpacity
-                key={scale}
-                onPress={() => setEffortScale(scale)}
-                style={[styles.chip, effortScale === scale && styles.chipActive]}
-                accessibilityRole="button"
-                accessibilityState={{ selected: effortScale === scale }}
-              >
-                <Text style={[styles.chipText, effortScale === scale && styles.chipTextActive]}>{scale.toUpperCase()}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-          <Text style={styles.helperText}>Applies to all resistance exercises. RPE rates effort; RIR estimates reps left. RPE 8 is approximately 2 RIR.</Text>
-          <Text style={styles.targetLabel}>Weight</Text>
-          <View style={styles.row}>
-            {(["kg", "lbs"] as WeightUnit[]).map((unit) => (
-              <TouchableOpacity
-                key={unit}
-                onPress={() => applyWeightUnit(unit)}
-                style={[styles.chip, weightUnit === unit && styles.chipActive]}
-              >
-                <Text style={[styles.chipText, weightUnit === unit && styles.chipTextActive]}>
-                  {unit}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-          <Text style={styles.targetLabel}>Height</Text>
-          <View style={styles.row}>
-            {(["cm", "ft/in"] as HeightUnit[]).map((unit) => (
-              <TouchableOpacity
-                key={unit}
-                onPress={() => setHeightUnit(unit)}
-                style={[styles.chip, heightUnit === unit && styles.chipActive]}
-              >
-                <Text style={[styles.chipText, heightUnit === unit && styles.chipTextActive]}>
-                  {unit}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-          <Text style={styles.targetLabel}>Food energy</Text>
-          <View style={styles.row}>
-            {(["kcal", "kJ"] as EnergyUnit[]).map((unit) => (
-              <TouchableOpacity
-                key={unit}
-                onPress={() => applyEnergyUnit(unit)}
-                style={[styles.chip, energyUnit === unit && styles.chipActive]}
-              >
-                <Text style={[styles.chipText, energyUnit === unit && styles.chipTextActive]}>
-                  {unit}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-        <View style={styles.card}>
-          <View style={styles.sectionHeaderRow}>
-          <Text style={styles.cardTitleNoMargin}>Body composition</Text>
-          </View>
-          <Text style={styles.helperText}>Latest source: {latestBodyCompositionSource}</Text>
-          <Text style={styles.helperText}>Last updated: {latestBodyCompositionLabel}</Text>
-          <Text style={styles.helperText}>
-            Lean body mass: {formatWeightForUnit(bodyCompositionEffective.leanBodyMassKg, weightUnit) || "-"} {weightUnit}
-          </Text>
-          {typeof bodyCompositionEffective.legacyMuscleMassKg === "number" ? (
-            <Text style={styles.helperText}>
-              Legacy muscle mass: {formatWeightForUnit(bodyCompositionEffective.legacyMuscleMassKg, weightUnit)} {weightUnit} (type unverified)
-            </Text>
-          ) : null}
-          <View style={styles.targetRow}>
-            <View style={styles.targetColumn}>
-              <Text style={styles.targetLabel}>Weight ({weightUnit})</Text>
-              <TextInput
-                placeholder={weightUnit === "lbs" ? "176.4" : "80.0"}
-                placeholderTextColor="#7a7a8c"
-                style={styles.input}
-                value={bodyWeight}
-                onChangeText={setBodyWeight}
-                keyboardType="decimal-pad"
-              />
-            </View>
-            <View style={styles.targetColumn}>
-              <Text style={styles.targetLabel}>Body fat (%)</Text>
-              <TextInput
-                placeholder="15.0"
-                placeholderTextColor="#7a7a8c"
-                style={styles.input}
-                value={bodyFatPercent}
-                onChangeText={setBodyFatPercent}
-                keyboardType="decimal-pad"
-              />
-            </View>
-            <View style={styles.targetColumn}>
-              <Text style={styles.targetLabel}>Skeletal muscle ({weightUnit}, manual)</Text>
-              <TextInput
-                placeholder={weightUnit === "lbs" ? "88.2" : "40.0"}
-                placeholderTextColor="#7a7a8c"
-                style={styles.input}
-                value={muscleMass}
-                onChangeText={setMuscleMass}
-                keyboardType="decimal-pad"
-              />
-            </View>
-          </View>
-          <View style={styles.historySection}>
-            <Text style={styles.targetLabel}>Recent history</Text>
-            {bodyCompositionHistory.length === 0 ? (
-              <Text style={styles.helperText}>No body composition records yet.</Text>
-            ) : (
-              <>
-                {visibleBodyCompositionHistory.map((entry, index) => (
-                  <View
-                    key={`${entry.source}-${entry.recordedAt?.toMillis() ?? index}-${index}`}
-                    style={styles.historyRow}
-                  >
-                    <View style={styles.historyRowHeader}>
-                      <Text style={styles.historyRowTitle}>
-                        {formatBodyCompositionSource(entry.source, entry.originLabel)}
-                      </Text>
-                      <Text style={styles.historyRowMeta}>
-                        {formatBodyCompositionTimestamp(entry.recordedAt)}
-                      </Text>
-                    </View>
-                    <Text style={styles.historyRowValues}>
-                      {`W ${formatWeightForUnit(entry.weightKg, weightUnit) || "-"} ${weightUnit} | BF ${
-                        formatPercent(entry.bodyFatPercent) || "-"
-                      }% | LBM ${formatWeightForUnit(entry.leanBodyMassKg, weightUnit) || "-"} ${weightUnit} | SMM ${
-                        formatWeightForUnit(entry.skeletalMuscleMassKg, weightUnit) || "-"
-                      } ${weightUnit}${
-                        typeof entry.legacyMuscleMassKg === "number"
-                          ? ` | Legacy ${formatWeightForUnit(entry.legacyMuscleMassKg, weightUnit)} ${weightUnit}`
-                          : ""
-                      }`}
-                    </Text>
-                  </View>
-                ))}
-                {bodyCompositionHistory.length > 3 ? (
-                  <TouchableOpacity
-                    style={styles.historyToggle}
-                    onPress={() => setBodyHistoryExpanded((previous) => !previous)}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={styles.historyToggleText}>
-                      {bodyHistoryExpanded ? "Show less" : "Show more"}
-                    </Text>
-                  </TouchableOpacity>
-                ) : null}
-              </>
-            )}
-          </View>
-        </View>
-
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>TDEE calculator</Text>
-          <Text style={styles.helperText}>Use this as a starting estimate. Your weight is taken from Body composition.</Text>
-          <View style={styles.targetRow}>
-            <View style={styles.targetColumn}>
-              <Text style={styles.targetLabel}>Age</Text>
-              <TextInput placeholder="30" placeholderTextColor="#7a7a8c" style={styles.input} value={tdeeAge} onChangeText={setTdeeAge} keyboardType="numeric" />
-            </View>
-            <View style={styles.targetColumn}>
-              <Text style={styles.targetLabel}>Height (cm)</Text>
-              <TextInput placeholder="175" placeholderTextColor="#7a7a8c" style={styles.input} value={tdeeHeightCm} onChangeText={setTdeeHeightCm} keyboardType="decimal-pad" />
-            </View>
-          </View>
-          <Text style={styles.targetLabel}>Sex</Text>
-          <View style={styles.row}>
-            {(["female", "male"] as TdeeSex[]).map((value) => (
-              <TouchableOpacity key={value} style={[styles.chip, tdeeSex === value && styles.chipActive]} onPress={() => setTdeeSex(value)}>
-                <Text style={[styles.chipText, tdeeSex === value && styles.chipTextActive]}>{value === "male" ? "Male" : "Female"}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-          <Text style={styles.targetLabel}>Activity</Text>
-          <View style={styles.row}>
-            {(Object.keys(TDEE_ACTIVITY_MULTIPLIERS) as TdeeActivity[]).map((value) => (
-              <TouchableOpacity key={value} style={[styles.chip, tdeeActivity === value && styles.chipActive]} onPress={() => setTdeeActivity(value)}>
-                <Text style={[styles.chipText, tdeeActivity === value && styles.chipTextActive]}>{TDEE_ACTIVITY_MULTIPLIERS[value].label}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-          <Text style={styles.tdeeEstimateText}>
-            {tdeeEstimateKcal == null ? "Enter age, height, and weight to calculate." : `Estimated maintenance: ${Math.round(convertEnergyValue(tdeeEstimateKcal, "kcal", energyUnit))} ${energyUnit}/day`}
-          </Text>
-          <TouchableOpacity style={[styles.secondaryButton, tdeeEstimateKcal == null && styles.disabled]} disabled={tdeeEstimateKcal == null} onPress={applyTdeeEstimate}>
-            <Text style={styles.secondaryButtonText}>Use for nutrition targets</Text>
-          </TouchableOpacity>
-        </View>
-
-        <MealPreferencesCard labels={mealLabels} onChange={setMealLabels} disabled={loading || savingProfile || initialSnapshot == null} />
-
-        <View style={styles.card}>
-          <View style={styles.nutritionTargetsHeaderRow}>
-            <Text style={styles.cardTitleNoMargin}>Nutrition targets</Text>
-            <TouchableOpacity
-              style={styles.energyUnitToggle}
-              onPress={() => applyEnergyUnit(energyUnit === "kcal" ? "kJ" : "kcal")}
-            >
-              <Text style={styles.energyUnitToggleText}>{energyUnit}</Text>
-            </TouchableOpacity>
-          </View>
-          <Text style={styles.helperText}>
-            Set daily targets by diet phase. Nutrition decisions will use completed days, not partial
-            same-day intake.
-          </Text>
-          <View style={styles.targetRow}>
-            <View style={styles.targetColumn}>
-              <Text style={styles.targetLabel}>Cut</Text>
-              <TextInput
-                placeholder="2200"
-                placeholderTextColor="#7a7a8c"
-                style={styles.input}
-                value={cutCalories}
-                onChangeText={setCutCalories}
-                keyboardType="numeric"
-              />
-            </View>
-            <View style={styles.targetColumn}>
-              <Text style={styles.targetLabel}>Maintain</Text>
-              <TextInput
-                placeholder="2600"
-                placeholderTextColor="#7a7a8c"
-                style={styles.input}
-                value={maintainCalories}
-                onChangeText={setMaintainCalories}
-                keyboardType="numeric"
-              />
-            </View>
-            <View style={styles.targetColumn}>
-              <Text style={styles.targetLabel}>Bulk</Text>
-              <TextInput
-                placeholder="2900"
-                placeholderTextColor="#7a7a8c"
-                style={styles.input}
-                value={bulkCalories}
-                onChangeText={setBulkCalories}
-                keyboardType="numeric"
-              />
-            </View>
-          </View>
-          <Text style={styles.targetLabel}>Protein target (g/day)</Text>
-          <TextInput
-            placeholder="160"
-            placeholderTextColor="#7a7a8c"
-            style={styles.input}
-            value={proteinTargetGrams}
-            onChangeText={setProteinTargetGrams}
-            keyboardType="numeric"
-          />
-        </View>
-
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Sleep target</Text>
-          <TextInput
-            placeholder="7.0"
-            placeholderTextColor="#7a7a8c"
-            style={styles.input}
-            value={sleepTargetHours}
-            onChangeText={setSleepTargetHours}
-            keyboardType="decimal-pad"
-          />
-        </View>
-
-        <View
-          style={styles.card}
-          onLayout={(event) => {
-            healthSyncYRef.current = event.nativeEvent.layout.y;
-          }}
-        >
-          <Text style={styles.cardTitle}>Health sync</Text>
-          <Text style={styles.healthSummaryText}>Sync supported sleep and body composition data.</Text>
-          <View style={styles.healthStatusBlock}>
-            <View style={styles.healthStatusRow}>
-              <Text style={styles.healthStatusLabel}>Status</Text>
-              <Text style={styles.healthStatusValue}>{healthConnectionStatus}</Text>
-            </View>
-            <View style={styles.healthStatusRow}>
-              <Text style={styles.healthStatusLabel}>Supported data</Text>
-              <Text style={styles.healthStatusValue}>Sleep, Body composition</Text>
-            </View>
-              <View style={styles.healthStatusRow}>
-                <Text style={styles.healthStatusLabel}>Sleep</Text>
-                <Text style={styles.healthStatusValue}>{displayedSleepStatus}</Text>
-              </View>
-              <View style={styles.healthStatusRow}>
-                <Text style={styles.healthStatusLabel}>Body comp</Text>
-                <Text style={styles.healthStatusValue}>{displayedBodyStatus}</Text>
-              </View>
-              <View style={styles.healthStatusRow}>
-                <Text style={styles.healthStatusLabel}>{sleepSyncRowLabel}</Text>
-                <Text style={styles.healthStatusValue}>{displayedLastSleepSyncLabel}</Text>
-              </View>
-              <View style={styles.healthStatusRow}>
-                <Text style={styles.healthStatusLabel}>{bodySyncRowLabel}</Text>
-                <Text style={styles.healthStatusValue}>{displayedLastBodySyncLabel}</Text>
-              </View>
-          </View>
-          <Text style={styles.healthCaptionText}>{healthConnectMessage()}</Text>
-          <TouchableOpacity
-            style={[
-              styles.healthPrimaryButton,
-              !shouldShowConnectAction && isHealthConnected && styles.connectedButton,
-              healthLoading && styles.buttonDisabled,
-            ]}
-            disabled={healthLoading}
-            onPress={shouldShowConnectAction ? handleOpenHealthConsent : handleSyncHealthConnectData}
-          >
-            <Text
-              style={[
-                styles.healthPrimaryButtonText,
-                !shouldShowConnectAction && isHealthConnected && styles.connectedButtonText,
-              ]}
-            >
-              {healthPrimaryButtonLabel}
-            </Text>
-          </TouchableOpacity>
-          {healthConsentAccepted ? (
-            <View style={styles.healthLinkRow}>
-              <TouchableOpacity disabled={healthLoading} onPress={handleManageHealthPermissions}>
-                <Text style={[styles.healthLinkText, healthLoading && styles.buttonDisabled]}>
-                  Health Connect permissions
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity disabled={healthLoading} onPress={handleDisconnectHealth}>
-                <Text style={[styles.healthLinkText, healthLoading && styles.buttonDisabled]}>
-                  Disconnect
-                </Text>
-              </TouchableOpacity>
-            </View>
-          ) : null}
-          {healthAvailability === "provider_update_required" ? (
-            <TouchableOpacity
-              style={[styles.secondaryButton, healthLoading && styles.buttonDisabled]}
-              disabled={healthLoading}
-              onPress={handleOpenPlayStore}
-            >
-              <Text style={styles.secondaryButtonText}>Open Play Store</Text>
-            </TouchableOpacity>
-          ) : null}
-          {healthFeedback ? <Text style={styles.healthFeedback}>{healthFeedback}</Text> : null}
-        </View>
-
-        <Modal
-          visible={healthConsentVisible}
-          transparent
-          animationType="slide"
-          onRequestClose={() => setHealthConsentVisible(false)}
-        >
-          <View style={styles.sheetOverlay}>
-            <TouchableWithoutFeedback onPress={() => setHealthConsentVisible(false)}>
-              <View style={styles.sheetDismissArea} />
-            </TouchableWithoutFeedback>
-            <View style={[styles.sheetCard, {
-              width: "100%",
-              maxWidth: 560,
-              alignSelf: "center",
-              maxHeight: windowHeight - insets.top - 16,
-              paddingBottom: 16 + Math.max(insets.bottom, 8),
-              paddingLeft: 20 + insets.left,
-              paddingRight: 20 + insets.right,
-            }]}>
-              <View style={styles.sheetHandle} />
-              <Text style={styles.sheetTitle}>Connect health data</Text>
-              <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ gap: 12 }}>
-                <Text style={styles.sheetText}>
-                  On supported Android devices, Lastrep can read sleep, weight, body-fat, and lean-body-mass records that you permit.
-                </Text>
-                <Text style={styles.sheetText}>
-                  We use them for recovery, sleep, and body-composition trends. Relevant summaries may also support AI-assisted training recommendations.
-                </Text>
-                <Text style={styles.sheetText}>
-                  Imported summaries are stored in your Lastrep account. Before the first AI-assisted plan, Lastrep separately explains what is sent to OpenAI and asks you to continue.
-                </Text>
-                <Text style={styles.sheetText}>
-                  This is optional. You can disconnect in Profile or revoke access in your connected health service at any time.
-                </Text>
-              </ScrollView>
-              <View style={styles.sheetActions}>
-                <TouchableOpacity style={styles.sheetSecondaryButton} onPress={() => setHealthConsentVisible(false)}>
-                  <Text style={styles.sheetSecondaryButtonText}>Not now</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.sheetPrimaryButton} onPress={handleAcceptHealthConsent}>
-                  <Text style={styles.sheetPrimaryButtonText}>Continue</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        </Modal>
-
-        <TouchableOpacity style={styles.save} onPress={save} disabled={savingProfile}>
-          <Text style={styles.saveText}>{savingProfile ? "Saving..." : "Save Changes"}</Text>
-        </TouchableOpacity>
-        {saveFeedback ? <Text style={styles.saveFeedback}>{saveFeedback}</Text> : null}
-      </ScrollView>
-    </SafeAreaView>
-  );
+    </ScrollView>}
+    {editor ? <ProfileSheet title={titles[editor.section]} onClose={cancelEditor} footer={<><ProfileAction label="Done" primary onPress={acceptEditor} /><ProfileAction label="Cancel" onPress={cancelEditor} /></>}>
+      <ProfileText muted>Changes are staged until you tap Save on Profile.</ProfileText>
+      {editor.section === "identity" ? <>
+        <View style={{ alignItems: "center", gap: 8 }}><ProfilePhoto fallbackBackgroundColor={colors.subtle} fallbackTextColor={colors.ink} fallbackFontFamily={notebookFonts.semibold} uid={uid} reference={profilePhotoUri} initial={nickname.trim().charAt(0).toUpperCase() || "L"} style={{ width: 96, height: 96, borderRadius: 48, backgroundColor: colors.subtle }} contentFit="cover" /><ProfileAction label={profilePhotoUri ? "Change photo" : "Add photo"} onPress={() => setPhotoActionMenuVisible(true)} /></View>
+        <ProfileField label="Nickname" value={nickname} onChangeText={setNickname} placeholder="Your nickname" />
+        <ProfileField label="Description" value={profileDescription} onChangeText={setProfileDescription} placeholder="A few words about you" multiline maxLength={160} />
+      </> : null}
+      {editor.section === "training" ? <><ProfileChoices label="Training phase" values={TRAINING_PHASES} selected={trainingPhase} onChange={setTrainingPhase} /><ProfileText muted>{phaseLabel("training")}</ProfileText><ProfileText muted>A different phase starts when you save Profile.</ProfileText></> : null}
+      {editor.section === "diet" ? <><ProfileChoices label="Diet phase" values={DIET_PHASES} selected={dietPhase} onChange={setDietPhase} /><ProfileText muted>{phaseLabel("diet")}</ProfileText><ProfileText muted>A different phase starts when you save Profile.</ProfileText></> : null}
+      {editor.section === "availability" ? <><ProfileText>{availabilityDays} days / week</ProfileText><Slider accessibilityLabel="Days available per week" accessibilityValue={{ min: 1, max: 7, now: availabilityDays }} value={availabilityDays} minimumValue={1} maximumValue={7} step={1} minimumTrackTintColor={colors.accent} maximumTrackTintColor={colors.rule} thumbTintColor={colors.ink} onValueChange={(value: number) => setAvailabilityDays(Math.round(value))} /></> : null}
+      {editor.section === "units" ? <>
+        <ProfileChoices equalCells label="Exercise effort" values={["RPE", "RIR"]} selected={effortScale.toUpperCase()} onChange={(value) => setEffortScale(value.toLowerCase() as EffortScale)} />
+        <ProfileText muted>Applies to all resistance exercises. RPE 8 is approximately 2 RIR. Your recorded history is unchanged.</ProfileText>
+        <ProfileChoices equalCells label="Weight" values={["kg", "lbs"] as WeightUnit[]} selected={weightUnit} onChange={applyWeightUnit} />
+        <ProfileChoices equalCells label="Height" values={["cm", "ft/in"] as HeightUnit[]} selected={heightUnit} onChange={setHeightUnit} />
+        <ProfileChoices equalCells label="Food energy" values={["kcal", "kJ"] as EnergyUnit[]} selected={energyUnit} onChange={applyEnergyUnit} />
+      </> : null}
+      {editor.section === "body" ? <>
+        {metricField("Weight", bodyWeight, setBodyWeight, weightUnit, weightUnit === "kg" ? "e.g. 80.15" : "e.g. 176.7")}
+        {metricField("Body fat", bodyFatPercent, setBodyFatPercent, "%", "e.g. 15.0")}
+        {metricField("Lean body mass", leanMass, setLeanMass, weightUnit, weightUnit === "kg" ? "e.g. 65.0" : "e.g. 143.3")}
+        {metricField("Skeletal muscle", muscleMass, setMuscleMass, weightUnit, weightUnit === "kg" ? "e.g. 35.0" : "e.g. 77.2")}
+      </> : null}
+      {editor.section === "tdee" ? <>
+        <ProfileField label="Age" value={tdeeAge} onChangeText={setTdeeAge} placeholder="e.g. 30" keyboardType="number-pad" />
+        <ProfileField label="Height" value={tdeeHeightCm} onChangeText={setTdeeHeightCm} placeholder="e.g. 175" unit="cm" keyboardType="decimal-pad" />
+        <ProfileText muted>Uses your latest weight from Body composition. Height here is entered in cm.</ProfileText>
+        <ProfileChoices label="Sex used for calculation" values={["female", "male"] as TdeeSex[]} selected={tdeeSex} onChange={setTdeeSex} />
+        <View style={{ gap: 8 }}><ProfileText>Activity</ProfileText>{(Object.keys(TDEE_ACTIVITY_MULTIPLIERS) as TdeeActivity[]).map((value) => <Pressable key={value} accessibilityRole="button" accessibilityState={{ selected: value === tdeeActivity }} onPress={() => setTdeeActivity(value)} style={{ padding: 12, minHeight: 48, borderWidth: 1, borderRadius: 6, borderColor: value === tdeeActivity ? colors.primary : colors.border, backgroundColor: value === tdeeActivity ? colors.primary : colors.surface }}><Text style={{ color: value === tdeeActivity ? colors.onPrimary : colors.ink, fontFamily: notebookFonts.body, fontSize: 16 }}>{TDEE_ACTIVITY_MULTIPLIERS[value].label}</Text></Pressable>)}</View>
+        <ProfileText>{tdeeEstimateKcal == null ? "Enter valid age, height and weight to calculate." : `Estimated maintenance: ${Math.round(convertEnergyValue(tdeeEstimateKcal, "kcal", energyUnit))} ${energyUnit} / day`}</ProfileText>
+        <ProfileAction label="Use for nutrition targets" primary disabled={tdeeEstimateKcal == null} onPress={() => { applyTdeeEstimate(); }} />
+      </> : null}
+      {editor.section === "nutrition" ? <>
+        {metricField("Cut", cutCalories, setCutCalories, energyUnit, "e.g. 2200")}
+        {metricField("Maintain", maintainCalories, setMaintainCalories, energyUnit, "e.g. 2600")}
+        {metricField("Bulk", bulkCalories, setBulkCalories, energyUnit, "e.g. 2900")}
+        {metricField("Protein", proteinTargetGrams, setProteinTargetGrams, "g / day", "e.g. 160")}
+      </> : null}
+      {editor.section === "sleep" ? <ProfileField label="Daily sleep target" unit="hours" value={sleepTargetHours} onChangeText={setSleepTargetHours} keyboardType="decimal-pad" placeholder="e.g. 7.5" /> : null}
+      {editorError ? <Text accessibilityRole="alert" style={{ color: colors.danger, fontSize: 16, fontFamily: notebookFonts.body }}>{editorError}</Text> : null}
+    </ProfileSheet> : null}
+    {photoActionMenuVisible ? <ProfileSheet title="Profile photo" onClose={() => setPhotoActionMenuVisible(false)} footer={<ProfileAction label="Cancel" onPress={() => setPhotoActionMenuVisible(false)} />}><ProfileAction label={profilePhotoUri ? "Choose another photo" : "Choose photo"} onPress={handlePickProfilePhoto} />{profilePhotoUri ? <ProfileAction label="Remove photo" onPress={handleRemoveProfilePhoto} /> : null}</ProfileSheet> : null}
+    {help ? <ProfileSheet title="Body composition" onClose={() => setHelp(null)} footer={<ProfileAction label="Close" onPress={() => setHelp(null)} />}><ProfileText>{help}</ProfileText></ProfileSheet> : null}
+    {historyVisible ? <ProfileSheet title="Body composition history" onClose={() => setHistoryVisible(false)} footer={<ProfileAction label="Close" onPress={() => setHistoryVisible(false)} />}>
+      {visibleBodyCompositionHistory.length ? visibleBodyCompositionHistory.map((entry, index) => <View key={`${entry.source}-${entry.recordedAt?.toMillis() ?? index}-${index}`} style={{ gap: 8, paddingVertical: 12, borderBottomWidth: index < visibleBodyCompositionHistory.length - 1 ? 1 : 0, borderBottomColor: colors.rule }}><ProfileText>{formatBodyCompositionTimestamp(entry.recordedAt)}</ProfileText><ProfileText muted>{formatBodyCompositionSource(entry.source, entry.originLabel)}</ProfileText><ProfileText>{`Weight ${formatWeightForUnit(entry.weightKg, weightUnit) || "-"} ${weightUnit} / Body fat ${formatPercent(entry.bodyFatPercent) || "-"}%`}</ProfileText><ProfileText>{`Lean mass ${formatWeightForUnit(entry.leanBodyMassKg, weightUnit) || "-"} ${weightUnit} / Skeletal muscle ${formatWeightForUnit(entry.skeletalMuscleMassKg, weightUnit) || "-"} ${weightUnit}`}</ProfileText></View>) : <ProfileText muted>No body composition records yet.</ProfileText>}
+      {bodyCompositionHistory.length > 3 ? <ProfileAction label={bodyHistoryExpanded ? "Show less" : "Show more"} onPress={() => setBodyHistoryExpanded((value) => !value)} /> : null}
+    </ProfileSheet> : null}
+    {healthConsentVisible ? <ProfileSheet title="Connect health data" onClose={() => setHealthConsentVisible(false)} footer={<><ProfileAction label="Continue" primary onPress={handleAcceptHealthConsent} /><ProfileAction label="Not now" onPress={() => setHealthConsentVisible(false)} /></>}>
+      <ProfileText>On supported Android devices, Lastrep can read sleep, weight, body-fat and lean-body-mass records that you permit.</ProfileText>
+      <ProfileText>We use them for recovery, sleep and body-composition trends. Relevant summaries may also support AI-assisted training recommendations.</ProfileText>
+      <ProfileText>Imported summaries are stored in your Lastrep account. Before the first AI-assisted plan, Lastrep separately explains what is sent to OpenAI and asks you to continue.</ProfileText>
+      <ProfileText>This is optional. You can disconnect in Profile or revoke access in your connected health service at any time.</ProfileText>
+    </ProfileSheet> : null}
+  </SafeAreaView>;
 }
-
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#0d0d1a" },
-  loadingText: { color: "#fff", padding: 20 },
-  container: { flex: 1, backgroundColor: "#0d0d1a" },
-  scrollContent: { width: "100%", maxWidth: 760, alignSelf: "center", padding: 20, paddingTop: 8, paddingBottom: 100, gap: 10 },
-  header: { width: "100%", maxWidth: 760, alignSelf: "center",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 8,
-  },
-  backButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.08)",
-  },
-  headerSpacer: {
-    width: 22,
-  },
-  title: { color: "#fff", fontSize: 22, fontWeight: "800" },
-  sectionTitle: { color: "#fff", fontSize: 15, fontWeight: "700", marginTop: 18, marginBottom: 8 },
-  cardTitle: { color: "#fff", fontSize: 15, fontWeight: "700", marginBottom: 8 },
-  cardTitleNoMargin: { color: "#fff", fontSize: 15, fontWeight: "700" },
-  helperText: { color: "#a5acc1", fontSize: 13, lineHeight: 18 },
-  tdeeEstimateText: { color: "#d8daec", fontSize: 14, fontWeight: "700", lineHeight: 20 },
-  nutritionTargetsHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  sectionHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
-  energyUnitToggle: {
-    borderRadius: 10,
-    borderWidth: StyleSheet.hairlineWidth * 2,
-    borderColor: "rgba(255,255,255,0.28)",
-    backgroundColor: "rgba(255,255,255,0.08)",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  energyUnitToggleText: { color: "#fff", fontWeight: "700", fontSize: 12 },
-  availabilityValue: { color: "#fff", fontSize: 18, fontWeight: "700", marginBottom: 2 },
-  identityRow: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  profilePhotoWrap: {
-    position: "relative",
-  },
-  profilePhoto: {
-    width: 104,
-    height: 104,
-    borderRadius: 28,
-    overflow: "hidden",
-    backgroundColor: "rgba(255,255,255,0.12)",
-  },
-  profilePhotoPlaceholder: {
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  profilePhotoAction: {
-    position: "absolute",
-    right: 4,
-    bottom: 4,
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: "rgba(22, 22, 37, 0.82)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.14)",
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#000",
-    shadowOpacity: 0.18,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
-  },
-  photoActionOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(5, 8, 18, 0.56)",
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: 24,
-  },
-  photoActionSheet: {
-    width: "100%",
-    maxWidth: 280,
-    borderRadius: 22,
-    paddingVertical: 10,
-    backgroundColor: "#171a2a",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-  },
-  photoActionItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingHorizontal: 18,
-    paddingVertical: 14,
-  },
-  photoActionItemText: {
-    color: "#f4f7ff",
-    fontSize: 15,
-    fontWeight: "700",
-  },
-  photoActionDeleteText: {
-    color: "#ffb4b4",
-  },
-  multilineInput: {
-    minHeight: 88,
-  },
-  availabilityTicksRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 4,
-    paddingHorizontal: 2,
-  },
-  availabilityTickCol: {
-    width: 18,
-    alignItems: "center",
-    gap: 4,
-  },
-  availabilityTick: {
-    width: 2,
-    height: 8,
-    borderRadius: 1,
-    backgroundColor: "rgba(216,218,236,0.55)",
-  },
-  availabilityTickActive: {
-    height: 10,
-    backgroundColor: "#fff",
-  },
-  availabilityTickLabel: {
-    color: "#d8daec",
-    fontSize: 11,
-    fontWeight: "700",
-  },
-  availabilityTickLabelActive: {
-    color: "#fff",
-  },
-  row: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  targetRow: { gap: 10 },
-  card: {
-    backgroundColor: "rgba(255,255,255,0.06)",
-    borderRadius: 16,
-    padding: 14,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(255,255,255,0.08)",
-    gap: 8,
-  },
-  targetColumn: { gap: 8 },
-  targetLabel: { color: "#cfcfe6", fontSize: 14, fontWeight: "600" },
-  input: {
-    backgroundColor: "rgba(255,255,255,0.08)",
-    borderColor: "rgba(255,255,255,0.2)",
-    borderWidth: 1,
-    borderRadius: 12,
-    color: "#fff",
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    fontSize: 14,
-  },
-  chip: {
-    backgroundColor: "rgba(255,255,255,0.15)",
-    borderRadius: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.3)",
-  },
-  chipActive: { backgroundColor: "#fff", borderColor: "#7b61ff" },
-  chipText: { color: "#fff", fontWeight: "600", fontSize: 13.5 },
-  chipTextActive: { color: "#4a90e2", fontWeight: "700", fontSize: 13.5 },
-  secondaryButton: {
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.24)",
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    alignItems: "center",
-  },
-  secondaryButtonText: { color: "#fff", fontSize: 14, fontWeight: "600" },
-  disabled: { opacity: 0.45 },
-  healthActionsRow: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  healthSummaryText: { color: "#d7dcef", fontSize: 13, lineHeight: 18 },
-  healthStatusBlock: { gap: 8 },
-  healthStatusRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    backgroundColor: "#0d0d1a",
-    zIndex: 2,
-    alignItems: "flex-start",
-    gap: 12,
-  },
-  healthStatusLabel: { color: "#8f96ae", fontSize: 12, fontWeight: "700" },
-  healthStatusValue: { color: "#eef1ff", fontSize: 12, lineHeight: 16, flex: 1, textAlign: "right" },
-  healthCaptionText: { color: "#a5acc1", fontSize: 12, lineHeight: 16 },
-  healthPrimaryButton: {
-    borderRadius: 12,
-    minHeight: 46,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#7b61ff",
-    paddingHorizontal: 12,
-  },
-  healthPrimaryButtonText: { color: "#fff", fontSize: 14, fontWeight: "700" },
-  healthLinkRow: {
-    flexDirection: "row",
-    justifyContent: "flex-start",
-    gap: 18,
-  },
-  healthLinkText: { color: "#cfd3f8", fontSize: 12, fontWeight: "700" },
-  healthActionButton: {
-    flex: 1,
-  },
-  buttonDisabled: { opacity: 0.6 },
-  healthFeedback: { color: "#a5acc1", fontSize: 12, lineHeight: 16 },
-  healthHint: { color: "#a5acc1", fontSize: 12, lineHeight: 16 },
-  connectedButton: {
-    borderColor: "#37c26b",
-    backgroundColor: "rgba(55,194,107,0.16)",
-  },
-  connectedButtonText: {
-    color: "#c6f5d8",
-  },
-  sheetOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(6, 10, 20, 0.62)",
-    justifyContent: "flex-end",
-  },
-  sheetDismissArea: {
-    flex: 1,
-  },
-  sheetCard: {
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    backgroundColor: "#171a2a",
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 28,
-    gap: 12,
-    borderTopWidth: 1,
-    borderLeftWidth: 1,
-    borderRightWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-  },
-  sheetHandle: {
-    alignSelf: "center",
-    width: 42,
-    height: 4,
-    borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.24)",
-    marginBottom: 6,
-  },
-  sheetTitle: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "800",
-  },
-  sheetText: {
-    color: "#c7cde0",
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  sheetActions: {
-    flexDirection: "row",
-    gap: 10,
-    marginTop: 6,
-  },
-  sheetSecondaryButton: {
-    flex: 1,
-    minHeight: 48,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.18)",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.06)",
-  },
-  sheetSecondaryButtonText: {
-    color: "#eef1ff",
-    fontSize: 14,
-    fontWeight: "700",
-  },
-  sheetPrimaryButton: {
-    flex: 1,
-    minHeight: 48,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#7b61ff",
-  },
-  sheetPrimaryButtonText: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "800",
-  },
-  historySection: {
-    gap: 10,
-    paddingTop: 4,
-  },
-  historyRow: {
-    gap: 4,
-    paddingTop: 10,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: "rgba(255,255,255,0.08)",
-  },
-  historyRowHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
-  },
-  historyRowTitle: {
-    color: "#fff",
-    fontSize: 13,
-    fontWeight: "700",
-  },
-  historyRowMeta: {
-    color: "#8f96ae",
-    fontSize: 11,
-  },
-  historyRowValues: {
-    color: "#cfcfe6",
-    fontSize: 12,
-    lineHeight: 18,
-  },
-  historyToggle: {
-    alignSelf: "flex-start",
-    paddingTop: 4,
-    paddingBottom: 2,
-  },
-  historyToggleText: {
-    color: "#dbe3ff",
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  save: { backgroundColor: "#7b61ff", borderRadius: 12, alignItems: "center", paddingVertical: 14, marginTop: 22 },
-  saveText: { color: "#fff", fontWeight: "800", fontSize: 15 },
-  saveFeedback: { color: "#a6e3a1", textAlign: "center", fontSize: 13, marginTop: 8 },
-});
-
+const makeStyles = (colors: NotebookColors) => StyleSheet.create({ helperText: { color: colors.muted, fontFamily: notebookFonts.body, fontSize: 16 } });

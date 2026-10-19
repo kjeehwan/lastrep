@@ -1,3 +1,4 @@
+import { NotebookInfoButton } from "../../src/ui/notebook/NotebookInfoButton";
 import { PopupBackdrop } from "../../src/ui/PopupBackdrop";
 import { NotebookProvider, useNotebook, useNotebookStyles, notebookSheet } from "../../src/ui/notebook/Notebook";
 import { notebookFonts, type NotebookColors } from "../../src/ui/notebook/tokens";
@@ -212,6 +213,7 @@ function Home() {
   const [bodyHistoryError, setBodyHistoryError] = useState(false);
   const [effortScale, setEffortScale] = useState<EffortScale>("rpe");
   const [userNickname, setUserNickname] = useState<string | null>(null);
+  const [profileDataLoaded, setProfileDataLoaded] = useState(false);
   const [profilePhotoUri, setProfilePhotoUri] = useState<string | null>(null);
   const [profileDescription, setProfileDescription] = useState<string | null>(null);
   const [showFirstTimeBanner, setShowFirstTimeBanner] = useState(false);
@@ -283,6 +285,10 @@ function Home() {
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (user) => {
+      setProfileDataLoaded(false);
+      setUserNickname(null);
+      setProfilePhotoUri(null);
+      setProfileDescription(null);
       setRawDailyContext(null);
       setHasRecoveryCheckIn(false);
       setContextVisible(false);
@@ -336,6 +342,8 @@ function Home() {
       doc(db, "users", uid),
       (snap) => {
         const data: any = snap.data();
+        if (!data) return; // An empty offline cache is not a loaded generic account.
+        setProfileDataLoaded(true);
         setRawDailyContext(data?.todayPlanContext ?? null);
         setBodyHistory(normalizeBodyCompositionHistory(data?.[USER_BODY_COMPOSITION_FIELD]?.history));
         setBodyHistoryLoaded(true);
@@ -1154,7 +1162,7 @@ function Home() {
         <View style={styles.iconContainer}>
           <TouchableOpacity style={styles.headerUtility} accessibilityRole="button" accessibilityLabel="Open calendar" onPress={() => calendarRef.current?.open()}><NotebookUtilityIcon name="calendar" color={colors.ink} /></TouchableOpacity>
           <TouchableOpacity style={styles.headerUtility} accessibilityRole="button" accessibilityLabel="Open settings" onPress={() => router.push("/settings" as Href)}><NotebookUtilityIcon name="settings" color={colors.ink} /></TouchableOpacity>
-          <TouchableOpacity style={styles.headerUtility} accessibilityRole="button" accessibilityLabel={`View profile, ${userNickname ?? "Lifter"}`} onPress={() => setShowProfileModal(true)}>
+          <TouchableOpacity style={styles.headerUtility} accessibilityRole="button" accessibilityLabel={`View profile, ${profileDataLoaded ? userNickname ?? "Lifter" : "not loaded"}`} onPress={() => setShowProfileModal(true)}>
             {uid && profilePhotoUri ? <ProfilePhoto uid={uid} reference={profilePhotoUri} initial={(userNickname ?? "L").charAt(0).toUpperCase()} style={styles.headerAvatar} contentFit="cover" /> : <View style={[styles.headerAvatar, styles.headerAvatarPlaceholder]}><Text style={styles.headerAvatarInitial}>{(userNickname ?? "L").charAt(0).toUpperCase()}</Text></View>}
           </TouchableOpacity>
         </View>
@@ -1287,17 +1295,12 @@ function Home() {
           <View style={[styles.card, styles.outlinedPanel]}>
             <View style={styles.sectionHeaderRow}>
               <Text style={styles.cardHeading}>Readiness</Text>
-              <TouchableOpacity
-                style={styles.snapshotInfoBtn}
-                onPress={() =>
+              <NotebookInfoButton label="About recovery readiness" onPress={() =>
                   showAppAlert(
                     "Recovery readiness",
                     "Score weights:\n- Sleep: 30%\n- Soreness: 30%\n- Fatigue: 30%\n- Motivation: 10%\n\nNotes:\n- Soreness/Fatigue are inverted (lower is better).\n\nLabels:\n- Ready: >= 75\n- Neutral: 50-74\n- Recover: < 50"
                   )
-                }
-              >
-                <Ionicons name="information-circle-outline" size={16} color={colors.muted} />
-              </TouchableOpacity>
+                } />
             </View>
             <Text style={styles.metricValue}>{hasRecoveryCheckIn && sleepSnapshot.averageSleepHours != null ? `${recoveryReadiness.score}%` : "Not enough information yet"}</Text>
             <Text style={styles.metricSub}>{hasRecoveryCheckIn && sleepSnapshot.averageSleepHours != null ? `${recoveryReadiness.label}. A recovery summary, not a workout prescription.` : "Recorded sleep and a recovery check-in help complete this summary."}</Text>
@@ -1341,12 +1344,7 @@ function Home() {
           <View style={styles.card}>
             <View style={styles.sectionHeaderRow}>
               <Text style={styles.cardHeading}>Weekly Trends</Text>
-              <TouchableOpacity
-                style={styles.snapshotInfoBtn}
-                onPress={() => showAppAlert("Snapshot change", "The last 7 days are compared with the previous 7 days. Only recorded data is included.")}
-              >
-                <Ionicons name="information-circle-outline" size={16} color={colors.muted} />
-              </TouchableOpacity>
+              <NotebookInfoButton label="About weekly trends" onPress={() => showAppAlert("Snapshot change", "The last 7 days are compared with the previous 7 days. Only recorded data is included.")} />
             </View>
             {[
               { key: "workouts" as const, label: "Workouts", value: String(weeklyMetrics.workoutsThisWeek), detail: weeklyDeltas.workouts.text },
@@ -1600,13 +1598,13 @@ function Home() {
                     </Text>
                   </View>
                 )}
-                <Text style={styles.profileModalName}>{userNickname ?? "Lifter"}</Text>
-                <View style={[styles.entitlementBadge, { alignSelf: "center" }, entitlement.state === "active" ? styles.entitlementBadgeActive : styles.entitlementBadgeInactive]}><Text style={[styles.entitlementBadgeText, entitlement.state === "active" ? styles.entitlementBadgeTextActive : styles.entitlementBadgeTextMuted]}>{entitlement.state === "active" ? "Premium" : entitlement.state === "inactive" ? "Free" : "Checking"}</Text></View>
+                <Text style={styles.profileModalName}>{profileDataLoaded ? userNickname ?? "Lifter" : "Profile not loaded"}</Text>
+                {profileDataLoaded ? <View style={[styles.entitlementBadge, { alignSelf: "center" }, entitlement.state === "active" ? styles.entitlementBadgeActive : styles.entitlementBadgeInactive]}><Text style={[styles.entitlementBadgeText, entitlement.state === "active" ? styles.entitlementBadgeTextActive : styles.entitlementBadgeTextMuted]}>{entitlement.state === "active" ? "Premium" : entitlement.state === "inactive" ? "Free" : "Checking"}</Text></View> : null}
                 {profileDescription ? (
                   <Text style={styles.profileModalDescription}>{profileDescription}</Text>
                 ) : (
                   <Text style={styles.profileModalDescriptionMuted}>
-                    No description added yet.
+                    {profileDataLoaded ? "No description added yet." : "Profile details are not available yet."}
                   </Text>
                 )}
               </AdaptiveModalCard>

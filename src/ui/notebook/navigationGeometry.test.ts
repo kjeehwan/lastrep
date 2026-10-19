@@ -2,8 +2,8 @@ import { expect, it } from "vitest";
 import { notebookTabBarHeight, usesNotebookDesign } from "./navigationGeometry";
 
 it("themes shared dialogs only on migrated screens", () => {
-  for (const path of ["/home", "/workout", "/workout/log", "/nutrition", "/nutrition/meal/search", "/sleep"]) expect(usesNotebookDesign(path)).toBe(true);
-  for (const path of ["/profile", "/settings", "/auth/sign-in", "/nutrition-other", "/sleep-other"]) expect(usesNotebookDesign(path)).toBe(false);
+  for (const path of ["/home", "/workout", "/workout/log", "/nutrition", "/nutrition/meal/search", "/sleep", "/profile"]) expect(usesNotebookDesign(path)).toBe(true);
+  for (const path of ["/settings", "/auth/sign-in", "/nutrition-other", "/sleep-other", "/profile-other"]) expect(usesNotebookDesign(path)).toBe(false);
 });
 it("reserves the same tab height in screens and root dialog portals", () => {
   expect(notebookTabBarHeight(24, 1)).toBe(92);

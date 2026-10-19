@@ -1,50 +1,112 @@
-# Welcome to your Expo app 👋
+# Lastrep
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Lastrep is a fitness logging and planning app for strength training, nutrition,
+sleep and recovery. It combines routines and detailed workout records with
+personal history, body-composition progress and optional training guidance.
 
-## Get started
+The interface is being migrated to an approved **training notebook** design:
+paper/ink surfaces, clear numeric entries, restrained coaching and consistent
+light/dark layouts. Android is the current device-testing and Google Play release
+focus. Browser prototypes are design studies, not production account screens.
 
-1. Install dependencies
+## Start Here
 
-   ```bash
-   npm install
-   ```
+- [Project overview and working agreement](docs/project-overview.md): purpose,
+  features, architecture, safeguards and collaboration workflow.
+- [Design specification](docs/training-notebook-design.md): shared tokens,
+  interaction rules and approved screen directions.
+- [Browser studies](prototypes/training-notebook/README.md): opening mockups and
+  reviewing their example states.
+- [Profile migration handoff](docs/profile-migration-handoff.md): instructions
+  for resuming the migration review in a new development thread.
+- [Profile migration notes](docs/profile-notebook-migration.md): implementation
+  scope and recorded verification. Check dates and Git before assuming status.
 
-2. Start the app
+## Stack and Layout
 
-   ```bash
-   npx expo start
-   ```
+Expo / React Native / TypeScript with Expo Router, Firebase account/data services,
+optional Android health integration, and RevenueCat / Google Play billing.
+`package.json` and the lockfile define exact dependencies.
 
-In the output, you'll find options to open the app in a
+| Path | Purpose |
+| --- | --- |
+| `app/` | Routes and screen integration |
+| `src/` | Domain logic, services, shared UI and tests |
+| `src/ui/notebook/` | Native notebook design primitives and tokens |
+| `functions/` | Backend functions and decision services |
+| `android/` | Tracked native Android project |
+| `plugins/`, `scripts/` | Native configuration and development/build tooling |
+| `prototypes/training-notebook/` | Approved interactive browser studies |
+| `docs/` | Engineering, design and migration documentation |
+| `doc/privacy.md` | Maintained privacy-policy source |
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+`docs/index.md` contains older privacy text; it is not the project index or the
+current policy source.
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+## Local Development
 
-## Get a fresh project
+The usual workspace is Windows PowerShell. Start by checking the working tree:
 
-When you're ready, run:
-
-```bash
-npm run reset-project
+```powershell
+git status --short
+git branch --show-current
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+Preserve existing changes. For a fresh checkout, install locked dependencies with
+`npm.cmd ci`. Obtain required local Firebase/Google configuration and environment
+values through an authorized channel; never commit credentials or assume example
+configuration connects to a real account. Inspect app configuration and existing
+setup scripts before attempting a native build.
 
-## Learn more
+The app uses native integrations. Use the Lastrep dev client, not Expo Go, for
+device acceptance testing. With a compatible dev app installed:
 
-To learn more about developing your project with Expo, look at the following resources:
+```powershell
+npm.cmd run start:dev-client
+```
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+Check whether Metro already owns port 8081 before starting another instance.
+For USB testing, connect/unlock the phone and confirm authorization with
+`adb devices -l`. Reconnection may require restoring port forwarding and reloading
+the app. Confirm the latest UI is visible before interpreting a test result.
 
-## Join the community
+`npm.cmd run start:dev-client:fast` uses the project's alternative fast mode.
+Record which mode was used when comparing performance. JS-only changes normally
+load through Metro; native dependency/configuration changes can require a new
+dev build. Check `eas.json` and tracked Android configuration rather than guessing
+flavor/task names.
 
-Join our community of developers creating universal apps.
+## Verification
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+```powershell
+npx.cmd tsc --noEmit
+npm.cmd run lint
+npm.cmd test
+npm.cmd run check:web-export
+git diff --check
+```
+
+Additional scripts include `verify:android-native` and `test:firestore-rules`;
+the latter requires emulator tooling. Backend changes need their own build/tests.
+Check `.github/workflows/web-export-check.yml` for CI coverage.
+
+Report actual skipped tests and unverified cases. Green unit tests or web export
+do not establish native keyboard/permission behavior, persisted saves, visual
+approval or real production billing. Read
+[keyboard/modal guardrails](docs/keyboard-modal-guardrails.md) before changing
+input layouts.
+
+## Review and Releases
+
+Work in focused branches, preserve existing behavior, run relevant checks and
+obtain user review. Commit/push, PR/merge, branch deletion, deployments and AAB
+builds are separate actions requiring explicit requests in this collaboration.
+
+Dev and production are separate app packages. Production billing must be tested
+in the Play-installed production app, not inferred from dev Premium access.
+See [billing isolation](docs/revenuecat-build-isolation.md) and
+[restore outcomes](docs/restore-purchase-outcomes.md).
+
+Google Play release/policy actions remain user-controlled unless explicitly
+delegated. Never publish raw device/account artifacts, environment files or
+credentials. Sanitize local checkpoints before making them commit candidates.

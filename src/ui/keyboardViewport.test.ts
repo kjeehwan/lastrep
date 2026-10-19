@@ -1,5 +1,12 @@
 import { expect, it } from "vitest";
-import { focusedInputScrollOffset, modalViewportHeight } from "./keyboardViewport";
+import { focusedInputScrollOffset, modalFooterShouldScroll, modalViewportHeight } from "./keyboardViewport";
+
+it("lets the footer scroll instead of consuming the entire short or enlarged-text modal", () => {
+  expect(modalFooterShouldScroll(180, 1.1)).toBe(true);
+  expect(modalFooterShouldScroll(400, 2)).toBe(true);
+  expect(modalFooterShouldScroll(600, 1.1)).toBe(false);
+  expect(modalFooterShouldScroll(600, 2)).toBe(false);
+});
 it("limits modal content to the visible area without double-subtracting a resized keyboard", () => {
   expect(modalViewportHeight(800, null, 24, 24)).toBe(720);
   expect(modalViewportHeight(800, 450, 24, 24)).toBe(370);

@@ -12,3 +12,6 @@ export function focusedInputScrollOffset(offset: number, viewportTop: number, vi
     : Math.max(0, inputTop + inputHeight - bottom);
   return Math.max(0, offset + delta);
 }
+export function modalFooterShouldScroll(availableHeight: number, fontScale: number): boolean {
+  return availableHeight < 240 * Math.max(1, fontScale);
+}
