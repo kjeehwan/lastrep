@@ -151,7 +151,7 @@ const createStyles = (colors: NotebookColors) => notebookSheet({
   undoText: { color: colors.ink, fontSize: 13, fontWeight: "600" },
   link: { color: colors.accent, fontSize: 16, fontWeight: "600" },
   overlay: { flex: 1, backgroundColor: colors.overlay, justifyContent: "flex-end" },
-  sheet: { backgroundColor: colors.surface, borderTopLeftRadius: 16, borderTopRightRadius: 16, height: "85%", paddingHorizontal: 20, paddingTop: 20 },
+  sheet: { backgroundColor: colors.surface, borderRadius: 16, height: "85%", paddingHorizontal: 20, paddingTop: 20 },
   heading: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 },
   title: { color: colors.ink, fontFamily: notebookFonts.editorial, fontSize: 20, fontWeight: "700" },
   body: { gap: 12, paddingBottom: 20 },
