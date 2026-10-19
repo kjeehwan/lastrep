@@ -1,6 +1,6 @@
 # Lastrep Training Notebook Design Specification
 
-Version: 1.25 | Date: October 19, 2026
+Version: 1.26 | Date: October 20, 2026
 
 Status: Workout, Home, Nutrition, Sleep, Profile and Settings browser design
 directions approved through iterative review. Shared rules below incorporate that
@@ -13,8 +13,9 @@ Account-write checks remain separate from read-only visual acceptance.
 Profile's native migration is approved and merged in PR #38, including selective
 photo writes, offline recovery and interrupted-upload retry. The optional one-call
 photo optimization remains deferred locally and undeployed. Native Settings is
-approved and merged in PR #39. Native Sign in / Sign up is being migrated
-separately on `feature/auth-notebook-ui`; native onboarding is not started.
+approved and merged in PR #39. Native Sign in / Sign up is merged in PR #40.
+Four-step native onboarding is user-approved on `feature/onboarding-notebook-ui`
+and preparing PR review; its notes record passed checks and coverage limits.
 See workout-notebook-migration.md, home-notebook-migration.md and
 nutrition-notebook-migration.md, sleep-notebook-migration.md and
 settings-notebook-migration.md for boundaries and actual
@@ -1945,8 +1946,8 @@ Sign in / Sign up received user design approval on October 19. The revised
 onboarding flow received user approval on October 19. Final refinements retain
 separate production/dev logos and remove visible slider minus/plus controls.
 The shared browser sidebar revision is also user-approved.
-Native Sign in / Sign up is being migrated on its own branch; onboarding
-remains separate and has not yet been migrated. Both studies use the shared paper/dark
+Native Sign in / Sign up is merged in PR #40; the separate four-step onboarding
+migration is now in progress. Both studies use the shared paper/dark
 tokens, bundled serif/sans fonts, ink primary actions, explicit field labels,
 restrained rules and 48px controls. Use sentence case: Sign in, Sign up and
 Sign out, including confirmation and progress copy.
@@ -1988,7 +1989,7 @@ it does not offer date correction. Prefer editing the start date and calculating
 the week, rather than storing a second editable week count. This remains a
 separate design/implementation follow-up explicitly postponed by the user; do
 not implement it in this migration. The onboarding revision changes no
-phase history, existing dates or native persistence.
+phase history or existing dates. Native progress storage is described below.
 
 Keep form fields and actions scrollable on short screens and at 200% text; do
 not pin a footer over fields. No tab navigation appears before entry to the app.
@@ -2040,3 +2041,16 @@ previous Google account selection before each explicit Google attempt so signing
 out does not lead to automatic reuse of that account. Auth screens
 have notebook dialogs/status icons but no reserved bottom-tab space. Preserve
 existing account creation/storage/routing until onboarding is migrated separately.
+
+
+### Native onboarding progress and failure behavior
+
+Use explicit account-scoped progress and completion, independent of optional
+nickname/experience answers and the old installation-wide completion flag. New
+accounts start at Experience; accounts without a new progress marker retain
+legacy access. Skips advance without writing unchosen answers. Final Skip and
+Go to Home share confirmed completion behavior. Preserve draft answers on Back
+and failed saves; show inline retry feedback on the actual step. Keep pending
+writes locked and prevent an account change from applying stale UI results.
+Do not assign a goal, phase, phase start date or generated routine during setup.
+Old goal/preview links may redirect into the new flow for compatibility.

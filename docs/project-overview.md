@@ -1,6 +1,6 @@
 # Lastrep Project Overview and Working Agreement
 
-Last reviewed: October 19, 2026.
+Last reviewed: October 20, 2026.
 
 This is the entry point for a new development thread, not a replacement for the
 code, design specification, or current task checkpoint. Status below is dated;
@@ -29,7 +29,7 @@ Use the brand spelling Lastrep or lastrep, not LastRep.
 | Sleep | Manual and imported sessions, multiple sessions per day, overlap handling, target editing, history/chart. Missing data is not zero sleep. Superseded totals and intentional deletion exclusions are separate concerns. |
 | Profile | Identity/photo, training/diet phases, global units and effort preference, distinct body metrics, TDEE, nutrition/sleep targets, optional health connection. Native notebook migration approved and merged in PR #38. |
 | Settings / Billing | Account/settings, support/legal access, subscription management and restore. Premium access and an active store subscription are not equivalent. Native Settings migration and per-account appearance merged in PR #39. |
-| Authentication / Onboarding | Approved browser studies. Native Sign in / Sign up migration in progress on `feature/auth-notebook-ui`; onboarding remains legacy until its separate migration. |
+| Authentication / Onboarding | Approved browser studies. Native Sign in / Sign up merged in PR #40. Four-step onboarding is user-approved on `feature/onboarding-notebook-ui` and preparing PR review; see its notes for verification. |
 
 These are a navigation map, not a claim that every edge case is verified.
 
@@ -72,8 +72,10 @@ As of this overview:
 - Sleep: approved and merged, PR #37.
 - Profile: approved and merged, PR #38; remaining limits are in its migration notes.
 - Settings: approved and merged, PR #39.
-- Sign in / Sign up: native implementation and phone follow-ups accepted on
-  `feature/auth-notebook-ui`; preparing PR review. Onboarding remains legacy.
+- Sign in / Sign up: approved and merged, PR #40.
+- Onboarding: four-step native implementation on `feature/onboarding-notebook-ui`,
+  user-approved with completion/retry and native accessibility checks recorded;
+  preparing PR review.
 
 See each `docs/*-notebook-migration.md` for actual scope and coverage. Some older
 status paragraphs describe pre-merge states. Git plus the dated checkpoint
@@ -211,6 +213,7 @@ also need their own build/tests. Avoid unreviewed `npm audit fix --force`.
 | Profile scope | `docs/profile-notebook-migration.md` |
 | Settings native review | `docs/settings-notebook-migration.md` |
 | Authentication migration | `docs/auth-notebook-migration.md` |
+| Onboarding migration | `docs/onboarding-notebook-migration.md` |
 | Shared input behavior | `docs/keyboard-modal-guardrails.md` |
 | Other screen boundaries | `docs/workout-notebook-migration.md`, `docs/home-notebook-migration.md`, `docs/nutrition-notebook-migration.md`, `docs/sleep-notebook-migration.md` |
 | Billing | `docs/revenuecat-build-isolation.md`, `docs/restore-purchase-outcomes.md` |
