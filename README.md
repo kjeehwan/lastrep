@@ -22,7 +22,9 @@ focus. Browser prototypes are design studies, not production account screens.
 - [Profile migration notes](docs/profile-notebook-migration.md): implementation
   scope and recorded verification. Check dates and Git before assuming status.
 - [Settings migration notes](docs/settings-notebook-migration.md): current native
-  implementation, verification and remaining review after Profile PR #38.
+  implementation and verification, merged in PR #39.
+- [Authentication migration notes](docs/auth-notebook-migration.md): current
+  Sign in / Sign up implementation, accepted phone checks and PR scope.
 
 ## Stack and Layout
 

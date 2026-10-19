@@ -1,6 +1,6 @@
 # Lastrep Training Notebook Design Specification
 
-Version: 1.24 | Date: October 19, 2026
+Version: 1.25 | Date: October 19, 2026
 
 Status: Workout, Home, Nutrition, Sleep, Profile and Settings browser design
 directions approved through iterative review. Shared rules below incorporate that
@@ -13,8 +13,8 @@ Account-write checks remain separate from read-only visual acceptance.
 Profile's native migration is approved and merged in PR #38, including selective
 photo writes, offline recovery and interrupted-upload retry. The optional one-call
 photo optimization remains deferred locally and undeployed. Native Settings is
-user-approved on `feature/settings-notebook-ui` and prepared for release.
-Native auth/onboarding migration remains separate.
+approved and merged in PR #39. Native Sign in / Sign up is being migrated
+separately on `feature/auth-notebook-ui`; native onboarding is not started.
 See workout-notebook-migration.md, home-notebook-migration.md and
 nutrition-notebook-migration.md, sleep-notebook-migration.md and
 settings-notebook-migration.md for boundaries and actual
@@ -1945,8 +1945,8 @@ Sign in / Sign up received user design approval on October 19. The revised
 onboarding flow received user approval on October 19. Final refinements retain
 separate production/dev logos and remove visible slider minus/plus controls.
 The shared browser sidebar revision is also user-approved.
-Native authentication/onboarding presentation
-and behavior have not yet been migrated. Both studies use the shared paper/dark
+Native Sign in / Sign up is being migrated on its own branch; onboarding
+remains separate and has not yet been migrated. Both studies use the shared paper/dark
 tokens, bundled serif/sans fonts, ink primary actions, explicit field labels,
 restrained rules and 48px controls. Use sentence case: Sign in, Sign up and
 Sign out, including confirmation and progress copy.
@@ -2023,3 +2023,20 @@ uses useSafeAreaInsets padding on its outer View to avoid a native SafeAreaView
 recalculating during navigation animation. Do not hard-code status-bar heights
 or add root padding that doubles existing screen insets. Verify the actual
 sign-in transition on the phone; a settled screenshot is insufficient.
+
+
+### Native authentication implementation rules
+
+Use the existing flavor-aware logo. Keep the entire form scrollable, apply safe
+insets from the first layout, and reveal focused fields minimally after keyboard
+and rotation changes. Use eye/eye-off icons in a 48dp target inside the password field at its right edge,
+with reserved text padding and the same full width as the email field, retaining
+Show password / Hide password accessibility labels at all text sizes.
+Set email/password autofill roles and appropriate keyboard actions. A single
+pending guard covers both providers and remains held through session completion.
+Inline errors preserve fields and avoid raw provider diagnostics. Handle explicit
+Google cancellation before requesting any cached Google tokens. Clear the SDK's
+previous Google account selection before each explicit Google attempt so signing
+out does not lead to automatic reuse of that account. Auth screens
+have notebook dialogs/status icons but no reserved bottom-tab space. Preserve
+existing account creation/storage/routing until onboarding is migrated separately.
