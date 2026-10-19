@@ -5,7 +5,7 @@ import { usePathname } from "expo-router";
 import { BottomTabBarHeightContext } from "expo-router/js-tabs";
 import { NotebookProvider } from "../src/ui/notebook/Notebook";
 import { NotebookAppDialog } from "../src/ui/notebook/NotebookAppDialog";
-import { notebookTabBarHeight, usesNotebookDesign } from "../src/ui/notebook/navigationGeometry";
+import { notebookDialogTabHeight, usesNotebookDesign } from "../src/ui/notebook/navigationGeometry";
 import { registerAppDialogPresenter, type AppDialogButton, type AppDialogOptions } from "../src/ui/appDialog";
 
 const DEFAULT_BUTTONS: AppDialogButton[] = [{ text: "OK", role: "default" }];
@@ -27,7 +27,7 @@ export default function AppDialogHost() {
 
   if (!dialog) return null;
 
-  if (usesNotebookDesign(pathname)) return <BottomTabBarHeightContext.Provider value={notebookTabBarHeight(insets.bottom, fontScale)}>
+  if (usesNotebookDesign(pathname)) return <BottomTabBarHeightContext.Provider value={notebookDialogTabHeight(pathname, insets.bottom, fontScale)}>
     <NotebookProvider><NotebookAppDialog dialog={dialog} onClose={() => setDialog(null)} /></NotebookProvider>
   </BottomTabBarHeightContext.Provider>;
 

@@ -9,56 +9,19 @@ import {
   signInWithCredential,
 } from "firebase/auth";
 import React, { useEffect, useState } from "react";
-import { StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
-import LastrepLogo from "../../components/LastrepLogo"; // Static logo component
+import { AuthNotebookForm } from "../../src/auth/AuthNotebookForm";
+import { requestGoogleIdToken } from "../../src/auth/googleSignIn";
+import { useAuthRequest } from "../../src/auth/useAuthRequest";
+import { validateAuthFields } from "../../src/auth/authPresentation";
+import { NotebookProvider } from "../../src/ui/notebook/Notebook";
 import { auth } from "../../src/config/firebaseConfig";
 import { buildDefaultUserDoc, getDecisionUsage, getUserData, saveUserData } from "../../src/userData";
 
-const normalizeGoogleAuthErrorMessage = (error: unknown, fallback: string): string => {
-  const raw =
-    typeof (error as { message?: unknown } | undefined)?.message === "string"
-      ? (error as { message: string }).message
-      : "";
-  const normalized = raw.toLowerCase();
-  if (
-    normalized.includes("gettokens requires a user to be signed in") ||
-    normalized.includes("user cancelled") ||
-    normalized.includes("user canceled") ||
-    normalized.includes("sign_in_cancelled")
-  ) {
-    return "Google sign-up was canceled.";
-  }
-  return raw || fallback;
-};
-
-const normalizeEmailSignUpErrorMessage = (error: unknown): string => {
-  const code =
-    typeof (error as { code?: unknown } | undefined)?.code === "string"
-      ? (error as { code: string }).code.toLowerCase()
-      : "";
-  const raw =
-    typeof (error as { message?: unknown } | undefined)?.message === "string"
-      ? (error as { message: string }).message.toLowerCase()
-      : "";
-
-  if (code.includes("email-already-in-use") || raw.includes("email-already-in-use")) {
-    return "This email is already registered. Try signing in instead.";
-  }
-  if (code.includes("invalid-email") || raw.includes("invalid-email")) {
-    return "Please enter a valid email address.";
-  }
-  if (code.includes("weak-password") || raw.includes("weak-password")) {
-    return "Use a stronger password (at least 6 characters).";
-  }
-
-  return "Sign-up failed. Please check your details and try again.";
-};
-
-export default function SignUp() {
+export default function SignUp() { return <NotebookProvider><SignUpContent /></NotebookProvider>; }
+function SignUpContent() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [googleBusy, setGoogleBusy] = useState(false);
+  const request = useAuthRequest("sign-up");
   const router = useRouter();
   useEffect(() => {
     GoogleSignin.configure({
@@ -69,14 +32,10 @@ export default function SignUp() {
     });
   }, []);
 
-  const handleSignUp = async () => {
-    try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      await finalizeRegistration(userCredential, true);
-    } catch (err: any) {
-      setError(normalizeEmailSignUpErrorMessage(err));
-    }
-  };
+  const handleSignUp = () => request.run("email", async () => {
+    const userCredential = await createUserWithEmailAndPassword(auth, email.trim(), password);
+    await finalizeRegistration(userCredential, true);
+  }, validateAuthFields("sign-up", email, password));
 
   const finalizeRegistration = async (userCredential: UserCredential, isNewUser: boolean) => {
     const userToken = await userCredential.user.getIdToken(); // Get the Firebase ID token
@@ -109,141 +68,18 @@ export default function SignUp() {
     }
   };
 
-  const handleGooglePress = async () => {
-    setError(null);
-    setGoogleBusy(true);
-    try {
-      await GoogleSignin.hasPlayServices();
-      const signInResult = await GoogleSignin.signIn();
-      let idToken = (signInResult as any)?.idToken;
-      if (!idToken) {
-        const tokens = await GoogleSignin.getTokens();
-        idToken = tokens?.idToken;
-      }
-      if (!idToken) throw new Error("Google Sign-Up did not return an ID token");
-      const credential = GoogleAuthProvider.credential(idToken);
-      const userCredential = await signInWithCredential(auth, credential);
-      const additionalInfo = getAdditionalUserInfo(userCredential);
-      await finalizeRegistration(userCredential, additionalInfo?.isNewUser ?? false);
-    } catch (googleError: any) {
-      setError(normalizeGoogleAuthErrorMessage(googleError, "Google Sign-Up failed"));
-    } finally {
-      setGoogleBusy(false);
-    }
-  };
+  const handleGooglePress = () => request.run("google", async () => {
+    const idToken = await requestGoogleIdToken(GoogleSignin);
+    const credential = GoogleAuthProvider.credential(idToken);
+    const userCredential = await signInWithCredential(auth, credential);
+    const additionalInfo = getAdditionalUserInfo(userCredential);
+    await finalizeRegistration(userCredential, additionalInfo?.isNewUser ?? false);
+  });
 
-  return (
-    <View style={styles.container}>
-      {/* Static logo at the top */}
-      <LastrepLogo />
-
-      <TextInput
-        style={styles.input}
-        placeholder="Email"
-        placeholderTextColor="#777"
-        value={email}
-        onChangeText={setEmail}
-        autoCapitalize="none"
-        keyboardType="email-address"
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Password"
-        placeholderTextColor="#777"
-        secureTextEntry={true}
-        autoCapitalize="none"
-        autoCorrect={false}
-        textContentType="password"
-        autoComplete="password"
-        selectionColor="#2a67b1"
-        value={password}
-        onChangeText={setPassword}
-      />
-      {error && <Text style={styles.error}>{error}</Text>}
-
-      <TouchableOpacity style={styles.button} onPress={handleSignUp}>
-        <Text style={styles.buttonText}>Sign Up</Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={[styles.button, styles.googleButton]}
-        onPress={handleGooglePress}
-        disabled={googleBusy}
-      >
-        <Text style={[styles.buttonText, styles.googleButtonText]}>
-          {googleBusy ? "Connecting..." : "Continue with Google"}
-        </Text>
-      </TouchableOpacity>
-
-      {/* Link to Sign-In */}
-      <View style={styles.footer}>
-        <Text style={styles.footerText}>Already have an account? </Text>
-        <TouchableOpacity onPress={() => router.push("/auth/sign-in")}>
-          <Text style={styles.link}>Sign in!</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
+  return <AuthNotebookForm mode="sign-up" email={email} password={password}
+    onEmailChange={value => { setEmail(value); request.setError(null); }}
+    onPasswordChange={value => { setPassword(value); request.setError(null); }}
+    onSubmit={() => { void handleSignUp(); }} onGoogle={() => { void handleGooglePress(); }}
+    onSwitch={() => router.push("/auth/sign-in")}
+    active={request.active} error={request.error} />;
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    paddingHorizontal: 16,
-    paddingTop: 60, // new: slight padding from top
-    backgroundColor: "#0d0d1a",
-  },
-  form: {
-    flexGrow: 1,
-    justifyContent: "flex-start", // move up toward top
-  },
-  input: {
-    height: 50,
-    borderColor: "#ccc",
-    borderWidth: 1,
-    marginBottom: 12,
-    paddingLeft: 12,
-    borderRadius: 12,
-    backgroundColor: "#fff",
-    color: "#111",
-  },
-  button: {
-    backgroundColor: "#2a67b1",
-    paddingVertical: 16,
-    borderRadius: 12,
-    alignItems: "center",
-    marginTop: 40,
-  },
-  googleButton: {
-    marginTop: 16,
-    backgroundColor: "#fff",
-  },
-  footer: {
-    marginTop: 20,
-    flexDirection: "row",
-    justifyContent: "center",
-  },
-  footerText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  link: {
-    color: "#7b61ff",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  error: {
-    color: "red",
-    marginBottom: 12,
-  },
-
-  buttonText: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "700",
-  },
-  googleButtonText: {
-    color: "#2a67b1",
-  },
-});
