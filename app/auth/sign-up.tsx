@@ -15,6 +15,7 @@ import { useAuthRequest } from "../../src/auth/useAuthRequest";
 import { validateAuthFields } from "../../src/auth/authPresentation";
 import { NotebookProvider } from "../../src/ui/notebook/Notebook";
 import { auth } from "../../src/config/firebaseConfig";
+import { createOnboardingUser, resolveOnboardingDestination } from "../../src/onboarding/onboardingService";
 import { buildDefaultUserDoc, getDecisionUsage, getUserData, saveUserData } from "../../src/userData";
 
 export default function SignUp() { return <NotebookProvider><SignUpContent /></NotebookProvider>; }
@@ -42,8 +43,9 @@ function SignUpContent() {
     await AsyncStorage.setItem("userToken", userToken); // Save the user token
 
     const tzOffsetMinutes = new Date().getTimezoneOffset();
-    if (isNewUser) {
-      await saveUserData(
+    const data = isNewUser ? null : await getUserData(userCredential.user.uid);
+    if (isNewUser || !data) {
+      const destination = await createOnboardingUser(
         userCredential.user.uid,
         buildDefaultUserDoc({
           email: userCredential.user.email,
@@ -51,20 +53,18 @@ function SignUpContent() {
             userCredential.user.displayName ||
             userCredential.user.email?.split("@")[0] ||
             "New User",
-          goal: "Build muscle",
         }, new Date(), tzOffsetMinutes)
       );
       await AsyncStorage.setItem("isSignedUp", "true");
-      router.push("/onboarding/goal"); // Redirect to onboarding after successful sign-up
+      router.replace(destination);
     } else {
-      const data = await getUserData(userCredential.user.uid);
       if (data) {
         const normalized = getDecisionUsage(data, new Date(), tzOffsetMinutes);
         await saveUserData(userCredential.user.uid, {
           usage: { decisions: normalized },
         });
       }
-      router.replace("/(tabs)/home");
+      router.replace(await resolveOnboardingDestination(userCredential.user.uid, data));
     }
   };
 

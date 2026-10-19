@@ -4,7 +4,6 @@ import { GoogleSignin } from "@react-native-google-signin/google-signin";
 import {
   GoogleAuthProvider,
   UserCredential,
-  getAdditionalUserInfo,
   signInWithCredential,
   signInWithEmailAndPassword,
 } from "firebase/auth";
@@ -15,6 +14,7 @@ import { useAuthRequest } from "../../src/auth/useAuthRequest";
 import { validateAuthFields } from "../../src/auth/authPresentation";
 import { NotebookProvider } from "../../src/ui/notebook/Notebook";
 import { auth } from "../../src/config/firebaseConfig";
+import { createOnboardingUser, resolveOnboardingDestination } from "../../src/onboarding/onboardingService";
 import { buildDefaultUserDoc, getDecisionUsage, getUserData, saveUserData } from "../../src/userData";
 
 export default function SignIn() { return <NotebookProvider><SignInContent /></NotebookProvider>; }
@@ -42,11 +42,10 @@ function SignInContent() {
     await AsyncStorage.setItem("userToken", userToken);
 
     const data = await getUserData(userCredential.user.uid);
-    const additionalInfo = getAdditionalUserInfo(userCredential);
 
     const tzOffsetMinutes = new Date().getTimezoneOffset();
-    if (!data && additionalInfo?.isNewUser) {
-      await saveUserData(
+    if (!data) {
+      const destination = await createOnboardingUser(
         userCredential.user.uid,
         buildDefaultUserDoc({
           email: userCredential.user.email,
@@ -54,11 +53,10 @@ function SignInContent() {
             userCredential.user.displayName ||
             userCredential.user.email?.split("@")[0] ||
             "New User",
-          goal: "Build muscle",
         }, new Date(), tzOffsetMinutes)
       );
       await AsyncStorage.setItem("isSignedUp", "true");
-      router.push("/onboarding/goal");
+      router.replace(destination);
       return;
     }
 
@@ -69,7 +67,7 @@ function SignInContent() {
       });
     }
 
-    router.replace("/(tabs)/home");
+    router.replace(await resolveOnboardingDestination(userCredential.user.uid, data));
   };
 
   const handleGooglePress = () => request.run("google", async () => {
