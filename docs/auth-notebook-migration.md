@@ -1,5 +1,10 @@
 # Authentication Notebook Native Migration
 
+Merged in PR #40 as 502934d; the auth feature branch was deleted with user
+authorization. The later onboarding migration is tracked separately in
+`onboarding-notebook-migration.md`. Implementation/verification below records the
+auth release scope on October 19.
+
 Reviewed October 19, 2026. Branch: `feature/auth-notebook-ui`, based on Settings
 PR #39. Scope is native Sign in / Sign up; onboarding remains legacy.
 User authorized split commits, push and PR review. Merge, branch deletion,

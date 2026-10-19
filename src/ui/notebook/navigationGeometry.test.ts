@@ -15,3 +15,11 @@ it("does not reserve nonexistent bottom tabs on authentication screens", () => {
   expect(notebookDialogTabHeight("/auth/sign-up", 24, 2)).toBeUndefined();
   expect(notebookDialogTabHeight("/home", 24, 1)).toBe(92);
 });
+
+it("uses notebook dialogs without bottom tabs on the four onboarding routes", () => {
+  for (const step of ["experience", "availability", "nickname", "health"]) {
+    expect(usesNotebookDesign(`/onboarding/${step}`)).toBe(true);
+    expect(notebookDialogTabHeight(`/onboarding/${step}`, 24, 2)).toBeUndefined();
+  }
+  expect(usesNotebookDesign("/onboarding/unknown")).toBe(false);
+});
