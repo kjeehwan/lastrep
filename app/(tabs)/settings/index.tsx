@@ -1,31 +1,54 @@
-import { Ionicons } from "@expo/vector-icons";
+import { UserRound, Mail, FileText } from "lucide-react-native";
+import { requireOptionalNativeModule } from "expo-modules-core";
+import { doc, onSnapshot } from "firebase/firestore";
+import { NotebookProvider, useNotebook } from "../../../src/ui/notebook/Notebook";
+import { NotebookHeader } from "../../../src/ui/notebook/NotebookHeader";
+import { useNotebookStatusBar } from "../../../src/ui/notebook/useNotebookStatusBar";
+import { notebookFonts } from "../../../src/ui/notebook/tokens";
+import { SettingsSection, SettingsRow, SettingsText, SettingsAction, SettingsVersionIcon } from "../../../src/settings/SettingsNotebookControls";
+import { formatInstalledVersion, settingsAccessLabel } from "../../../src/settings/settingsPresentation";
+import { useOfflineStatus } from "../../../src/hooks/useOfflineStatus";
+import { isExpectedOfflineError } from "../../../src/utils/networkErrors";
 import { Href, Redirect, useFocusEffect, useNavigation, useRouter } from "expo-router";
 import type { NavigationProp } from "@react-navigation/native";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { getFunctions, httpsCallable } from "firebase/functions";
-import React, { useCallback, useEffect, useState } from "react";
-import { BackHandler, Linking, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { BackHandler, Linking, Pressable, ScrollView, Text, View, useWindowDimensions } from "react-native";
+import { useAppTheme } from "../../../src/theme/AppThemeProvider";
+import type { ThemePreference } from "../../../src/theme/themePreference";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { getUidPrefix, logAnalyticsEvent } from "../../../src/analytics/analytics";
 import { MANAGE_SUBSCRIPTION_URL } from "../../../src/config/billingConfig";
-import { auth } from "../../../src/config/firebaseConfig";
+import { auth, db } from "../../../src/config/firebaseConfig";
 import { PRIVACY_POLICY_URL, SUPPORT_EMAIL } from "../../../src/config/legalConfig";
 import { useEntitlement } from "../../../src/hooks/useEntitlement";
 import { showAppDialog } from "../../../src/ui/appDialog";
-import { getUserData } from "../../../src/userData";
 import { clearProfilePhotoCache } from "../../../src/profile/profilePhotos";
 import { isDevBillingBuild } from "../../../src/billing/revenuecat";
 import { usePurchaseRestore } from "../../../src/billing/usePurchaseRestore";
 import { returnFromSettingsToHome } from "../../../src/navigation/settingsNavigation";
 
-const ACCENT = "#7b61ff";
-const MUTED = "#a5acc1";
 const FUNCTIONS_REGION = "asia-northeast3";
 
 export default function SettingsIndex() {
+  return <NotebookProvider><SettingsContent /></NotebookProvider>;
+}
+function SettingsContent() {
+  useNotebookStatusBar();
+  const { colors } = useNotebook();
+  const appearance = useAppTheme();
+  const largeText = useWindowDimensions().fontScale >= 1.5;
+  const { isOffline, ready: networkReady } = useOfflineStatus();
+  const nativeMetadata = requireOptionalNativeModule<{ nativeApplicationVersion?: string; nativeBuildVersion?: string }>("ExpoApplication");
+  const installedVersion = formatInstalledVersion(nativeMetadata?.nativeApplicationVersion, nativeMetadata?.nativeBuildVersion);
+  const [account, setAccount] = useState<{ uid: string; nickname: string } | null>(null);
+  const [accountLoadFailed, setAccountLoadFailed] = useState(false);
+  const [sessionFeedback, setSessionFeedback] = useState<string | null>(null);
+  const [signingOut, setSigningOut] = useState(false);
+  const accountOperationRef = useRef(false);
   const router = useRouter();
   const navigation = useNavigation<NavigationProp<{ home: undefined }>>();
-  const [nickname, setNickname] = useState("You");
   const [email, setEmail] = useState<string | null>(null);
   const [redirectTo, setRedirectTo] = useState<Href | null>(null);
   const [authReady, setAuthReady] = useState(false);
@@ -40,6 +63,8 @@ export default function SettingsIndex() {
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (user) => {
       setAuthReady(true);
+      setAccount(null);
+      setAccountLoadFailed(false);
       if (!user) {
         setUid(null);
         setEmail(null);
@@ -49,30 +74,62 @@ export default function SettingsIndex() {
       setUid(user.uid);
       setRedirectTo(null);
       setEmail(user.email || null);
-      (async () => {
-        try {
-          const data = await getUserData(user.uid);
-          if (data?.nickname) setNickname(data.nickname);
-        } catch (e) {
-          console.log("Failed to load nickname", e);
-        }
-      })();
+
     });
     return unsub;
   }, []);
 
-  const handleSignOut = async () => {
-    try {
-      await signOut(auth);
-      if (uid) await clearProfilePhotoCache(uid).catch(() => undefined);
-      router.replace("/auth/sign-in");
-    } catch (e) {
-      console.log("Sign out error", e);
-    }
+  useEffect(() => {
+    if (!uid) return;
+    return onSnapshot(doc(db, "users", uid), (snapshot) => {
+      const data = snapshot.data();
+      if (!data) { setAccountLoadFailed(true); return; }
+      setAccount({ uid, nickname: typeof data.nickname === "string" && data.nickname.trim() ? data.nickname.trim() : "Your account" });
+      setAccountLoadFailed(false);
+    }, (error) => {
+      setAccountLoadFailed(true);
+      if (!isExpectedOfflineError(error)) console.log("Could not load Settings account", error);
+    });
+  }, [uid]);
+
+  const accountLoaded = account?.uid === uid && !!uid;
+  const nickname = accountLoaded ? account!.nickname : accountLoadFailed ? "Profile not loaded" : "Loading account...";
+  const accessLabel = settingsAccessLabel(accountLoaded, entitlement.state);
+  const busy = deletingAccount || signingOut;
+  const accountDisabled = busy || !uid || !networkReady || isOffline;
+
+  const handleSignOut = () => {
+    if (accountDisabled || accountOperationRef.current) return;
+    showAppDialog({
+      title: "Sign out?",
+      message: "You can sign back in to access your saved account data.",
+      buttonLayout: "vertical",
+      buttons: [
+        { text: "Sign out", onPress: () => {
+          if (auth.currentUser?.uid !== uid || accountOperationRef.current) return;
+          accountOperationRef.current = true;
+          setSigningOut(true); setSessionFeedback(null);
+          void (async () => {
+            try {
+              await signOut(auth);
+              if (uid) await clearProfilePhotoCache(uid).catch(() => undefined);
+              router.replace("/auth/sign-in");
+            } catch (error) {
+              console.log("Sign out error", error);
+              setSessionFeedback("Could not sign out. Please try again.");
+            } finally { accountOperationRef.current = false; setSigningOut(false); }
+          })();
+        } },
+        { text: "Stay signed in", role: "cancel" },
+      ],
+    });
   };
 
-  const contactSupport = () => {
-    Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=Support%20request`);
+  const contactSupport = async () => {
+    const subject = encodeURIComponent("Lastrep support request");
+    const body = encodeURIComponent(`Describe what happened:\n\nApp version: ${installedVersion}`);
+    try { await Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=${subject}&body=${body}`); }
+    catch { showAppDialog({ title: "Contact support", message: `Email ${SUPPORT_EMAIL}. Include the app version from Settings > Support and a description of the problem.`, buttons: [{ text: "OK", role: "cancel" }] }); }
   };
 
   const openPrivacyPolicy = async () => {
@@ -90,7 +147,7 @@ export default function SettingsIndex() {
   };
 
   const handleGoBack = useCallback(() => {
-    returnFromSettingsToHome(navigation);
+    if (!accountOperationRef.current) returnFromSettingsToHome(navigation);
   }, [navigation]);
 
   useFocusEffect(useCallback(() => {
@@ -159,16 +216,19 @@ export default function SettingsIndex() {
   };
 
   const handleDeleteAccount = () => {
-    if (deletingAccount) return;
+    if (accountDisabled || accountOperationRef.current) return;
     showAppDialog({
       title: "Delete account?",
-      message: "This permanently deletes your Lastrep account and associated app data.",
+      message: "This permanently deletes your Lastrep account and associated app data. It does not automatically cancel a Google Play subscription. Manage subscriptions in Google Play separately.",
+      buttonLayout: "vertical",
       buttons: [
-        { text: "Cancel", role: "cancel" },
+        { text: "Keep account", role: "cancel" },
         {
-          text: "Delete",
+          text: "Delete account",
           role: "destructive",
           onPress: async () => {
+            if (auth.currentUser?.uid !== uid || accountOperationRef.current) return;
+            accountOperationRef.current = true;
             setDeleteFeedback(null);
             setDeletingAccount(true);
             try {
@@ -184,6 +244,7 @@ export default function SettingsIndex() {
               console.log("Failed to delete account", e);
               setDeleteFeedback("Could not delete account. Please try again.");
             } finally {
+              accountOperationRef.current = false;
               setDeletingAccount(false);
             }
           },
@@ -194,221 +255,63 @@ export default function SettingsIndex() {
 
   if (redirectTo) return <Redirect href={redirectTo} />;
 
-  return (
-    <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
-        <View style={styles.header}>
-          <TouchableOpacity style={styles.backButton} onPress={handleGoBack}>
-            <Ionicons name="chevron-back" size={22} color="#fff" />
-          </TouchableOpacity>
-          <Text style={styles.title}>Settings</Text>
-          <View style={styles.headerSpacer} />
+  return <SafeAreaView style={{ flex: 1, backgroundColor: colors.canvas }} edges={["top", "left", "right"]}>
+    <NotebookHeader title="Settings" onBack={handleGoBack} />
+    <ScrollView pointerEvents={busy ? "none" : "auto"} contentContainerStyle={{ width: "100%", maxWidth: 800, alignSelf: "center", padding: 20, paddingBottom: 56, gap: 28 }}>
+      {isOffline ? <SettingsText live>Offline. Store and account operations need a connection. Saved details remain visible.</SettingsText> : null}
+      <SettingsSection first title="Account">
+        <SettingsRow strong icon={<UserRound size={20} strokeWidth={1.5} color={colors.ink} />} label={nickname}>
+          <View style={{ alignSelf: "flex-start", borderWidth: 1, borderColor: colors.border, borderRadius: 4, paddingHorizontal: 8, paddingVertical: 4 }}><Text style={{ fontFamily: notebookFonts.semibold, fontSize: 13, color: colors.ink }}>{accessLabel}</Text></View>
+          {email ? <SettingsText>{email}</SettingsText> : null}
+          {!accountLoaded && accountLoadFailed ? <SettingsText live>Saved profile details are unavailable. They will update when the connection returns.</SettingsText> : null}
+        </SettingsRow>
+      </SettingsSection>
+      <SettingsSection title="Appearance">
+        <SettingsText>System follows your device’s appearance.</SettingsText>
+        <View accessibilityRole="radiogroup" accessibilityLabel="Appearance" style={{ flexDirection: largeText ? "column" : "row", gap: 8 }}>
+          {([['light', 'Light'], ['dark', 'Dark'], ['system', 'System']] as [ThemePreference, string][]).map(([value, label]) => <Pressable key={value} accessibilityRole="radio" accessibilityLabel={label} accessibilityState={{ checked: appearance.preference === value, disabled: appearance.saving }} disabled={appearance.saving} onPress={() => void appearance.setPreference(value)} style={{ flex: largeText ? undefined : 1, minHeight: 48, alignItems: "center", justifyContent: "center", padding: 12, borderRadius: 6, borderWidth: 1, borderColor: appearance.preference === value ? colors.primary : colors.border, backgroundColor: appearance.preference === value ? colors.primary : colors.surface }}><Text style={{ fontFamily: notebookFonts.semibold, fontSize: 16, color: appearance.preference === value ? colors.onPrimary : colors.ink }}>{label}</Text></Pressable>)}
         </View>
-      <ScrollView contentContainerStyle={styles.content} style={styles.container} bounces>
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Account</Text>
-          <View style={styles.row}>
-            <View style={styles.rowIcon}>
-              <Ionicons name="person-circle-outline" size={28} color={ACCENT} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.itemText}>{nickname}</Text>
-              {email ? <Text style={styles.subText}>{email}</Text> : null}
-            </View>
-            <Pressable onPress={() => router.push({ pathname: "/profile", params: { from: "/settings/index" } })}>
-              <Text style={styles.linkText}>Edit</Text>
-            </Pressable>
-          </View>
-        </View>
-
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Support</Text>
-          <Pressable style={styles.row} onPress={contactSupport}>
-            <View style={styles.rowIcon}>
-              <Ionicons name="bug-outline" size={22} color={ACCENT} />
-            </View>
-            <Text style={styles.itemText}>Report a problem</Text>
-          </Pressable>
-        </View>
-
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Legal</Text>
-          <Pressable style={styles.row} onPress={openPrivacyPolicy}>
-            <View style={styles.rowIcon}>
-              <Ionicons name="document-text-outline" size={22} color={ACCENT} />
-            </View>
-            <Text style={styles.itemText}>Privacy policy</Text>
-            <Ionicons name="open-outline" size={18} color={MUTED} style={styles.rowTrailingIcon} />
-          </Pressable>
-        </View>
-
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Subscription</Text>
-          {entitlement.state === "loading" ? (
-            <Text style={styles.subText}>Checking subscription status...</Text>
-          ) : devBillingBuild ? (
-            <>
-              {entitlement.state === "active" ? (
-                <Text style={styles.itemText}>Premium access active</Text>
-              ) : null}
-              <Text style={styles.subText}>
-                Billing is unavailable in Lastrep Dev. Use the Play-installed app to test subscriptions.
-              </Text>
-              {entitlement.state === "active" ? (
-                <Text style={styles.subText}>
-                  Premium access does not necessarily mean you have a paid Google Play subscription.
-                </Text>
-              ) : null}
-            </>
-          ) : entitlement.state === "active" ? (
-            <>
-              <TouchableOpacity style={styles.secondaryButton} onPress={handleManageSubscription}>
-                <Text style={styles.secondaryButtonText}>Manage subscription</Text>
-              </TouchableOpacity>
-              <Text style={styles.subText}>
-                Opens Google Play. To cancel, tap Lastrep in the subscription list.
-              </Text>
-            </>
-          ) : (
-            <TouchableOpacity
-              style={styles.secondaryButton}
-              onPress={() =>
-                router.push({
-                  pathname: "/paywall",
-                  params: { sourceScreen: "settings", reasonCode: "manual_upgrade" },
-                })
-              }
-            >
-              <Text style={styles.secondaryButtonText}>Upgrade to Premium</Text>
-            </TouchableOpacity>
-          )}
-          {!devBillingBuild && entitlement.state === "active" && manageFallbackText ? (
-            <Text style={styles.subText}>{manageFallbackText}</Text>
-          ) : null}
-          {!devBillingBuild && entitlement.state !== "loading" ? (
-            <TouchableOpacity
-              style={[styles.secondaryButton, restoring && styles.disabledButton]}
-              onPress={() => void handleRestorePurchases()}
-              disabled={restoring || !uid}
-            >
-              <Text style={styles.secondaryButtonText}>{restoring ? "Restoring..." : "Restore purchases"}</Text>
-            </TouchableOpacity>
-          ) : null}
-          {restoreFeedback ? <Text accessibilityLiveRegion="polite" style={styles.subText}>{restoreFeedback}</Text> : null}
-        </View>
-
-        <View style={styles.card}>
-          <TouchableOpacity style={styles.secondaryButton} onPress={handleSignOut}>
-            <Text style={styles.secondaryButtonText}>Log out</Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Delete Account</Text>
-          <TouchableOpacity
-            style={[styles.secondaryButton, styles.deleteButton, deletingAccount && styles.disabledButton]}
-            onPress={handleDeleteAccount}
-            disabled={deletingAccount}
-          >
-            <Text style={[styles.secondaryButtonText, styles.deleteButtonText]}>
-              {deletingAccount ? "Deleting account..." : "Delete account"}
-            </Text>
-          </TouchableOpacity>
-          <Text style={styles.subText}>
-            Permanently deletes your account and associated app data.
-          </Text>
-          {deleteFeedback ? <Text style={styles.subText}>{deleteFeedback}</Text> : null}
-        </View>
-
-        {__DEV__ ? (
-          <View style={styles.card}>
-            <Text style={styles.sectionTitle}>Dev</Text>
-            <Text style={styles.subText}>
-              Entitlement: {entitlement.state === "active" ? "Paid" : "Free"}
-            </Text>
-            <View style={styles.devRow}>
-              <TouchableOpacity style={styles.secondaryButton} onPress={() => setDevEntitlement(true)}>
-                <Text style={styles.secondaryButtonText}>Set Paid</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.secondaryButton} onPress={() => setDevEntitlement(false)}>
-                <Text style={styles.secondaryButtonText}>Set Free</Text>
-              </TouchableOpacity>
-            </View>
-            <TouchableOpacity style={styles.secondaryButton} onPress={resetDailyLimit}>
-              <Text style={styles.secondaryButtonText}>Reset daily limit</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.secondaryButton} onPress={resetCooldown}>
-              <Text style={styles.secondaryButtonText}>Reset cooldown</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.secondaryButton}
-              onPress={() => router.push("/settings/revenuecat-dev" as Href)}
-            >
-              <Text style={styles.secondaryButtonText}>RevenueCat debug</Text>
-            </TouchableOpacity>
-          </View>
-        ) : null}
-      </ScrollView>
-    </SafeAreaView>
-  );
+        {appearance.saving ? <SettingsText live>Saving appearance...</SettingsText> : appearance.feedback ? <SettingsText live>{appearance.feedback}</SettingsText> : null}
+      </SettingsSection>
+      <SettingsSection title="Support">
+        <SettingsRow icon={<Mail size={20} strokeWidth={1.5} color={colors.ink} />} label="Report a problem" onPress={() => void contactSupport()} />
+        <SettingsRow icon={<SettingsVersionIcon />} label="App version" value={installedVersion} />
+      </SettingsSection>
+      <SettingsSection title="Legal">
+        <SettingsRow icon={<FileText size={20} strokeWidth={1.5} color={colors.ink} />} label="Privacy policy" onPress={() => void openPrivacyPolicy()} />
+      </SettingsSection>
+      <SettingsSection title="Subscription">
+        {entitlement.state === "loading" || !accountLoaded ? <SettingsText>Checking subscription status...</SettingsText> : devBillingBuild ? <>
+          <SettingsText>Billing is unavailable in Lastrep Dev. Use the Play-installed app to test subscriptions.</SettingsText>
+          {entitlement.state === "active" ? <SettingsText>Premium access does not necessarily mean you have a paid Google Play subscription.</SettingsText> : null}
+        </> : <>
+          <SettingsText>{entitlement.state === "active" ? "Premium access does not necessarily mean you have a paid Google Play subscription. Manage subscriptions in Google Play." : "View Premium options or restore an existing subscription."}</SettingsText>
+          {entitlement.state === "active" ? <>
+            <SettingsAction label="Manage subscription" disabled={accountDisabled || restoring} onPress={() => void handleManageSubscription()} />
+            <SettingsText>Opens Google Play. To cancel, tap Lastrep in the subscription list.</SettingsText>
+          </> : <SettingsAction label="Upgrade to Premium" primary disabled={accountDisabled || restoring} onPress={() => router.push({ pathname: "/paywall", params: { sourceScreen: "settings", reasonCode: "manual_upgrade" } })} />}
+          {manageFallbackText ? <SettingsText live>{manageFallbackText}</SettingsText> : null}
+          <SettingsAction label={restoring ? "Checking purchases..." : "Restore purchases"} disabled={accountDisabled || restoring} onPress={() => void handleRestorePurchases()} />
+        </>}
+        {restoreFeedback ? <SettingsText live>{restoreFeedback}</SettingsText> : null}
+      </SettingsSection>
+      <SettingsSection title="Session">
+        <SettingsAction label={signingOut ? "Signing out..." : "Sign out"} disabled={accountDisabled || restoring} onPress={handleSignOut} />
+        {sessionFeedback ? <SettingsText live>{sessionFeedback}</SettingsText> : null}
+      </SettingsSection>
+      <SettingsSection title="Delete account">
+        <SettingsText>Permanently deletes your account and associated Lastrep data.</SettingsText>
+        <SettingsAction label={deletingAccount ? "Deleting account..." : "Delete account"} destructive disabled={accountDisabled || restoring} onPress={handleDeleteAccount} />
+        {deleteFeedback ? <SettingsText live>{deleteFeedback}</SettingsText> : null}
+      </SettingsSection>
+      {__DEV__ ? <SettingsSection title="Development tools">
+        <SettingsText>Access: {accessLabel}</SettingsText>
+        <SettingsAction label="Set Premium" disabled={accountDisabled} onPress={() => void setDevEntitlement(true)} />
+        <SettingsAction label="Set Free" disabled={accountDisabled} onPress={() => void setDevEntitlement(false)} />
+        <SettingsAction label="Reset daily limit" disabled={accountDisabled} onPress={() => void resetDailyLimit()} />
+        <SettingsAction label="Reset cooldown" disabled={accountDisabled} onPress={() => void resetCooldown()} />
+        <SettingsAction label="RevenueCat debug" disabled={busy} onPress={() => router.push("/settings/revenuecat-dev" as Href)} />
+      </SettingsSection> : null}
+    </ScrollView>
+  </SafeAreaView>;
 }
-
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#0d0d1a" },
-  container: { flex: 1, backgroundColor: "#0d0d1a" },
-  content: { width: "100%", maxWidth: 760, alignSelf: "center", padding: 20, paddingTop: 8, paddingBottom: 32, gap: 14 },
-  header: { width: "100%", maxWidth: 760, alignSelf: "center",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 8,
-  },
-  backButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.08)",
-  },
-  headerSpacer: {
-    width: 22,
-  },
-  title: { color: "#fff", fontSize: 22, fontWeight: "800" },
-  card: {
-    backgroundColor: "rgba(255,255,255,0.06)",
-    borderRadius: 18,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(255,255,255,0.07)",
-    gap: 6,
-  },
-  sectionTitle: { color: "#fff", fontSize: 15, fontWeight: "700", marginBottom: 6, letterSpacing: 0.2 },
-  row: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 4 },
-  rowIcon: { width: 28, alignItems: "center" },
-  rowTrailingIcon: { marginLeft: "auto" },
-  itemText: { color: "#fff", fontSize: 16, fontWeight: "600" },
-  subText: { color: MUTED, fontSize: 13 },
-  linkText: { color: ACCENT, fontWeight: "700" },
-  secondaryButton: {
-    borderColor: "rgba(255,255,255,0.25)",
-    borderWidth: StyleSheet.hairlineWidth * 2,
-    paddingVertical: 14,
-    borderRadius: 14,
-    alignItems: "center",
-  },
-  secondaryButtonText: { color: "#fff", fontWeight: "700", fontSize: 15 },
-  disabledButton: {
-    opacity: 0.6,
-  },
-  deleteButton: {
-    backgroundColor: "rgba(255, 90, 90, 0.16)",
-    borderColor: "rgba(255, 90, 90, 0.5)",
-  },
-  deleteButtonText: {
-    color: "#ffb8b8",
-  },
-  devRow: { flexDirection: "row", gap: 12 },
-});

@@ -1,5 +1,5 @@
 import * as SplashScreen from 'expo-splash-screen';
-import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
+import { DarkTheme, DefaultTheme, Stack, ThemeProvider, usePathname } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { onAuthStateChanged } from 'firebase/auth';
 import { useEffect } from 'react';
@@ -12,6 +12,8 @@ import { auth } from '@/src/config/firebaseConfig';
 import { initializeRevenueCat, isDevBillingBuild, syncRevenueCatIdentity } from '@/src/billing/revenuecat';
 import { logAnalyticsRuntimeDiagnostics } from '@/src/analytics/analytics';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { AppThemeProvider } from '@/src/theme/AppThemeProvider';
+import { usesNotebookDesign } from '@/src/ui/notebook/navigationGeometry';
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -45,7 +47,11 @@ if (__DEV__) {
 }
 
 export default function RootLayout() {
+  return <AppThemeProvider><RootContent /></AppThemeProvider>;
+}
+function RootContent() {
   const colorScheme = useColorScheme();
+  const pathname = usePathname();
 
   useEffect(() => {
     if (!__DEV__) return;
@@ -112,7 +118,7 @@ export default function RootLayout() {
         <Stack>{stackScreens}</Stack>
         <OfflineBanner />
         <AppDialogHost />
-        <StatusBar style="light" />
+        <StatusBar style={usesNotebookDesign(pathname) && colorScheme === 'light' ? 'dark' : 'light'} />
       </ThemeProvider>
     </GestureHandlerRootView>
   );
