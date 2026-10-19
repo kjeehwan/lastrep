@@ -54,7 +54,7 @@ import {
   View,
 } from "react-native";
 import { auth, db } from "../../src/config/firebaseConfig";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useEntitlement } from "../../src/hooks/useEntitlement";
 import { hasHealthSyncConsent } from "../../src/health/healthSyncConsent";
 import {
@@ -196,6 +196,7 @@ const convertKcalToUnit = (valueKcal: number, unit: EnergyUnit): number =>
 export default function HomeRoute() { return <NotebookProvider><Home /></NotebookProvider>; }
 
 function Home() {
+  const insets = useSafeAreaInsets();
   const { colors } = useNotebook();
   const styles = useNotebookStyles(createStyles);
   const { fontScale } = useWindowDimensions();
@@ -1156,7 +1157,7 @@ function Home() {
   const shouldShowFirstTimeBanner = showFirstTimeBanner && workoutHistoryStatus?.uid === uid && !workoutHistoryStatus.hasWorkouts;
 
   return (
-    <SafeAreaView style={styles.container} edges={["top", "left", "right"]}>
+    <View style={[styles.container, { paddingTop: insets.top, paddingLeft: insets.left, paddingRight: insets.right }]}>
       <View style={styles.header}>
         <LastrepLogo variant="header" />
         <View style={styles.iconContainer}>
@@ -1620,7 +1621,7 @@ function Home() {
 
 
 
-    </SafeAreaView>
+    </View>
   );
 }
 

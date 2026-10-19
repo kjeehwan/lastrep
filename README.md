@@ -21,6 +21,8 @@ focus. Browser prototypes are design studies, not production account screens.
   for resuming the migration review in a new development thread.
 - [Profile migration notes](docs/profile-notebook-migration.md): implementation
   scope and recorded verification. Check dates and Git before assuming status.
+- [Settings migration notes](docs/settings-notebook-migration.md): current native
+  implementation, verification and remaining review after Profile PR #38.
 
 ## Stack and Layout
 

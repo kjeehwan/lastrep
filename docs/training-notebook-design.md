@@ -1,21 +1,23 @@
 # Lastrep Training Notebook Design Specification
 
-Version: 1.18 | Date: October 19, 2026
+Version: 1.24 | Date: October 19, 2026
 
 Status: Workout, Home, Nutrition, Sleep, Profile and Settings browser design
 directions approved through iterative review. Shared rules below incorporate that
 feedback. Workout's native migration was approved and merged in PR #34. Home's
 native migration was approved after phone review and merged in PR #35 on
 October 17. Nutrition's native migration was approved and merged in PR #36.
-Sleep's native migration is approved on `feature/sleep-notebook-ui` after phone
+Sleep's native migration is approved and merged in PR #37 after phone
 review, including deletion, overlap handling and bidirectional target sync.
 Account-write checks remain separate from read-only visual acceptance.
-Profile has an uncommitted native candidate on `feature/profile-notebook-ui`,
-with user-approved presentation, Save/reopen, photo persistence and landscape
-keyboard behavior. Reduced-motion and focused feedback follow-ups remain;
-Settings has not been migrated.
+Profile's native migration is approved and merged in PR #38, including selective
+photo writes, offline recovery and interrupted-upload retry. The optional one-call
+photo optimization remains deferred locally and undeployed. Native Settings is
+user-approved on `feature/settings-notebook-ui` and prepared for release.
+Native auth/onboarding migration remains separate.
 See workout-notebook-migration.md, home-notebook-migration.md and
-nutrition-notebook-migration.md and sleep-notebook-migration.md for boundaries and actual
+nutrition-notebook-migration.md, sleep-notebook-migration.md and
+settings-notebook-migration.md for boundaries and actual
 verification coverage.
 The initial Figma pair records an earlier Workout revision; the local browser
 prototype and decisions below capture the subsequent approved refinements.
@@ -1840,7 +1842,18 @@ AI context disclosure remains separate from granting health access.
 
 ### Settings hierarchy and outcomes
 
-Order: Account, Support, Legal, Subscription, Session, Delete account.
+Order: Account, Appearance, Support, Legal, Subscription, Session, Delete account.
+Appearance offers Light, Dark and System, with System as the default. Save the
+choice separately for each account on this device and restore it after restart.
+A newly encountered account starts at System. The old installation-wide value
+has no account owner and must not be inherited. The signed-out state has its own
+local preference. Account changes must ignore late reads/writes from a prior account. Explicit Light/Dark overrides
+the OS appearance; System follows subsequent OS changes. Use the same resolved
+theme across all notebook screens, tabs, navigation, loading states and dialogs.
+Changing appearance updates the existing screen in place, preserving navigation,
+scroll and unsaved drafts. At enlarged text, stack the three choices rather than
+shrinking labels or targets. Announce storage failures and retain the last saved
+choice; a failed read must not block access to the app.
 Back always returns to Home. Account shows the nickname and a compact Premium or
 Free badge, not a redundant Edit action. Keep badges neutral paper/ink with a
 fine outline: they identify account access, not an action or warning. While access is loading, show Checking
@@ -1853,11 +1866,29 @@ clearly visible filled dot above a shorter stem. The browser SVG uses a 1.1-unit
 dot radius, with no stroke on the dot. Keep the version right-aligned and the row
 non-interactive; do not add a chevron or button affordance.
 The native implementation must use the installed version/build,
-not the browser fixture. Support points users to Settings > Support for the version and uses
-lastrep.dev@gmail.com. Privacy opens the published policy only after an explicit
-link click. Log out and deletion require confirmation. Deletion explains that
+not the browser fixture. Support uses lastrep.dev@gmail.com and includes the app
+version in the report draft. Omit redundant instructions about where to find the
+version from that draft. Privacy opens the published policy only after an explicit
+link click. Sign out and deletion require confirmation. Deletion explains that
 Google Play subscriptions must be cancelled separately. Browser simulations must
 never imply that a real account was signed out or deleted.
+
+Use metadata from the installed native binary, not the current Metro/OTA
+configuration, for App version. Preserve development flavor suffixes and show
+the build alongside the version. If native metadata is unavailable, say so;
+never substitute a prototype version. At enlarged text, the version may reflow
+below its label within the same aligned text column.
+
+Settings account details update with saved Profile changes. An unloaded account
+must not appear as a generic account or briefly show Free access. Retain saved
+details through a connection loss and distinguish unavailable data from empty
+values. Keep one contextual connectivity notice and the shared dismissible bottom
+banner, as on Profile. Disable store/account operations while offline or busy;
+failure feedback clears progress, retains the account and offers an honest retry.
+Sign out and deletion use stacked confirmation actions with explicit safe choices
+(Stay signed in / Keep account). Do not perform an action for a different account
+if authentication changes while its confirmation is open. Support opens a draft
+only on a tap and never sends account information or logs automatically.
 
 Separate Premium entitlement from a paid subscription, including manually granted
 Premium. Development builds explain billing is unavailable; no purchase/restore
@@ -1906,3 +1937,89 @@ existing parent-screen back behavior; the root Nutrition back action goes Home.
 Home keeps its brand/utility header. All header icons use the same 22-pixel glyph
 inside a 44-pixel compact target. These revisions supersede earlier root headers
 in the approved browser references without changing native navigation yet.
+
+
+## 23. Authentication and onboarding browser studies
+
+Sign in / Sign up received user design approval on October 19. The revised
+onboarding flow received user approval on October 19. Final refinements retain
+separate production/dev logos and remove visible slider minus/plus controls.
+The shared browser sidebar revision is also user-approved.
+Native authentication/onboarding presentation
+and behavior have not yet been migrated. Both studies use the shared paper/dark
+tokens, bundled serif/sans fonts, ink primary actions, explicit field labels,
+restrained rules and 48px controls. Use sentence case: Sign in, Sign up and
+Sign out, including confirmation and progress copy.
+
+Authentication preserves email/password and Continue with Google. Password
+visibility is included in the approved study. Do not add providers or password
+reset services without separate behavior review.
+
+The revised onboarding order is Experience, Availability, Nickname and Optional
+health sync. Remove the legacy goal question; the user explicitly chose to manage
+training/diet phases in Profile. Do not replace the question with mandatory phase
+selection. The sample-program page is removed because preferences, equipment and
+exercise suitability have not been collected. Do not present an arbitrary routine
+as a personalized recommendation or generate a program during onboarding.
+
+Use the same Lastrep wordmark as Home at the upper left: blue-purple in
+production and orange-red in dev. The browser study shows production branding.
+Below it,
+place Back on the left and Skip on the right on one row. Skip advances a step;
+on the final screen it goes Home. Keep header and content in one scrollable
+surface so short landscape and 200% text do not trap controls offscreen.
+
+Availability uses a labeled, discrete 1-7 slider (default 4), a visible day count,
+and numbered ticks. Do not add visible minus/plus buttons. Keyboard arrows
+change one day; native implementation must retain screen-reader adjustment and
+verify it on the phone. Back preserves selections.
+Nickname is explicitly optional; Continue
+stays available when empty, and the name can be changed later in Profile.
+
+Optional health sync is the final step with Go to Home as the primary action.
+Explain supported records, account storage, optional connection in Profile,
+revocation and the separate AI disclosure. Setup does not request permissions
+or connect health data. The removed Keep your place selector was a save-failure
+example, not a product step. Future native save errors belong inline on the
+relevant step and retain the actual entered fields.
+
+Phase-week follow-up: Profile currently calculates weeks from stored start dates;
+it does not offer date correction. Prefer editing the start date and calculating
+the week, rather than storing a second editable week count. This remains a
+separate design/implementation follow-up explicitly postponed by the user; do
+not implement it in this migration. The onboarding revision changes no
+phase history, existing dates or native persistence.
+
+Keep form fields and actions scrollable on short screens and at 200% text; do
+not pin a footer over fields. No tab navigation appears before entry to the app.
+Browser interaction checks do not establish native keyboard/screen-reader support.
+
+
+### Browser study navigation
+
+All eight browser studies share one navigation order: Home, Workout, Nutrition,
+Sleep, Profile, Settings, Sign in / Sign up and Onboarding. Omit the current
+screen. Use Review followed by the screen name, with no prototype suffix.
+Group all screen links in the Screen studies navigation above review controls;
+Scope and review guide remains below. New study links must be updated across
+all study pages, not appended below the controls on older pages.
+
+### Migration boundaries after design approval
+
+Recommended next boundary: complete the Settings release separately before
+native authentication/onboarding migration. Release actions still require the
+user's explicit instruction. Browser approval is design approval; it does not verify account
+creation, provider navigation, native slider accessibility or onboarding saves.
+Preserve existing accounts and records during the later migration. Removing the
+onboarding goal question does not authorize deleting existing account goal data.
+Phase start-date correction remains explicitly postponed.
+
+
+### Android sign-in transition
+
+Content such as the logo/text must remain below status icons throughout entry
+transitions. Edge-to-edge backgrounds may extend behind the system bar. Home
+uses useSafeAreaInsets padding on its outer View to avoid a native SafeAreaView
+recalculating during navigation animation. Do not hard-code status-bar heights
+or add root padding that doubles existing screen insets. Verify the actual
+sign-in transition on the phone; a settled screenshot is insufficient.

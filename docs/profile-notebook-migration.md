@@ -3,7 +3,7 @@
 Branch: `feature/profile-notebook-ui`, based on main after Sleep PR #37.
 Design authority: `training-notebook-design.md` v1.18 section 22 and approved
 `prototypes/training-notebook/profile.html` / account study. Browser fixtures are
-not used as account data. Implementation is on the feature branch, pending merge.
+not used as account data. Implementation was merged into main in PR #38.
 Core user review is approved; focused follow-ups below remain open.
 
 This maintained note records implementation decisions and generalized verification

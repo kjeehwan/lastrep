@@ -340,3 +340,46 @@ technology test. Lastrep's 326 active tests, lint and typecheck also passed.
 
 Fonts are bundled for offline use. License notices are in `assets/`. The prototype
 has no imported runtime dependencies and does not change the root package files.
+
+
+## Authentication and onboarding studies - October 19
+
+Open `http://127.0.0.1:4317/auth.html` for Sign in / Sign up (user approved) and
+`http://127.0.0.1:4317/onboarding.html` for the revised four-step setup proposal.
+Both are linked from the six existing studies. If the server is not running,
+start it from this directory with `python -m http.server 4317 --bind 127.0.0.1`.
+
+Onboarding now covers Experience, Availability (1-7 day slider), optional Nickname
+and Optional health sync, with a final Go to Home action. The existing Home logo
+is at the upper left; Back/Skip sit below it. Goal, sample week and the standalone
+save-failure example have been removed. Phases remain managed in Profile.
+
+Use made-up credentials only. Inputs are in memory; no account, API, Google,
+health or storage operation runs. Sign-up proceeds to the onboarding study;
+Sign-in succeeds only as a local simulation. Authentication review selectors
+expose invalid credentials, existing email, offline, connecting and success.
+Onboarding selectors now show only actual steps. Back retains availability,
+experience and nickname. Skip advances without requiring a choice. Health
+connection remains available later in Profile; this study requests no permission.
+
+Use Dark paper, 200% text and the five viewport presets to review both studies.
+Native authentication/onboarding has not changed. Real keyboard and native
+screen-reader behavior require a later implementation/device pass.
+
+The earlier 280 browser checks covered the superseded first proposal. Current
+verification: 220 layout combinations passed across all 11 current states, five
+viewport presets, both palettes and normal/200% text. Interaction checks passed
+for logo/Back/Skip placement, slider keyboard adjustment and bounds, optional
+nickname, preserved Back entries, Skip progression and final Home navigation.
+No browser exceptions, overflow defects or external requests occurred.
+
+Final availability refinement: visible minus/plus buttons removed with user
+approval. The latest 220 layout checks and interaction checks passed again,
+including Arrow keys, Home/End, 1-7 bounds, updated accessible value and retained
+Back selections. Production/dev logos remain separate; the study shows production.
+
+
+All study sidebars use the same Screen studies navigation order: Home, Workout,
+Nutrition, Sleep, Profile, Settings, Sign in / Sign up and Onboarding (omitting
+the current page). Screen links sit above review controls and use Review labels
+without a prototype suffix. Scope and review guide remains below the controls.

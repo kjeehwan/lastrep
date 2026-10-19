@@ -1,11 +1,12 @@
 import React, { createContext, useContext, useMemo } from "react";
 import { useFonts } from "expo-font";
-import { useColorScheme, StyleSheet, View, ActivityIndicator, type TextStyle, type ViewStyle, type ImageStyle } from "react-native";
+import { StyleSheet, View, ActivityIndicator, type TextStyle, type ViewStyle, type ImageStyle } from "react-native";
+import { useAppTheme } from "../../theme/AppThemeProvider";
 import { notebookDark, notebookPaper, notebookFonts, type NotebookColors } from "./tokens";
 
 const NotebookContext = createContext({ colors: notebookPaper, fontsLoaded: false });
 export function NotebookProvider({ children }: { children: React.ReactNode }) {
-  const dark = useColorScheme() === "dark";
+  const dark = useAppTheme().colorScheme === "dark";
   const [loaded, error] = useFonts({
     NotebookSans: require("../../../assets/fonts/source-sans-3.ttf"),
     NotebookSansSemibold: require("../../../assets/fonts/source-sans-3-semibold.ttf"),
