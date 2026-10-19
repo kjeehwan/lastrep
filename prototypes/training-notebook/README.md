@@ -383,3 +383,11 @@ All study sidebars use the same Screen studies navigation order: Home, Workout,
 Nutrition, Sleep, Profile, Settings, Sign in / Sign up and Onboarding (omitting
 the current page). Screen links sit above review controls and use Review labels
 without a prototype suffix. Scope and review guide remains below the controls.
+
+Password visibility now uses eye/eye-off icons with accessible Show password /
+Hide password labels, matching native auth. The updated study passed the 220
+layout combinations and flow checks again; no exceptions or external requests.
+
+The password eye control sits inside the input's right edge with reserved text
+padding; email/password borders have equal width. All 220 study checks passed
+again, plus 40 auth geometry checks across themes, sizes and enlarged text.
