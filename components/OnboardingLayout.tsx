@@ -1,112 +1,68 @@
-import { LinearGradient } from "expo-linear-gradient";
-import React from "react";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import EntranceView from "./EntranceView";
+import { ArrowLeft } from "lucide-react-native";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import LastrepLogo from "./LastrepLogo";
+import { useNotebook, useNotebookStyles } from "../src/ui/notebook/Notebook";
+import { useNotebookStatusBar } from "../src/ui/notebook/useNotebookStatusBar";
+import { notebookFonts, type NotebookColors } from "../src/ui/notebook/tokens";
+import { focusedInputScrollOffset } from "../src/ui/keyboardViewport";
 
-type OnboardingLayoutProps = {
-  title: string;
-  children: React.ReactNode;
-  showSkip?: boolean;
-  onSkip?: () => void;
-  onBack?: () => void;
-};
-
-export default function OnboardingLayout({
-  title,
-  children,
-  showSkip = true,
-  onSkip,
-  onBack,
-}: OnboardingLayoutProps) {
-  return (
-    <LinearGradient colors={["#4a90e2", "#7b61ff"]} style={styles.gradient}>
-      <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
-        <View style={styles.topRow}>
-          <EntranceView
-            from={{ opacity: 0, translateY: -5 }}
-            animate={{ opacity: 1, translateY: 0 }}
-            transition={{ type: "timing", delay: 120, duration: 300 }}
-            style={styles.topActionSlot}
-          >
-            {onBack ? (
-              <TouchableOpacity onPress={onBack} style={styles.actionButton}>
-                <Text style={styles.actionText}>‹ Back</Text>
-              </TouchableOpacity>
-            ) : (
-              <View style={styles.topActionPlaceholder} />
-            )}
-          </EntranceView>
-          <EntranceView
-            from={{ opacity: 0, translateY: -5 }}
-            animate={{ opacity: 1, translateY: 0 }}
-            transition={{ type: "timing", delay: 200, duration: 400 }}
-            style={styles.topActionSlot}
-          >
-            {showSkip && onSkip ? (
-              <TouchableOpacity onPress={onSkip} style={styles.actionButton}>
-                <Text style={styles.actionText}>Skip ›</Text>
-              </TouchableOpacity>
-            ) : (
-              <View style={styles.topActionPlaceholder} />
-            )}
-          </EntranceView>
+type Props = { title: string; step: number; children: React.ReactNode; busy: boolean; skipDisabled: boolean; onBack: () => void; onSkip: () => void };
+export default function OnboardingLayout({ title, step, children, busy, skipDisabled, onBack, onSkip }: Props) {
+  const { colors } = useNotebook();
+  const styles = useNotebookStyles(createStyles);
+  const insets = useSafeAreaInsets();
+  const { width, height, fontScale } = useWindowDimensions();
+  const scrollRef = useRef<ScrollView>(null);
+  const offset = useRef(0), frame = useRef<number | null>(null);
+  const [keyboardTop, setKeyboardTop] = useState<number | null>(() => Keyboard.metrics()?.screenY ?? null);
+  const reveal = useCallback(() => {
+    if (frame.current !== null) cancelAnimationFrame(frame.current);
+    frame.current = requestAnimationFrame(() => {
+      frame.current = requestAnimationFrame(() => {
+        frame.current = null;
+        const input = TextInput.State.currentlyFocusedInput(), scroll = scrollRef.current;
+        if (!Keyboard.isVisible() || !input || !scroll) return;
+        scroll.getNativeScrollRef()?.measureInWindow((_x, top, _w, viewportHeight) => {
+          input.measureInWindow((_ix, inputTop, _iw, inputHeight) => {
+            if (input !== TextInput.State.currentlyFocusedInput() || viewportHeight <= 0 || inputHeight <= 0) return;
+            const next = focusedInputScrollOffset(offset.current, top, viewportHeight, inputTop, inputHeight);
+            if (Math.abs(next - offset.current) > 1) scroll.scrollTo({ y: next, animated: false });
+          });
+        });
+      });
+    });
+  }, []);
+  useEffect(() => {
+    const shown = Keyboard.addListener("keyboardDidShow", event => { setKeyboardTop(event.endCoordinates.screenY); reveal(); });
+    const hidden = Keyboard.addListener("keyboardDidHide", () => setKeyboardTop(null));
+    return () => { shown.remove(); hidden.remove(); if (frame.current !== null) cancelAnimationFrame(frame.current); };
+  }, [reveal]);
+  useEffect(() => { reveal(); }, [width, height, fontScale, reveal]);
+  useNotebookStatusBar();
+  return <View testID="onboarding-notebook" style={[styles.screen, { paddingTop: insets.top, paddingLeft: insets.left, paddingRight: insets.right, maxHeight: Platform.OS === "android" && keyboardTop != null ? Math.min(height, keyboardTop) : undefined }]}>
+    <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <ScrollView ref={scrollRef} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" onLayout={reveal} onContentSizeChange={reveal} scrollEventThrottle={16} onScroll={event => { offset.current = event.nativeEvent.contentOffset.y; }} contentContainerStyle={[styles.content, { paddingBottom: Math.max(20, insets.bottom) + 24 }]}>
+        <LastrepLogo variant="header" />
+        <View style={styles.nav}>
+          <Pressable accessibilityRole="button" disabled={busy} accessibilityState={{ disabled: busy }} style={styles.navButton} onPress={onBack}><ArrowLeft size={20} strokeWidth={1.5} color={colors.ink} accessible={false} /><Text style={styles.navText}>Back</Text></Pressable>
+          <Pressable accessibilityRole="button" disabled={skipDisabled} accessibilityState={{ disabled: skipDisabled }} style={styles.navButton} onPress={onSkip}><Text style={[styles.navText, { color: colors.accent }]}>Skip</Text></Pressable>
         </View>
-
-        <EntranceView
-          from={{ opacity: 0, translateY: 20 }}
-          animate={{ opacity: 1, translateY: 0 }}
-          transition={{ type: "timing", duration: 600 }}
-          style={styles.container}
-        >
-          <Text style={styles.header}>{title}</Text>
-          <View style={styles.content}>{children}</View>
-        </EntranceView>
-      </SafeAreaView>
-    </LinearGradient>
-  );
+        <View accessible accessibilityLabel={`Step ${step} of 4`} style={styles.progress}>{[1, 2, 3, 4].map(value => <View key={value} style={[styles.track, value <= step && { backgroundColor: colors.ink }]} />)}</View>
+        <View style={styles.intro}><Text style={styles.caption}>Getting started {"\u00b7"} {step} / 4</Text><Text accessibilityRole="header" style={styles.title}>{title}</Text></View>
+        {children}
+      </ScrollView>
+    </KeyboardAvoidingView>
+  </View>;
 }
-
-const styles = StyleSheet.create({
-  gradient: { flex: 1 },
-  safe: { flex: 1 },
-  topRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingTop: 10,
-  },
-  topActionSlot: {
-    width: 88,
-    alignItems: "flex-start",
-  },
-  topActionPlaceholder: {
-    width: 88,
-    height: 34,
-  },
-  container: {
-    flex: 1,
-    paddingHorizontal: 24,
-    paddingBottom: 24,
-    paddingTop: 34,
-    justifyContent: "center",
-  },
-  header: {
-    fontSize: 28,
-    fontWeight: "800",
-    color: "#fff",
-    marginBottom: 50,
-    textAlign: "center",
-  },
-  content: { flexGrow: 1 },
-  actionButton: {
-    backgroundColor: "rgba(255,255,255,0.15)",
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    minWidth: 84,
-    alignItems: "center",
-  },
-  actionText: { color: "#fff", fontSize: 15, opacity: 0.95, fontWeight: "700" },
+const createStyles = (colors: NotebookColors) => StyleSheet.create({
+  screen: { flex: 1, backgroundColor: colors.canvas },
+  content: { width: "100%", maxWidth: 540, alignSelf: "center", paddingHorizontal: 20, paddingTop: 20, gap: 24 },
+  nav: { flexDirection: "row", justifyContent: "space-between", borderBottomWidth: 1, borderBottomColor: colors.rule, paddingBottom: 12, marginTop: -12 },
+  navButton: { minWidth: 64, minHeight: 48, flexDirection: "row", alignItems: "center", gap: 6 },
+  navText: { fontFamily: notebookFonts.semibold, fontSize: 16, lineHeight: 22, color: colors.ink },
+  progress: { flexDirection: "row", gap: 6 }, track: { flex: 1, height: 3, backgroundColor: colors.rule },
+  intro: { gap: 10 }, caption: { fontFamily: notebookFonts.body, fontSize: 13, lineHeight: 18, color: colors.muted },
+  title: { fontFamily: notebookFonts.editorial, fontSize: 26, lineHeight: 32, color: colors.ink },
 });
