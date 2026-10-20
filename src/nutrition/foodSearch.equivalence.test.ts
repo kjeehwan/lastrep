@@ -66,7 +66,7 @@ it("catalog candidates match every packaged food and its actual chunk", async ()
       const name = food.name.toLowerCase().trim();
       if (seen.has(name)) continue;
       seen.add(name);
-      expected.push([food.id, name, (food.aliases ?? []).join(" ").toLowerCase().trim(), chunk]);
+      expected.push([food.id, name, [...(food.aliases ?? []), ...(food.brandNames ?? []), food.searchIdentity ?? ""].join(" ").toLowerCase().trim(), chunk]);
     }
   }
   expect(JSON.parse(await fs.readFile(path.join(directory, "foods-search-catalog.blob"), "utf8"))).toEqual(expected);

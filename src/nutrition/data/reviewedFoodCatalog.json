@@ -1,0 +1,48 @@
+{
+  "reviewedAt": "2026-10-20",
+  "metadata": [
+    { "id": "off-0039759076110", "identity": "water", "brands": [], "searchable": false, "basis": "Name implies plain water, but imported record contains 19.7 kcal and 4.93 g carbohydrate per 100 g. Preserve for historical hydration; exclude from new search pending source verification." },
+    { "id": "off-0034500151276", "identity": "butter", "brands": ["Land O Lakes"], "basis": "Reviewed packaged name and leading brand alias." },
+    { "id": "off-0705016520039", "identity": "protein powder", "brands": ["Dymatize"], "basis": "Reviewed packaged name and leading brand alias." },
+    { "id": "off-0748927027211", "identity": "whey protein", "brands": ["Optimum Nutrition"], "basis": "Reviewed packaged whey protein name and explicit leading Optimum nutrition brand alias; existing nutrition is retained." },
+    { "id": "off-0377463354354", "identity": "protein bar", "brands": ["Quest"], "basis": "Reviewed packaged product name and Quest Bar alias." },
+    { "id": "off-0009800800254", "identity": "hazelnut spread", "brands": ["Nutella"], "basis": "Reviewed packaged product name and Nutella alias." },
+    { "id": "off-0089068346213", "identity": "oat milk", "brands": [], "basis": "Reviewed Oat Beverage name and milk-alternative category. No consumer brand inferred from distributor name." },
+    { "id": "off-0008273000253", "identity": "soy milk", "brands": [], "basis": "Reviewed Soy Milk name. No consumer brand inferred from importer name." },
+    { "id": "usda-171266", "identity": "milk", "brands": [], "basis": "Reviewed USDA description: ordinary fluid milk." },
+    { "id": "usda-171689", "identity": "apple", "brands": [], "basis": "Reviewed USDA description: raw apple without skin." },
+    { "id": "usda-328637", "identity": "cheddar cheese", "brands": [], "basis": "Reviewed USDA description: Cheese, cheddar." },
+    { "id": "usda-171413", "identity": "olive oil", "brands": [], "basis": "Reviewed USDA description: Oil, olive, salad or cooking." },
+    { "id": "usda-175167", "identity": "salmon", "brands": [], "basis": "Reviewed USDA description: raw farmed Atlantic salmon." },
+    { "id": "usda-325871", "identity": "white bread", "brands": [], "basis": "Reviewed USDA description: commercially prepared white bread." },
+    { "id": "usda-330137", "identity": "greek yogurt", "brands": [], "basis": "Reviewed USDA description: plain nonfat Greek yogurt." }
+  ],
+  "additions": [
+    {
+      "id": "reviewed-cheerios-original-us",
+      "name": "Cheerios Original (US)",
+      "aliases": ["Original Cheerios", "General Mills Cheerios"],
+      "identity": "oat cereal",
+      "brands": ["Cheerios", "General Mills"],
+      "sourceType": "manufacturer",
+      "label": { "servingLabel": "1 1/2 cups (39 g)", "servingGrams": 39, "calories": 140, "proteinGrams": 5, "carbsGrams": 29, "fatGrams": 2.5 },
+      "source": {
+        "reviewedAt": "2026-10-20", "market": "US", "basis": "As packaged, without milk. English page supplies macros; Spanish version explicitly supplies the matching 39 g serving weight.",
+        "urls": ["https://www.cheerios.com/products/original-cheerios", "https://www.cheerios.com/es/products/original-cheerios"]
+      }
+    },
+    {
+      "id": "usda-173647",
+      "name": "Water, tap, drinking",
+      "aliases": ["Water", "Tap water", "Plain water"],
+      "identity": "water",
+      "brands": [],
+      "sourceType": "usda-generic",
+      "label": { "servingLabel": "100 g", "servingGrams": 100, "calories": 0, "proteinGrams": 0, "carbsGrams": 0, "fatGrams": 0 },
+      "source": {
+        "reviewedAt": "2026-10-20", "market": "US", "basis": "USDA FoodData Central April 30, 2026 CSV release; FDC 173647, Beverages, water, tap, drinking; nutrient IDs 1008, 1003, 1005, 1004 are all 0 per 100 g. Serving is the 100 g reference basis, not a guessed cup weight.",
+        "urls": ["https://fdc.nal.usda.gov/download-datasets/"]
+      }
+    }
+  ]
+}

@@ -86,6 +86,8 @@ const fromNormalized = (row, idx) => ({
   id: String(row.id ?? `food-${idx + 1}`).trim(),
   name: String(row.name ?? "").trim(),
   aliases: pickAlias(row.aliases),
+  ...(Array.isArray(row.brandNames) ? { brandNames: pickAlias(row.brandNames) } : {}),
+  ...(typeof row.searchIdentity === "string" && row.searchIdentity.trim() ? { searchIdentity: row.searchIdentity.trim() } : {}),
   servingLabel: String(row.servingLabel ?? "100 g").trim(),
   servingGrams: toFinite(row.servingGrams),
   caloriesPer100g: toFinite(row.caloriesPer100g),
@@ -165,6 +167,7 @@ const fromOff = (row, idx) => {
   ];
   return {
     id: `off-${slugify(row?.code || row?.id || idx + 1)}`,
+    brandNames: pickAlias(row?.brands),
     barcode: String(row?.code ?? "").trim() || undefined,
     name: String(row?.product_name ?? row?.product_name_en ?? "").trim(),
     aliases,

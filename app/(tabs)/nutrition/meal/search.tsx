@@ -857,7 +857,7 @@ export default function MealSearchScreen() {
           {tab === "search" && !canSearch ? <Text style={styles.subText}>Type at least 2 characters or scan a barcode.</Text> : null}
           {tab === "search" && searching ? <Text style={styles.subText}>Searching...</Text> : null}
           {!searching && tab === "search" && submittedQuery.trim().length >= 2 && searchResults.length === 0 ? (
-            <Text style={styles.subText}>No matching foods in the current database. Try a simpler food name or scan a packaged food barcode.</Text>
+            <Text style={styles.subText}>No matching foods in the current database. Try another food name, scan a barcode, or choose Enter food manually.</Text>
           ) : null}
 
           {tab === "search" &&

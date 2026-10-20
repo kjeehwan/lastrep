@@ -15,7 +15,7 @@ export function buildFoodSearchCatalog(directory) {
       if (seen.has(name)) continue;
       seen.add(name);
       const chunk = file === "foods-core.blob" ? 0 : Number(file.match(/\d+/)[0]);
-      catalog.push([food.id, name, (food.aliases ?? []).join(" ").toLowerCase().trim(), chunk]);
+      catalog.push([food.id, name, [...(food.aliases ?? []), ...(food.brandNames ?? []), food.searchIdentity ?? ""].join(" ").toLowerCase().trim(), chunk]);
     }
   }
   fs.writeFileSync(path.join(directory, "foods-search-catalog.blob"), JSON.stringify(catalog));

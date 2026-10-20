@@ -100,6 +100,18 @@ describe("nutrition food search benchmark", () => {
     expect(rows.slice(0, 3).every((food) => /rice, brown/i.test(food.name) && /cooked/i.test(food.name))).toBe(true);
     expect(rows.some((food) => food.id === "usda-169704" && food.caloriesPer100g === 123)).toBe(true);
   });
+  it("ranks protein-named foods ahead of incidental nutrient descriptions in the bundled catalog", async () => {
+    const rows = await searchFoodsAsync("protein", 20);
+    const powder = rows.findIndex(food => /^protein powder$/i.test(food.name));
+    const spaghetti = rows.findIndex(food => /spaghetti.*protein.fortified/i.test(food.name));
+    const yogurt = rows.findIndex(food => /yogurt.*grams protein/i.test(food.name));
+    expect(rows.slice(0, 5).every(food => /^protein\b/i.test(food.name))).toBe(true);
+    expect(powder).toBeGreaterThanOrEqual(0);
+    expect(powder).toBeLessThan(5);
+    if (yogurt >= 0) expect(powder).toBeLessThan(yogurt);
+    if (spaghetti >= 0) expect(powder).toBeLessThan(spaghetti);
+    expect((await searchFoodsAsync("protein powder", 20))[0].name).toMatch(/^protein powder$/i);
+  });
   it("returns plain oats before oatmeal bread, pancakes and baked desserts", async () => {
     const rows = await searchFoodsAsync("oatmeal", 20);
     expect(rows.slice(0, 5).every((food) => !/\b(bread|pancakes?|bake|cookies?)\b/i.test(food.name))).toBe(true);
@@ -131,5 +143,47 @@ describe("nutrition food search benchmark", () => {
     const food = { id: "zero", name: "Cola Zero", aliases: [], servingLabel: "100 g", servingGrams: 100, caloriesPer100g: 0, proteinPer100g: 0 };
     expect(computeFromFood(food, "calories", "100")).toBeNull();
     expect(computeFromFood(food, "grams", "100")?.calories).toBe(0);
+  });
+  it.each([
+    ["water", /^water, tap, drinking$/i], ["butter", /^butter[!]?$/i],
+    ["apple", /^apples?, raw/i], ["sweet potato", /^sweet potato, raw/i],
+    ["milk", /^milk, (?:producer|fluid|whole|reduced)/i],
+    ["bread", /^bread, (?:white|wheat|whole|italian|french|rye)/i],
+    ["tofu", /^tofu$/i], ["soy milk", /^soy milk$/i],
+    ["oat milk", /oat.*(?:beverage|milk|drink)/i],
+    ["sugar", /^sugar$/i], ["chocolate", /^chocolates?$/i],
+  ])("returns a direct ordinary-food match first for %s", async (query, expected) => {
+    const rows = await searchFoodsAsync(query, 20);
+    expect(rows[0]?.name, rows.slice(0, 5).map(food => food.name).join(" | ")).toMatch(expected);
+    expect(await getFoodsByIdsAsync(rows.map(food => food.id))).toEqual(rows);
+  });
+  it("keeps leading brand matches ahead of incidental company names", async () => {
+    const quest = await searchFoodsAsync("Quest", 20);
+    expect(quest[0].aliases.some(alias => /^quest\b/i.test(alias))).toBe(true);
+    expect((await searchFoodsAsync("Coca Cola", 20))[0].name).toMatch(/^coca.cola$/i);
+  });
+  it("finds the sourced Cheerios addition and hydrates its precise label-serving nutrition", async () => {
+    const rows = await searchFoodsAsync("Cheerios", 20);
+    expect(rows[0].id).toBe("reviewed-cheerios-original-us");
+    const [loaded] = await getFoodsByIdsAsync([rows[0].id]);
+    expect(loaded).toEqual(rows[0]);
+    const serving = computeFromFood(loaded, "servings", "1")!;
+    expect(serving.calories).toBeCloseTo(140, 8);
+    expect(serving.proteinGrams).toBeCloseTo(5, 8);
+    expect(serving.carbGrams).toBeCloseTo(29, 8);
+    expect(serving.fatGrams).toBeCloseTo(2.5, 8);
+  });
+  it("keeps suspect legacy food hydration intact while excluding it from new searches", async () => {
+    const rows = await searchFoodsAsync("water", 20);
+    expect(rows[0].id).toBe("usda-173647");
+    expect(rows.some(row => row.id === "off-0039759076110")).toBe(false);
+    const [legacy] = await getFoodsByIdsAsync(["off-0039759076110"]);
+    expect(legacy.caloriesPer100g).toBe(19.7);
+    expect(legacy.carbsPer100g).toBe(4.93);
+  });
+  it("uses the reviewed Optimum Nutrition brand without adding a duplicate food", async () => {
+    const rows = await searchFoodsAsync("Optimum Nutrition", 20);
+    expect(rows[0].id).toBe("off-0748927027211");
+    expect(await getFoodsByIdsAsync([rows[0].id])).toEqual([rows[0]]);
   });
 });
