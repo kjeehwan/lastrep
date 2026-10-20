@@ -3,7 +3,7 @@ import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, type StyleProp, 
 
 /** Avoid the keyboard at the modal-window level, not around a bottom-aligned card. */
 export function KeyboardAwareModalFrame({ children, style, onDismiss }: { children: ReactNode; style?: StyleProp<ViewStyle>; onDismiss?: () => void }) {
-  return <KeyboardAvoidingView style={[{ flex: 1 }, style]} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+  return <KeyboardAvoidingView pointerEvents="box-none" style={[{ flex: 1 }, style]} behavior={Platform.OS === "ios" ? "padding" : "height"}>
     {onDismiss ? <Pressable accessibilityRole="button" accessibilityLabel="Dismiss popup" style={StyleSheet.absoluteFill} onPress={onDismiss} /> : null}
     {children}
   </KeyboardAvoidingView>;

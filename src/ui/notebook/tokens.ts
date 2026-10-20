@@ -13,4 +13,5 @@ export const notebookDark: NotebookColors = {
 };
 export const notebookFonts = { body: "NotebookSans", semibold: "NotebookSansSemibold", editorial: "NotebookSerif" };
 export const notebookGeometry = { inset: 20, contentWidth: 760, icon: 20, headerIcon: 22, target: 48, headerTarget: 44 };
-export function notebookRowHeight(fontScale: number) { return fontScale >= 1.5 ? Math.ceil(340 * Math.min(fontScale, 3) / 2) : Math.ceil(52 * Math.max(1, fontScale)); }
+// Initial estimate only; Android reports its measured rows (including margins).
+export function notebookRowHeight(fontScale: number) { return fontScale >= 1.5 ? Math.ceil(340 * Math.min(fontScale, 3) / 2) : Math.ceil(56 * Math.max(1, fontScale)); }

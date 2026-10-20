@@ -90,7 +90,8 @@ class WorkoutSetListManager : SimpleViewManager<WorkoutSetListView>() {
       "topDeleteSet" to mapOf("registrationName" to "onDeleteSet"),
       "topSetLabelPress" to mapOf("registrationName" to "onSetLabelPress"),
       "topLastPress" to mapOf("registrationName" to "onLastPress"),
-      "topSetActivate" to mapOf("registrationName" to "onSetActivate")
+      "topSetActivate" to mapOf("registrationName" to "onSetActivate"),
+      "topContentSizeChange" to mapOf("registrationName" to "onContentSizeChange")
     )
 
   private fun ReadableMap.getStringOrEmpty(key: String): String {

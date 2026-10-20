@@ -88,6 +88,41 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
   private var accentSoft = Color.parseColor("#F3E4D8")
   private var family = "NotebookSans"
   private val largeText get() = resources.configuration.fontScale >= 1.5f
+  private var reportedContentHeight = -1
+  private var relayoutPosted = false
+
+  // React Native owns the outer bounds. RecyclerView still needs a native
+  // measure/layout pass after adapter changes, including palette-only updates.
+  override fun requestLayout() {
+    super.requestLayout()
+    if (relayoutPosted) return
+    relayoutPosted = true
+    post {
+      relayoutPosted = false
+      if (width > 0) {
+        measure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(height, MeasureSpec.EXACTLY))
+        layout(left, top, right, bottom)
+      }
+    }
+  }
+
+  override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+    recyclerView.measure(widthMeasureSpec, MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED))
+    val contentHeight = recyclerView.measuredHeight
+    setMeasuredDimension(MeasureSpec.getSize(widthMeasureSpec), resolveSize(contentHeight, heightMeasureSpec))
+    if (reactTagForEvents != View.NO_ID && reportedContentHeight != contentHeight) {
+      reportedContentHeight = contentHeight
+      val payload = Arguments.createMap().apply { putDouble("height", contentHeight / resources.displayMetrics.density.toDouble()) }
+      post {
+        (context as? com.facebook.react.bridge.ReactContext)?.getJSModule(RCTEventEmitter::class.java)?.receiveEvent(reactTagForEvents, "topContentSizeChange", payload)
+      }
+    }
+  }
+
+  override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
+    recyclerView.layout(0, 0, right - left, recyclerView.measuredHeight)
+  }
+
   private fun notebookFace(): Typeface = ReactFontManager.getInstance().getTypeface(family, Typeface.NORMAL, context.assets)
   fun setNotebookColors(colors: ReadableMap?) {
     if (colors == null) return
@@ -96,6 +131,7 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
     if (next == listOf(ink, muted, surface, border, primary, onPrimary, accent, accentSoft)) return
     ink = next[0]; muted = next[1]; surface = next[2]; border = next[3]; primary = next[4]; onPrimary = next[5]
     accent = next[6]; accentSoft = next[7]
+    adapter.refreshPalette()
     adapter.notifyDataSetChanged()
   }
   fun setNotebookFont(value: String?) { if (value != null && family != value) { family = value; adapter.notifyDataSetChanged() } }
@@ -301,6 +337,12 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
       }
     }
 
+    fun refreshPalette() {
+      for (i in 0 until recyclerView.childCount) {
+        (recyclerView.getChildViewHolder(recyclerView.getChildAt(i)) as? WorkoutSetViewHolder)?.applyPalette()
+      }
+    }
+
     fun setItems(next: List<WorkoutSetItem>) {
       if (items.size == next.size) {
         val changedIndices = mutableListOf<Int>()
@@ -487,12 +529,7 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
 
       fun bind(position: Int, item: WorkoutSetItem) {
         boundIndex = position
-        updateHighlight()
-        binding.setLabel.setTextColor(muted); binding.last.setTextColor(muted)
-        for (input in listOf(binding.weight, binding.reps, binding.rpe)) {
-          input.setTextColor(ink); input.setHintTextColor(muted); input.typeface = notebookFace()
-          input.background = GradientDrawable().apply { setColor(surface); setStroke(dp(1f), border); cornerRadius = dp(4f).toFloat() }
-        }
+        applyPalette()
         binding.setLabel.text = item.marker.ifBlank { (position + 1).toString() }
         binding.setLabel.setOnClickListener {
           if (boundIndex >= 0) onSetLabelPress(boundIndex)
@@ -588,6 +625,18 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
         binding.root.isSelected = boundIndex >= 0 && boundIndex == activeSetIndex
         binding.root.setBackgroundColor(if (binding.root.isSelected) accentSoft else Color.TRANSPARENT)
         binding.root.invalidate()
+      }
+
+      fun applyPalette() {
+        updateHighlight()
+        binding.setLabel.setTextColor(muted); binding.last.setTextColor(muted)
+        for (input in listOf(binding.weight, binding.reps, binding.rpe)) {
+          input.setTextColor(ink); input.setHintTextColor(muted); input.typeface = notebookFace()
+          input.background = GradientDrawable().apply {
+            setColor(surface); setStroke(dp(if (input.hasFocus()) 2f else 1f), if (input.hasFocus()) accent else border); cornerRadius = dp(4f).toFloat()
+          }
+        }
+        applyCheckStyle(localDone)
       }
 
       private fun bindFocusTracking(input: AppCompatEditText, field: String) {

@@ -4,6 +4,7 @@ import type { WorkoutSetUi } from "./WorkoutSetList.android";
 import type { NativeSyntheticEvent } from "react-native";
 
 type Props = {
+  onContentSizeChange?: (event: NativeSyntheticEvent<{ height: number }>) => void;
   activeSetIndex?: number;
   editingSuspended?: boolean;
   onSetActivate?: (event: NativeSyntheticEvent<{ index: number }>) => void;

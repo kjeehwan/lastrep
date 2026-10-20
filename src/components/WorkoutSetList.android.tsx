@@ -26,6 +26,7 @@ type SetLabelPressEvent = NativeSyntheticEvent<{ index: number }>;
 type LastPressEvent = NativeSyntheticEvent<{ index: number }>;
 
 type NativeProps = {
+  onContentSizeChange?: (event: NativeSyntheticEvent<{ height: number }>) => void;
   activeSetIndex?: number;
   editingSuspended?: boolean;
   onSetActivate?: (event: NativeSyntheticEvent<{ index: number }>) => void;
