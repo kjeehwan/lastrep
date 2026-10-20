@@ -1,9 +1,17 @@
 # Onboarding Notebook Native Migration
 
-October 20, 2026. Branch: `feature/onboarding-notebook-ui`, based on Auth PR #40
-(merge 502934d). Overall native appearance received user approval on October 20.
-Release preparation is authorized: split commits, push and PR review. Merge,
-branch deletion, deployment and AAB builds require a separate explicit instruction.
+October 20, 2026. Merged in [PR #41](https://github.com/kjeehwan/lastrep/pull/41)
+as `fc6a00c`, following Auth PR #40 (`502934d`). Overall native appearance received
+user approval on October 20. The feature branch was deleted after the authorized
+merge. Main's [post-merge Quality Checks](https://github.com/kjeehwan/lastrep/actions/runs/39279615605)
+completed successfully, including backend build, lint, tracked Android
+configuration verification, unit tests and Expo web export. Earlier queued status
+has cleared; no cancellation, rerun or support escalation is needed.
+
+Cross-screen release verification is next. Production billing remains unverified
+in a Play-installed production build. Deployments and AAB builds still require
+an explicit request. Historical verification sections below retain their original
+scope and do not establish coverage for later changes.
 
 ## Scope and approved flow
 

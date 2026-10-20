@@ -29,7 +29,7 @@ Use the brand spelling Lastrep or lastrep, not LastRep.
 | Sleep | Manual and imported sessions, multiple sessions per day, overlap handling, target editing, history/chart. Missing data is not zero sleep. Superseded totals and intentional deletion exclusions are separate concerns. |
 | Profile | Identity/photo, training/diet phases, global units and effort preference, distinct body metrics, TDEE, nutrition/sleep targets, optional health connection. Native notebook migration approved and merged in PR #38. |
 | Settings / Billing | Account/settings, support/legal access, subscription management and restore. Premium access and an active store subscription are not equivalent. Native Settings migration and per-account appearance merged in PR #39. |
-| Authentication / Onboarding | Approved browser studies. Native Sign in / Sign up merged in PR #40. Four-step onboarding is user-approved on `feature/onboarding-notebook-ui` and preparing PR review; see its notes for verification. |
+| Authentication / Onboarding | Native Sign in / Sign up merged in PR #40. Approved four-step onboarding merged in PR #41; see its notes for verification and remaining limits. |
 
 These are a navigation map, not a claim that every edge case is verified.
 
@@ -73,9 +73,10 @@ As of this overview:
 - Profile: approved and merged, PR #38; remaining limits are in its migration notes.
 - Settings: approved and merged, PR #39.
 - Sign in / Sign up: approved and merged, PR #40.
-- Onboarding: four-step native implementation on `feature/onboarding-notebook-ui`,
-  user-approved with completion/retry and native accessibility checks recorded;
-  preparing PR review.
+- Onboarding: approved and merged, PR #41 (`fc6a00c`); feature branch deleted.
+  Completion/retry and native accessibility checks are recorded in its notes.
+  Post-merge Quality Checks completed successfully. Cross-screen release
+  verification is next; production billing requires a Play-installed build.
 
 See each `docs/*-notebook-migration.md` for actual scope and coverage. Some older
 status paragraphs describe pre-merge states. Git plus the dated checkpoint
