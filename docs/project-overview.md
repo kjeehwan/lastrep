@@ -151,6 +151,11 @@ resolve current progress; do not rewrite history by assuming everything passed.
    Play Console review/promotion and policy forms unless access and execution
    are explicitly delegated. Verify current remote EAS version codes; do not
    infer them from filenames or old conversation messages.
+   Before every new production AAB, run a fresh
+   `npx.cmd --yes expo-doctor@latest` on the intended source/dependency state.
+   Resolve unexpected Doctor failures and rerun affected checks before building;
+   a previous Doctor result or green CI does not replace this preflight.
+   Preserve the documented intentional native-config exception.
 7. Use checkpoints at interruptions. Record completed versus unverified changes,
    branch, remaining work, commands and device caveats. Never claim a usage
    percentage reliably predicts how much work will fit.
@@ -218,6 +223,7 @@ also need their own build/tests. Avoid unreviewed `npm audit fix --force`.
 | Shared input behavior | `docs/keyboard-modal-guardrails.md` |
 | Other screen boundaries | `docs/workout-notebook-migration.md`, `docs/home-notebook-migration.md`, `docs/nutrition-notebook-migration.md`, `docs/sleep-notebook-migration.md` |
 | Billing | `docs/revenuecat-build-isolation.md`, `docs/restore-purchase-outcomes.md` |
+| Current internal-test findings | `docs/internal-testing-v35-follow-up.md` |
 | Profile photo storage | `docs/cloud-profile-photos.md` |
 | Performance evidence | `docs/performance-batches.md`, `docs/targeted-profiling.md` |
 | Android configuration | `docs/android-adaptive-layout.md`, `docs/android-edge-to-edge.md`, `docs/android-release-optimization.md` |

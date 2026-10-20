@@ -1,6 +1,6 @@
 # Lastrep Training Notebook Design Specification
 
-Version: 1.30 | Date: October 20, 2026
+Version: 1.31 | Date: October 20, 2026
 
 Status: Workout, Home, Nutrition, Sleep, Profile and Settings browser design
 directions approved through iterative review. Shared rules below incorporate that
@@ -260,8 +260,9 @@ native implementation must reuse a matching approved drawing or shared component
   navigation controls or use fixed assumptions about status-bar height.
 - Bottom navigation: five existing destinations and labels in their current order:
   Home, Workout, Nutrition, Sleep, Profile. Minimum 56 high plus bottom inset.
-- Tab icon: `icon-tab` (22), label: 12/16. Selected tab uses ink text and a 2-dp accent mark
-  above its icon. No large circular selection background or floating tab capsule.
+- Tab icon: `icon-tab` (22), label: 12/16. Selected tab uses ink and a visibly
+  heavier stroke (2.5 versus 1.5); retain the same glyph geometry and touch target.
+  No large circular selection background or floating tab capsule.
 - Header and tab surfaces use canvas with a single separator, not glass or shadow.
 - On root pages, page title is left-aligned. A nested page may have Back; its title
   and right action must fit without shifting when an action is unavailable.
@@ -310,6 +311,9 @@ not determine text alignment.
   standalone target is 48 x 48; named compact-header/help exceptions are 44 x 44.
 - Pressed state: immediate surface change, no scale bounce. Disabled: unavailable
   action plus distinct muted styling, not merely an unexplained faded button.
+- Profile distinguishes a clean draft (`Saved`), an actionable draft (`Save`)
+  and an in-flight write (`Saving...`). Keep upload/save progress visible outside
+  page scrolling, including when Save and leave awaits completion.
 - Fields: surface fill, visible control-border, 6 radius, min-height 48, 12 inset.
   Focus uses a 2-dp accent border without changing outer geometry.
 - Labels are persistent; placeholders are examples, never the only field name.
@@ -376,6 +380,10 @@ not determine text alignment.
   when switching modes, and identify the affected date in Save/Delete feedback.
 - Close, outside dismissal and Cancel must not silently save unfinished edits.
   Use explicit loss confirmation when existing product behavior requires it.
+- Tapping outside a popup dismisses through its existing close/cancel handler.
+  Full-screen layout wrappers must not consume the backdrop's empty-space taps;
+  taps inside the card and its controls must not dismiss it. Pending writes keep
+  their existing non-cancellation/data-integrity guards.
 
 ### Shared data-visualization pattern
 
@@ -904,10 +912,10 @@ inventory before implementing any relocation.
 - Use narrow rules and section headings rather than six large floating meal cards.
 - Energy/protein consumed and target labels stay within bar bounds, share a
   baseline and do not overlap at zero or near target. Remaining is header text.
-- Approved macro palette: protein #4C6454, carbs #86643C, fat #666A70 on paper;
-  dark counterparts #A8BEA6, #CDB78F, #B2B7BE. Validate overlaid percentage contrast;
-  use ink/on-primary per segment rather than assuming white always works.
-- Match P/C/F gram labels to segment colors; percentages inside only where they
+- Macro fills use muted sage #A8BEA6, sand #CDB78F and slate #B2B7BE in both modes.
+  Keep percentage and companion labels in high-contrast ink; pale fills are not
+  suitable text colors on paper. This internal-test refinement awaits visual review.
+- P/C/F gram labels identify segments in a stable order; percentages inside only where they
   fit at readable size. For narrow segments, place the percentage in an accessible
   companion label instead of squeezing text. Consumed and target use same order.
 - Labels below segments align with segments when space permits; avoid collisions
@@ -934,6 +942,10 @@ inventory before implementing any relocation.
 - Keep meal naming in Nutrition, not a second Profile preference card. Preserve
   explicit Save/Discard for staged Profile edits.
 - Health consent, permissions and sync timestamps remain separate concepts.
+- Health sync shows one short permission instruction. Put per-device permission
+  and source-app sharing details behind a header help icon, using a few brief
+  paragraphs. Do not repeat ready/status rows as explanatory prose or add a
+  separate long How to grant access walkthrough.
 - Legal/contact links use the same icon slots and text alignment as account rows.
 - Subscription, restore and developer-build isolation retain verified outcome
   messages. Restore never promises ongoing verification without evidence.

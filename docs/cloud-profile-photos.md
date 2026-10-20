@@ -1,5 +1,13 @@
 # Cloud-backed profile photos
 
+## Native upload preparation — October 20, 2026
+
+The native client now center-crops and encodes a JPEG at at most 512 x 512 before
+uploading, preserving the selected source for failed-save retries. The deployed
+two-call flow and server validation remain unchanged; the deferred one-call
+backend patch is not deployed. See [photo save performance](profile-photo-save-performance.md)
+for fresh measurements, native cancellation/retry checks and their limitations.
+
 ## Design
 
 - Photo selection remains a local preview until Save Changes (including Save in the leave prompt).

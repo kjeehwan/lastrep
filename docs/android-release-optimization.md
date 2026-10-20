@@ -27,6 +27,15 @@ the exclusion if that becomes a requirement.
 
 ## Release Verification
 
+Before every new production AAB, run a fresh
+`npx.cmd --yes expo-doctor@latest` against the source and dependencies that will
+be built. Resolve unexpected failures, including Expo SDK patch mismatches,
+then rerun Doctor and affected automated/native checks before starting the AAB.
+Do not substitute historical Doctor results, other green checks or new install
+exclusions. See `docs/expo-doctor-exceptions.md` for the existing intentional
+native-config synchronization exception. This preflight requirement was added
+on October 20, 2026 after EAS build 34 reported six SDK 57 patch mismatches.
+
 Build the production variant from `android/` with `APP_VARIANT=prod` and
 `NODE_ENV=production`: `./gradlew :app:bundleProdRelease` (`gradlew.bat` on Windows).
 This compiles a bundle; it does not install over the Play-distributed production app.
