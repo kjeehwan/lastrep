@@ -67,6 +67,7 @@ import { isExpectedOfflineError } from "../../../src/utils/networkErrors";
 import { scheduleAfterInteractions } from "../../../src/utils/scheduleAfterInteractions";
 import { scheduleAfterPaint } from "../../../src/utils/scheduleAfterPaint";
 import { popPendingExerciseSelection } from "../../../src/workouts/addExerciseBridge";
+import { getExerciseSubstitutions, indexExerciseSearch, replacementSearchOptions } from "../../../src/workouts/exerciseSearch";
 import { loadFreeExerciseDbCatalog } from "../../../src/workouts/freeExerciseDbCatalog";
 import { resolveFreeExerciseDbImagesForNames } from "../../../src/workouts/freeExerciseDbImages";
 import {
@@ -367,7 +368,6 @@ const formatWeightInput = (weightKg: number | null, targetUnit: Unit) => {
 };
 
 const normalizeExerciseName = (value: string) => value.trim().toLowerCase();
-const exerciseNameCollator = new Intl.Collator();
 function indexPreviousExerciseSets(pastWorkouts: PastWorkout[]) {
   const map = new Map<string, PastWorkout["exercises"][number]["sets"]>();
   for (const workout of pastWorkouts) {
@@ -868,53 +868,13 @@ export default function WorkoutLog() {
     return Array.from(map.values());
   }, [freeDbCatalog]);
 
-  const catalogIndex = useMemo(() => {
-    type IndexedItem = {
-      item: ExerciseCatalogItem;
-      nameLower: string;
-      searchText: string;
-    };
-
-    const byName = new Map<string, ExerciseCatalogItem>();
-    const groups: Record<ExerciseGroupKey | "all", IndexedItem[]> = {
-      all: [],
-      chest: [],
-      back: [],
-      legs: [],
-      shoulders: [],
-      arms: [],
-      core: [],
-      cardio: [],
-    };
-
-    mergedCatalog.forEach((item) => {
-      const nameLower = item.name.trim().toLowerCase();
-      const searchText = [
-        item.name,
-        ...item.aliases,
-        ...item.primaryMuscles,
-        ...item.secondaryMuscles,
-        ...item.equipment,
-        item.movementPattern,
-      ]
-        .join(" ")
-        .toLowerCase();
-      const indexed: IndexedItem = { item, nameLower, searchText };
-      byName.set(nameLower, item);
-      groups.all.push(indexed);
-      groups[item.group].push(indexed);
-    });
-
-    (Object.keys(groups) as (keyof typeof groups)[]).forEach((key) => {
-      groups[key].sort((a, b) => exerciseNameCollator.compare(a.item.name, b.item.name));
-    });
-
-    return { byName, groups };
-  }, [mergedCatalog]);
+  const catalogByName = useMemo(() => new Map(mergedCatalog.map((item) => [
+    item.name.trim().toLowerCase(), item,
+  ])), [mergedCatalog]);
 
   const findCatalogExercise = useCallback(
-    (name: string) => catalogIndex.byName.get(name.trim().toLowerCase()) ?? null,
-    [catalogIndex]
+    (name: string) => catalogByName.get(name.trim().toLowerCase()) ?? null,
+    [catalogByName]
   );
   const getExerciseMode = useCallback(
     (exerciseName: string): ExerciseMode =>
@@ -956,117 +916,30 @@ export default function WorkoutLog() {
     [effortScale]
   );
 
-  const searchMergedCatalog = useCallback(
-    (params: { query: string; group: ExerciseGroupKey | "all" }) => {
-      const normalize = (value: string) =>
-        value
-          .toLowerCase()
-          .replace(/[^a-z0-9\s]/g, " ")
-          .replace(/\s+/g, " ")
-          .trim();
-      const isSubsequenceLocal = (needleValue: string, haystack: string) => {
-        if (!needleValue) return true;
-        let index = 0;
-        for (let i = 0; i < haystack.length && index < needleValue.length; i += 1) {
-          if (haystack[i] === needleValue[index]) index += 1;
-        }
-        return index === needleValue.length;
-      };
-      const scoreSearch = (needleValue: string, title: string, haystack: string) => {
-        if (!needleValue) return 1;
-        let score = 0;
-        if (title.startsWith(needleValue)) score += 120;
-        if (title.includes(needleValue)) score += 80;
-        if (haystack.includes(needleValue)) score += 60;
-        const tokens = needleValue.split(" ").filter(Boolean);
-        score += tokens.filter((token) => haystack.includes(token)).length * 20;
-        if (isSubsequenceLocal(needleValue.replace(/\s+/g, ""), title.replace(/\s+/g, ""))) score += 20;
-        return score;
-      };
-      const needle = normalize(params.query);
-      let pool = catalogIndex.groups[params.group];
-      if (!needle) {
-        return pool.map((entry) => entry.item);
-      }
-      const seen = new Set<string>();
-      const deduped = pool.filter((entry) => {
-        if (seen.has(entry.nameLower)) return false;
-        seen.add(entry.nameLower);
-        return true;
-      });
-      return deduped
-        .map((entry) => ({
-          item: entry.item,
-          score: scoreSearch(needle, normalize(entry.item.name), normalize(entry.searchText)),
-        }))
-        .filter((entry) => entry.score > 0)
-        .sort((a, b) => b.score - a.score || a.item.name.localeCompare(b.item.name))
-        .map((entry) => entry.item);
-    },
-    [catalogIndex]
-  );
+  const exerciseSearchIndex = useMemo(() => indexExerciseSearch(mergedCatalog), [mergedCatalog]);
 
   const getSubstitutionCandidates = useCallback(
     (exerciseName: string, limit = 16) => {
       const target = findCatalogExercise(exerciseName);
       if (!target) return [];
-      const score = (candidate: ExerciseCatalogItem) => {
-        let value = 0;
-        if (candidate.group === target.group) value += 5;
-        if (candidate.movementPattern === target.movementPattern) value += 4;
-        if (candidate.primaryMuscles.some((muscle) => target.primaryMuscles.includes(muscle))) value += 4;
-        if (candidate.secondaryMuscles.some((muscle) => target.primaryMuscles.includes(muscle))) value += 2;
-        if (candidate.primaryMuscles.some((muscle) => target.secondaryMuscles.includes(muscle))) value += 2;
-        if (candidate.equipment.some((equipment) => target.equipment.includes(equipment))) value += 3;
-        if (candidate.difficulty === target.difficulty) value += 1;
-        return value;
-      };
-      return mergedCatalog
-        .filter((candidate) => candidate.name.toLowerCase() !== target.name.toLowerCase())
-        .map((candidate) => ({ candidate, score: score(candidate) }))
-        .filter((entry) => entry.score > 0)
-        .sort((a, b) => b.score - a.score || a.candidate.name.localeCompare(b.candidate.name))
-        .slice(0, limit)
-        .map((entry) => entry.candidate);
+      return getExerciseSubstitutions(mergedCatalog, target, limit);
     },
     [findCatalogExercise, mergedCatalog]
   );
 
   const replacementOptions = useMemo(() => {
     if (!replaceTarget) return [];
-    const targetExercise = exercises.find((exercise) => exercise.id === replaceTarget);
-    if (targetExercise) {
-      const targetCatalog = findCatalogExercise(targetExercise.name);
-      // A custom name has no reliable metadata. Do not show arbitrary alphabetic exercises.
-      if (!targetCatalog && !replaceSearch.trim()) return [];
-      const searchGroup =
-        replaceGroup === "all"
-          ? targetCatalog?.group ?? "all"
-          : (replaceGroup as ExerciseGroupKey);
-      const normalizedTargetName = targetExercise.name.trim().toLowerCase();
-      const substitutions = getSubstitutionCandidates(targetExercise.name, 24);
-      const searched = searchMergedCatalog({
-        query: replaceSearch,
-        group: searchGroup,
-      });
-      const merged = [...substitutions, ...searched].filter(
-        (candidate) => candidate.name.trim().toLowerCase() !== normalizedTargetName
-      );
-      const deduped: ExerciseCatalogItem[] = [];
-      const seen = new Set<string>();
-      merged.forEach((candidate) => {
-        const key = candidate.name.trim().toLowerCase();
-        if (seen.has(key)) return;
-        seen.add(key);
-        deduped.push(candidate);
-      });
-      return deduped.slice(0, 24);
-    }
-    return searchMergedCatalog({
+    const target = exercises.find((exercise) => exercise.id === replaceTarget);
+    if (!target) return [];
+    return replacementSearchOptions({
+      index: exerciseSearchIndex,
       query: replaceSearch,
       group: replaceGroup === "all" ? "all" : (replaceGroup as ExerciseGroupKey),
+      targetName: target.name,
+      targetGroup: findCatalogExercise(target.name)?.group,
+      suggestions: replaceSearch.trim() ? [] : getSubstitutionCandidates(target.name, Number.POSITIVE_INFINITY),
     });
-  }, [replaceGroup, replaceSearch, replaceTarget, exercises, findCatalogExercise, getSubstitutionCandidates, searchMergedCatalog]);
+  }, [replaceGroup, replaceSearch, replaceTarget, exercises, findCatalogExercise, getSubstitutionCandidates, exerciseSearchIndex]);
 
   const loadPastWorkouts = useCallback(async () => {
     try {
@@ -3283,7 +3156,7 @@ export default function WorkoutLog() {
                     {replacementOptions.length === 0 ? (
                       <Text style={styles.replacementEmptyText}>
                         {exerciseCatalogItem
-                          ? "No matching alternatives. Try another search or body part."
+                          ? "No close alternatives found. Search for another exercise."
                           : "Custom exercises do not have automatic alternatives. Search for the exercise you want instead."}
                       </Text>
                     ) : null}

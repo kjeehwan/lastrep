@@ -1,6 +1,6 @@
 # Lastrep Training Notebook Design Specification
 
-Version: 1.28 | Date: October 20, 2026
+Version: 1.29 | Date: October 20, 2026
 
 Status: Workout, Home, Nutrition, Sleep, Profile and Settings browser design
 directions approved through iterative review. Shared rules below incorporate that
@@ -700,6 +700,22 @@ After loading, show a compact source/summary; details are expandable.
 - Preserve multiple selection and current custom-exercise keyboard behavior.
 - Loading, no matches and error states each have distinct copy and recovery action.
 - Selection does not change because a result disappears under a different query.
+- Add and Replace share relevance rules: exact exercise names and genuine aliases
+  precede partial title and muscle/equipment matches. Require all query terms;
+  support common equipment abbreviations and joined/hyphenated exercise names.
+  Do not use arbitrary letter subsequences to fill a no-match list.
+- Replace keeps substitution suggestions for an empty query. Once searching,
+  show matching results only, respect the selected category, and let All search
+  every body part. Exclude the current exercise; never replace it on search alone.
+- Empty-query suggestions put named variations of the same movement before
+  generic muscle/equipment matches. All includes these variations across catalog
+  body-part labels (e.g. Back and Legs deadlifts); explicit body-part filters stay
+  strict. Generic compound/isolation labels do not establish movement similarity.
+- Apply the same relevance gate to every catalog entry, including unfamiliar
+  names: require a named family, a specific movement-pattern/primary-muscle match,
+  or a meaningful name/primary-muscle match. Keep mobility, resistance, plyometrics
+  and cardio separate. Do not pad a short list with same-category exercises;
+  offer explicit search when no close catalog alternative exists.
 
 ### History and progress
 

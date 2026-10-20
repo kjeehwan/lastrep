@@ -17,6 +17,8 @@ export type ExerciseCatalogItem = {
   movementPattern: string;
   difficulty: "beginner" | "intermediate" | "advanced";
   group: ExerciseGroupKey;
+  /** Source activity category, used only for catalog relevance (not saved logs). */
+  category?: string;
   cues: string[];
   demoImages?: number[];
 };
