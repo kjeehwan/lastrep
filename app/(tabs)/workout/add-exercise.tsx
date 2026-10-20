@@ -282,6 +282,7 @@ export default function AddExerciseScreen() {
 
         <FlatList
           data={filtered}
+          contentContainerStyle={styles.exerciseList}
           keyExtractor={(item) => item.id}
           keyboardShouldPersistTaps="handled"
           initialNumToRender={24}
@@ -361,6 +362,7 @@ const createStyles = (colors: NotebookColors) => { const base = notebookSheet({
   addSelectedButtonDisabled: { backgroundColor: colors.subtle },
   addSelectedText: { color: colors.onPrimary, fontSize: 12, fontWeight: "800" },
   topControls: { paddingHorizontal: 12, paddingBottom: 8 },
+  exerciseList: { paddingHorizontal: 12 },
   searchField: {
     flexDirection: "row", alignItems: "center", marginBottom: 8,
     backgroundColor: colors.subtle, borderRadius: 10,
