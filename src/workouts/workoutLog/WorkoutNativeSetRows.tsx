@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { type ViewStyle } from "react-native";
 import WorkoutSetList from "../../components/WorkoutSetList";
 
@@ -49,6 +49,8 @@ export function WorkoutNativeSetRows({
   onSetLabelPress,
   onLastPress,
 }: WorkoutNativeSetRowsProps) {
+  const [measurement, setMeasurement] = useState<{ signature: string; height: number } | null>(null);
+  const signature = `${listKey}:${rows.length}:${style.height}`;
   return (
     <WorkoutSetList
       activeSetIndex={activeSetIndex}
@@ -59,7 +61,13 @@ export function WorkoutNativeSetRows({
       notebookColors={notebookColors}
       fontFamily={fontFamily}
       key={listKey}
-      style={style}
+      style={{ ...style, height: measurement?.signature === signature ? measurement.height : style.height }}
+      onContentSizeChange={({ nativeEvent }) => {
+        if (Number.isFinite(nativeEvent.height) && nativeEvent.height > 0) {
+          setMeasurement((previous) => previous?.signature === signature && previous.height === nativeEvent.height
+            ? previous : { signature, height: nativeEvent.height });
+        }
+      }}
       weightLabel={weightLabel}
       repsLabel={repsLabel}
       rpeLabel={rpeLabel}

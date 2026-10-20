@@ -29,6 +29,8 @@ focus. Browser prototypes are design studies, not production account screens.
   native flow, account-scoped progress and verification coverage, merged in PR #41.
 - [Release verification](docs/notebook-release-verification.md): final cross-screen
   checks and the separate production-build/billing steps.
+- [Internal testing v35 follow-up](docs/internal-testing-v35-follow-up.md):
+  Play-installed findings, current fixes and remaining device/billing retests.
 - [Food catalog maintenance](docs/food-catalog-maintenance.md): reviewed metadata,
   sourced additions and the repeatable coverage audit.
 - [Exercise search review](docs/exercise-search-quality-review.md): shared Add /
@@ -109,6 +111,12 @@ approval or real production billing. Read
 input layouts.
 
 ## Review and Releases
+
+Before every new production AAB build, run a fresh
+`npx.cmd --yes expo-doctor@latest` against the intended source/dependency state.
+Resolve unexpected failures, including Expo patch-version alignment, and rerun
+affected verification before starting the build. The intentional native-config
+exception is documented in [Expo Doctor exceptions](docs/expo-doctor-exceptions.md).
 
 Work in focused branches, preserve existing behavior, run relevant checks and
 obtain user review. Commit/push, PR/merge, branch deletion, deployments and AAB

@@ -19,8 +19,12 @@ export function NotebookModal({ children, dismissOnBackdropPress = true, ...prop
     const hide = Keyboard.addListener("keyboardDidHide", () => setKeyboardVisible(false));
     return () => { show.remove(); hide.remove(); };
   }, []);
+  // Full-screen layout Views must let empty-space taps reach the sibling backdrop.
+  // The content card remains a normal hit-test surface; its controls keep their taps.
+  const content = React.Children.map(children, (child) => React.isValidElement<{ pointerEvents?: "box-none" }>(child) && child.type === View
+    ? React.cloneElement(child, { pointerEvents: "box-none" }) : child);
   return <Modal {...props}><View style={{ flex: 1 }}>
     {dismissOnBackdropPress ? <Pressable style={StyleSheet.absoluteFill} accessibilityRole="button" accessibilityLabel="Dismiss popup outside content" onPress={props.onRequestClose} /> : null}
-    <View pointerEvents="box-none" style={{ flex: 1, paddingTop: insets.top, paddingBottom: popupBottomSpace(insets.bottom, tabs, keyboardVisible), paddingLeft: insets.left, paddingRight: insets.right }}>{children}</View>
+    <View pointerEvents="box-none" style={{ flex: 1, paddingTop: insets.top, paddingBottom: popupBottomSpace(insets.bottom, tabs, keyboardVisible), paddingLeft: insets.left, paddingRight: insets.right }}>{content}</View>
   </View></Modal>;
 }

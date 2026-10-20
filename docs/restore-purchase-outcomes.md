@@ -10,6 +10,9 @@ The RevenueCat wrapper retains CustomerInfo from the restore response. The flow
 checks active Lastrep subscription products and the active Google Play Premium
 entitlement. It supports bare subscription IDs and base-plan-qualified IDs.
 An active product with missing Premium mapping is unconfirmed, not "no purchase".
+When a server-confirmed permanent grant already supplies Premium, explain that
+independent access without counting it as a restored paid subscription. Cached
+or pending grant data cannot confirm this outcome.
 
 After finding a purchase, the app listens for a matching server-backed Firestore
 entitlement for at most 10 seconds. Cache-only data, pending writes, manual
@@ -23,6 +26,7 @@ An existing matching paid backend entitlement may confirm immediately.
 | --- | --- |
 | Loading | Checking purchases... |
 | Store purchase and backend paid access confirmed | Purchases restored. Premium is active. |
+| Active subscription and an independent server-confirmed permanent grant | An active subscription was found. This account already has Premium access independently of that subscription. |
 | No active Lastrep subscription | No active subscription found. Make sure you're using the Google Play account you subscribed with. |
 | Active subscription found, access not confirmed | An active subscription was found, but Lastrep hasn't confirmed Premium access yet. Please try again shortly. |
 | Identity, store request or malformed response failure | Couldn't restore purchases. Check your connection and try again. |
@@ -42,6 +46,8 @@ by the existing access UI but is not counted as a restored paid purchase.
   request duration. No message claims verification continues after timeout.
 - Restore lifecycle analytics are retained. Only confirmed paid access logs
   restore_completed; other terminal outcomes have explicit result_status.
+  Independent access uses result_status alreadyActive and does not log a paid
+  restore_completed or restore_failed event.
 
 ## Verification
 

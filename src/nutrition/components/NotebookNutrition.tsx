@@ -59,7 +59,7 @@ export function MacroComposition({ title, grams }: { title: string; grams: [numb
       </View>)}
     </View>
     <View style={large ? { gap: 8 } : { height: 26 * fontScale }}>
-      {grams.map((value, index) => <Text key={names[index]} style={{ fontFamily: notebookFonts.semibold, fontSize: 15, color: tones[index], ...(large ? {} : { position: "absolute", width: labelWidth, left: centers[index] - labelWidth / 2, textAlign: "center" }) }}>
+      {grams.map((value, index) => <Text key={names[index]} style={{ fontFamily: notebookFonts.semibold, fontSize: 15, color: colors.ink, ...(large ? {} : { position: "absolute", width: labelWidth, left: centers[index] - labelWidth / 2, textAlign: "center" }) }}>
         {names[index]} {Math.round(value)}g{large || fractions[index] < 0.15 || fractions[index] * width < 44 * fontScale ? ` (${percentages[index]}%)` : ""}
       </Text>)}
     </View>

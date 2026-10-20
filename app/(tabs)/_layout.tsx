@@ -113,8 +113,8 @@ export default function TabsLayout() {
         tabBarInactiveBackgroundColor: "transparent",
         // React Navigation permits nullable press handlers; TouchableOpacity does not.
         tabBarButton: (props) => <TouchableOpacity {...(props as TouchableOpacityProps)} activeOpacity={0.8} />,
-        tabBarIcon: ({ color, size }) => {
-          if (notebook) return <NotebookTabIcon name={route.name} color={color} />;
+        tabBarIcon: ({ color, size, focused }) => {
+          if (notebook) return <NotebookTabIcon name={route.name} color={color} focused={focused} />;
           const icons: Record<string, keyof typeof Ionicons.glyphMap> = {
             home: "home-outline",
             nutrition: "restaurant-outline",

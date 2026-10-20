@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from "react-native";
+import { Modal, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { usePathname } from "expo-router";
 import { BottomTabBarHeightContext } from "expo-router/js-tabs";
@@ -37,6 +37,7 @@ export default function AppDialogHost() {
   return (
     <Modal transparent animationType="fade" visible={Boolean(dialog)} onRequestClose={() => setDialog(null)}>
       <SafeAreaView style={styles.backdrop}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Dismiss popup" style={StyleSheet.absoluteFill} onPress={() => setDialog(null)} />
         <View style={styles.card}>
           <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ gap: 10 }}>
           <Text style={styles.title}>{dialog.title}</Text>

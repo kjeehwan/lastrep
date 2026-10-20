@@ -14,7 +14,7 @@ describe("Notebook set presentation", () => {
     expect(lastResistanceSet({ weightKg: 0, reps: "12" }, "kg", "rpe")).toBe("12");
   });
   it("reserves a larger native row for enlarged text", () => {
-    expect(notebookRowHeight(1)).toBe(52);
+    expect(notebookRowHeight(1)).toBeGreaterThanOrEqual(48 + 4 + 4); // input, row padding, row margin
     expect(notebookRowHeight(2)).toBeGreaterThanOrEqual(180);
     expect(notebookRowHeight(3)).toBeGreaterThan(notebookRowHeight(2));
   });

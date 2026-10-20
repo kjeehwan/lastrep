@@ -12,7 +12,8 @@ import {
   query,
 } from "firebase/firestore";
 import React, { useEffect, useMemo, useState } from "react";
-import { Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { NotebookModal as Modal } from "../../../src/ui/notebook/NotebookModal";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { auth, db } from "../../../src/config/firebaseConfig";
 import { saveUserData, getUserData } from "../../../src/userData";

@@ -4,16 +4,17 @@ import { ENTITLEMENT_ID, PRODUCT_ID_ANNUAL, PRODUCT_ID_MONTHLY } from "../config
 export const RESTORE_MESSAGES = {
   loading: "Checking purchases...",
   restored: "Purchases restored. Premium is active.",
+  alreadyActive: "An active subscription was found. This account already has Premium access independently of that subscription.",
   notFound: "No active subscription found. Make sure you're using the Google Play account you subscribed with.",
   unconfirmed: "An active subscription was found, but Lastrep hasn't confirmed Premium access yet. Please try again shortly.",
   failed: "Couldn't restore purchases. Check your connection and try again.",
 } as const;
 
-export type RestoreOutcome = "restored" | "notFound" | "unconfirmed" | "failed";
+export type RestoreOutcome = "restored" | "alreadyActive" | "notFound" | "unconfirmed" | "failed";
 export type RestoreDependencies = {
   identify: (uid: string) => Promise<void>;
   restore: () => Promise<RestoreResult>;
-  confirm: (uid: string, productId: string, signal: AbortSignal) => Promise<boolean>;
+  confirm: (uid: string, productId: string, signal: AbortSignal) => Promise<boolean | "existingAccess">;
   currentUid: () => string | null;
 };
 
@@ -24,6 +25,11 @@ export function samePlayProduct(left: string, right: string): boolean {
   return leftId === rightId && (!leftPlan || !rightPlan || leftPlan === rightPlan);
 }
 const isLastrepProduct = (id: string) => [PRODUCT_ID_MONTHLY, PRODUCT_ID_ANNUAL].includes(id.split(":")[0]);
+
+export function isPermanentPremiumConfirmed(data: unknown, fromCache: boolean): boolean {
+  return !fromCache && !!data && typeof data === "object" &&
+    (data as Record<string, unknown>).manualGrantPermanent === true;
+}
 
 export function isPaidPremiumConfirmed(data: unknown, productId: string, fromCache: boolean): boolean {
   if (fromCache || !data || typeof data !== "object") return false;
@@ -50,16 +56,17 @@ export async function runRestoreFlow(uid: string, signal: AbortSignal, deps: Res
     if (!subscription) return "notFound";
     // Only Lastrep's active Play subscription qualifies, not other purchases or grants.
     const premium = info.entitlements.active[ENTITLEMENT_ID];
-    if (!premium?.isActive || premium.store !== "PLAY_STORE" || !isLastrepProduct(premium.productIdentifier)) return "unconfirmed";
-    const productId = premium.productPlanIdentifier && !premium.productIdentifier.includes(":")
-      ? `${premium.productIdentifier}:${premium.productPlanIdentifier}` : premium.productIdentifier;
+    const mapped = premium?.isActive && premium.store === "PLAY_STORE" && isLastrepProduct(premium.productIdentifier);
+    const productId = mapped ? premium.productPlanIdentifier && !premium.productIdentifier.includes(":")
+      ? `${premium.productIdentifier}:${premium.productPlanIdentifier}` : premium.productIdentifier : subscription;
     if (!info.activeSubscriptions.some((id) => samePlayProduct(id, productId))) return "unconfirmed";
-    let confirmed = false;
+    let confirmed: boolean | "existingAccess" = false;
     try { confirmed = await deps.confirm(uid, productId, signal); } catch {
       // A backend read failure is not "no purchase" once a purchase was found.
     }
     if (cancelled()) return null;
-    return confirmed ? "restored" : "unconfirmed";
+    if (confirmed === "existingAccess") return "alreadyActive";
+    return mapped && confirmed ? "restored" : "unconfirmed";
   } catch { return cancelled() ? null : "failed"; }
 }
 

@@ -105,6 +105,7 @@ const requiredPlugins: ExpoPlugin[] = [
   "expo-status-bar",
   "expo-web-browser",
   "./plugins/with-workout-native-overrides",
+  "./plugins/with-health-permissions",
 ];
 let plugins: ExpoPlugin[] = [...mappedPlugins];
 for (const requiredPlugin of requiredPlugins) {

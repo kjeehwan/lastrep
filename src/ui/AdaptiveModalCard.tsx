@@ -107,7 +107,7 @@ export function AdaptiveModalCard({ children, style, contentSized = false, conte
         contentContainerStyle={contentContainerStyle}
         onLayout={scheduleFocusVisibility} onContentSizeChange={scheduleFocusVisibility}
         scrollEventThrottle={16} onScroll={(event) => { scrollOffset.current = event.nativeEvent.contentOffset.y; }}
-        style={{ flexShrink: 1, ...(contentSized ? { flexGrow: 0 } : {}) }}>
+        style={{ alignSelf: "stretch", flexShrink: 1, ...(contentSized ? { flexGrow: 0 } : {}) }}>
         <ModalInputFocusContext.Provider value={() => { ownedFocus.current = TextInput.State.currentlyFocusedInput(); scheduleFocusVisibility(); }}>{focusAware(content)}{footer && scrollFooter ? <View style={{ paddingTop: 12 }}>{footer}</View> : null}</ModalInputFocusContext.Provider>
       </ScrollView>
       {footer && !scrollFooter ? <View style={{ paddingTop: 12, flexShrink: 0 }}>{footer}</View> : null}

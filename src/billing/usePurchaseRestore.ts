@@ -31,7 +31,8 @@ export function usePurchaseRestore(uid: string | null, disabled: boolean, contex
     if (outcome && focused.current && auth.currentUser?.uid === uid) {
       const resultParams = { ...params, result_status: outcome, latency_ms: Date.now() - startedAt };
       logBillingLifecycleEvent("restore_result", resultParams);
-      void logAnalyticsEvent(outcome === "restored" ? "restore_completed" : "restore_failed", resultParams);
+      // An independent grant explains current access, but is not a restored purchase.
+      if (outcome !== "alreadyActive") void logAnalyticsEvent(outcome === "restored" ? "restore_completed" : "restore_failed", resultParams);
     }
   }, [controller, disabled, uid, context.sourceScreen, context.reasonCode]);
   const current = state?.uid === uid ? state : null;

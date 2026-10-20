@@ -33,7 +33,7 @@ it("uses one connectivity-driven offline save notice without leaving stale save 
   expect(save).toContain("if (isOffline) return false;");
   expect(save.indexOf("if (isOffline) return false;")).toBeLessThan(save.indexOf("setSaveFeedback(null)"));
   expect(source).not.toContain("Reconnect before saving; your edits are kept.");
-  expect(source).toContain('Offline. Your edits stay here; reconnect before saving.</Text> : saveFeedback ?');
+  expect(source).toContain('Offline. Your edits stay here; reconnect before saving.</Text> : saveFeedback && !savingProfile ?');
   const banner = readFileSync("components/OfflineBanner.tsx", "utf8");
   expect(banner).toContain('if (!ready || !isOffline || dismissed)');
   expect(banner).not.toContain('pathname');
