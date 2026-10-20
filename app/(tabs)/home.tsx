@@ -12,6 +12,7 @@ import { HomeRecoverySheet } from "../../src/home/HomeRecoverySheet";
 import { TodayPlanContextModal } from "../../src/services/decision/TodayPlanContextModal";
 import { Ionicons } from "@expo/vector-icons";
 import LastrepLogo from "../../components/LastrepLogo";
+import { useStartupReady } from "../../src/branding/useStartupReady";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ProfilePhoto } from "../../src/profile/ProfilePhoto";
 import { profilePhotoReference } from "../../src/profile/profilePhotoReference";
@@ -24,7 +25,7 @@ import { AdaptiveModalCard } from "../../src/ui/AdaptiveModalCard";
 import { normalizeBodyCompositionHistory } from "../../src/bodyComposition/normalizeBodyCompositionHistory";
 import { USER_BODY_COMPOSITION_FIELD, type BodyCompositionHistoryEntry } from "../../src/contracts/bodyComposition";
 import { formatEffort, resolveEffortScale, type EffortScale } from "../../src/workouts/effortScale";
-import { Href, Redirect, useFocusEffect, useRouter } from "expo-router";
+import { Href, Redirect, useFocusEffect, useIsFocused, usePathname, useRouter } from "expo-router";
 import { onAuthStateChanged } from "firebase/auth";
 import {
   updateDoc,
@@ -282,6 +283,9 @@ function Home() {
   const lastHomeInsightsLoadAtRef = useRef(0);
 
   const entitlement = useEntitlement(authReady, uid);
+  const focused = useIsFocused();
+  const pathname = usePathname();
+  useStartupReady(Boolean(authReady && uid && profileDataLoaded && homeContextLoaded && healthSyncStatusLoaded), 8000, focused && pathname === "/home");
   const nowMs = useNow(60_000);
 
   useEffect(() => {

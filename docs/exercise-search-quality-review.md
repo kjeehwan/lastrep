@@ -117,3 +117,109 @@ equivalent spellings of the current exercise. A native Bench Press check confirm
 press variations in the default list and an explicit RDL search across movement
 families. An empty explicit category displayed the search prompt and All restored
 the relevant alternatives. No exercise was selected or replaced.
+
+## Splash follow-up
+
+The dev native splash used brown `#1F130B`; production used dark blue `#0d0d1a`.
+Both flavors now use black in native day/night resources, Expo splash config and
+the temporary app loading screen. The initial bitmap fix removed the colored
+matte, but user review found the old artwork differed from Home and was clipped
+by Android's splash mask. That composition has been replaced.
+
+Home and native startup now share `src/branding/wordmarkGeometry.json`: the
+existing Home Android sans-serif bold wordmark converted to stable vector paths.
+Home keeps its header geometry. The native logo is
+112dp wide (about 1.5 times Home), centered in a 288dp canvas, entirely inside
+Android's [192dp safe circle](https://developer.android.com/develop/ui/views/launch/splash-screen#dimensions).
+The dev orange/red and production blue/purple gradients remain separate; launcher
+icons are unchanged.
+
+Run `npm.cmd run generate:wordmarks` after a deliberate geometry change. The
+script generates flavor SVGs, Expo-compatible PNGs and Android vector drawables
+from the shared path. The pinned development-only SVG rasterizer is not imported
+by app code. Native verification detects drift and incorrect flavor selection;
+rendered-pixel tests guard the mask boundary. A Metro reload cannot update the
+installed native icon; the updated dev APK was built and installed.
+
+## Verification
+
+Search verification: 51 catalog review queries, all 907 exact-name queries and
+the focused search/replacement regression cases passed. Native Add checks passed
+for bench press, DB bench, RDL, kettlebell swing and no match. Native Replace
+checks passed for OHP and bench press across body parts with All, no match,
+and Shoulders/Chest filtering. No result was selected or exercise replaced.
+
+Full suite after the catalog-wide and wordmark follow-up: 630 passed,
+22 emulator-dependent skipped. TypeScript, lint,
+web export, native configuration verification and diff checks passed. The dev
+APK compiled and installed with the same signing certificate, retaining app data.
+The final launcher cold-start recording showed the smaller complete orange/red
+wordmark on continuous black, without clipping. The shared fallback/loading logo
+is defined at Home size; it was not separately visible in the sampled cold-start
+recording. Both source flavors/day-night resources are guarded. A production build/device splash has not been tested.
+
+The development-client launcher is configured to open its server picker on an
+ordinary icon launch; the agent reconnected the dev app to the existing Metro
+server after the native splash check. Local device artifacts remain ignored.
+No production AAB, deployment or production-app installation is part of this pass.
+
+### Single-splash handoff follow-up
+
+User accepted Replace and requested a single native splash until Home is ready.
+The index route no longer displays a second logo or hides the splash while
+navigation is merely starting. Focused notebook destinations release it after
+font readiness and two animation frames; Home additionally waits for initial
+profile, insight and health-status results. Background tabs cannot release it.
+Home has an eight-second escape into its normal loading/error UI for stalled
+reads; this is a maximum wait, not a minimum display duration.
+
+The Metro-connected dev client explicitly hides the native splash in Expo's
+launcher before application JavaScript runs. Its cold-start recording therefore
+does not verify the standalone handoff. Expo documents this limitation and
+recommends [testing a standalone build](https://docs.expo.dev/develop/user-interface/splash-screen-and-app-icon/).
+The local standalone **dev-flavor**, arm64 APK was built with code/resource
+shrinking disabled by command-line flags for this focused check; tracked release
+settings were unchanged. Its signing certificate matched the installed dev app.
+Installation retained app data. A cold-start recording showed one native logo
+held until populated Home, then the native fade directly into Home, including
+the saved workout draft and profile photo. No second logo screen was present.
+The Metro-connected dev client was restored afterward. Production splash,
+signed-out/onboarding cold starts and native offline fallback were not retested
+in this follow-up.
+
+Latest checks: 25 focused branding/native configuration tests passed, TypeScript,
+lint and web export passed, and `git diff --check` passed. The four new handoff
+tests cover readiness/paint ordering, the stalled-read escape, readiness loss
+and unmount cancellation. The earlier full-suite count above predates this
+single-splash change. No AAB, production installation or deployment was performed.
+
+After the user reproduced Expo's black/loading screens on the restored Metro
+client, the same verified standalone dev APK was reinstalled and reopened for
+visual review. It is currently left installed for that review, retaining app
+data. Restore the Metro-connected dev client before expecting JavaScript edits
+to appear on the phone; do not mistake the standalone bundle for a live Metro
+session.
+
+The user subsequently reported a brief flicker between the retained splash and
+Home. A new 30fps recording showed a monotonic brightness transition through
+Expo's default 400ms fade, without a separate blank frame. The startup now sets
+`duration: 0, fade: false` to reveal the prepared destination directly. This
+changes the exit animation only; the readiness/deadline gate is unchanged.
+TypeScript, lint and diff checks passed after this change. The unminified arm64
+standalone dev APK rebuilt successfully and was installed with app data retained.
+A new 30fps recording showed the splash changing directly to populated Home,
+without the previous multi-frame fade or an intervening sampled blank screen.
+The user accepted the updated transition after another cold start. This
+standalone dev build remains installed; restore the Metro-connected client before
+expecting live JavaScript changes on the phone.
+
+### Final batch verification and approval
+
+On October 20, the user approved the exercise relevance and final direct
+splash-to-Home transition, then authorized split commits, push, PR review and
+merge after CI. Fresh full-suite verification passed with **634 tests passed and
+22 emulator-dependent tests skipped** (91 files passed, two skipped). TypeScript,
+lint, web export, Android configuration verification and diff checks passed.
+The earlier counts above describe earlier snapshots. Production splash,
+signed-out/onboarding cold starts and native offline fallback remain unverified
+for this splash change. No production AAB or deployment is authorized.

@@ -77,8 +77,8 @@ const adaptiveForeground = isDevVariant
   ? "./assets/images/logo-splash-512-foreground-padded-dev.png"
   : "./assets/images/logo-splash-512-foreground-padded-v3.png";
 const splashImage = isDevVariant
-  ? "./assets/images/logo-splash-512-foreground-padded-dev.png"
-  : "./assets/images/logo-splash-512-foreground-padded-v3.png";
+  ? "./assets/images/wordmark-splash-dev.png"
+  : "./assets/images/wordmark-splash-prod.png";
 
 const mappedPlugins: ExpoPlugin[] = (baseConfig.plugins ?? []).map((plugin) => {
   if (Array.isArray(plugin) && plugin[0] === "expo-splash-screen") {
@@ -87,8 +87,8 @@ const mappedPlugins: ExpoPlugin[] = (baseConfig.plugins ?? []).map((plugin) => {
       {
         ...(plugin[1] as Record<string, unknown>),
         image: splashImage,
-        backgroundColor: "#0d0d1a",
-        dark: { backgroundColor: "#0d0d1a" },
+        backgroundColor: "#000000",
+        dark: { backgroundColor: "#000000" },
       },
     ] as ExpoPlugin;
   }

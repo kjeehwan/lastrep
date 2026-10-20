@@ -1,6 +1,6 @@
 # Lastrep Training Notebook Design Specification
 
-Version: 1.29 | Date: October 20, 2026
+Version: 1.30 | Date: October 20, 2026
 
 Status: Workout, Home, Nutrition, Sleep, Profile and Settings browser design
 directions approved through iterative review. Shared rules below incorporate that
@@ -962,6 +962,22 @@ inventory before implementing any relocation.
   with identical geometry. Logo gradient is a brand exception, not a UI palette.
 - Match optical size between variants. Do not stretch the wordmark or introduce
   fake handwritten branding. App/splash assets are separate approval scope.
+  The native launch/splash background is black (`#000000`) in both appearance
+  modes and both app flavors, matching the black around the existing logo.
+  Keep the production and dev logo artwork distinct.
+- Home and native startup share one vector outline of Home's Android
+  sans-serif bold lettering. Keep Home's header geometry. Hold the native splash
+  until the focused destination has rendered with its fonts and Home's initial
+  profile/insight/health-status reads have settled. Do not show a second branded
+  loading screen or add a minimum logo duration. A stalled Home read may release
+  after eight seconds into the screen's normal loading/error state, so offline
+  startup cannot leave users trapped on the splash. Signed-out and incomplete
+  accounts reveal their authentication/onboarding destination instead of Home.
+  Reveal the prepared screen directly, without fading the black splash through
+  the light notebook canvas; the default native fade was perceived as a flicker.
+  Native startup may enlarge the wordmark modestly (112dp wide), centered within
+  Android's 288dp canvas / 192dp safe circle. All visible artwork must fit inside
+  the mask. Launcher icons remain separate from splash artwork.
 
 ## 14. Mandatory mockup package
 

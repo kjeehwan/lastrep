@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useMemo } from "react";
 import { useFonts } from "expo-font";
+import { useIsFocused, usePathname } from "expo-router";
+import { useStartupReady } from "../../branding/useStartupReady";
 import { StyleSheet, View, ActivityIndicator, type TextStyle, type ViewStyle, type ImageStyle } from "react-native";
 import { useAppTheme } from "../../theme/AppThemeProvider";
 import { notebookDark, notebookPaper, notebookFonts, type NotebookColors } from "./tokens";
@@ -13,6 +15,11 @@ export function NotebookProvider({ children }: { children: React.ReactNode }) {
     NotebookSerif: require("../../../assets/fonts/source-serif-4.ttf"),
   });
   const value = useMemo(() => ({ colors: dark ? notebookDark : notebookPaper, fontsLoaded: loaded }), [dark, loaded]);
+  const pathname = usePathname();
+  const focused = useIsFocused();
+  // Home waits for its initial data too. Auth/onboarding and direct links can
+  // reveal their own usable screen once the notebook fonts are ready.
+  useStartupReady(Boolean(loaded || error), undefined, focused && pathname !== "/" && pathname !== "/home");
   // A failed font load must not prevent users from reaching their workout.
   if (error && __DEV__) console.warn("Notebook fonts unavailable", error.message);
   return <NotebookContext.Provider value={value}>{!loaded && !error ? <View style={{ flex: 1, backgroundColor: value.colors.canvas, justifyContent: "center" }}><ActivityIndicator color={value.colors.accent} accessibilityLabel="Loading screen" /></View> : children}</NotebookContext.Provider>;

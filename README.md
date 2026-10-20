@@ -31,6 +31,8 @@ focus. Browser prototypes are design studies, not production account screens.
   checks and the separate production-build/billing steps.
 - [Food catalog maintenance](docs/food-catalog-maintenance.md): reviewed metadata,
   sourced additions and the repeatable coverage audit.
+- [Exercise search review](docs/exercise-search-quality-review.md): shared Add /
+  Replace ranking, catalog coverage and native splash follow-up.
 
 ## Stack and Layout
 

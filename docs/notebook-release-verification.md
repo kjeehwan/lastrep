@@ -125,3 +125,8 @@ authorized by starting this checklist.
 October 20 release authorization: user approved the reviewed batch and requested
 split commits, push, PR review, merge and CI verification. The user wants another
 task before the production AAB. This does not authorize a build or deployment.
+
+That batch merged in PR #42 (`abc0ad3`), with successful post-merge Quality Checks.
+The subsequent requested task covers [Workout search quality and splash
+backgrounds](exercise-search-quality-review.md). Its verification and review are
+separate from PR #42; production AAB work remains pending an explicit request.

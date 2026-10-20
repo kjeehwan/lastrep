@@ -27,6 +27,9 @@ if (Platform.OS !== 'web') {
 void SplashScreen.preventAutoHideAsync().catch(() => {
   // already prevented or unavailable
 });
+// Home is prepared behind the native splash. Avoid blending the black launch
+// surface through the light notebook canvas during Expo's default 400ms fade.
+SplashScreen.setOptions({ duration: 0, fade: false });
 
 if (__DEV__) {
   const warnGuard = globalThis as unknown as { __lastrepWarnFilterInstalled?: boolean };

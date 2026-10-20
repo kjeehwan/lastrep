@@ -132,7 +132,7 @@ export default function TabsLayout() {
         },
       })}
     >
-      <Tabs.Screen name="index" options={{ href: null }} />
+      <Tabs.Screen name="index" options={{ href: null, tabBarStyle: { display: "none" } }} />
       <Tabs.Screen name="home" options={{ title: "Home" }} listeners={createProfileTabLeaveListener("home")} />
       <Tabs.Screen
         name="workout"
