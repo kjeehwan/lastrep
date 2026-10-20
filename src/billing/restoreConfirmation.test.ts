@@ -47,6 +47,15 @@ describe("bounded backend restore confirmation", () => {
   it("does not accept manually granted Premium as restored access", async () => {
     const result = confirmRestoredPremium("user", product, new AbortController().signal);
     update({ data: () => ({ entitlement: { ...paid, manualGrantPermanent: true } }), metadata: { fromCache: false } });
+    expect(await result).toBe("existingAccess");
+    expect(mocks.unsubscribe).toHaveBeenCalledTimes(1);
+  });
+  it("requires a server-confirmed grant rather than cached or pending access", async () => {
+    const result = confirmRestoredPremium("user", product, new AbortController().signal);
+    const grant = { ...paid, manualGrantPermanent: true };
+    update({ data: () => ({ entitlement: grant }), metadata: { fromCache: true, hasPendingWrites: false } });
+    update({ data: () => ({ entitlement: grant }), metadata: { fromCache: false, hasPendingWrites: true } });
+    expect(mocks.unsubscribe).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(RESTORE_CONFIRM_TIMEOUT_MS);
     expect(await result).toBe(false);
   });

@@ -64,6 +64,16 @@ describe("restore outcomes and exact user feedback", () => {
     deps.restore.mockResolvedValue({ status: "RESTORED", customerInfo: info });
     expect(await display()).toEqual([RESTORE_MESSAGES.unconfirmed, false]);
   });
+  it("explains an independent grant without claiming a paid purchase was restored", async () => {
+    deps.confirm.mockResolvedValue("existingAccess");
+    expect(await display()).toEqual([RESTORE_MESSAGES.alreadyActive, false]);
+  });
+  it("explains an independent grant even when the store product lacks Premium mapping", async () => {
+    const info = customer(); delete info.entitlements.active.premium;
+    deps.restore.mockResolvedValue({ status: "RESTORED", customerInfo: info });
+    deps.confirm.mockResolvedValue("existingAccess");
+    expect(await display()).toEqual([RESTORE_MESSAGES.alreadyActive, false]);
+  });
   it("supports annual subscriptions with base-plan-qualified identifiers", async () => {
     const info = customer();
     Object.assign(info.entitlements.active.premium, { productIdentifier: "lastrep_premium_annual", productPlanIdentifier: "yearly" });
