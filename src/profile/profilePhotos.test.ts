@@ -12,6 +12,12 @@ const fake = vi.hoisted(() => ({
   stageResponse: null as Promise<unknown> | null,
 }));
 vi.mock("../config/firebaseConfig", () => ({ auth: fake.auth }));
+vi.mock("./prepareProfilePhoto", async () => ({
+  prepareProfilePhotoUpload: async (uri: string) => {
+    const files = await import("expo-file-system/legacy");
+    return files.readAsStringAsync(uri, { encoding: files.EncodingType.Base64 });
+  },
+}));
 vi.mock("react-native", () => ({ Platform: { OS: "android" } }));
 vi.mock("firebase/app", () => ({ getApp: () => ({}) }));
 vi.mock("firebase/functions", () => ({

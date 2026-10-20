@@ -22,7 +22,8 @@ async function readPhotoBase64(uri: string): Promise<string> {
   if (Platform.OS !== "web") {
     const info = await FileSystem.getInfoAsync(uri);
     if (!info.exists || (info.size ?? 0) > MAX_INPUT_BYTES) throw new Error("Choose an image smaller than 6 MB.");
-    return FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+    const { prepareProfilePhotoUpload } = await import("./prepareProfilePhoto");
+    return prepareProfilePhotoUpload(uri);
   }
   const response = await fetch(uri);
   const blob = await response.blob();
