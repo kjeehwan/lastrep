@@ -1,3 +1,4 @@
+import { normalizeServingInfo } from "@/src/nutrition/servingLabel";
 import { ManualFoodEditor } from "@/src/nutrition/components/ManualFoodEditor";
 import { type ManualFood } from "@/src/nutrition/manualFood";
 import { NotebookHeader } from "@/src/ui/notebook/NotebookHeader";
@@ -97,31 +98,6 @@ function formatServingQuantity(servings: number, servingInfo: string): string {
   return `${s} x ${servingInfo}`;
 }
 
-function normalizeServingInfo(label: string | null | undefined, servingGrams: number): string {
-  const raw = String(label ?? "").trim();
-  if (!raw) return "1 serving";
-  const gramsPattern = /^\d+(?:\.\d+)?\s*g$/i;
-  if (gramsPattern.test(raw)) return "1 serving";
-  // Strings that are only numeric/gram tokens are not meaningful serving descriptors.
-  const alphaOnly = raw.replace(/[^a-zA-Z]/g, "").toLowerCase();
-  if (alphaOnly === "g" || alphaOnly === "gram" || alphaOnly === "grams") return "1 serving";
-
-  const gramsThenParen = raw.match(/^\d+(?:\.\d+)?\s*g\s*\(([^)]+)\)\s*$/i);
-  if (gramsThenParen?.[1]) {
-    const extracted = gramsThenParen[1].trim();
-    if (/^\d+(?:\.\d+)?\s*g$/i.test(extracted)) return "1 serving";
-    return extracted;
-  }
-
-  const textThenGramsParen = raw.match(/^(.+?)\s*\(\s*\d+(?:\.\d+)?\s*g\s*\)\s*$/i);
-  if (textThenGramsParen?.[1]) return textThenGramsParen[1].trim();
-
-  const normalizedRaw = raw.replace(/\s+/g, " ").trim();
-  if (normalizedRaw.toLowerCase() === `${Math.round(servingGrams)} g`) return "1 serving";
-  // Keep explicit serving descriptors (cup, piece, banana, scoop, etc.) as-is.
-  if (/[a-z]/i.test(normalizedRaw)) return normalizedRaw;
-  return normalizedRaw;
-}
 
 export default function MealSearchScreen() {
   const colors = useNutritionColors();

@@ -1,3 +1,4 @@
+import { normalizeServingInfo } from "@/src/nutrition/servingLabel";
 import { Star, ArrowRightLeft, Trash2 } from "lucide-react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { loggedFoodReference } from "@/src/nutrition/loggedFood";
@@ -60,23 +61,6 @@ function formatMealQuantity(meal: NutritionMeal): string | null {
   return parts.join(" / ");
 }
 
-function normalizeServingInfo(label: string | null | undefined, servingGrams: number): string {
-  const raw = String(label ?? "").trim();
-  if (!raw) return "1 serving";
-  const gramsPattern = /^\d+(?:\.\d+)?\s*g$/i;
-  if (gramsPattern.test(raw)) return "1 serving";
-
-  const gramsThenParen = raw.match(/^\d+(?:\.\d+)?\s*g\s*\(([^)]+)\)\s*$/i);
-  if (gramsThenParen?.[1]) return gramsThenParen[1].trim();
-
-  const textThenGramsParen = raw.match(/^(.+?)\s*\(\s*\d+(?:\.\d+)?\s*g\s*\)\s*$/i);
-  if (textThenGramsParen?.[1]) return textThenGramsParen[1].trim();
-
-  const normalizedRaw = raw.replace(/\s+/g, " ").trim();
-  if (normalizedRaw.toLowerCase() === `${Math.round(servingGrams)} g`) return "1 serving";
-  if (/[a-z]/i.test(normalizedRaw)) return normalizedRaw;
-  return normalizedRaw;
-}
 
 export default function MealSectionScreen() {
   const colors = useNutritionColors();

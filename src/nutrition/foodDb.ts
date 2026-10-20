@@ -260,18 +260,7 @@ export async function searchFoodsAsync(query: string, limit = SEARCH_LIMIT_DEFAU
 export async function searchFoodsBrandedAsync(query: string, limit = SEARCH_LIMIT_DEFAULT): Promise<FoodItem[]> {
   return search(query, limit, true);
 }
-export function formatServingLabel(label: string): string {
-  const trimmed = String(label ?? "").trim();
-  const m = trimmed.match(/^(\d+(?:\.\d+)?)(\s*[a-zA-Z].*)$/);
-  if (!m) return trimmed;
-  const num = Number(m[1]);
-  if (!Number.isFinite(num)) return trimmed;
-  const normalizedNum =
-    Math.abs(num - Math.round(num)) < 1e-9
-      ? String(Math.round(num))
-      : String(Math.round(num * 100) / 100);
-  return `${normalizedNum}${m[2]}`;
-}
+export { formatServingLabel } from "./servingLabel";
 
 export function computeFromFood(item: FoodItem, mode: FoodEntryMode, rawValue: string) {
   const value = Number(rawValue);
