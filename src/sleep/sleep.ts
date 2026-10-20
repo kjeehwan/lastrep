@@ -2,7 +2,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { mutateSleepJournal } from "./sleepJournal";
 import { commitManualSleep, deriveSleepDays, emptySleepEntry, sleepDateKey, validateSleepHours } from "./sleepSessionModel";
 import { providerSleepEntry, readAllSleepPages, reconcileHealthSleep, type ProviderSleepRecord } from "./healthSleepImport";
-import { Platform } from "react-native";
+import { Linking, Platform } from "react-native";
+import { applicationId } from "expo-application";
 import { collection, doc, getDoc, Timestamp } from "firebase/firestore";
 import { db } from "../config/firebaseConfig";
 import {
@@ -44,7 +45,6 @@ const sleepReadPermission: Permission = {
   accessType: "read",
   recordType: "SleepSession",
 };
-const LASTREP_ANDROID_PACKAGES = ["com.kjeehwan.lastrep.dev", "com.kjeehwan.lastrep"] as const;
 
 const loadHealthConnect = async (): Promise<HealthConnectModule> =>
   import("react-native-health-connect");
@@ -189,21 +189,16 @@ export const openHealthConnectAppPermissionsScreen = async (): Promise<boolean> 
     if (availability !== "available" && availability !== "provider_update_required") {
       return false;
     }
-    const healthConnect = await loadHealthConnect();
-    const openDataManagement = healthConnect.openHealthConnectDataManagement as unknown as (
-      packageName?: string
-    ) => void;
-
-    for (const packageName of LASTREP_ANDROID_PACKAGES) {
-      try {
-        openDataManagement(packageName);
-        return true;
-      } catch {
-        // Try the next known package name.
-      }
+    if (!applicationId) return false;
+    // Manage-data takes a provider package, not the app whose permissions to edit.
+    if (Number(Platform.Version) >= 34) {
+      await Linking.sendIntent("android.health.connect.action.MANAGE_HEALTH_PERMISSIONS", [
+        { key: "android.intent.extra.PACKAGE_NAME", value: applicationId },
+      ]);
+    } else {
+      // The separate Android 13 provider exposes settings, not an app-permission deep link.
+      await Linking.sendIntent("androidx.health.ACTION_HEALTH_CONNECT_SETTINGS");
     }
-
-    openDataManagement();
     return true;
   } catch {
     return false;

@@ -1,4 +1,5 @@
 import { NotebookProvider, useNotebook } from "../../../src/ui/notebook/Notebook";
+import { NotebookInfoButton } from "../../../src/ui/notebook/NotebookInfoButton";
 import { NotebookHeader } from "../../../src/ui/notebook/NotebookHeader";
 import { useNotebookStatusBar } from "../../../src/ui/notebook/useNotebookStatusBar";
 import { notebookFonts, type NotebookColors } from "../../../src/ui/notebook/tokens";
@@ -180,7 +181,7 @@ function ProfileContent() {
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const [editor, setEditor] = useState<{ section: ProfileEditor; before: string; focus?: string } | null>(null);
   const [editorError, setEditorError] = useState<string | null>(null);
-  const [help, setHelp] = useState<string | null>(null);
+  const [help, setHelp] = useState<{ title: string; message: string } | null>(null);
   const [historyVisible, setHistoryVisible] = useState(false);
   const router = useRouter();
   const navigation = useNavigation();
@@ -749,41 +750,11 @@ function ProfileContent() {
   }, [loading, profileLoadFailed, initialSnapshot, currentSnapshot]);
 
   const healthConnectMessage = () => {
-    if (!healthConsentAccepted) {
-      return "Connect to allow supported sleep and body composition sync.";
-    }
-    const hasAnyBodyCompositionAccess =
-      bodyHealthPermissionGranted || healthConnectBodyPermissionGranted;
-    if (isOffline) {
-      return "You're offline. Reconnect before checking permissions or syncing.";
-    }
-    if (healthAvailability === "provider_update_required") {
-      return "Update Health Connect to enable sleep sync.";
-    }
-    if (healthAvailability === "unavailable") {
-      return "Health Connect is unavailable on this device, so sleep sync is unavailable.";
-    }
-    if (healthAvailability === "unsupported") {
-      return "Health sync is only supported on Android.";
-    }
-    if (healthPermissionState === "granted" && hasAnyBodyCompositionAccess) {
-      return bodyHealthPermissionGranted
-        ? "Ready. Sleep and body composition can sync now."
-        : "Ready. Sleep can sync now, and supported body composition data is available through Health Connect.";
-    }
-    if (samsungHealthIssue && hasAnyBodyCompositionAccess) {
-      return "Supported sleep and body composition data can sync now.";
-    }
-    if (healthPermissionState === "granted") {
-      return "Sleep is ready. Body composition permission is still needed.";
-    }
-    if (hasAnyBodyCompositionAccess) {
-      return "Body composition is ready. Health Connect sleep permission is still needed.";
-    }
-    if (healthPermissionState === "denied" || healthPermissionState === "revoked") {
-      return "Connect to allow supported sleep and body composition sync.";
-    }
-    return "Connect to set permissions, then use Sync now to import your latest records.";
+    if (isOffline) return "Reconnect before syncing.";
+    if (healthAvailability === "provider_update_required") return "Update Health Connect to sync.";
+    if (healthAvailability === "unavailable") return "Health Connect is unavailable on this device.";
+    if (healthAvailability === "unsupported") return "Health sync requires Android.";
+    return null;
   };
 
   const handleOpenPlayStore = async () => {
@@ -942,11 +913,31 @@ function ProfileContent() {
   }, [uid]);
 
   const handleManageHealthPermissions = useCallback(async () => {
-    const opened =
-      (await openHealthConnectAppPermissionsScreen()) ||
-      (await openHealthConnectDataManagementScreen());
-    setHealthFeedback(opened ? null : "Unable to open Health Connect permissions on this device.");
-  }, []);
+    setHealthLoading(true);
+    setHealthFeedback(null);
+    try {
+      const healthConnect = await import("react-native-health-connect");
+      await healthConnect.initialize();
+      const granted = await healthConnect.getGrantedPermissions();
+      if (!granted.length) {
+        // A first request registers Lastrep on this device and shows Android's
+        // actual permission chooser, rather than an empty data-management page.
+        await healthConnect.requestPermission([
+          { accessType: "read", recordType: "SleepSession" },
+          { accessType: "read", recordType: "Weight" },
+          { accessType: "read", recordType: "BodyFat" },
+          { accessType: "read", recordType: "LeanBodyMass" },
+        ]);
+      } else if (!(await openHealthConnectAppPermissionsScreen())) {
+        setHealthFeedback("Couldn't open Lastrep's permissions. Open Android Settings, search for Health Connect, then open App permissions and choose Lastrep.");
+      }
+      await refreshHealthConnectStatus();
+    } catch {
+      setHealthFeedback("Couldn't open Health Connect permissions. Open Android Settings, search for Health Connect, then open App permissions and choose Lastrep. If Lastrep is missing, return here and try Health Connect permissions again.");
+    } finally {
+      setHealthLoading(false);
+    }
+  }, [refreshHealthConnectStatus]);
 
   const handleDisconnectHealth = useCallback(() => {
     showAppDialog({
@@ -1584,9 +1575,10 @@ function ProfileContent() {
   ];
   if (redirectTo) return <Redirect href={redirectTo} />;
   return <SafeAreaView style={{ flex: 1, backgroundColor: colors.canvas }} edges={["top", "left", "right"]}>
-    <NotebookHeader title="Profile" onBack={() => { if (!savingProfile) handleGoBack(); }} action={savingProfile ? "Saving..." : "Save"} onAction={() => void save()} disabled={loading || savingProfile || !hasUnsavedChanges || initialSnapshot == null} />
+    <NotebookHeader title="Profile" onBack={() => { if (!savingProfile) handleGoBack(); }} action={savingProfile ? "Saving..." : initialSnapshot != null && !hasUnsavedChanges ? "Saved" : "Save"} onAction={() => void save()} disabled={loading || savingProfile || !hasUnsavedChanges || initialSnapshot == null} />
+    {savingProfile ? <View accessibilityLiveRegion="polite" style={{ paddingHorizontal: 20, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.rule }}><ProfileText>{saveFeedback ?? "Saving profile..."} Please keep Lastrep open.</ProfileText></View> : null}
     {loading ? <ProfileText>Loading profile...</ProfileText> : profileLoadFailed ? <View style={{ padding: 20, gap: 12 }}><ProfileText muted>Your saved profile has not loaded. Reconnect to load it; no changes have been saved.</ProfileText><ProfileAction label="Retry" disabled={isOffline || !networkReady} onPress={() => setProfileLoadAttempt((attempt) => attempt + 1)} /></View> : <ScrollView ref={profileScrollRef} onContentSizeChange={revealHealthFeedback} pointerEvents={savingProfile ? "none" : "auto"} keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 20, paddingBottom: 56, gap: 28, width: "100%", maxWidth: 800, alignSelf: "center" }}>
-      {isOffline ? <Text accessibilityLiveRegion="polite" style={styles.helperText}>Offline. Your edits stay here; reconnect before saving.</Text> : saveFeedback ? <Text accessibilityLiveRegion="polite" style={styles.helperText}>{saveFeedback}</Text> : null}
+      {isOffline ? <Text accessibilityLiveRegion="polite" style={styles.helperText}>Offline. Your edits stay here; reconnect before saving.</Text> : saveFeedback && !savingProfile ? <Text accessibilityLiveRegion="polite" style={styles.helperText}>{saveFeedback}</Text> : null}
       <ProfileSection first title="Identity" action={<ProfileAction label="Edit" onPress={() => openEditor("identity")} />}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 20 }}>
           <ProfilePhoto fallbackBackgroundColor={colors.subtle} fallbackTextColor={colors.ink} fallbackFontFamily={notebookFonts.semibold} uid={uid} reference={profilePhotoUri} initial={nickname.trim().charAt(0).toUpperCase() || "L"} style={{ width: 72, height: 72, borderRadius: 36, backgroundColor: colors.subtle }} contentFit="cover" />
@@ -1607,8 +1599,8 @@ function ProfileContent() {
       <ProfileSection title="Body composition">
         <ProfileRow label="Weight" value={displayValue(bodyWeight, weightUnit)} onPress={() => openEditor("body", "Weight")} />
         <ProfileRow label="Body fat" value={displayValue(bodyFatPercent, "%")} onPress={() => openEditor("body", "Body fat")} />
-        <ProfileRow label="Lean body mass" value={displayValue(leanMass, weightUnit)} onPress={() => openEditor("body", "Lean body mass")} help={() => setHelp("Lean body mass is your body weight excluding fat. It includes muscle, organs, bones and water; it is not skeletal muscle mass.")} />
-        <ProfileRow label="Skeletal muscle" value={displayValue(muscleMass, weightUnit)} onPress={() => openEditor("body", "Skeletal muscle")} help={() => setHelp("Skeletal muscle mass is the mass of muscles that move your skeleton. It is only part of lean body mass and must not be inferred from a lean-mass reading.")} />
+        <ProfileRow label="Lean body mass" value={displayValue(leanMass, weightUnit)} onPress={() => openEditor("body", "Lean body mass")} help={() => setHelp({ title: "Body composition", message: "Lean body mass is your body weight excluding fat. It includes muscle, organs, bones and water; it is not skeletal muscle mass." })} />
+        <ProfileRow label="Skeletal muscle" value={displayValue(muscleMass, weightUnit)} onPress={() => openEditor("body", "Skeletal muscle")} help={() => setHelp({ title: "Body composition", message: "Skeletal muscle mass is the mass of muscles that move your skeleton. It is only part of lean body mass and must not be inferred from a lean-mass reading." })} />
         <ProfileText muted>{latestBodyCompositionSource} / {latestBodyCompositionLabel}</ProfileText>
         {typeof bodyCompositionEffective.legacyMuscleMassKg === "number" ? <ProfileText muted>Older muscle value: {formatWeightForUnit(bodyCompositionEffective.legacyMuscleMassKg, weightUnit)} {weightUnit}. Type unverified; not used as lean or skeletal muscle.</ProfileText> : null}
         <ProfileAction label="View body history" onPress={() => setHistoryVisible(true)} />
@@ -1625,11 +1617,15 @@ function ProfileContent() {
       </ProfileSection>
       <ProfileSection title="Sleep target"><ProfileRow label="Daily target" value={`${sleepTargetHours} hours`} onPress={() => openEditor("sleep")} /></ProfileSection>
       <View onLayout={(event) => { healthSyncYRef.current = event.nativeEvent.layout.y; }}>
-        <ProfileSection title="Health sync">
+        <ProfileSection title="Health sync" action={<NotebookInfoButton label="About Health sync permissions" onPress={() => setHelp({ title: "Health sync", message: "Each phone needs its own permissions. Previously synced records do not grant access.\n\nUsing Samsung Health? Allow it to share data with Health Connect, then return and tap Sync now.\n\nIf Lastrep is missing, return here and tap Health Connect permissions to start the request." + (samsungHealthIssue ? `\n\n${samsungHealthIssue}` : "") })} />}>
           {healthRows.map(([label, value]) => <View key={label} style={{ flexDirection: fontScale >= 1.5 ? "column" : "row", gap: 8, paddingVertical: 6 }}><View style={{ flex: 1 }}><ProfileText>{label}</ProfileText></View><View style={{ flex: 1.4 }}><ProfileText muted>{value}</ProfileText></View></View>)}
-          <ProfileText muted>{healthConnectMessage()}</ProfileText>
+          {healthConnectMessage() ? <ProfileText muted>{healthConnectMessage()}</ProfileText> : null}
+          <ProfileText muted>{healthConsentAccepted ? "Tap Health Connect permissions, choose Lastrep, and allow the data you want to sync." : "Tap Connect to choose the data you want to sync."}</ProfileText>
           <ProfileAction label={healthPrimaryButtonLabel} primary disabled={healthLoading} onPress={shouldShowConnectAction ? handleOpenHealthConsent : handleSyncHealthConnectData} />
-          {healthConsentAccepted ? <><ProfileAction label="Health Connect permissions" disabled={healthLoading} onPress={handleManageHealthPermissions} /><ProfileAction label="Disconnect" disabled={healthLoading} onPress={handleDisconnectHealth} /></> : null}
+          {healthConsentAccepted ? <>
+            <ProfileAction label="Health Connect permissions" disabled={healthLoading} onPress={handleManageHealthPermissions} />
+            <ProfileAction label="Disconnect" disabled={healthLoading} onPress={handleDisconnectHealth} />
+          </> : null}
           {healthAvailability === "provider_update_required" || healthAvailability === "unavailable" ? <ProfileAction label="Set up Health Connect" disabled={healthLoading} onPress={handleOpenPlayStore} /> : null}
           {healthFeedback ? <View accessibilityLiveRegion="polite" onLayout={revealHealthFeedback}><ProfileText muted>{healthFeedback}</ProfileText></View> : null}
         </ProfileSection>
@@ -1680,7 +1676,7 @@ function ProfileContent() {
       {editorError ? <Text accessibilityRole="alert" style={{ color: colors.danger, fontSize: 16, fontFamily: notebookFonts.body }}>{editorError}</Text> : null}
     </ProfileSheet> : null}
     {photoActionMenuVisible ? <ProfileSheet title="Profile photo" onClose={() => setPhotoActionMenuVisible(false)} footer={<ProfileAction label="Cancel" onPress={() => setPhotoActionMenuVisible(false)} />}><ProfileAction label={profilePhotoUri ? "Choose another photo" : "Choose photo"} onPress={handlePickProfilePhoto} />{profilePhotoUri ? <ProfileAction label="Remove photo" onPress={handleRemoveProfilePhoto} /> : null}</ProfileSheet> : null}
-    {help ? <ProfileSheet title="Body composition" onClose={() => setHelp(null)} footer={<ProfileAction label="Close" onPress={() => setHelp(null)} />}><ProfileText>{help}</ProfileText></ProfileSheet> : null}
+    {help ? <ProfileSheet title={help.title} onClose={() => setHelp(null)} footer={<ProfileAction label="Close" onPress={() => setHelp(null)} />}><ProfileText>{help.message}</ProfileText></ProfileSheet> : null}
     {historyVisible ? <ProfileSheet title="Body composition history" onClose={() => setHistoryVisible(false)} footer={<ProfileAction label="Close" onPress={() => setHistoryVisible(false)} />}>
       {visibleBodyCompositionHistory.length ? visibleBodyCompositionHistory.map((entry, index) => <View key={`${entry.source}-${entry.recordedAt?.toMillis() ?? index}-${index}`} style={{ gap: 8, paddingVertical: 12, borderBottomWidth: index < visibleBodyCompositionHistory.length - 1 ? 1 : 0, borderBottomColor: colors.rule }}><ProfileText>{formatBodyCompositionTimestamp(entry.recordedAt)}</ProfileText><ProfileText muted>{formatBodyCompositionSource(entry.source, entry.originLabel)}</ProfileText><ProfileText>{`Weight ${formatWeightForUnit(entry.weightKg, weightUnit) || "-"} ${weightUnit} / Body fat ${formatPercent(entry.bodyFatPercent) || "-"}%`}</ProfileText><ProfileText>{`Lean mass ${formatWeightForUnit(entry.leanBodyMassKg, weightUnit) || "-"} ${weightUnit} / Skeletal muscle ${formatWeightForUnit(entry.skeletalMuscleMassKg, weightUnit) || "-"} ${weightUnit}`}</ProfileText></View>) : <ProfileText muted>No body composition records yet.</ProfileText>}
       {bodyCompositionHistory.length > 3 ? <ProfileAction label={bodyHistoryExpanded ? "Show less" : "Show more"} onPress={() => setBodyHistoryExpanded((value) => !value)} /> : null}

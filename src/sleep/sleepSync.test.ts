@@ -1,11 +1,13 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import type { SleepEntry } from "./sleepSessionModel";
-import { syncSleepFromHealthConnect } from "./sleep";
+import { openHealthConnectAppPermissionsScreen, syncSleepFromHealthConnect } from "./sleep";
 const fake = vi.hoisted(() => ({
   consent: true, permitted: true, storage: new Map<string, string>(), entries: [] as SleepEntry[],
   read: vi.fn(), changes: vi.fn(), mutate: vi.fn(), sdk: vi.fn(),
+  sendIntent: vi.fn(), applicationId: "com.kjeehwan.lastrep", platform: { OS: "android", Version: 34 },
 }));
-vi.mock("react-native", () => ({ Platform: { OS: "android", Version: 34 } }));
+vi.mock("react-native", () => ({ Platform: fake.platform, Linking: { sendIntent: fake.sendIntent } }));
+vi.mock("expo-application", () => ({ get applicationId() { return fake.applicationId; } }));
 vi.mock("@react-native-async-storage/async-storage", () => ({ default: { getItem: async (key: string) => fake.storage.get(key) ?? null, setItem: async (key: string, value: string) => { fake.storage.set(key, value); } } }));
 vi.mock("../config/firebaseConfig", () => ({ db: {} }));
 vi.mock("../health/healthSyncConsent", () => ({ hasHealthSyncConsent: async () => fake.consent }));
@@ -26,10 +28,28 @@ const record = { startTime: "2026-10-16T23:00Z", endTime: "2026-10-17T07:00Z", m
 const changes = (overrides = {}) => ({ upsertionChanges: [], deletionChanges: [], nextChangesToken: "cursor", changesTokenExpired: false, hasMore: false, ...overrides });
 beforeEach(() => {
   vi.clearAllMocks(); fake.storage.clear(); fake.entries = []; fake.consent = true; fake.permitted = true;
+  fake.platform.Version = 34; fake.applicationId = "com.kjeehwan.lastrep"; fake.sendIntent.mockResolvedValue(undefined);
   fake.sdk.mockResolvedValue(3); fake.read.mockResolvedValue({ records: [record] }); fake.changes.mockResolvedValue(changes());
   fake.mutate.mockImplementation(async (_uid: string, change: (entries: SleepEntry[]) => SleepEntry[], options: { authorize: () => Promise<void> }) => {
     await options.authorize(); fake.entries = change(fake.entries); return fake.entries;
   });
+});
+
+it.each(["com.kjeehwan.lastrep", "com.kjeehwan.lastrep.dev"])("opens app permissions for the running package %s on Android 14+", async (packageName) => {
+  fake.applicationId = packageName;
+  expect(await openHealthConnectAppPermissionsScreen()).toBe(true);
+  expect(fake.sendIntent).toHaveBeenCalledWith("android.health.connect.action.MANAGE_HEALTH_PERMISSIONS", [
+    { key: "android.intent.extra.PACKAGE_NAME", value: packageName },
+  ]);
+});
+it("opens supported provider settings on Android 13 instead of inventing an app-permission action", async () => {
+  fake.platform.Version = 33;
+  expect(await openHealthConnectAppPermissionsScreen()).toBe(true);
+  expect(fake.sendIntent).toHaveBeenCalledWith("androidx.health.ACTION_HEALTH_CONNECT_SETTINGS");
+});
+it("reports an unavailable permission activity instead of claiming it opened", async () => {
+  fake.sendIntent.mockRejectedValue(new Error("Activity not found"));
+  expect(await openHealthConnectAppPermissionsScreen()).toBe(false);
 });
 it("does not read or write health records without app consent", async () => {
   fake.consent = false;
