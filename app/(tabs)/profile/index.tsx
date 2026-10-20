@@ -272,6 +272,7 @@ function ProfileContent() {
   const [tdeeHeightCm, setTdeeHeightCm] = useState("");
   const [tdeeSex, setTdeeSex] = useState<TdeeSex>("male");
   const [tdeeActivity, setTdeeActivity] = useState<TdeeActivity>("moderate");
+  const [appliedTdeeEstimate, setAppliedTdeeEstimate] = useState<number | null>(null);
   const [bodyCompositionProfile, setBodyCompositionProfile] = useState<BodyCompositionProfile | null>(null);
   const [bodyCompositionEffective, setBodyCompositionEffective] = useState<BodyCompositionMetricSnapshot>(
     getEffectiveBodyCompositionSnapshot({
@@ -452,6 +453,7 @@ function ProfileContent() {
     setMaintainCalories(display(tdeeEstimateKcal));
     setCutCalories(display(Math.max(0, tdeeEstimateKcal - 400)));
     setBulkCalories(display(tdeeEstimateKcal + 300));
+    setAppliedTdeeEstimate(tdeeEstimateKcal);
     setSaveFeedback("TDEE estimate applied. Review the targets, then save changes.");
   };
 
@@ -1552,6 +1554,7 @@ function ProfileContent() {
   const entitlement = useEntitlement(!!uid, uid);
   const openEditor = (section: ProfileEditor, focus?: string) => {
     setEditorError(null);
+    setAppliedTdeeEstimate(null);
     setEditor({ section, focus, before: buildSnapshot() });
   };
   const cancelEditor = () => {
@@ -1662,7 +1665,10 @@ function ProfileContent() {
         <ProfileChoices label="Sex used for calculation" values={["female", "male"] as TdeeSex[]} selected={tdeeSex} onChange={setTdeeSex} />
         <View style={{ gap: 8 }}><ProfileText>Activity</ProfileText>{(Object.keys(TDEE_ACTIVITY_MULTIPLIERS) as TdeeActivity[]).map((value) => <Pressable key={value} accessibilityRole="button" accessibilityState={{ selected: value === tdeeActivity }} onPress={() => setTdeeActivity(value)} style={{ padding: 12, minHeight: 48, borderWidth: 1, borderRadius: 6, borderColor: value === tdeeActivity ? colors.primary : colors.border, backgroundColor: value === tdeeActivity ? colors.primary : colors.surface }}><Text style={{ color: value === tdeeActivity ? colors.onPrimary : colors.ink, fontFamily: notebookFonts.body, fontSize: 16 }}>{TDEE_ACTIVITY_MULTIPLIERS[value].label}</Text></Pressable>)}</View>
         <ProfileText>{tdeeEstimateKcal == null ? "Enter valid age, height and weight to calculate." : `Estimated maintenance: ${Math.round(convertEnergyValue(tdeeEstimateKcal, "kcal", energyUnit))} ${energyUnit} / day`}</ProfileText>
-        <ProfileAction label="Use for nutrition targets" primary disabled={tdeeEstimateKcal == null} onPress={() => { applyTdeeEstimate(); }} />
+        <ProfileAction label={appliedTdeeEstimate != null && appliedTdeeEstimate === tdeeEstimateKcal ? "Targets applied to draft" : "Use for nutrition targets"} primary disabled={tdeeEstimateKcal == null} onPress={() => { applyTdeeEstimate(); }} />
+        {appliedTdeeEstimate != null ? <Text accessibilityLiveRegion="polite" style={styles.helperText}>{appliedTdeeEstimate === tdeeEstimateKcal
+          ? `Draft nutrition targets updated: Cut ${cutCalories}, Maintain ${maintainCalories}, Bulk ${bulkCalories} ${energyUnit} / day. Tap Done, then Save on Profile to keep these changes.`
+          : "Estimate changed. Tap Use for nutrition targets again to update your draft targets."}</Text> : null}
       </> : null}
       {editor.section === "nutrition" ? <>
         {metricField("Cut", cutCalories, setCutCalories, energyUnit, "e.g. 2200")}

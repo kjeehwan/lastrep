@@ -1,6 +1,6 @@
 # Lastrep Training Notebook Design Specification
 
-Version: 1.26 | Date: October 20, 2026
+Version: 1.28 | Date: October 20, 2026
 
 Status: Workout, Home, Nutrition, Sleep, Profile and Settings browser design
 directions approved through iterative review. Shared rules below incorporate that
@@ -14,8 +14,8 @@ Profile's native migration is approved and merged in PR #38, including selective
 photo writes, offline recovery and interrupted-upload retry. The optional one-call
 photo optimization remains deferred locally and undeployed. Native Settings is
 approved and merged in PR #39. Native Sign in / Sign up is merged in PR #40.
-Four-step native onboarding is user-approved on `feature/onboarding-notebook-ui`
-and preparing PR review; its notes record passed checks and coverage limits.
+Four-step native onboarding is approved and merged in PR #41; its notes record
+passed checks and coverage limits. Cross-screen release verification is in progress.
 See workout-notebook-migration.md, home-notebook-migration.md and
 nutrition-notebook-migration.md, sleep-notebook-migration.md and
 settings-notebook-migration.md for boundaries and actual
@@ -695,6 +695,8 @@ After loading, show a compact source/summary; details are expandable.
   remain visible above keyboard/system navigation.
 - Results show exercise name and useful equipment/muscle metadata; no ornamental
   images at the expense of the result name. Custom exercise stays discoverable.
+- Align the results area's outer side margins with the search input's outer
+  edges; do not run list dividers to the screen edge beneath an inset search.
 - Preserve multiple selection and current custom-exercise keyboard behavior.
 - Loading, no matches and error states each have distinct copy and recovery action.
 - Selection does not change because a result disappears under a different query.
@@ -1349,6 +1351,12 @@ sections/reordering, rather than assuming only the six initial slots are allowed
 7. Search and logged edits use one quantity-editor shell. Data source, unit
    controls, amount, equivalent summary, selected-amount nutrition and reference
    serving have distinct spacing. Per-100-g values are progressively disclosed.
+   Display serving quantities as decimals throughout Nutrition: `1.5 cups`,
+   `0.5 cup`, `0.125 tsp`, rather than mixed or typographic fractions. This is
+   display formatting; preserve original source labels, serving weights and
+   nutrition calculations. Nonterminating fractions display up to three decimal
+   places for ordinary amounts without changing the underlying source amount;
+   retain very small nonzero quantities rather than displaying zero.
 
 ### Geometry and data-truth rules exercised
 
@@ -1797,6 +1805,9 @@ Reflow at 200% rather than reducing type or shrinking controls.
    to the rounded estimate, Cut to estimate minus 400 kcal and Bulk to estimate
    plus 300 kcal; it preserves the protein target. Incomplete inputs disable Apply.
    Applying stages nutrition targets; the top-level Save still commits them.
+   Confirm application inside the open calculator immediately, including a visible
+   action-label change when a longer summary would be below the viewport. State
+   that targets are drafts and require Done, then Save on Profile.
 7. Nutrition targets: separate calories for each diet phase, plus protein. Tapping
    any target opens the complete group, titled Nutrition targets. Units uses the
    same grouped-editor convention, titled Units and effort; related preferences
@@ -1852,7 +1863,8 @@ local preference. Account changes must ignore late reads/writes from a prior acc
 the OS appearance; System follows subsequent OS changes. Use the same resolved
 theme across all notebook screens, tabs, navigation, loading states and dialogs.
 Changing appearance updates the existing screen in place, preserving navigation,
-scroll and unsaved drafts. At enlarged text, stack the three choices rather than
+scroll and unsaved drafts. Avoid rerendering inactive tab contents during the
+change; they must display the current palette when revisited. At enlarged text, stack the three choices rather than
 shrinking labels or targets. Announce storage failures and retain the last saved
 choice; a failed read must not block access to the app.
 Back always returns to Home. Account shows the nickname and a compact Premium or

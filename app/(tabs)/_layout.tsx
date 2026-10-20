@@ -97,6 +97,7 @@ export default function TabsLayout() {
       screenOptions={({ route }) => ({
         headerShown: false,
         lazy: false,
+        freezeOnBlur: true,
         tabBarStyle: {
           backgroundColor: notebook ? paper.canvas : "#0d0d1a",
           borderTopColor: notebook ? paper.rule : "rgba(255,255,255,0.08)",

@@ -57,6 +57,23 @@ describe("food search relevance", () => {
     expect(rankFoodMatches([food("off-1", "Chocolate chip cookie")], foodQuery("chocolate cookie"), 20)).toHaveLength(1);
     expect(rankFoodMatches([food("off-2", "Hazelnut spread", { aliases: ["Nutella"] })], foodQuery("Nutella"), 20)).toHaveLength(1);
   });
+  it("ranks protein powder before incidental protein fortification without hiding fortified foods", () => {
+    const foods = [
+      food("usda-1", "Spaghetti, protein-fortified, cooked, enriched (n x 6.25)", { sourceType: "usda-generic" }),
+      food("powder", "Protein Powder"),
+    ];
+    expect(rankFoodMatches(foods, foodQuery("protein"), 20).map(row => row.id)).toEqual(["powder", "usda-1"]);
+    expect(rankFoodMatches(foods, foodQuery("protein fortified spaghetti"), 20).map(row => row.id)).toEqual(["usda-1"]);
+    expect(rankFoodMatches(foods, foodQuery("spaghetti"), 20)[0].id).toBe("usda-1");
+  });
+  it("ranks food-name matches above nutrient amounts while preserving specific yogurt queries", () => {
+    const foods = [
+      food("usda-yogurt", "Yogurt, fruit, low fat, 10 grams protein per 8 ounce", { sourceType: "usda-generic" }),
+      food("powder", "Protein Powder"),
+    ];
+    expect(rankFoodMatches(foods, foodQuery("protein"), 20).map(row => row.id)).toEqual(["powder", "usda-yogurt"]);
+    expect(rankFoodMatches(foods, foodQuery("yogurt protein"), 20).map(row => row.id)).toEqual(["usda-yogurt"]);
+  });
   it("collapses redundant punctuation/case variants, but keeps different nutrition and preparations", () => {
     const rows = rankFoodMatches([
       food("1", "Greek yogurt"), food("2", "Greek, yogurt"),
@@ -68,5 +85,25 @@ describe("food search relevance", () => {
   it("filters impossible values but permits zero-calorie products", () => {
     const rows = rankFoodMatches([food("1", "Cola", { caloriesPer100g: 0 }), food("2", "Cola", { proteinPer100g: 200 }), food("3", "Cola", { caloriesPer100g: -1 })], foodQuery("cola"), 20);
     expect(rows.map((row) => row.id)).toEqual(["1"]);
+  });
+  it("prefers the named food over packing liquid and compound food names", () => {
+    expect(rankFoodMatches([food("fish", "Fish, tuna, canned in water", { sourceType: "usda-generic" }), food("water", "Water")], foodQuery("water"), 20)[0].id).toBe("water");
+    expect(rankFoodMatches([food("peanut", "Peanut butter, creamy", { sourceType: "usda-generic" }), food("butter", "Butter")], foodQuery("butter"), 20)[0].id).toBe("butter");
+  });
+  it("does not penalize skinless produce or promote unsolicited special preparations", () => {
+    const foods = [food("dry", "Apples, dried, uncooked", { sourceType: "usda-generic" }), food("raw", "Apples, raw, without skin", { sourceType: "usda-generic" })];
+    expect(rankFoodMatches(foods, foodQuery("apple"), 20)[0].id).toBe("raw");
+    expect(rankFoodMatches(foods, foodQuery("apple dried"), 20)[0].id).toBe("dry");
+  });
+  it("prioritizes direct brand aliases over ingredient lists and company-name fragments", () => {
+    const foods = [food("company", "Hazelnut butter", { aliases: ["Buck Quest Inc."] }), food("brand", "Protein Bar, Cookies & Cream", { aliases: ["Quest Bar"] }), food("ingredient", "Plain donut", { aliases: ["Country Kitchen", "en:snacks", "reduced iron"] }), food("iron", "Iron supplement")];
+    expect(rankFoodMatches(foods, foodQuery("quest"), 20)[0].id).toBe("brand");
+    expect(rankFoodMatches(foods, foodQuery("iron"), 20)[0].id).toBe("iron");
+  });
+  it("recognizes plant beverages without treating protein powders or non-soy milk as soy milk", () => {
+    expect(matchesFoodQuery("Oat Beverage", "", foodQuery("oat milk"))).toBe(true);
+    expect(matchesFoodQuery("Beverages, Protein powder soy based", "", foodQuery("soy milk"))).toBe(false);
+    expect(matchesFoodQuery("Milk, imitation, non-soy", "", foodQuery("soy milk"))).toBe(false);
+    expect(matchesFoodQuery("Milk, imitation, non-soy", "", foodQuery("non soy milk"))).toBe(true);
   });
 });

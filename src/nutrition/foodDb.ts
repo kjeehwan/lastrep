@@ -7,12 +7,15 @@ import {
   FOOD_GENERIC_ASSET,
 } from "./data/foodsAssetManifest";
 import { foodQuery, matchesFoodQuery, normalizeFoodSearch, rankFoodMatches } from "./foodSearchRanking";
+import { reviewedFoods, reviewedSearchAliases } from "./reviewedFoodCatalog";
 
 export type FoodItem = {
   id: string;
   barcode?: string;
   name: string;
   aliases: string[];
+  brandNames?: string[];
+  searchIdentity?: string;
   servingLabel: string;
   servingGrams: number;
   caloriesPer100g: number;
@@ -27,7 +30,7 @@ export type FoodItem = {
   isBranded?: boolean;
   isDerivative?: boolean;
   isStaple?: boolean;
-  sourceType?: "usda-generic";
+  sourceType?: "usda-generic" | "manufacturer";
 };
 
 export type FoodEntryMode = "grams" | "servings" | "calories";
@@ -175,7 +178,9 @@ function loadGenericFoods() {
   return genericPromise ??= (async () => {
     const [rows, locations] = await Promise.all([readBlobModuleJson<FoodItem[]>(FOOD_GENERIC_ASSET), loadLocations()]);
     // Existing IDs retain their original nutrition and serving definitions.
-    return rows.filter((food) => !locations.has(food.id));
+    const generic = rows.filter((food) => !locations.has(food.id));
+    const existing = new Set([...locations.keys(), ...generic.map(food => food.id)]);
+    return [...generic, ...reviewedFoods.filter(food => !existing.has(food.id))];
   })().catch((error) => { genericPromise = null; throw error; });
 }
 function loadChunk(chunk: number): Promise<FoodItem[]> {
@@ -212,7 +217,7 @@ async function matchingFoods(ctx: ReturnType<typeof foodQuery>, prefix = false):
   let sliceStarted = Date.now();
   for (let index = 0; index < catalog.length; index++) {
     const [id, name, aliases, chunk] = catalog[index];
-    if (matchesFoodQuery(name, aliases, ctx, prefix)) {
+    if (matchesFoodQuery(name, `${aliases} ${reviewedSearchAliases(id)}`, ctx, prefix)) {
       if (!byChunk.has(chunk)) byChunk.set(chunk, new Set());
       byChunk.get(chunk)!.add(id);
     }
@@ -255,18 +260,7 @@ export async function searchFoodsAsync(query: string, limit = SEARCH_LIMIT_DEFAU
 export async function searchFoodsBrandedAsync(query: string, limit = SEARCH_LIMIT_DEFAULT): Promise<FoodItem[]> {
   return search(query, limit, true);
 }
-export function formatServingLabel(label: string): string {
-  const trimmed = String(label ?? "").trim();
-  const m = trimmed.match(/^(\d+(?:\.\d+)?)(\s*[a-zA-Z].*)$/);
-  if (!m) return trimmed;
-  const num = Number(m[1]);
-  if (!Number.isFinite(num)) return trimmed;
-  const normalizedNum =
-    Math.abs(num - Math.round(num)) < 1e-9
-      ? String(Math.round(num))
-      : String(Math.round(num * 100) / 100);
-  return `${normalizedNum}${m[2]}`;
-}
+export { formatServingLabel } from "./servingLabel";
 
 export function computeFromFood(item: FoodItem, mode: FoodEntryMode, rawValue: string) {
   const value = Number(rawValue);

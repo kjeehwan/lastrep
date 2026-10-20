@@ -24,7 +24,8 @@
     "test:firestore-rules": "firebase emulators:exec --only firestore \"npx vitest run src/firestore.rules.test.ts\"",
     "vercel-build": "node scripts/write-google-services.js",
     "eas-build-pre-install": "node scripts/write-google-services.js",
-    "import:food-db": "node scripts/import-food-db.mjs"
+    "import:food-db": "node scripts/import-food-db.mjs",
+    "audit:food-catalog": "node scripts/audit-food-catalog.mjs"
   },
   "postinstall": "node scripts/patch-tslib.js && node scripts/patch-health-connect.js",
   "dependencies": {

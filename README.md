@@ -26,7 +26,11 @@ focus. Browser prototypes are design studies, not production account screens.
 - [Authentication migration notes](docs/auth-notebook-migration.md): current
   Sign in / Sign up implementation and accepted phone checks, merged in PR #40.
 - [Onboarding migration notes](docs/onboarding-notebook-migration.md): the four-step
-  native flow, account-scoped progress and verification coverage.
+  native flow, account-scoped progress and verification coverage, merged in PR #41.
+- [Release verification](docs/notebook-release-verification.md): final cross-screen
+  checks and the separate production-build/billing steps.
+- [Food catalog maintenance](docs/food-catalog-maintenance.md): reviewed metadata,
+  sourced additions and the repeatable coverage audit.
 
 ## Stack and Layout
 
