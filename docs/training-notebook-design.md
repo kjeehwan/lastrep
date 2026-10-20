@@ -1,6 +1,6 @@
 # Lastrep Training Notebook Design Specification
 
-Version: 1.28 | Date: October 20, 2026
+Version: 1.30 | Date: October 20, 2026
 
 Status: Workout, Home, Nutrition, Sleep, Profile and Settings browser design
 directions approved through iterative review. Shared rules below incorporate that
@@ -700,6 +700,22 @@ After loading, show a compact source/summary; details are expandable.
 - Preserve multiple selection and current custom-exercise keyboard behavior.
 - Loading, no matches and error states each have distinct copy and recovery action.
 - Selection does not change because a result disappears under a different query.
+- Add and Replace share relevance rules: exact exercise names and genuine aliases
+  precede partial title and muscle/equipment matches. Require all query terms;
+  support common equipment abbreviations and joined/hyphenated exercise names.
+  Do not use arbitrary letter subsequences to fill a no-match list.
+- Replace keeps substitution suggestions for an empty query. Once searching,
+  show matching results only, respect the selected category, and let All search
+  every body part. Exclude the current exercise; never replace it on search alone.
+- Empty-query suggestions put named variations of the same movement before
+  generic muscle/equipment matches. All includes these variations across catalog
+  body-part labels (e.g. Back and Legs deadlifts); explicit body-part filters stay
+  strict. Generic compound/isolation labels do not establish movement similarity.
+- Apply the same relevance gate to every catalog entry, including unfamiliar
+  names: require a named family, a specific movement-pattern/primary-muscle match,
+  or a meaningful name/primary-muscle match. Keep mobility, resistance, plyometrics
+  and cardio separate. Do not pad a short list with same-category exercises;
+  offer explicit search when no close catalog alternative exists.
 
 ### History and progress
 
@@ -946,6 +962,22 @@ inventory before implementing any relocation.
   with identical geometry. Logo gradient is a brand exception, not a UI palette.
 - Match optical size between variants. Do not stretch the wordmark or introduce
   fake handwritten branding. App/splash assets are separate approval scope.
+  The native launch/splash background is black (`#000000`) in both appearance
+  modes and both app flavors, matching the black around the existing logo.
+  Keep the production and dev logo artwork distinct.
+- Home and native startup share one vector outline of Home's Android
+  sans-serif bold lettering. Keep Home's header geometry. Hold the native splash
+  until the focused destination has rendered with its fonts and Home's initial
+  profile/insight/health-status reads have settled. Do not show a second branded
+  loading screen or add a minimum logo duration. A stalled Home read may release
+  after eight seconds into the screen's normal loading/error state, so offline
+  startup cannot leave users trapped on the splash. Signed-out and incomplete
+  accounts reveal their authentication/onboarding destination instead of Home.
+  Reveal the prepared screen directly, without fading the black splash through
+  the light notebook canvas; the default native fade was perceived as a flicker.
+  Native startup may enlarge the wordmark modestly (112dp wide), centered within
+  Android's 288dp canvas / 192dp safe circle. All visible artwork must fit inside
+  the mask. Launcher icons remain separate from splash artwork.
 
 ## 14. Mandatory mockup package
 

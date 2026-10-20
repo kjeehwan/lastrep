@@ -26,35 +26,10 @@ import {
   type ExerciseGroupKey,
 } from "../../../src/workouts/exerciseCatalog";
 
+import { indexExerciseSearch, searchExerciseIndex } from "../../../src/workouts/exerciseSearch";
+
 const FAVORITES_KEY = "workout-favorite-exercises-v1";
 const FAVORITES_KEY_PREFIX = "workout-favorite-exercises-v1";
-const normalizeSearch = (value: string) =>
-  value
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-const isSubsequence = (needle: string, haystack: string) => {
-  if (!needle) return true;
-  let index = 0;
-  for (let i = 0; i < haystack.length && index < needle.length; i += 1) {
-    if (haystack[i] === needle[index]) index += 1;
-  }
-  return index === needle.length;
-};
-const scoreExerciseSearch = (needle: string, searchableText: string, title: string) => {
-  if (!needle) return 1;
-  let score = 0;
-  if (title.startsWith(needle)) score += 120;
-  if (title.includes(needle)) score += 80;
-  if (searchableText.includes(needle)) score += 60;
-  const tokens = needle.split(" ").filter(Boolean);
-  const tokenHits = tokens.filter((token) => searchableText.includes(token)).length;
-  score += tokenHits * 20;
-  if (isSubsequence(needle.replace(/\s+/g, ""), title.replace(/\s+/g, ""))) score += 20;
-  return score;
-};
-
 export default function AddExerciseScreen() {
   const { colors } = useNotebook();
   const styles = useNotebookStyles(createStyles);
@@ -145,21 +120,13 @@ export default function AddExerciseScreen() {
   }, []);
 
   // Normalize and alphabetize once, not on each keystroke or clear action.
-  const searchIndex = useMemo(() => catalog.map((item) => ({
-    item,
-    title: normalizeSearch(item.name),
-    searchableText: normalizeSearch([
-      item.name, ...item.aliases, ...item.primaryMuscles,
-      ...item.secondaryMuscles, ...item.equipment, item.movementPattern,
-    ].join(" ")),
-  })).sort((a, b) => a.item.name.localeCompare(b.item.name)), [catalog]);
+  const searchIndex = useMemo(() => indexExerciseSearch(catalog), [catalog]);
 
   const filtered = useMemo(() => {
     const group =
       activeGroup === "all" || activeGroup === "favorites" || activeGroup === "recent"
         ? "all"
         : (activeGroup as ExerciseGroupKey);
-    const needle = normalizeSearch(deferredSearchQuery);
     const base = searchIndex.filter(({ item }) => {
       if (group !== "all" && item.group !== group) return false;
       const name = item.name.toLowerCase();
@@ -167,19 +134,7 @@ export default function AddExerciseScreen() {
       if (activeGroup === "recent") return recentSet.has(name);
       return true;
     });
-    if (!needle) return base.map(({ item }) => item);
-    const matches = base
-      .map(({ item, title, searchableText }) => {
-        return {
-          item,
-          score: scoreExerciseSearch(needle, searchableText, title),
-        };
-      })
-      .filter((entry) => entry.score > 0)
-      .sort((a, b) => b.score - a.score || a.item.name.localeCompare(b.item.name))
-      .map((entry) => entry.item);
-
-    return matches;
+    return searchExerciseIndex(base, deferredSearchQuery);
   }, [activeGroup, deferredSearchQuery, searchIndex, favoriteSet, recentSet]);
 
   const toggleFavorite = useCallback(async (name: string) => {

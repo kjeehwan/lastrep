@@ -133,4 +133,7 @@ foreach ($file in Get-ChildItem -LiteralPath $devResDir -Recurse -Filter *.png) 
   } finally { $source.Dispose() }
 }
 
+# Splash wordmarks share the Home vector geometry, separately from launcher icons.
+node (Join-Path $root "scripts/wordmark-assets.js")
+
 Write-Output "Generated orange-red gradient dev assets and native resources from production geometry."

@@ -119,6 +119,7 @@ const mapRecord = (record: FreeExerciseRecord): ExerciseCatalogItem | null => {
     movementPattern,
     difficulty,
     group,
+    category: String(record?.category || "").trim() || undefined,
     cues,
     demoImages: [],
   };

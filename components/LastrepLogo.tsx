@@ -1,10 +1,13 @@
 import React, { useId } from "react";
 import { StyleSheet, View } from "react-native";
 import Constants from "expo-constants";
-import Svg, { Defs, LinearGradient, Stop, Text as SvgText } from "react-native-svg";
+import Svg, { Defs, LinearGradient, Stop, Path } from "react-native-svg";
+import wordmark from "../src/branding/wordmarkGeometry.json";
 
 const LastrepLogo = ({ variant = "splash" }: { variant?: "splash" | "header" }) => {
   const isHeader = variant === "header";
+  const bounds = wordmark.bounds;
+  const inkWidth = bounds.width * wordmark.header.width / 260;
   const gradientId = `lastrep-${useId().replace(/:/g, "")}`;
   const appVariant = String((Constants.expoConfig?.extra as { appVariant?: unknown } | undefined)?.appVariant ?? "");
   const appName = (Constants.expoConfig?.name ?? "").toLowerCase();
@@ -23,7 +26,9 @@ const LastrepLogo = ({ variant = "splash" }: { variant?: "splash" | "header" }) 
 
   return (
     <View style={[styles.container, isHeader && styles.header]} accessible accessibilityRole="image" accessibilityLabel="Lastrep">
-      <Svg height={isHeader ? 40.8 : 80} width={isHeader ? 132 : 260} viewBox="0 0 260 80">
+      <Svg height={isHeader ? wordmark.header.height : inkWidth * bounds.height / bounds.width}
+        width={isHeader ? wordmark.header.width : inkWidth}
+        viewBox={isHeader ? wordmark.header.viewBox : `${bounds.x} ${bounds.y} ${bounds.width} ${bounds.height}`}>
         <Defs>
           <LinearGradient id={gradientId} x1="0" y1="0" x2="1" y2="1">
             <Stop offset="0%" stopColor={startColor} />
@@ -31,17 +36,7 @@ const LastrepLogo = ({ variant = "splash" }: { variant?: "splash" | "header" }) 
           </LinearGradient>
         </Defs>
 
-        <SvgText
-          x={isHeader ? 0 : "50%"}
-          y={isHeader ? "65%" : "55%"}
-          textAnchor={isHeader ? "start" : "middle"}
-          fontSize="48"
-          fontWeight="bold"
-          fill={`url(#${gradientId})`}
-          fontFamily="sans-serif"
-        >
-          lastrep
-        </SvgText>
+        <Path d={wordmark.path} fill={`url(#${gradientId})`} />
       </Svg>
     </View>
   );
@@ -50,7 +45,6 @@ const LastrepLogo = ({ variant = "splash" }: { variant?: "splash" | "header" }) 
 const styles = StyleSheet.create({
   container: {
     alignItems: "center",
-    marginBottom: 20, // reduced space below logo
   },
   header: {
     alignItems: "flex-start",

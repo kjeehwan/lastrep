@@ -13,7 +13,7 @@ describe('Android edge-to-edge configuration', () => {
   it('draws the background in the app rather than setting a deprecated status-bar color', () => {
     const theme = read('android/app/src/main/res/values/styles.xml');
     expect(theme).not.toMatch(/android:(statusBarColor|navigationBarColor|windowOptOutEdgeToEdgeEnforcement)/);
-    expect(theme).toContain('<item name="android:windowBackground">#0d0d1a</item>');
+    expect(theme).toContain('<item name="android:windowBackground">@color/splashscreen_background</item>');
     expect(read('app/_layout.tsx')).toContain("<StatusBar style={usesNotebookDesign(pathname) && colorScheme === 'light' ? 'dark' : 'light'} />");
   });
 
