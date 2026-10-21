@@ -1,6 +1,6 @@
 # Lastrep Training Notebook Design Specification
 
-Version: 1.31 | Date: October 20, 2026
+Version: 1.32 | Date: October 21, 2026
 
 Status: Workout, Home, Nutrition, Sleep, Profile and Settings browser design
 directions approved through iterative review. Shared rules below incorporate that
@@ -311,8 +311,11 @@ not determine text alignment.
   standalone target is 48 x 48; named compact-header/help exceptions are 44 x 44.
 - Pressed state: immediate surface change, no scale bounce. Disabled: unavailable
   action plus distinct muted styling, not merely an unexplained faded button.
-- Profile distinguishes a clean draft (`Saved`), an actionable draft (`Save`)
-  and an in-flight write (`Saving...`). Keep upload/save progress visible outside
+- Profile shows no save action or saved status when opened with a clean draft.
+  Show `Save` for an actionable draft and `Saving...` during a write. After success,
+  hide Save and briefly show `✓ Changes saved` inline for four seconds, clearing
+  it on new edits or leaving the screen. Failed saves retain the draft and Save.
+  Keep upload/save progress and the brief confirmation visible outside
   page scrolling, including when Save and leave awaits completion.
 - Fields: surface fill, visible control-border, 6 radius, min-height 48, 12 inset.
   Focus uses a 2-dp accent border without changing outer geometry.
@@ -946,6 +949,9 @@ inventory before implementing any relocation.
   and source-app sharing details behind a header help icon, using a few brief
   paragraphs. Do not repeat ready/status rows as explanatory prose or add a
   separate long How to grant access walkthrough.
+  Health/scale apps may be named as conditional examples; do not promise every
+  app exports every measurement or older records. Briefly explain current sync
+  limits in help: past 30 days for sleep, latest values for body measurements.
 - Legal/contact links use the same icon slots and text alignment as account rows.
 - Subscription, restore and developer-build isolation retain verified outcome
   messages. Restore never promises ongoing verification without evidence.
