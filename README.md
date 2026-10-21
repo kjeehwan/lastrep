@@ -31,6 +31,8 @@ focus. Browser prototypes are design studies, not production account screens.
   checks and the separate production-build/billing steps.
 - [Internal testing v35 follow-up](docs/internal-testing-v35-follow-up.md):
   Play-installed findings, current fixes and remaining device/billing retests.
+- [Internal testing v36 follow-up](docs/internal-testing-v36-follow-up.md):
+  accepted Play checks, expired-restore feedback and clearer Profile saved status.
 - [Food catalog maintenance](docs/food-catalog-maintenance.md): reviewed metadata,
   sourced additions and the repeatable coverage audit.
 - [Exercise search review](docs/exercise-search-quality-review.md): shared Add /

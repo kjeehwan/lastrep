@@ -4,6 +4,22 @@ October 20, 2026. Local source follow-up to Play internal build 35; not in that 
 
 ## Fresh native measurements
 
+### Subsequent user timing check — October 21, 2026
+
+The user reported an initial dev save at approximately eight seconds without a
+timer, followed by a timed 2.89-second save. After a controlled app force-stop
+and reopen, the first save was timed at 1.90 seconds and the immediate repeat at
+2.71 seconds. These measure the user's Save-to-end-of-Saving observation, not
+instrumented stages. This pair does not support a consistently slower first save.
+Production v36 was separately observed at approximately six seconds, without a
+stage breakdown. Intermittent slow saves remain unexplained.
+
+The user approved retaining the current client and deployed two-call backend.
+No one-call deployment is planned for this batch. Further optimization needs new
+evidence, rather than attributing the earlier slow observation to a cold start.
+
+### Original instrumented comparison
+
 The user reported roughly ten seconds in both production and the standalone dev
 app. Temporary stage-only timing in a fresh standalone dev build measured the
 following saves with the same user-selected photo:
