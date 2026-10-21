@@ -1892,7 +1892,14 @@ Sync now stays on Profile when permissions are missing and explains how to
 restore access. It must not automatically open permission/settings screens.
 Permission navigation requires an explicit permissions or Connect/Reconnect action.
 That action requests only missing supported reads, including partial grants.
-Cancel/denial returns to Lastrep; reviewing settings is a separate fallback action.
+Cancel/denial returns to Lastrep. Keep one Health Connect permissions button;
+a subsequent explicit tap can review settings if a request leaves access off.
+If direct app permissions are blocked, fall back to ordinary Health Connect
+settings. Do not add a second settings button for that same purpose.
+Before opening general settings, show a notebook popup explaining the next
+steps: App permissions → Lastrep, then allow the desired data. Offer Cancel and
+Open Health Connect. Back/outside dismissal cancels without navigation or an
+error. Skip this popup when the direct Lastrep permission screen opens.
 Keep the main instruction short. A visible `Connect another health app` help link
 explains enabling sharing in Samsung Health or InBody where supported, allowing
 that app to write data to Health Connect, then allowing Lastrep to read it and
