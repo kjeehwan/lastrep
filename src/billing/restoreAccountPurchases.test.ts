@@ -1,5 +1,5 @@
 import type { CustomerInfo } from "react-native-purchases";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createRestoreController, isPaidPremiumConfirmed, RESTORE_MESSAGES, runRestoreFlow } from "./restoreFlow";
 
 const product = "lastrep_premium_monthly";
@@ -16,6 +16,7 @@ beforeEach(() => {
   deps.restore.mockResolvedValue({ status: "RESTORED", customerInfo: customer() });
   deps.confirm.mockResolvedValue(true);
 });
+afterEach(() => vi.useRealTimers());
 
 async function display() {
   const publish = vi.fn();
@@ -63,6 +64,48 @@ describe("restore outcomes and exact user feedback", () => {
     const info = customer(); delete info.entitlements.active.premium;
     deps.restore.mockResolvedValue({ status: "RESTORED", customerInfo: info });
     expect(await display()).toEqual([RESTORE_MESSAGES.unconfirmed, false]);
+  });
+  it.each([product, `${product}:monthly`])("rejects a stale active product after its recorded expiry: %s", async (id) => {
+    const info = customer();
+    info.activeSubscriptions[0] = id;
+    Object.assign(info, { requestDate: new Date().toISOString(), allExpirationDates: { [product]: new Date(Date.now() - 60000).toISOString() } });
+    deps.restore.mockResolvedValue({ status: "RESTORED", customerInfo: info });
+    expect(await display()).toEqual([RESTORE_MESSAGES.notFound, false]);
+    expect(deps.confirm).not.toHaveBeenCalled();
+  });
+  it("uses a known entitlement expiry when the product date is missing", async () => {
+    const info = customer();
+    Object.assign(info.entitlements.active.premium, { expirationDate: new Date(Date.now() - 60000).toISOString() });
+    deps.restore.mockResolvedValue({ status: "RESTORED", customerInfo: info });
+    expect(await display()).toEqual([RESTORE_MESSAGES.notFound, false]);
+  });
+  it("keeps a canceled subscription restorable until its expiration date", async () => {
+    const info = customer();
+    Object.assign(info, { allExpirationDates: { [product]: new Date(Date.now() + 60000).toISOString() } });
+    Object.assign(info.entitlements.active.premium, { willRenew: false });
+    deps.restore.mockResolvedValue({ status: "RESTORED", customerInfo: info });
+    expect(await display()).toEqual([RESTORE_MESSAGES.restored, false]);
+  });
+  it.each([null, "invalid-date"])("does not invent expiry from an unknown date: %s", async (date) => {
+    const info = customer();
+    Object.assign(info, { allExpirationDates: { [product]: date } });
+    deps.confirm.mockResolvedValue(false);
+    deps.restore.mockResolvedValue({ status: "RESTORED", customerInfo: info });
+    expect(await display()).toEqual([RESTORE_MESSAGES.unconfirmed, false]);
+  });
+  it("uses the SDK response clock when the phone clock is ahead", async () => {
+    const info = customer();
+    Object.assign(info, { requestDate: "2026-01-01T00:00:00Z", allExpirationDates: { [product]: "2026-01-01T00:05:00Z" } });
+    deps.restore.mockResolvedValue({ status: "RESTORED", customerInfo: info });
+    expect(await display()).toEqual([RESTORE_MESSAGES.restored, false]);
+  });
+  it("does not report restored when the subscription expires during backend confirmation", async () => {
+    vi.useFakeTimers();
+    const info = customer();
+    Object.assign(info, { requestDate: new Date().toISOString(), allExpirationDates: { [product]: new Date(Date.now() + 1000).toISOString() } });
+    deps.restore.mockResolvedValue({ status: "RESTORED", customerInfo: info });
+    deps.confirm.mockImplementation(async () => { vi.setSystemTime(Date.now() + 2000); return true; });
+    expect(await display()).toEqual([RESTORE_MESSAGES.notFound, false]);
   });
   it("explains an independent grant without claiming a paid purchase was restored", async () => {
     deps.confirm.mockResolvedValue("existingAccess");

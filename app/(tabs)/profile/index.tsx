@@ -418,6 +418,14 @@ function ProfileContent() {
 
   const currentSnapshot = useMemo(() => buildSnapshot(), [buildSnapshot]);
   const hasUnsavedChanges = initialSnapshot != null && currentSnapshot !== initialSnapshot;
+  useEffect(() => {
+    if (saveFeedback !== "Changes saved.") return;
+    const timer = setTimeout(() => setSaveFeedback((current) => current === "Changes saved." ? null : current), hasUnsavedChanges ? 0 : 4000);
+    return () => clearTimeout(timer);
+  }, [saveFeedback, hasUnsavedChanges]);
+  useFocusEffect(useCallback(() => () => {
+    setSaveFeedback((current) => current === "Changes saved." ? null : current);
+  }, []));
 
   useEffect(() => {
     latestSnapshotRef.current = currentSnapshot;
@@ -1575,10 +1583,11 @@ function ProfileContent() {
   ];
   if (redirectTo) return <Redirect href={redirectTo} />;
   return <SafeAreaView style={{ flex: 1, backgroundColor: colors.canvas }} edges={["top", "left", "right"]}>
-    <NotebookHeader title="Profile" onBack={() => { if (!savingProfile) handleGoBack(); }} action={savingProfile ? "Saving..." : initialSnapshot != null && !hasUnsavedChanges ? "Saved" : "Save"} onAction={() => void save()} disabled={loading || savingProfile || !hasUnsavedChanges || initialSnapshot == null} />
+    <NotebookHeader title="Profile" onBack={() => { if (!savingProfile) handleGoBack(); }} action={savingProfile ? "Saving..." : hasUnsavedChanges ? "Save" : undefined} onAction={() => void save()} disabled={loading || savingProfile || !hasUnsavedChanges || initialSnapshot == null} />
     {savingProfile ? <View accessibilityLiveRegion="polite" style={{ paddingHorizontal: 20, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.rule }}><ProfileText>{saveFeedback ?? "Saving profile..."} Please keep Lastrep open.</ProfileText></View> : null}
+    {!savingProfile && !hasUnsavedChanges && saveFeedback === "Changes saved." ? <View style={{ paddingHorizontal: 20, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.rule }}><Text accessibilityLiveRegion="polite" style={styles.helperText}>✓ Changes saved</Text></View> : null}
     {loading ? <ProfileText>Loading profile...</ProfileText> : profileLoadFailed ? <View style={{ padding: 20, gap: 12 }}><ProfileText muted>Your saved profile has not loaded. Reconnect to load it; no changes have been saved.</ProfileText><ProfileAction label="Retry" disabled={isOffline || !networkReady} onPress={() => setProfileLoadAttempt((attempt) => attempt + 1)} /></View> : <ScrollView ref={profileScrollRef} onContentSizeChange={revealHealthFeedback} pointerEvents={savingProfile ? "none" : "auto"} keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 20, paddingBottom: 56, gap: 28, width: "100%", maxWidth: 800, alignSelf: "center" }}>
-      {isOffline ? <Text accessibilityLiveRegion="polite" style={styles.helperText}>Offline. Your edits stay here; reconnect before saving.</Text> : saveFeedback && !savingProfile ? <Text accessibilityLiveRegion="polite" style={styles.helperText}>{saveFeedback}</Text> : null}
+      {isOffline ? <Text accessibilityLiveRegion="polite" style={styles.helperText}>Offline. Your edits stay here; reconnect before saving.</Text> : saveFeedback && saveFeedback !== "Changes saved." && !savingProfile ? <Text accessibilityLiveRegion="polite" style={styles.helperText}>{saveFeedback}</Text> : null}
       <ProfileSection first title="Identity" action={<ProfileAction label="Edit" onPress={() => openEditor("identity")} />}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 20 }}>
           <ProfilePhoto fallbackBackgroundColor={colors.subtle} fallbackTextColor={colors.ink} fallbackFontFamily={notebookFonts.semibold} uid={uid} reference={profilePhotoUri} initial={nickname.trim().charAt(0).toUpperCase() || "L"} style={{ width: 72, height: 72, borderRadius: 36, backgroundColor: colors.subtle }} contentFit="cover" />
@@ -1617,7 +1626,7 @@ function ProfileContent() {
       </ProfileSection>
       <ProfileSection title="Sleep target"><ProfileRow label="Daily target" value={`${sleepTargetHours} hours`} onPress={() => openEditor("sleep")} /></ProfileSection>
       <View onLayout={(event) => { healthSyncYRef.current = event.nativeEvent.layout.y; }}>
-        <ProfileSection title="Health sync" action={<NotebookInfoButton label="About Health sync permissions" onPress={() => setHelp({ title: "Health sync", message: "Each phone needs its own permissions. Previously synced records do not grant access.\n\nUsing Samsung Health? Allow it to share data with Health Connect, then return and tap Sync now.\n\nIf Lastrep is missing, return here and tap Health Connect permissions to start the request." + (samsungHealthIssue ? `\n\n${samsungHealthIssue}` : "") })} />}>
+        <ProfileSection title="Health sync" action={<NotebookInfoButton label="About Health sync permissions" onPress={() => setHelp({ title: "Health sync", message: "Each phone needs its own permissions.\n\nEnable Health Connect sharing in your health or scale app, such as Samsung Health, InBody or OntoFit, where available. Then allow Lastrep to read the shared data and tap Sync now.\n\nSleep: past 30 days. Body measurements: latest values only. Older records may not be shared.\n\nIf Lastrep is missing, tap Health Connect permissions here." + (samsungHealthIssue ? `\n\n${samsungHealthIssue}` : "") })} />}>
           {healthRows.map(([label, value]) => <View key={label} style={{ flexDirection: fontScale >= 1.5 ? "column" : "row", gap: 8, paddingVertical: 6 }}><View style={{ flex: 1 }}><ProfileText>{label}</ProfileText></View><View style={{ flex: 1.4 }}><ProfileText muted>{value}</ProfileText></View></View>)}
           {healthConnectMessage() ? <ProfileText muted>{healthConnectMessage()}</ProfileText> : null}
           <ProfileText muted>{healthConsentAccepted ? "Tap Health Connect permissions, choose Lastrep, and allow the data you want to sync." : "Tap Connect to choose the data you want to sync."}</ProfileText>

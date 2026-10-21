@@ -463,6 +463,7 @@ export async function restorePurchases(): Promise<RestoreResult> {
   await configureRevenueCat();
   const startedAt = Date.now();
   try {
+    await Purchases.invalidateCustomerInfoCache();
     const customerInfo = await Purchases.restorePurchases();
     logBillingEvent({
       op: "restorePurchases",
