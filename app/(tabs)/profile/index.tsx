@@ -220,7 +220,7 @@ function ProfileContent() {
   const [sleepTargetHours, setSleepTargetHours] = useState("7");
   const [healthFeedback, setHealthFeedback] = useState<string | null>(null);
   const [healthLoading, setHealthLoading] = useState(false);
-  const [showHealthSettingsFallback, setShowHealthSettingsFallback] = useState(false);
+  const [reviewHealthAccessInSettings, setReviewHealthAccessInSettings] = useState(false);
   const [healthAvailability, setHealthAvailability] = useState<HealthConnectAvailability>("unsupported");
   const [healthPermissionState, setHealthPermissionState] = useState<
     "granted" | "denied" | "revoked" | "unavailable" | "unsupported" | "unknown"
@@ -838,8 +838,9 @@ function ProfileContent() {
         return;
       }
 
-      const opened =
-        (await openHealthConnectAppPermissionsScreen()) ||
+      const permissionsOpened = await openHealthConnectAppPermissionsScreen();
+      if (permissionsOpened === null) return;
+      const opened = permissionsOpened ||
         (await openHealthConnectDataManagementScreen());
       setHealthFeedback(
         opened
@@ -848,8 +849,9 @@ function ProfileContent() {
       );
     } catch (error) {
       console.log("Failed to request Health Connect permissions", error);
-      const opened =
-        (await openHealthConnectAppPermissionsScreen()) ||
+      const permissionsOpened = await openHealthConnectAppPermissionsScreen();
+      if (permissionsOpened === null) return;
+      const opened = permissionsOpened ||
         (await openHealthConnectDataManagementScreen());
       setHealthFeedback(
         opened
@@ -919,44 +921,34 @@ function ProfileContent() {
     }
   }, [uid]);
 
-  const handleOpenHealthSettings = useCallback(async () => {
-    setHealthLoading(true);
-    setHealthFeedback(null);
-    try {
-      if (await openHealthConnectAppPermissionsScreen()) {
-        setShowHealthSettingsFallback(false);
-      } else {
-        setHealthFeedback("Couldn't open Health Connect settings. Open Android Settings, search for Health Connect, then choose App permissions > Lastrep.");
-      }
-      await refreshHealthConnectStatus();
-    } finally {
-      setHealthLoading(false);
-    }
-  }, [refreshHealthConnectStatus]);
-
   const handleManageHealthPermissions = useCallback(async () => {
     setHealthLoading(true);
     setHealthFeedback(null);
-    setShowHealthSettingsFallback(false);
     try {
-      const healthConnect = await import("react-native-health-connect");
-      await healthConnect.initialize();
-      const result = await manageHealthReadPermissions(healthConnect, openHealthConnectAppPermissionsScreen);
+      let result: Awaited<ReturnType<typeof manageHealthReadPermissions>>;
+      if (reviewHealthAccessInSettings) {
+        const opened = await openHealthConnectAppPermissionsScreen();
+        result = opened === null ? "canceled" : opened ? "settings_opened" : "unavailable";
+      } else {
+        const healthConnect = await import("react-native-health-connect");
+        await healthConnect.initialize();
+        result = await manageHealthReadPermissions(healthConnect, openHealthConnectAppPermissionsScreen);
+      }
       if (result === "incomplete") {
-        setShowHealthSettingsFallback(true);
-        setHealthFeedback("Some access is still off. You can sync allowed data or review access in Health Connect settings.");
+        setReviewHealthAccessInSettings(true);
+        setHealthFeedback("Some access is still off. You can sync allowed data, or tap Health Connect permissions again to review access.");
       } else if (result === "unavailable") {
-        setShowHealthSettingsFallback(true);
-        setHealthFeedback("Couldn't open Lastrep's permissions. Open Health Connect settings to review access.");
+        setReviewHealthAccessInSettings(true);
+        setHealthFeedback("Couldn't open Health Connect. Open Android Settings, search for Health Connect, then choose App permissions > Lastrep.");
       }
       await refreshHealthConnectStatus();
     } catch {
-      setShowHealthSettingsFallback(true);
-      setHealthFeedback("Couldn't open the permission chooser. Use Open Health Connect settings to review access.");
+      setReviewHealthAccessInSettings(true);
+      setHealthFeedback("Couldn't open the permission chooser. Tap Health Connect permissions again to review access, or search for Health Connect in Android Settings.");
     } finally {
       setHealthLoading(false);
     }
-  }, [refreshHealthConnectStatus]);
+  }, [refreshHealthConnectStatus, reviewHealthAccessInSettings]);
 
   const handleDisconnectHealth = useCallback(() => {
     showAppDialog({
@@ -1645,7 +1637,6 @@ function ProfileContent() {
           <ProfileAction label={healthPrimaryButtonLabel} primary disabled={healthLoading} onPress={shouldShowConnectAction ? handleOpenHealthConsent : handleSyncHealthConnectData} />
           {healthConsentAccepted ? <>
             <ProfileAction label="Health Connect permissions" disabled={healthLoading} onPress={handleManageHealthPermissions} />
-            {showHealthSettingsFallback ? <ProfileAction label="Open Health Connect settings" disabled={healthLoading} onPress={handleOpenHealthSettings} /> : null}
             <ProfileAction label="Disconnect" disabled={healthLoading} onPress={handleDisconnectHealth} />
           </> : null}
           {healthAvailability === "provider_update_required" || healthAvailability === "unavailable" ? <ProfileAction label="Set up Health Connect" disabled={healthLoading} onPress={handleOpenPlayStore} /> : null}

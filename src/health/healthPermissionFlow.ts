@@ -23,12 +23,15 @@ function missingPermissions(granted: unknown[]): Permission[] {
 /** Called only by an explicit permissions action, never by Sync now. */
 export async function manageHealthReadPermissions(
   client: PermissionClient,
-  openSettings: () => Promise<boolean>,
-): Promise<"granted" | "incomplete" | "settings_opened" | "unavailable"> {
+  openSettings: () => Promise<boolean | null>,
+): Promise<"granted" | "incomplete" | "settings_opened" | "unavailable" | "canceled"> {
   const missing = missingPermissions(await client.getGrantedPermissions());
-  if (!missing.length) return await openSettings() ? "settings_opened" : "unavailable";
+  if (!missing.length) {
+    const opened = await openSettings();
+    return opened === null ? "canceled" : opened ? "settings_opened" : "unavailable";
+  }
   await client.requestPermission(missing);
   // Cancellation or repeated denial must leave the user in Lastrep. Settings
-  // remains a separate explicit action, including when Android suppresses a prompt.
+  // requires another explicit tap, including when Android suppresses a prompt.
   return missingPermissions(await client.getGrantedPermissions()).length ? "incomplete" : "granted";
 }

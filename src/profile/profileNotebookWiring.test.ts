@@ -28,6 +28,16 @@ it("keeps Sync now in Profile when permissions are missing", () => {
   expect(denied).toContain("return;");
 });
 
+it("uses one permissions action for requests and settings recovery without automatic navigation after cancellation", () => {
+  expect(source).not.toContain('label="Open Health Connect settings"');
+  const handler = source.slice(source.indexOf("const handleManageHealthPermissions ="), source.indexOf("const handleDisconnectHealth ="));
+  expect(handler).toContain("if (reviewHealthAccessInSettings)");
+  expect(handler).toContain("await openHealthConnectAppPermissionsScreen()");
+  expect(handler).toContain('if (result === "incomplete")');
+  expect(handler).toContain("setReviewHealthAccessInSettings(true)");
+  expect(handler).toContain("tap Health Connect permissions again to review access");
+});
+
 it("uses one connectivity-driven offline save notice without leaving stale save feedback", () => {
   const save = source.slice(source.indexOf("const save ="), source.indexOf("const navigateBack"));
   expect(save).toContain("if (isOffline) return false;");
