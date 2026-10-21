@@ -73,9 +73,9 @@ export const getSamsungHealthAccessIssueMessage = (error: unknown): string | nul
   const message = getErrorMessage(error);
   if (!message) return null;
   if (message.includes("Could not get policy") || message.includes("AuthorizationException: 2003")) {
-    return "Samsung Health direct sync is blocked for this build. For local testing, enable Samsung Health developer mode for Data Read. For release, register the app package and SHA-256 with Samsung.";
+    return "Samsung Health direct access is unavailable. You can share measurements through Health Connect instead.";
   }
-  return `Samsung Health error: ${message}`;
+  return "Couldn't access Samsung Health. Try again, or share measurements through Health Connect instead.";
 };
 
 const normalizeNullableNumber = (value: unknown, max?: number, preservePrecision = false): number | null => {
