@@ -1891,6 +1891,14 @@ the partial-body fixture explains that lean mass is missing.
 Sync now stays on Profile when permissions are missing and explains how to
 restore access. It must not automatically open permission/settings screens.
 Permission navigation requires an explicit permissions or Connect/Reconnect action.
+That action requests only missing supported reads, including partial grants.
+Cancel/denial returns to Lastrep; reviewing settings is a separate fallback action.
+Keep the main instruction short. A visible `Connect another health app` help link
+explains enabling sharing in Samsung Health or InBody where supported, allowing
+that app to write data to Health Connect, then allowing Lastrep to read it and
+tapping Sync now. Do not promise historical backfill or universal app support.
+Health sync help and errors must use user-facing guidance, never developer mode,
+package registration or signing-certificate instructions.
 An unchanged sleep import says `No new sleep data found.`; do not imply existing
 saved sleep records are absent.
 

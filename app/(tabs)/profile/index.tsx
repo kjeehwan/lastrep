@@ -41,6 +41,8 @@ import {
   hasHealthSyncConsent,
 } from "../../../src/health/healthSyncConsent";
 import { showAppAlert, showAppDialog } from "../../../src/ui/appDialog";
+import { manageHealthReadPermissions } from "../../../src/health/healthPermissionFlow";
+import { HEALTH_APP_CONNECTION_HELP, HEALTH_SYNC_HELP } from "../../../src/health/healthSyncHelp";
 import {
   autoSyncBodyCompositionFromHealthConnectIfEligible,
   autoSyncBodyCompositionFromSamsungHealthIfEligible,
@@ -218,13 +220,13 @@ function ProfileContent() {
   const [sleepTargetHours, setSleepTargetHours] = useState("7");
   const [healthFeedback, setHealthFeedback] = useState<string | null>(null);
   const [healthLoading, setHealthLoading] = useState(false);
+  const [showHealthSettingsFallback, setShowHealthSettingsFallback] = useState(false);
   const [healthAvailability, setHealthAvailability] = useState<HealthConnectAvailability>("unsupported");
   const [healthPermissionState, setHealthPermissionState] = useState<
     "granted" | "denied" | "revoked" | "unavailable" | "unsupported" | "unknown"
   >("unknown");
   const [bodyHealthPermissionGranted, setBodyHealthPermissionGranted] = useState(false);
   const [healthConnectBodyPermissionGranted, setHealthConnectBodyPermissionGranted] = useState(false);
-  const [samsungHealthIssue, setSamsungHealthIssue] = useState<string | null>(null);
   const [healthConsentAccepted, setHealthConsentAccepted] = useState(false);
   const [healthConsentLoaded, setHealthConsentLoaded] = useState(false);
   const [healthConsentVisible, setHealthConsentVisible] = useState(false);
@@ -520,15 +522,13 @@ function ProfileContent() {
     try {
       const availability = await getHealthConnectAvailability();
       let samsungBodyGranted = false;
-      let samsungIssue: string | null = null;
       try {
         samsungBodyGranted = await hasSamsungHealthBodyCompositionPermission();
-      } catch (error) {
-        samsungIssue = getSamsungHealthAccessIssueMessage(error);
+      } catch {
+        // Direct Samsung access is optional; Health Connect remains available.
       }
       setHealthAvailability(availability);
       setBodyHealthPermissionGranted(samsungBodyGranted);
-      setSamsungHealthIssue(samsungIssue);
       if (availability === "unsupported") {
         setHealthPermissionState("unsupported");
         setHealthConnectBodyPermissionGranted(false);
@@ -547,7 +547,6 @@ function ProfileContent() {
       setHealthPermissionState("unknown");
       setBodyHealthPermissionGranted(false);
       setHealthConnectBodyPermissionGranted(false);
-      setSamsungHealthIssue(null);
     } finally {
       setHealthLoading(false);
     }
@@ -920,28 +919,40 @@ function ProfileContent() {
     }
   }, [uid]);
 
-  const handleManageHealthPermissions = useCallback(async () => {
+  const handleOpenHealthSettings = useCallback(async () => {
     setHealthLoading(true);
     setHealthFeedback(null);
     try {
+      if (await openHealthConnectAppPermissionsScreen()) {
+        setShowHealthSettingsFallback(false);
+      } else {
+        setHealthFeedback("Couldn't open Health Connect settings. Open Android Settings, search for Health Connect, then choose App permissions > Lastrep.");
+      }
+      await refreshHealthConnectStatus();
+    } finally {
+      setHealthLoading(false);
+    }
+  }, [refreshHealthConnectStatus]);
+
+  const handleManageHealthPermissions = useCallback(async () => {
+    setHealthLoading(true);
+    setHealthFeedback(null);
+    setShowHealthSettingsFallback(false);
+    try {
       const healthConnect = await import("react-native-health-connect");
       await healthConnect.initialize();
-      const granted = await healthConnect.getGrantedPermissions();
-      if (!granted.length) {
-        // A first request registers Lastrep on this device and shows Android's
-        // actual permission chooser, rather than an empty data-management page.
-        await healthConnect.requestPermission([
-          { accessType: "read", recordType: "SleepSession" },
-          { accessType: "read", recordType: "Weight" },
-          { accessType: "read", recordType: "BodyFat" },
-          { accessType: "read", recordType: "LeanBodyMass" },
-        ]);
-      } else if (!(await openHealthConnectAppPermissionsScreen())) {
-        setHealthFeedback("Couldn't open Lastrep's permissions. Open Android Settings, search for Health Connect, then open App permissions and choose Lastrep.");
+      const result = await manageHealthReadPermissions(healthConnect, openHealthConnectAppPermissionsScreen);
+      if (result === "incomplete") {
+        setShowHealthSettingsFallback(true);
+        setHealthFeedback("Some access is still off. You can sync allowed data or review access in Health Connect settings.");
+      } else if (result === "unavailable") {
+        setShowHealthSettingsFallback(true);
+        setHealthFeedback("Couldn't open Lastrep's permissions. Open Health Connect settings to review access.");
       }
       await refreshHealthConnectStatus();
     } catch {
-      setHealthFeedback("Couldn't open Health Connect permissions. Open Android Settings, search for Health Connect, then open App permissions and choose Lastrep. If Lastrep is missing, return here and try Health Connect permissions again.");
+      setShowHealthSettingsFallback(true);
+      setHealthFeedback("Couldn't open the permission chooser. Use Open Health Connect settings to review access.");
     } finally {
       setHealthLoading(false);
     }
@@ -1037,12 +1048,10 @@ function ProfileContent() {
         hasHealthBodyCompositionPermission(),
       ]);
       let samsungBodyGranted = false;
-      let samsungIssue: string | null = null;
       try {
         samsungBodyGranted = await hasSamsungHealthBodyCompositionPermission();
-      } catch (error) {
-        samsungIssue = getSamsungHealthAccessIssueMessage(error);
-        setSamsungHealthIssue(samsungIssue);
+      } catch {
+        // Direct Samsung access is optional; Health Connect remains available.
       }
 
       if (!sleepGranted && !samsungBodyGranted && !healthConnectBodyGrantedNext) {
@@ -1626,13 +1635,17 @@ function ProfileContent() {
       </ProfileSection>
       <ProfileSection title="Sleep target"><ProfileRow label="Daily target" value={`${sleepTargetHours} hours`} onPress={() => openEditor("sleep")} /></ProfileSection>
       <View onLayout={(event) => { healthSyncYRef.current = event.nativeEvent.layout.y; }}>
-        <ProfileSection title="Health sync" action={<NotebookInfoButton label="About Health sync permissions" onPress={() => setHelp({ title: "Health sync", message: "Each phone needs its own permissions.\n\nEnable Health Connect sharing in your health or scale app, such as Samsung Health, InBody or OntoFit, where available. Then allow Lastrep to read the shared data and tap Sync now.\n\nSleep: past 30 days. Body measurements: latest values only. Older records may not be shared.\n\nIf Lastrep is missing, tap Health Connect permissions here." + (samsungHealthIssue ? `\n\n${samsungHealthIssue}` : "") })} />}>
+        <ProfileSection title="Health sync" action={<NotebookInfoButton label="About Health sync permissions" onPress={() => setHelp({ title: "Health sync", message: HEALTH_SYNC_HELP })} />}>
           {healthRows.map(([label, value]) => <View key={label} style={{ flexDirection: fontScale >= 1.5 ? "column" : "row", gap: 8, paddingVertical: 6 }}><View style={{ flex: 1 }}><ProfileText>{label}</ProfileText></View><View style={{ flex: 1.4 }}><ProfileText muted>{value}</ProfileText></View></View>)}
           {healthConnectMessage() ? <ProfileText muted>{healthConnectMessage()}</ProfileText> : null}
-          <ProfileText muted>{healthConsentAccepted ? "Tap Health Connect permissions, choose Lastrep, and allow the data you want to sync." : "Tap Connect to choose the data you want to sync."}</ProfileText>
+          <ProfileText muted>{healthConsentAccepted ? "Tap Health Connect permissions and allow the data you want to sync." : "Tap Connect to choose the data you want to sync."}</ProfileText>
+          <Pressable accessibilityRole="button" onPress={() => setHelp({ title: "Connect another health app", message: HEALTH_APP_CONNECTION_HELP })} style={{ minHeight: 44, justifyContent: "center", alignSelf: "flex-start" }}>
+            <Text style={{ color: colors.accent, fontFamily: notebookFonts.semibold, fontSize: 14, textDecorationLine: "underline" }}>Connect another health app</Text>
+          </Pressable>
           <ProfileAction label={healthPrimaryButtonLabel} primary disabled={healthLoading} onPress={shouldShowConnectAction ? handleOpenHealthConsent : handleSyncHealthConnectData} />
           {healthConsentAccepted ? <>
             <ProfileAction label="Health Connect permissions" disabled={healthLoading} onPress={handleManageHealthPermissions} />
+            {showHealthSettingsFallback ? <ProfileAction label="Open Health Connect settings" disabled={healthLoading} onPress={handleOpenHealthSettings} /> : null}
             <ProfileAction label="Disconnect" disabled={healthLoading} onPress={handleDisconnectHealth} />
           </> : null}
           {healthAvailability === "provider_update_required" || healthAvailability === "unavailable" ? <ProfileAction label="Set up Health Connect" disabled={healthLoading} onPress={handleOpenPlayStore} /> : null}

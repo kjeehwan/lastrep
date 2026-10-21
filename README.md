@@ -35,6 +35,8 @@ focus. Browser prototypes are design studies, not production account screens.
   accepted Play checks, expired-restore feedback and clearer Profile saved status.
 - [Android 13 photo crop crash](docs/android13-photo-crop-crash.md):
   v37 native crash evidence, crop-result compatibility fix and release checks.
+- [Health Connect permissions and help](docs/health-connect-permissions-guidance.md):
+  partial-access requests, settings fallback and concise source-app instructions.
 - [Food catalog maintenance](docs/food-catalog-maintenance.md): reviewed metadata,
   sourced additions and the repeatable coverage audit.
 - [Exercise search review](docs/exercise-search-quality-review.md): shared Add /
