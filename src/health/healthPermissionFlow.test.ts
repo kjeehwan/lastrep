@@ -43,7 +43,7 @@ it("checks actual grants again after the chooser returns", async () => {
   expect(client.getGrantedPermissions).toHaveBeenCalledTimes(2);
 });
 
-it.each([[true, "settings_opened"], [false, "unavailable"]] as const)("reviews existing access through settings (%s)", async (opened, result) => {
+it.each([[true, "settings_opened"], [false, "unavailable"], [null, "canceled"]] as const)("reviews existing access through settings (%s)", async (opened, result) => {
   const client = {
     getGrantedPermissions: vi.fn().mockResolvedValue([sleep, ...body]),
     requestPermission: vi.fn(),

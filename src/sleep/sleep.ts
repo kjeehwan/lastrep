@@ -17,6 +17,7 @@ import {
 } from "../contracts";
 import type { Permission } from "react-native-health-connect";
 import { hasHealthSyncConsent } from "../health/healthSyncConsent";
+import { confirmAppDialog } from "../ui/appDialog";
 
 const DEFAULT_SLEEP_SOURCE: SleepSource = "manual";
 export const HEALTH_SLEEP_STALE_HOURS = 36;
@@ -182,23 +183,46 @@ export const openHealthConnectDataManagementScreen = async (): Promise<boolean> 
   }
 };
 
-export const openHealthConnectAppPermissionsScreen = async (): Promise<boolean> => {
+export const openHealthConnectAppPermissionsScreen = async (): Promise<boolean | null> => {
   if (Platform.OS !== "android") return false;
   try {
     const availability = await getHealthConnectAvailability();
     if (availability !== "available" && availability !== "provider_update_required") {
       return false;
     }
-    if (!applicationId) return false;
     // Manage-data takes a provider package, not the app whose permissions to edit.
-    if (Number(Platform.Version) >= 34) {
-      await Linking.sendIntent("android.health.connect.action.MANAGE_HEALTH_PERMISSIONS", [
-        { key: "android.intent.extra.PACKAGE_NAME", value: applicationId },
-      ]);
-    } else {
-      // The separate Android 13 provider exposes settings, not an app-permission deep link.
-      await Linking.sendIntent("androidx.health.ACTION_HEALTH_CONNECT_SETTINGS");
+    if (Number(Platform.Version) >= 34 && applicationId) {
+      try {
+        await Linking.sendIntent("android.health.connect.action.MANAGE_HEALTH_PERMISSIONS", [
+          { key: "android.intent.extra.PACKAGE_NAME", value: applicationId },
+        ]);
+        return true;
+      } catch {
+        // Some providers restrict this activity to system callers. The ordinary
+        // settings action remains available to third-party apps.
+      }
     }
+    return await openHealthConnectSettingsScreen();
+  } catch {
+    return false;
+  }
+};
+
+/** Separate fallback: opens Health Connect home, not app-specific management. */
+export const openHealthConnectSettingsScreen = async (): Promise<boolean | null> => {
+  if (Platform.OS !== "android") return false;
+  try {
+    const availability = await getHealthConnectAvailability();
+    if (availability !== "available" && availability !== "provider_update_required") return false;
+    const confirmed = await confirmAppDialog(
+      "Health Connect permissions",
+      "On the next screen, choose App permissions → Lastrep, then allow the data you want to sync.",
+      "Open Health Connect",
+    );
+    if (!confirmed) return null;
+    await Linking.sendIntent(Number(Platform.Version) >= 34
+      ? "android.health.connect.action.HEALTH_HOME_SETTINGS"
+      : "androidx.health.ACTION_HEALTH_CONNECT_SETTINGS");
     return true;
   } catch {
     return false;

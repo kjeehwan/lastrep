@@ -1,11 +1,13 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import type { SleepEntry } from "./sleepSessionModel";
-import { openHealthConnectAppPermissionsScreen, syncSleepFromHealthConnect } from "./sleep";
+import { openHealthConnectAppPermissionsScreen, openHealthConnectSettingsScreen, syncSleepFromHealthConnect } from "./sleep";
 const fake = vi.hoisted(() => ({
   consent: true, permitted: true, storage: new Map<string, string>(), entries: [] as SleepEntry[],
   read: vi.fn(), changes: vi.fn(), mutate: vi.fn(), sdk: vi.fn(),
   sendIntent: vi.fn(), applicationId: "com.kjeehwan.lastrep", platform: { OS: "android", Version: 34 },
+  confirm: vi.fn(),
 }));
+vi.mock("../ui/appDialog", () => ({ confirmAppDialog: (...args: unknown[]) => fake.confirm(...args) }));
 vi.mock("react-native", () => ({ Platform: fake.platform, Linking: { sendIntent: fake.sendIntent } }));
 vi.mock("expo-application", () => ({ get applicationId() { return fake.applicationId; } }));
 vi.mock("@react-native-async-storage/async-storage", () => ({ default: { getItem: async (key: string) => fake.storage.get(key) ?? null, setItem: async (key: string, value: string) => { fake.storage.set(key, value); } } }));
@@ -29,6 +31,7 @@ const changes = (overrides = {}) => ({ upsertionChanges: [], deletionChanges: []
 beforeEach(() => {
   vi.clearAllMocks(); fake.storage.clear(); fake.entries = []; fake.consent = true; fake.permitted = true;
   fake.platform.Version = 34; fake.applicationId = "com.kjeehwan.lastrep"; fake.sendIntent.mockResolvedValue(undefined);
+  fake.confirm.mockResolvedValue(true);
   fake.sdk.mockResolvedValue(3); fake.read.mockResolvedValue({ records: [record] }); fake.changes.mockResolvedValue(changes());
   fake.mutate.mockImplementation(async (_uid: string, change: (entries: SleepEntry[]) => SleepEntry[], options: { authorize: () => Promise<void> }) => {
     await options.authorize(); fake.entries = change(fake.entries); return fake.entries;
@@ -41,6 +44,23 @@ it.each(["com.kjeehwan.lastrep", "com.kjeehwan.lastrep.dev"])("opens app permiss
   expect(fake.sendIntent).toHaveBeenCalledWith("android.health.connect.action.MANAGE_HEALTH_PERMISSIONS", [
     { key: "android.intent.extra.PACKAGE_NAME", value: packageName },
   ]);
+  expect(fake.confirm).not.toHaveBeenCalled();
+});
+it("waits for guidance confirmation before opening general settings", async () => {
+  let confirm!: (value: boolean) => void;
+  fake.confirm.mockImplementation(() => new Promise<boolean>((resolve) => { confirm = resolve; }));
+  const opening = openHealthConnectSettingsScreen();
+  await vi.waitFor(() => expect(fake.confirm).toHaveBeenCalled());
+  expect(fake.sendIntent).not.toHaveBeenCalled();
+  confirm(true);
+  expect(await opening).toBe(true);
+  expect(fake.sendIntent).toHaveBeenCalledExactlyOnceWith("android.health.connect.action.HEALTH_HOME_SETTINGS");
+});
+it("keeps canceled fallback guidance in Lastrep without another navigation", async () => {
+  fake.sendIntent.mockRejectedValueOnce(new Error("SecurityException"));
+  fake.confirm.mockResolvedValue(false);
+  expect(await openHealthConnectAppPermissionsScreen()).toBeNull();
+  expect(fake.sendIntent).toHaveBeenCalledTimes(1);
 });
 it("opens supported provider settings on Android 13 instead of inventing an app-permission action", async () => {
   fake.platform.Version = 33;
@@ -50,6 +70,29 @@ it("opens supported provider settings on Android 13 instead of inventing an app-
 it("reports an unavailable permission activity instead of claiming it opened", async () => {
   fake.sendIntent.mockRejectedValue(new Error("Activity not found"));
   expect(await openHealthConnectAppPermissionsScreen()).toBe(false);
+});
+it("falls back to Health Connect home when app-specific management is restricted", async () => {
+  fake.sendIntent.mockRejectedValueOnce(new Error("SecurityException: requires GRANT_RUNTIME_PERMISSIONS"));
+  expect(await openHealthConnectAppPermissionsScreen()).toBe(true);
+  expect(fake.sendIntent).toHaveBeenNthCalledWith(2, "android.health.connect.action.HEALTH_HOME_SETTINGS");
+});
+it.each([
+  [34, "android.health.connect.action.HEALTH_HOME_SETTINGS"],
+  [36, "android.health.connect.action.HEALTH_HOME_SETTINGS"],
+  [33, "androidx.health.ACTION_HEALTH_CONNECT_SETTINGS"],
+])("opens independent general settings on API %s", async (api, action) => {
+  fake.platform.Version = api;
+  expect(await openHealthConnectSettingsScreen()).toBe(true);
+  expect(fake.sendIntent).toHaveBeenCalledExactlyOnceWith(action);
+});
+it("does not need an application ID to open the supported settings fallback", async () => {
+  fake.applicationId = "";
+  expect(await openHealthConnectAppPermissionsScreen()).toBe(true);
+  expect(fake.sendIntent).toHaveBeenCalledExactlyOnceWith("android.health.connect.action.HEALTH_HOME_SETTINGS");
+});
+it("reports a failed general-settings launch", async () => {
+  fake.sendIntent.mockRejectedValue(new Error("Activity not available"));
+  expect(await openHealthConnectSettingsScreen()).toBe(false);
 });
 it("does not read or write health records without app consent", async () => {
   fake.consent = false;
