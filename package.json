@@ -3,6 +3,7 @@
   "main": "expo-router/entry",
   "version": "1.0.0",
   "scripts": {
+    "postinstall": "node scripts/patch-tslib.js && node scripts/patch-health-connect.js && node scripts/patch-image-picker.js",
     "start": "expo start",
     "reset-project": "node ./scripts/reset-project.js",
     "android": "expo run:android",
@@ -28,7 +29,6 @@
     "import:food-db": "node scripts/import-food-db.mjs",
     "audit:food-catalog": "node scripts/audit-food-catalog.mjs"
   },
-  "postinstall": "node scripts/patch-tslib.js && node scripts/patch-health-connect.js",
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
     "@react-native-async-storage/async-storage": "2.2.0",
@@ -105,6 +105,11 @@
     "decode-uri-component": "$decode-uri-component"
   },
   "expo": {
+    "autolinking": {
+      "android": {
+        "buildFromSource": ["expo-image-picker"]
+      }
+    },
     "doctor": {
       "appConfigFieldsNotSyncedCheck": {
         "enabled": false
