@@ -10,6 +10,11 @@ The RevenueCat wrapper retains CustomerInfo from the restore response. The flow
 checks active Lastrep subscription products and the active Google Play Premium
 entitlement. It supports bare subscription IDs and base-plan-qualified IDs.
 An active product with missing Premium mapping is unconfirmed, not "no purchase".
+Explicit Restore invalidates the SDK customer-info cache first. Known expired
+products are excluded even if the SDK active list still includes them. The
+response's request date anchors the expiry check, with elapsed confirmation time
+included; missing/invalid dates are not evidence of expiration. Cancellation
+without expiration does not exclude a paid-through subscription.
 When a server-confirmed permanent grant already supplies Premium, explain that
 independent access without counting it as a restored paid subscription. Cached
 or pending grant data cannot confirm this outcome.

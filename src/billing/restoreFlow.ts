@@ -1,4 +1,5 @@
 import type { RestoreResult } from "../contracts";
+import type { CustomerInfo } from "react-native-purchases";
 import { ENTITLEMENT_ID, PRODUCT_ID_ANNUAL, PRODUCT_ID_MONTHLY } from "../config/billingConfig";
 
 export const RESTORE_MESSAGES = {
@@ -26,6 +27,19 @@ export function samePlayProduct(left: string, right: string): boolean {
 }
 const isLastrepProduct = (id: string) => [PRODUCT_ID_MONTHLY, PRODUCT_ID_ANNUAL].includes(id.split(":")[0]);
 
+function subscriptionExpired(info: CustomerInfo, productId: string, at: number): boolean {
+  const dates = info.allExpirationDates ?? {};
+  const expirations = Object.prototype.hasOwnProperty.call(dates, productId)
+    ? [dates[productId]] : Object.entries(dates).filter(([id]) => samePlayProduct(id, productId)).map(([, date]) => date);
+  if (!expirations.length) {
+    const premium = info.entitlements.all?.[ENTITLEMENT_ID] ?? info.entitlements.active[ENTITLEMENT_ID];
+    if (premium && samePlayProduct(premium.productIdentifier, productId)) expirations.push(premium.expirationDate);
+  }
+  // Missing/invalid dates are not evidence of expiry; backend confirmation is still required.
+  return expirations.length > 0 && expirations.every((date) => typeof date === "string" &&
+    Number.isFinite(Date.parse(date)) && Date.parse(date) <= at);
+}
+
 export function isPermanentPremiumConfirmed(data: unknown, fromCache: boolean): boolean {
   return !fromCache && !!data && typeof data === "object" &&
     (data as Record<string, unknown>).manualGrantPermanent === true;
@@ -52,19 +66,26 @@ export async function runRestoreFlow(uid: string, signal: AbortSignal, deps: Res
     if (cancelled()) return null;
     if (result.status === "ERROR") return "failed";
     const info = result.customerInfo;
-    const subscription = info.activeSubscriptions.find(isLastrepProduct);
+    const observedAt = Date.now();
+    const requestedAt = Date.parse(info.requestDate);
+    // Use RevenueCat's response clock, rather than a potentially skewed phone clock.
+    const referenceAt = Number.isFinite(requestedAt) ? requestedAt : observedAt;
+    const activeSubscriptions = () => info.activeSubscriptions.filter((id) => isLastrepProduct(id) &&
+      !subscriptionExpired(info, id, referenceAt + Math.max(0, Date.now() - observedAt)));
+    const subscription = activeSubscriptions()[0];
     if (!subscription) return "notFound";
     // Only Lastrep's active Play subscription qualifies, not other purchases or grants.
     const premium = info.entitlements.active[ENTITLEMENT_ID];
     const mapped = premium?.isActive && premium.store === "PLAY_STORE" && isLastrepProduct(premium.productIdentifier);
     const productId = mapped ? premium.productPlanIdentifier && !premium.productIdentifier.includes(":")
       ? `${premium.productIdentifier}:${premium.productPlanIdentifier}` : premium.productIdentifier : subscription;
-    if (!info.activeSubscriptions.some((id) => samePlayProduct(id, productId))) return "unconfirmed";
+    if (!activeSubscriptions().some((id) => samePlayProduct(id, productId))) return "unconfirmed";
     let confirmed: boolean | "existingAccess" = false;
     try { confirmed = await deps.confirm(uid, productId, signal); } catch {
       // A backend read failure is not "no purchase" once a purchase was found.
     }
     if (cancelled()) return null;
+    if (!activeSubscriptions().some((id) => samePlayProduct(id, productId))) return "notFound";
     if (confirmed === "existingAccess") return "alreadyActive";
     return mapped && confirmed ? "restored" : "unconfirmed";
   } catch { return cancelled() ? null : "failed"; }

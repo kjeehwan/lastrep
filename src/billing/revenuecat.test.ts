@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   setLogLevel: vi.fn(),
   setLogHandler: vi.fn(),
   restore: vi.fn(),
+  invalidate: vi.fn(),
 }));
 
 vi.mock("react-native", () => ({ Platform: { OS: "android" } }));
@@ -16,6 +17,7 @@ vi.mock("react-native-purchases", () => ({
     setLogLevel: mocks.setLogLevel,
     setLogHandler: mocks.setLogHandler,
     restorePurchases: mocks.restore,
+    invalidateCustomerInfoCache: mocks.invalidate,
   },
   LOG_LEVEL: { INFO: "INFO", WARN: "WARN", ERROR: "ERROR" },
 }));
@@ -65,6 +67,7 @@ describe("RevenueCat build isolation", () => {
     mocks.restore.mockResolvedValue(info);
     const billing = await import("./revenuecat");
     const result = await billing.restorePurchases();
+    expect(mocks.invalidate.mock.invocationCallOrder[0]).toBeLessThan(mocks.restore.mock.invocationCallOrder[0]);
     expect(result.status).toBe("RESTORED");
     if (result.status === "RESTORED") expect(result.customerInfo).toBe(info);
   });
