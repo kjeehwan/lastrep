@@ -11,6 +11,7 @@ export function NotebookAppDialog({ dialog, onClose }: { dialog: AppDialogOption
   const { colors } = useNotebook();
   const buttons = dialog.buttons?.length ? dialog.buttons : [{ text: "OK", role: "default" as const }];
   const vertical = dialog.buttonLayout === "vertical";
+  const dismiss = () => { onClose(); dialog.onDismiss?.(); };
   const footer = <View style={{ flexDirection: vertical ? "column" : "row", flexWrap: "wrap", justifyContent: "flex-end", gap: 12 }}>
     {buttons.map((button, index) => {
       const cancel = button.role === "cancel";
@@ -21,8 +22,8 @@ export function NotebookAppDialog({ dialog, onClose }: { dialog: AppDialogOption
       </TouchableOpacity>;
     })}
   </View>;
-  return <NotebookModal transparent visible animationType="fade" onRequestClose={onClose}>
-    <PopupBackdrop onClose={onClose} style={{ flex: 1, justifyContent: "center", alignItems: "center", padding: 20, backgroundColor: colors.overlay }}>
+  return <NotebookModal transparent visible animationType="fade" onRequestClose={dismiss}>
+    <PopupBackdrop onClose={dismiss} style={{ flex: 1, justifyContent: "center", alignItems: "center", padding: 20, backgroundColor: colors.overlay }}>
       <AdaptiveModalCard contentSized style={{ width: "100%", maxWidth: 560, padding: 20, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 8 }} contentContainerStyle={{ gap: 20 }} footer={footer}>
         <Text accessibilityRole="header" style={{ color: colors.ink, fontFamily: notebookFonts.editorial, fontSize: 22 }}>{dialog.title}</Text>
         {dialog.message ? <Text style={{ color: colors.muted, fontFamily: notebookFonts.body, fontSize: 16, lineHeight: 24 }}>{dialog.message}</Text> : null}
