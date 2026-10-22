@@ -1884,7 +1884,12 @@ data becomes available, while preserving drafts for an already-loaded profile.
 ### Health state and disclosure
 
 Keep app consent, device permissions, saved-account timestamps and last-sync
-timestamps independent. Supported data describes capability, not access.
+timestamps independent. Omit the redundant Supported data row; retain the
+individual Sleep and Body composition access states.
+Last-sync timestamps describe imported changes, not a successful reread of
+unchanged measurements. Show "No new body composition data found" for an
+unchanged body import and keep its last-sync timestamp/history unchanged.
+Track successful check times separately for automatic-sync throttling.
 Disconnected/revoked access must not hide previously saved records or fabricate
 new sync timestamps. Sleep permission can be ready while body access is absent;
 the partial-body fixture explains that lean mass is missing.
