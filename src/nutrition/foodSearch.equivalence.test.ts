@@ -39,9 +39,9 @@ vi.mock("./data/foodsAssetManifest", () => {
 });
 
 const { prewarmFoodSearch, getFoodsByIdsAsync } = await import("./foodDb");
-it("prewarms only the small core, not the full index or food chunks", async () => {
+it("prepares search metadata without reading the old full index or food chunks", async () => {
   await prewarmFoodSearch();
-  expect(reads.map((file) => path.basename(file))).toEqual(["foods-core.blob"]);
+  expect(reads.map((file) => path.basename(file)).sort()).toEqual(["foods-core.blob", "foods-generic.blob", "foods-search-catalog.blob"]);
 });
 it("preserves existing food IDs, nutrition and servings after intentional ranking changes", async () => {
   const expected = JSON.parse(await fs.readFile("src/nutrition/fixtures/search-results-before.json", "utf8"));

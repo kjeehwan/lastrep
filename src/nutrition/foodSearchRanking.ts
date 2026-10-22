@@ -45,9 +45,22 @@ export function foodQuery(query: string) {
       prefix: new RegExp(`(?:^|[^\\p{L}\\p{N}/.])(?:${pattern})`, "iu"),
     };
   });
-  return { normalized, tokens, groups, namedPreparation, expressions };
+  // A necessary substring condition only; the full matcher remains authoritative.
+  // Drop final y so both cherry/cherries pass. Non-ASCII queries skip this gate.
+  const fastTerms = groups.every(group => group.every(word => /^[a-z0-9%/.]+$/.test(word)))
+    ? groups.map(group => group.map(word => word.endsWith("y") ? word.slice(0, -1) : word)) : null;
+  return { normalized, tokens, groups, namedPreparation, expressions, fastTerms };
 }
 type Query = ReturnType<typeof foodQuery>;
+
+export function foodSearchText(name: string, aliases: string): string | null {
+  const text = `${name} ${aliases}`;
+  // Unicode case folding has extra equivalences; keep those rows on the full path.
+  return /^[\x00-\x7F]*$/.test(text) ? text.toLowerCase() : null;
+}
+export function mayMatchFoodQuery(text: string | null, query: Query): boolean {
+  return text === null || query.fastTerms === null || query.fastTerms.every(group => group.some(word => text.includes(word)));
+}
 
 export function matchesFoodQuery(name: string, aliases: string, query: Query, prefix = false): boolean {
   if (!query.tokens.length) return false;

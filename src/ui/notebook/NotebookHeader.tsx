@@ -4,12 +4,12 @@ import { ChevronLeft } from "lucide-react-native";
 import { useNotebook } from "./Notebook";
 import { notebookFonts } from "./tokens";
 
-export function NotebookHeader({ title, onBack, action, onAction, disabled = false }: {
-  title: string; onBack: () => void; action?: string; onAction?: () => void; disabled?: boolean;
+export function NotebookHeader({ title, onBack, action, onAction, disabled = false, compact = false }: {
+  title: string; onBack: () => void; action?: string; onAction?: () => void; disabled?: boolean; compact?: boolean;
 }) {
   const { colors } = useNotebook();
   const large = useWindowDimensions().fontScale >= 1.5;
-  return <View style={[styles.shell, { borderBottomColor: colors.rule }]}>
+  return <View style={[styles.shell, compact && { paddingVertical: 0 }, { borderBottomColor: colors.rule }]}>
     <View style={styles.row}>
       <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={onBack} style={[styles.side, { width: action && !large ? 80 : 44 }]}>
         <ChevronLeft size={22} strokeWidth={1.5} color={colors.ink} />

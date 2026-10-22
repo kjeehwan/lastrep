@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ExerciseCatalogItem, ExerciseGroupKey } from "./exerciseCatalog";
-import { getExerciseSubstitutions, indexExerciseSearch, replacementSearchOptions, searchExerciseIndex } from "./exerciseSearch";
+import { getExerciseSubstitutions, indexExerciseSearch, replacementSearchOptions, resolveReplacementTarget, searchExerciseIndex } from "./exerciseSearch";
 
 function exercise(name: string, group: ExerciseGroupKey, options: Partial<ExerciseCatalogItem> = {}): ExerciseCatalogItem {
   return { id: name, name, group, aliases: [], primaryMuscles: [], secondaryMuscles: [],
@@ -43,6 +43,36 @@ const catalog = [bench, incline, overhead,
 ];
 const index = indexExerciseSearch(catalog);
 const names = (query: string) => searchExerciseIndex(index, query).map((item) => item.name);
+
+describe("replacement of saved names outside the catalog", () => {
+  it.each([
+    ["Pendulum Squat", "Squat"], ["Safety-Bar Squats", "Front Squat"],
+    ["Chest-Supported Barbell Rows", "Seated Cable Row"],
+    ["Machine Chest Press", "Bench Press"], ["Machine Shoulder Press", "Overhead Press"],
+    ["Cable Preacher Curl", "Bicep Curl"], ["Lying Hamstring Curl", "Leg Curl"],
+    ["Assisted Pull-Up", "Pull Ups"], ["Romanian Deadlift Machine", "Romanian Deadlift"],
+  ])("%s finds movement peers including %s without invented metadata", (name, expected) => {
+    const target = resolveReplacementTarget(index, name)!;
+    expect(target).not.toBeNull();
+    expect(target.name).toBe(name);
+    expect(target.primaryMuscles).toEqual([]);
+    const options = getExerciseSubstitutions(catalog, target);
+    expect(options.map(item => item.name)).toContain(expected);
+    expect(options.map(item => item.name)).not.toContain("Treadmill");
+  });
+  it("resolves normalized titles and unique genuine aliases without renaming records", () => {
+    expect(resolveReplacementTarget(index, "PULL-UPS")).toBe(catalog.find(item => item.name === "Pull Ups"));
+    expect(resolveReplacementTarget(index, "RDL")).toBe(catalog.find(item => item.name === "Romanian Deadlift"));
+  });
+  it.each(["My exercise", "Press", "Bench Press Stretch", "My mystery movement"])("does not invent peers for %s", name => {
+    expect(resolveReplacementTarget(index, name)).toBeNull();
+  });
+  it("allows later matches to be reached instead of truncating the whole search", () => {
+    const params = { index, query: "press", group: "all" as const, targetName: "My exercise", suggestions: [] };
+    expect(replacementSearchOptions({ ...params, limit: Number.POSITIVE_INFINITY })).toHaveLength(searchExerciseIndex(index, "press").length);
+    expect(replacementSearchOptions({ ...params, limit: 2 })).toHaveLength(2);
+  });
+});
 
 describe("exercise search relevance shared by Add and Replace", () => {
   it.each([

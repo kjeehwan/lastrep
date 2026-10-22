@@ -9,6 +9,13 @@ keyboard-visible viewport and scrolls its own focused native input into view.
 Existing input focus handlers are preserved. Direct nested input ScrollViews
 should be replaced with content Views so the card owns the scrolling.
 
+Workout's page-level exercise notes use explicit focus ownership and measured
+scrolling through `useInputVisibility`. Keep Android's automatic child-focus
+scrolling disabled there: native set rows retain their own visibility handling.
+Measure the smaller of the scroll viewport and keyboard boundary, so an already
+resized Android window does not subtract keyboard height twice. Reveal only the
+focused note, without animation or resetting the user's scroll position.
+
 Applied to body-composition data, Workout input/routine dialogs and modal shell,
 program editing, nutrition serving/custom-food/saved-meal editors, barcode entry,
 available weights and Today's Plan context. Existing provider reads, saved drafts

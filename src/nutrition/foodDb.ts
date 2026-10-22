@@ -6,7 +6,7 @@ import {
   FOOD_SEARCH_CATALOG_ASSET,
   FOOD_GENERIC_ASSET,
 } from "./data/foodsAssetManifest";
-import { foodQuery, matchesFoodQuery, normalizeFoodSearch, rankFoodMatches } from "./foodSearchRanking";
+import { foodQuery, foodSearchText, mayMatchFoodQuery, matchesFoodQuery, normalizeFoodSearch, rankFoodMatches } from "./foodSearchRanking";
 import { reviewedFoods, reviewedSearchAliases } from "./reviewedFoodCatalog";
 
 export type FoodItem = {
@@ -158,10 +158,12 @@ type SearchIndexData = {
   FOOD_ID_TO_CHUNK: Record<string, number>;
 };
 type CatalogRow = [string, string, string, number];
+type SearchCatalogRow = { id: string; name: string; aliases: string; chunk: number; text: string | null };
 const queryCache = new Map<string, FoodItem[]>();
 const chunkPromises = new Map<number, Promise<FoodItem[]>>();
 let corePromise: Promise<FoodItem[]> | null = null;
 let catalogPromise: Promise<CatalogRow[]> | null = null;
+let searchCatalogPromise: Promise<SearchCatalogRow[]> | null = null;
 let locationsPromise: Promise<Map<string, number>> | null = null;
 let genericPromise: Promise<FoodItem[]> | null = null;
 function loadCoreFoods() {
@@ -169,6 +171,23 @@ function loadCoreFoods() {
 }
 function loadCatalog() {
   return catalogPromise ??= readBlobModuleJson<CatalogRow[]>(FOOD_SEARCH_CATALOG_ASSET).catch((error) => { catalogPromise = null; throw error; });
+}
+function loadSearchCatalog() {
+  return searchCatalogPromise ??= (async () => {
+    const catalog = await loadCatalog();
+    const rows: SearchCatalogRow[] = [];
+    let sliceStarted = Date.now();
+    for (let index = 0; index < catalog.length; index++) {
+      const [id, name, rawAliases, chunk] = catalog[index];
+      const aliases = `${rawAliases} ${reviewedSearchAliases(id)}`;
+      rows.push({ id, name, aliases, chunk, text: foodSearchText(name, aliases) });
+      if (index > 0 && index % 500 === 0 && Date.now() - sliceStarted >= 8) {
+        await new Promise<void>(resolve => setTimeout(resolve, 0));
+        sliceStarted = Date.now();
+      }
+    }
+    return rows;
+  })().catch(error => { searchCatalogPromise = null; throw error; });
 }
 function loadLocations() {
   return locationsPromise ??= loadCatalog().then((catalog) => new Map(catalog.map(([id, , , chunk]) => [id, chunk])))
@@ -196,7 +215,9 @@ function loadChunk(chunk: number): Promise<FoodItem[]> {
   return promise;
 }
 export function clearFoodSearchCache() { queryCache.clear(); }
-export async function prewarmFoodSearch(): Promise<void> { await loadCoreFoods(); }
+export async function prewarmFoodSearch(): Promise<void> {
+  await Promise.all([loadCoreFoods(), loadSearchCatalog(), loadGenericFoods()]);
+}
 
 export async function getFoodsByIdsAsync(ids: string[]): Promise<FoodItem[]> {
   const wanted = [...new Set(ids.map((id) => String(id).trim()).filter(Boolean))];
@@ -212,12 +233,12 @@ export async function getFoodsByIdsAsync(ids: string[]): Promise<FoodItem[]> {
 }
 
 async function matchingFoods(ctx: ReturnType<typeof foodQuery>, prefix = false): Promise<FoodItem[]> {
-  const [catalog, generic] = await Promise.all([loadCatalog(), loadGenericFoods()]);
+  const [catalog, generic] = await Promise.all([loadSearchCatalog(), loadGenericFoods()]);
   const byChunk = new Map<number, Set<string>>();
   let sliceStarted = Date.now();
   for (let index = 0; index < catalog.length; index++) {
-    const [id, name, aliases, chunk] = catalog[index];
-    if (matchesFoodQuery(name, `${aliases} ${reviewedSearchAliases(id)}`, ctx, prefix)) {
+    const { id, name, aliases, chunk, text } = catalog[index];
+    if (mayMatchFoodQuery(text, ctx) && matchesFoodQuery(name, aliases, ctx, prefix)) {
       if (!byChunk.has(chunk)) byChunk.set(chunk, new Set());
       byChunk.get(chunk)!.add(id);
     }

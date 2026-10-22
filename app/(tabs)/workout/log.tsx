@@ -6,6 +6,7 @@ import { lastResistanceSet } from "../../../src/workouts/workoutLog/setPresentat
 import { useNotebook, useNotebookStyles, notebookSheet } from "../../../src/ui/notebook/Notebook";
 import { notebookFonts, type NotebookColors } from "../../../src/ui/notebook/tokens";
 import { useEventCallbacks } from "../../../src/hooks/useEventCallbacks";
+import { useInputVisibility } from "../../../src/ui/useInputVisibility";
 import { KeyboardAwareModalFrame } from "../../../src/ui/KeyboardAwareModalFrame";
 import { Ionicons } from "@expo/vector-icons";
 import { useNow } from "../../../src/hooks/useNow";
@@ -67,7 +68,7 @@ import { isExpectedOfflineError } from "../../../src/utils/networkErrors";
 import { scheduleAfterInteractions } from "../../../src/utils/scheduleAfterInteractions";
 import { scheduleAfterPaint } from "../../../src/utils/scheduleAfterPaint";
 import { popPendingExerciseSelection } from "../../../src/workouts/addExerciseBridge";
-import { getExerciseSubstitutions, indexExerciseSearch, replacementSearchOptions } from "../../../src/workouts/exerciseSearch";
+import { getExerciseSubstitutions, indexExerciseSearch, replacementSearchOptions, resolveReplacementTarget } from "../../../src/workouts/exerciseSearch";
 import { loadFreeExerciseDbCatalog } from "../../../src/workouts/freeExerciseDbCatalog";
 import { resolveFreeExerciseDbImagesForNames } from "../../../src/workouts/freeExerciseDbImages";
 import {
@@ -94,6 +95,7 @@ import { selectRecommendedExercises } from "../../../src/workouts/recommendation
 import { getCalendarMatrix } from "../../../src/workouts/homeInsights";
 import { useWorkoutDraftPersistence } from "../../../src/workouts/workoutLog/useWorkoutDraftPersistence";
 import { useWorkoutElapsedTimer } from "../../../src/workouts/workoutLog/useWorkoutElapsedTimer";
+import { parseRecommendationUsage, recommendationQuestions, recommendationFeedback, type FeedbackAnswers } from "../../../src/workouts/workoutLog/recommendationFeedback";
 import { serializeWorkoutDraft } from "../../../src/workouts/workoutLog/workoutDraft";
 import { WorkoutModalShell } from "../../../src/workouts/workoutLog/WorkoutModalShell";
 import { WorkoutRecommendationSection } from "../../../src/workouts/workoutLog/WorkoutRecommendationSection";
@@ -419,6 +421,7 @@ export default function WorkoutLog() {
   const isFocused = useIsFocused();
   const guidanceNowMs = useNow(60_000, isFocused);
   const { width, height, fontScale } = useWindowDimensions();
+  const { scrollRef: noteScrollRef, onInputFocus: revealNote, onLayout: revealNoteOnLayout, onScroll: trackNoteScroll } = useInputVisibility();
   const [showSetup, setShowSetup] = useState(false);
   const [showSetTypeHelp, setShowSetTypeHelp] = useState(false);
   const [editingSet, setEditingSet] = useState<string | null>(null);
@@ -436,6 +439,7 @@ export default function WorkoutLog() {
   const [freeDbCatalog, setFreeDbCatalog] = useState<ExerciseCatalogItem[]>([]);
   const [replaceTarget, setReplaceTarget] = useState<string | null>(null);
   const [replaceSearch, setReplaceSearch] = useState("");
+  const [replacementPage, setReplacementPage] = useState({ key: "", limit: 24 });
   const [replaceGroup, setReplaceGroup] = useState<string>("all");
   const [recommendationFocus, setRecommendationFocus] = useState<RecommendationFocusId>("auto");
   const [showExerciseDemo, setShowExerciseDemo] = useState(false);
@@ -535,6 +539,10 @@ export default function WorkoutLog() {
   const [showDiscardConfirmModal, setShowDiscardConfirmModal] = useState(false);
   const [followedAnswer, setFollowedAnswer] = useState<FollowedAnswer | null>(null);
   const [helpfulAnswer, setHelpfulAnswer] = useState<HelpfulAnswer | null>(null);
+  const [todayPlanHelpful, setTodayPlanHelpful] = useState<HelpfulAnswer | null>(null);
+  const [recommendationUsage, setRecommendationUsage] = useState(() => parseRecommendationUsage());
+  const feedbackAnswers: FeedbackAnswers = { followedRecommendation: followedAnswer, helpful: helpfulAnswer, todayPlanHelpful };
+  const feedbackQuestions = recommendationQuestions(recommendationUsage);
   const [baselineDate, setBaselineDate] = useState<Date | null>(null);
   const [latestDecision, setLatestDecision] = useState<{
     decision?: Decision;
@@ -584,8 +592,9 @@ export default function WorkoutLog() {
       workoutTimerRunning,
       workoutTimerStartedAtMs,
       restTimerByExercise,
+      recommendationUsage,
     }),
-    [exercises, exerciseUnits, sessionTitle, sessionDateText, elapsedSeconds, workoutTimerRunning, workoutTimerStartedAtMs, restTimerByExercise]
+    [exercises, exerciseUnits, sessionTitle, sessionDateText, elapsedSeconds, workoutTimerRunning, workoutTimerStartedAtMs, restTimerByExercise, recommendationUsage]
   );
   const availableWeightsPreferences = useAvailableWeights(activeUid);
   // Guidance depends on prescriptions, not per-second timer display updates.
@@ -594,11 +603,15 @@ export default function WorkoutLog() {
   }), new Date(guidanceNowMs)), availableWeightsPreferences.values) ?? {
     source: "none" as const, title: null, exerciseNames: [],
   }, [exercises, sessionTitle, sessionDateText, guidanceNowMs, availableWeightsPreferences.values]);
-  const todayPlan = useWorkoutTodayPlan(activeUid, guidanceWorkout);
+  const markPlanReviewed = useCallback(() => {
+    setRecommendationUsage(previous => previous.todayPlanReviewed ? previous : { ...previous, todayPlanReviewed: true });
+  }, []);
+  const todayPlan = useWorkoutTodayPlan(activeUid, guidanceWorkout, markPlanReviewed);
   const todayGuidance = todayPlan.plan;
   const showTodayGuidance = todayPlan.visible;
   const setShowTodayGuidance = todayPlan.setVisible;
   const resetGuidance = todayPlan.reset;
+
 
   const workoutDraftStorageKey = auth.currentUser?.uid ? getDraftKey(auth.currentUser.uid) : null;
   const markWorkoutDraftSaved = useCallback(() => {
@@ -636,6 +649,7 @@ export default function WorkoutLog() {
       setEffortScale("rpe");
       appliedRestPreferencesRef.current = {};
       setAppliedGuidance(null);
+      setRecommendationUsage(parseRecommendationUsage());
       resetGuidance();
       setAvailableWeightsTarget(null);
     });
@@ -920,11 +934,11 @@ export default function WorkoutLog() {
 
   const getSubstitutionCandidates = useCallback(
     (exerciseName: string, limit = 16) => {
-      const target = findCatalogExercise(exerciseName);
+      const target = resolveReplacementTarget(exerciseSearchIndex, exerciseName);
       if (!target) return [];
       return getExerciseSubstitutions(mergedCatalog, target, limit);
     },
-    [findCatalogExercise, mergedCatalog]
+    [exerciseSearchIndex, mergedCatalog]
   );
 
   const replacementOptions = useMemo(() => {
@@ -935,11 +949,14 @@ export default function WorkoutLog() {
       index: exerciseSearchIndex,
       query: replaceSearch,
       group: replaceGroup === "all" ? "all" : (replaceGroup as ExerciseGroupKey),
-      targetName: target.name,
-      targetGroup: findCatalogExercise(target.name)?.group,
+      targetName: resolveReplacementTarget(exerciseSearchIndex, target.name)?.name ?? target.name,
+      targetGroup: resolveReplacementTarget(exerciseSearchIndex, target.name)?.group,
+      limit: Number.POSITIVE_INFINITY,
       suggestions: replaceSearch.trim() ? [] : getSubstitutionCandidates(target.name, Number.POSITIVE_INFINITY),
     });
-  }, [replaceGroup, replaceSearch, replaceTarget, exercises, findCatalogExercise, getSubstitutionCandidates, exerciseSearchIndex]);
+  }, [replaceGroup, replaceSearch, replaceTarget, exercises, getSubstitutionCandidates, exerciseSearchIndex]);
+  const replacementPageKey = JSON.stringify([replaceTarget, replaceSearch, replaceGroup]);
+  const replacementLimit = replacementPage.key === replacementPageKey ? replacementPage.limit : 24;
 
   const loadPastWorkouts = useCallback(async () => {
     try {
@@ -1098,6 +1115,7 @@ export default function WorkoutLog() {
         if (!raw) {
           // No draft for this account: clear any in-memory state from previous account/session.
           setExercises([]);
+          setRecommendationUsage(parseRecommendationUsage());
           setExerciseUnits({});
           setRestPreferenceByExercise({});
           setRestCustomInputByExercise({});
@@ -1109,6 +1127,7 @@ export default function WorkoutLog() {
         }
         if (raw) {
           const parsed = JSON.parse(raw);
+          setRecommendationUsage(parseRecommendationUsage(parsed.recommendationUsage));
           const todayKey = toLocalDateKey(new Date());
           const savedAtDate =
             typeof parsed.draftSavedAt === "number" && Number.isFinite(parsed.draftSavedAt)
@@ -2196,6 +2215,9 @@ export default function WorkoutLog() {
           baselineReps: s.reps,
         })),
       }));
+    setRecommendationUsage(parseRecommendationUsage());
+    resetGuidance();
+    setAppliedGuidance(null);
     setExercises(nextExercises);
     setSessionTitle(workout.title || "Workout");
     setSessionDateText(toLocalDateKey(workout.date));
@@ -2235,6 +2257,7 @@ export default function WorkoutLog() {
     if (!exercises.length) return;
     setFollowedAnswer(null);
     setHelpfulAnswer(null);
+    setTodayPlanHelpful(null);
     setShowFinishTitleInput(!sessionTitle.trim());
     setShowFinishModal(true);
   };
@@ -2245,6 +2268,9 @@ export default function WorkoutLog() {
   };
 
   const confirmDiscardWorkout = () => {
+    setRecommendationUsage(parseRecommendationUsage());
+    resetGuidance();
+    setAppliedGuidance(null);
     setExercises([]);
     setExerciseUnits({});
     setRestPreferenceByExercise({});
@@ -2256,6 +2282,7 @@ export default function WorkoutLog() {
     setBaselineDate(null);
     setFollowedAnswer(null);
     setHelpfulAnswer(null);
+    setTodayPlanHelpful(null);
     setShowFinishTitleInput(false);
     setShowFinishModal(false);
     setShowDiscardConfirmModal(false);
@@ -2269,8 +2296,8 @@ export default function WorkoutLog() {
 
   const saveWorkout = async () => {
     if (saving) return;
-    if (!followedAnswer || !helpfulAnswer) {
-      showAppAlert("Quick questions", "Please answer both questions before saving.");
+    if (feedbackQuestions.some(question => !feedbackAnswers[question.id])) {
+      showAppAlert("Quick questions", "Please answer the feedback questions before saving.");
       return;
     }
     const user = auth.currentUser;
@@ -2372,11 +2399,13 @@ export default function WorkoutLog() {
                 : null,
           })),
         })),
-        followedRecommendation: followedAnswer || "unknown",
-        helpful: helpfulAnswer || "unknown",
+        ...recommendationFeedback(recommendationUsage, feedbackAnswers),
         createdAt: Timestamp.now(),
       };
       await addDoc(collection(db, "users", user.uid, "workouts"), payload);
+      setRecommendationUsage(parseRecommendationUsage());
+      resetGuidance();
+      setAppliedGuidance(null);
       const appliedRoutineId = lastAppliedRoutineId;
       const routineSnapshot = sanitizedExercises as Exercise[];
       setExercises([]);
@@ -2458,6 +2487,9 @@ export default function WorkoutLog() {
     }));
 
   const startRoutineBuilderEmpty = () => {
+    setRecommendationUsage(parseRecommendationUsage());
+    resetGuidance();
+    setAppliedGuidance(null);
     setExercises([]);
     setExerciseUnits({});
     setRestPreferenceByExercise({});
@@ -2663,6 +2695,11 @@ export default function WorkoutLog() {
           };
         })
       : mapped;
+    if (mode === "replace") {
+      setRecommendationUsage(parseRecommendationUsage());
+      resetGuidance();
+      setAppliedGuidance(null);
+    }
     setExercises((prev) => (mode === "append" ? [...prev, ...workoutExercises] : workoutExercises));
     setExerciseUnits((prev) => {
       const next = { ...prev };
@@ -2900,6 +2937,9 @@ export default function WorkoutLog() {
           })),
         };
       });
+      setRecommendationUsage({ recommendedWorkout: true, todayPlanReviewed: false });
+      resetGuidance();
+      setAppliedGuidance(null);
       setExercises(recommendedExercises);
       setExerciseUnits(() => {
         const next: Record<string, Unit> = {};
@@ -3046,7 +3086,7 @@ export default function WorkoutLog() {
     }
   };
 
-  const cardActions = useEventCallbacks({ openExerciseDemo, openExerciseHistory, openExerciseActions, setReplaceSearch, setReplaceGroup, replaceExercise, updateExerciseNotes, openTempoEditor, openRestTimerModal, updateSetWeight, updateSetReps, updateSetRpe, toggleSetDone, removeSetWithUndo, openSetMenu, copyLastSetToCurrent, openCardioTimeModal, openCardioDistanceModal, setExercises, updateCardioSessionType, updateCardioEffortLevel, addEmptySet, duplicateLastSet, undoRemoveSet });
+  const cardActions = useEventCallbacks({ revealNote: revealNote, openExerciseDemo, openExerciseHistory, openExerciseActions, setReplaceSearch, setReplaceGroup, replaceExercise, updateExerciseNotes, openTempoEditor, openRestTimerModal, updateSetWeight, updateSetReps, updateSetRpe, toggleSetDone, removeSetWithUndo, openSetMenu, copyLastSetToCurrent, openCardioTimeModal, openCardioDistanceModal, setExercises, updateCardioSessionType, updateCardioEffortLevel, addEmptySet, duplicateLastSet, undoRemoveSet });
   // Cache unchanged card JSX so navigation and background context updates don't rebuild every row.
   const exerciseCards = useMemo(() => exercises.map((ex, exerciseIndex) => {
           const unit = exerciseUnits[ex.id] || "kg";
@@ -3079,7 +3119,7 @@ export default function WorkoutLog() {
                     {ex.name}
                   </Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.iconButton} onPress={() => cardActions.openExerciseActions(ex.id)}>
+                <TouchableOpacity accessibilityRole="button" accessibilityLabel={`${ex.name} actions`} style={styles.iconButton} onPress={() => cardActions.openExerciseActions(ex.id)}>
                   <Ionicons name="ellipsis-horizontal" size={18} color={colors.muted} />
                 </TouchableOpacity>
               </View>
@@ -3138,7 +3178,7 @@ export default function WorkoutLog() {
                     keyboardShouldPersistTaps="handled"
                     scrollEventThrottle={16}
                   >
-                    {replacementOptions.map((item) => (
+                    {replacementOptions.slice(0, replacementLimit).map((item) => (
                       <TouchableOpacity
                         key={`${item.id}-${ex.id}`}
                         style={styles.pickerRow}
@@ -3153,11 +3193,16 @@ export default function WorkoutLog() {
                         </View>
                       </TouchableOpacity>
                     ))}
+                    {replacementOptions.length > replacementLimit ? <TouchableOpacity
+                      accessibilityRole="button" style={styles.routineMenuRow}
+                      onPress={() => setReplacementPage({ key: replacementPageKey, limit: replacementLimit + 24 })}>
+                      <Text style={styles.linkText}>Show more exercises</Text>
+                    </TouchableOpacity> : null}
                     {replacementOptions.length === 0 ? (
                       <Text style={styles.replacementEmptyText}>
                         {exerciseCatalogItem
                           ? "No close alternatives found. Search for another exercise."
-                          : "Custom exercises do not have automatic alternatives. Search for the exercise you want instead."}
+                          : "No clear movement match. Search for the exercise you want instead."}
                       </Text>
                     ) : null}
                   </ScrollView>
@@ -3172,7 +3217,8 @@ export default function WorkoutLog() {
               </View>
               <View style={styles.exerciseMetaNotesSingle}>
                 <Text style={styles.noteLabel}>Note</Text>
-                <TextInput disableFullscreenUI placeholder="Keep the last rep controlled" placeholderTextColor={colors.muted} accessibilityLabel={`${ex.name} note`} value={ex.notes ?? ""} onChangeText={(v) => cardActions.updateExerciseNotes(ex.id, v)} style={[styles.input, styles.metaInput]} />
+                <TextInput disableFullscreenUI placeholder="Keep the last rep controlled" placeholderTextColor={colors.muted} accessibilityLabel={`${ex.name} note`}
+                        onFocus={cardActions.revealNote} value={ex.notes ?? ""} onChangeText={(v) => cardActions.updateExerciseNotes(ex.id, v)} style={[styles.input, styles.metaInput]} />
               </View>
               <View
                 style={[
@@ -3478,7 +3524,7 @@ export default function WorkoutLog() {
               ) : null}
             </View>
           );
-        }), [exercises, exerciseUnits, getExerciseMode, effortScale, previousExerciseSetsByName, findCatalogExercise, restTimerByExercise, replaceTarget, replaceSearch, replaceGroup, replacementOptions, isTabletLayout, formatLastSetSummary, scrollNativeGesture, getExerciseZone, undoDeletedSet, cardActions, styles, colors, fontScale, editingSet, cardioTimeTarget, cardioDistanceTarget, showCardioTimeModal, showCardioDistanceModal]);
+        }), [exercises, exerciseUnits, getExerciseMode, effortScale, previousExerciseSetsByName, findCatalogExercise, restTimerByExercise, replaceTarget, replaceSearch, replaceGroup, replacementOptions, replacementLimit, replacementPageKey, isTabletLayout, formatLastSetSummary, scrollNativeGesture, getExerciseZone, undoDeletedSet, cardActions, styles, colors, fontScale, editingSet, cardioTimeTarget, cardioDistanceTarget, showCardioTimeModal, showCardioDistanceModal]);
 
   return (
     <SafeAreaView style={styles.screen} edges={["top", "left", "right"]}>
@@ -3488,9 +3534,12 @@ export default function WorkoutLog() {
         keyboardVerticalOffset={Platform.OS === "ios" ? insets.top : 0}
       >
         <View style={styles.scrollShell}>
-        <NotebookHeader title={routineBuilderMode ? "Routine builder" : "Workout"} onBack={handleGoBack} action={exercises.length ? routineBuilderMode ? "Save" : "Finish" : undefined} onAction={routineBuilderMode ? openCreateRoutineModal : finishWorkout} disabled={saving} />
+        <NotebookHeader compact={keyboardHeight > 0 && width > height} title={routineBuilderMode ? "Routine builder" : "Workout"} onBack={handleGoBack} action={exercises.length ? routineBuilderMode ? "Save" : "Finish" : undefined} onAction={routineBuilderMode ? openCreateRoutineModal : finishWorkout} disabled={saving} />
         <GestureDetector gesture={scrollNativeGesture}>
           <ScrollView
+            ref={noteScrollRef}
+            onLayout={revealNoteOnLayout}
+            onScroll={trackNoteScroll}
             style={styles.container}
             contentContainerStyle={[styles.content, { paddingBottom: 140 + keyboardHeight }]}
             keyboardShouldPersistTaps="handled"
@@ -4527,43 +4576,24 @@ export default function WorkoutLog() {
           <AdaptiveModalCard style={styles.modalCard}>
             <Text style={styles.modalTitle}>Finish workout</Text>
             <Text style={styles.modalText}>{totalSets} sets planned. Only completed sets are saved.</Text>
-            <Text style={styles.modalText}>Followed recommendation?</Text>
-            <View style={styles.answerRow}>
-              {([
-                { value: "yes", label: "Yes" },
-                { value: "partial", label: "Partial" },
-                { value: "no", label: "No" },
-              ] as const).map((option) => (
-                <TouchableOpacity
+            {feedbackQuestions.map(question => <View key={question.id}>
+              <Text style={[styles.modalText, { marginTop: 12 }]}>{question.label}</Text>
+              <View style={styles.answerRow}>
+                {question.options.map(option => <TouchableOpacity
                   key={option.value}
-                  style={[styles.answerChip, followedAnswer === option.value && styles.answerChipActive]}
-                  onPress={() => setFollowedAnswer(option.value)}
-                >
-                  <Text style={[styles.answerText, followedAnswer === option.value && styles.answerTextActive]}>
-                    {option.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <Text style={[styles.modalText, { marginTop: 12 }]}>Helpful?</Text>
-            <View style={styles.answerRow}>
-              {([
-                { value: "yes", label: "Yes" },
-                { value: "neutral", label: "Neutral" },
-                { value: "no", label: "No" },
-              ] as const).map((option) => (
-                <TouchableOpacity
-                  key={option.value}
-                  style={[styles.answerChip, helpfulAnswer === option.value && styles.answerChipActive]}
-                  onPress={() => setHelpfulAnswer(option.value)}
-                >
-                  <Text style={[styles.answerText, helpfulAnswer === option.value && styles.answerTextActive]}>
-                    {option.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+                  accessibilityRole="button"
+                  accessibilityLabel={`${question.label} ${option.label}`}
+                  accessibilityState={{ selected: feedbackAnswers[question.id] === option.value }}
+                  style={[styles.answerChip, feedbackAnswers[question.id] === option.value && styles.answerChipActive]}
+                  onPress={() => {
+                    if (question.id === "followedRecommendation") setFollowedAnswer(option.value as FollowedAnswer);
+                    else if (question.id === "helpful") setHelpfulAnswer(option.value as HelpfulAnswer);
+                    else setTodayPlanHelpful(option.value as HelpfulAnswer);
+                  }}>
+                  <Text style={[styles.answerText, feedbackAnswers[question.id] === option.value && styles.answerTextActive]}>{option.label}</Text>
+                </TouchableOpacity>)}
+              </View>
+            </View>)}
             {showFinishTitleInput ? (
               <>
                 <Text style={[styles.modalText, { marginTop: 12 }]}>Optional session title</Text>

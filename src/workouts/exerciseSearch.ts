@@ -71,6 +71,8 @@ export function exerciseFamily(item: ExerciseCatalogItem): string | null {
     ["deadlift", /\bdeadlift\b/], ["calf raise", /\bcalf (raise|press)\b/],
     ["leg press", /\bleg press\b/], ["leg curl", /\b(leg|hamstring) curl\b/],
     ["leg extension", /\bleg extension\b/], ["squat", /\bsquat\b/],
+    ["wrist curl", /\bwrist\b.*\bcurl\b/],
+    ["arm curl", /\b(bicep|hammer|preacher|concentration|zottman|reverse|incline|standing|seated|cable|dumbbell|barbell)\b.*\bcurl\b/],
     ["lunge", /\blunge\b/], ["hip thrust", /\b(hip thrust|glute bridge|butt lift)\b/],
     ["good morning", /\bgood mornings?\b/],
     ["triceps extension", /\b(skull crusher|french press)\b/],
@@ -114,6 +116,32 @@ export function exerciseFamily(item: ExerciseCatalogItem): string | null {
   return null;
 }
 
+/** Resolve saved/custom spellings without changing the saved exercise identity.
+ * An uncatalogued name can suggest peers only when it names a known movement.
+ * Empty metadata deliberately prevents guessing muscles, loads or instructions.
+ */
+export function resolveReplacementTarget(index: ExerciseSearchIndex, name: string): ExerciseCatalogItem | null {
+  const title = normalizeExerciseSearch(name);
+  const exact = index.find(entry => entry.title === title);
+  if (exact) return exact.item;
+  const aliases = index.filter(entry => entry.aliases.includes(title));
+  if (aliases.length === 1) return aliases[0].item;
+  const cardio = /\b(treadmill|cycling|bicycling|rower|rowing|elliptical|jump rope|recumbent bike|stair climber)\b/.test(title);
+  const probe: ExerciseCatalogItem = {
+    id: "replacement-name-only", name, aliases: [], primaryMuscles: [], secondaryMuscles: [],
+    equipment: title.split(" ").filter(word => /^(barbell|dumbbell|kettlebell|cable|machine|band|bodyweight)$/.test(word)),
+    movementPattern: "", difficulty: "intermediate", group: cardio ? "cardio" : "core", cues: [],
+  };
+  const family = exerciseFamily(probe);
+  if (!family) return null;
+  const peers = index.filter(entry => exerciseFamily(entry.item) === family && exerciseActivity(entry.item) === exerciseActivity(probe));
+  if (!peers.length) return null;
+  const groups = new Map<ExerciseGroupKey, number>();
+  for (const { item } of peers) groups.set(item.group, (groups.get(item.group) ?? 0) + 1);
+  probe.group = [...groups].sort((a, b) => b[1] - a[1])[0][0];
+  return probe;
+}
+
 export function getExerciseSubstitutions(catalog: ExerciseCatalogItem[], target: ExerciseCatalogItem, limit = 24): ExerciseCatalogItem[] {
   const family = exerciseFamily(target);
   const titleWords = (item: ExerciseCatalogItem) => normalizeExerciseSearch(item.name).split(" ")
@@ -153,7 +181,7 @@ export function getExerciseSubstitutions(catalog: ExerciseCatalogItem[], target:
         score -= candidateWords.filter((word) => !targetWords.includes(word)).length * 0.5;
         // Added apparatus is a more specific setup. Prefer ordinary variations
         // unless that apparatus is already part of the exercise being replaced.
-        score -= candidateWords.filter((word) => /^(band|chains?|axles?|boards?|logs?)$/.test(word) && !targetWords.includes(word)).length * 8;
+        score -= candidateWords.filter((word) => /^(band|chains?|axles?|boards?|logs?|weighted)$/.test(word) && !targetWords.includes(word)).length * 8;
       }
       return { item, sameFamily, related, score };
     })
