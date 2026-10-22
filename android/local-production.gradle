@@ -1,0 +1,92 @@
+// Local production setup. Cloud signing/version injection remains owned by EAS.
+if (System.getenv("EAS_BUILD") != "true" && (System.getenv("APP_VARIANT") ?: "prod") == "prod") {
+    def credentialsPath = System.getenv("LASTREP_LOCAL_CREDENTIALS_FILE")
+    def credentialsFile = credentialsPath
+        ? rootProject.file(credentialsPath)
+        : rootProject.file("../credentials.json")
+    def versionText = System.getenv("LASTREP_ANDROID_VERSION_CODE")
+    def versionValid = versionText != null && versionText ==~ /[1-9][0-9]*/ &&
+        versionText.toBigInteger() <= 2100000000
+    if (versionText != null && !versionValid) {
+        throw new GradleException("LASTREP_ANDROID_VERSION_CODE must be an integer between 1 and 2100000000.")
+    }
+    if (versionValid) android.defaultConfig.versionCode = versionText.toInteger()
+
+    def signingReady = false
+    if (credentialsFile.isFile()) {
+        def keystore
+        try {
+            keystore = new groovy.json.JsonSlurper().parse(credentialsFile)?.android?.keystore
+        } catch (Exception ignored) {
+            throw new GradleException("Could not parse local production credentials JSON.")
+        }
+        if (!(keystore instanceof Map) ||
+            !["keystorePath", "keystorePassword", "keyAlias"].every { keystore[it] instanceof String && keystore[it] }) {
+            throw new GradleException("Local production credentials are incomplete.")
+        }
+        def store = new File(keystore.keystorePath)
+        if (!store.isAbsolute()) store = rootProject.file("../${keystore.keystorePath}")
+        if (!store.isFile() || store.canonicalFile == file("debug.keystore").canonicalFile || keystore.keyAlias == "androiddebugkey") {
+            throw new GradleException("A valid production upload keystore is required; debug signing is not allowed.")
+        }
+        android.signingConfigs.release {
+            storeFile store
+            storePassword keystore.keystorePassword
+            keyAlias keystore.keyAlias
+            keyPassword keystore.keyPassword ?: keystore.keystorePassword
+        }
+        signingReady = true
+    }
+
+    tasks.register("verifyLocalProductionSetup") {
+        group = "verification"
+        description = "Check local production identity, upload key and version without building an AAB."
+        doLast {
+            if (!signingReady || !versionValid) {
+                throw new GradleException("Local production credentials and an explicit version code are required.")
+            }
+            def signing = android.signingConfigs.release
+            def fingerprint
+            try {
+                def store = java.security.KeyStore.getInstance(signing.storeFile, signing.storePassword.toCharArray())
+                if (store.getKey(signing.keyAlias, signing.keyPassword.toCharArray()) == null) {
+                    throw new IllegalStateException()
+                }
+                fingerprint = java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(store.getCertificate(signing.keyAlias).encoded).encodeHex().toString()
+            } catch (Exception ignored) {
+                throw new GradleException("Production upload key/password validation failed.")
+            }
+            def expected = System.getenv("LASTREP_EXPECTED_UPLOAD_CERT_SHA256")
+            if (!expected || fingerprint != expected.toLowerCase().replace(":", "")) {
+                throw new GradleException("Production upload certificate must match the previously released AAB certificate.")
+            }
+            if (android.defaultConfig.applicationId != "com.kjeehwan.lastrep" ||
+                android.defaultConfig.versionCode != versionText.toInteger() ||
+                !android.buildTypes.release.minifyEnabled || !android.buildTypes.release.shrinkResources ||
+                android.buildTypes.release.signingConfig != signing) {
+                throw new GradleException("Local production identity, signing, version or optimization configuration is incorrect.")
+            }
+            println("Local production setup verified: com.kjeehwan.lastrep, versionCode ${android.defaultConfig.versionCode}, existing upload certificate, R8 and resource shrinking enabled.")
+        }
+    }
+
+    // Every local release validates its actual key, not only the readiness command.
+    tasks.configureEach { task ->
+        if (task.name == "validateSigningProdRelease") {
+            task.dependsOn("verifyLocalProductionSetup")
+        }
+    }
+
+    gradle.taskGraph.whenReady { graph ->
+        def buildsProductionRelease = graph.allTasks.any {
+            it.project.path == ":app" && it.name.endsWith("ProdRelease")
+        }
+        if (buildsProductionRelease && !signingReady) {
+            throw new GradleException("Local production signing is missing. Download existing EAS production credentials; do not use a debug key.")
+        }
+        if (buildsProductionRelease && !versionValid) {
+            throw new GradleException("Set LASTREP_ANDROID_VERSION_CODE explicitly before a local production release.")
+        }
+    }
+}

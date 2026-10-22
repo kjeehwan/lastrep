@@ -126,6 +126,9 @@ Resolve unexpected failures, including Expo patch-version alignment, and rerun
 affected verification before starting the build. The intentional native-config
 exception is documented in [Expo Doctor exceptions](docs/expo-doctor-exceptions.md).
 
+For local Android release signing, explicit version handling and readiness checks,
+see [Local production builds](docs/local-production-builds.md).
+
 Work in focused branches, preserve existing behavior, run relevant checks and
 obtain user review. Commit/push, PR/merge, branch deletion, deployments and AAB
 builds are separate actions requiring explicit requests in this collaboration.

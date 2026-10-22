@@ -150,6 +150,9 @@ android {
         }
     }
     signingConfigs {
+        release {
+            // EAS injects cloud credentials; local credentials are loaded below.
+        }
         debug {
             storeFile file('debug.keystore')
             storePassword 'android'
@@ -162,9 +165,7 @@ android {
             signingConfig signingConfigs.debug
         }
         release {
-            // Caution! In production, you need to generate your own keystore file.
-            // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.debug
+            signingConfig activeAppVariant == "prod" ? signingConfigs.release : signingConfigs.debug
             def enableShrinkResources = findProperty('android.enableShrinkResourcesInReleaseBuilds') ?: 'false'
             shrinkResources enableShrinkResources.toBoolean()
             minifyEnabled enableMinifyInReleaseBuilds
@@ -183,6 +184,8 @@ android {
         ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:!CVS:!thumbs.db:!picasa.ini:!*~'
     }
 }
+
+apply from: rootProject.file("local-production.gradle")
 
 preBuild.dependsOn("prepareGoogleServices")
 

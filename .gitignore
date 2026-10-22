@@ -68,3 +68,7 @@ GoogleService-Info.plist
 
 # local development tooling
 /.dev-tools/
+
+# Downloaded EAS signing credentials
+/credentials.json
+/credentials/
