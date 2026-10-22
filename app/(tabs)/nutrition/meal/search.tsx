@@ -127,6 +127,7 @@ export default function MealSearchScreen() {
   const [searchNonce, setSearchNonce] = useState(0);
   const [searchResults, setSearchResults] = useState<FoodItem[]>([]);
   const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const [staged, setStaged] = useState<Record<string, SelectionDraft>>({});
   const [submitting, setSubmitting] = useState(false);
   const [manualFoodVisible, setManualFoodVisible] = useState(false);
@@ -175,7 +176,7 @@ export default function MealSearchScreen() {
     void (async () => {
       try {
         const foodDb = await getFoodDb();
-        if (!prewarmPromise) prewarmPromise = foodDb.prewarmFoodSearch();
+        if (!prewarmPromise) prewarmPromise = foodDb.prewarmFoodSearch().catch(error => { prewarmPromise = null; throw error; });
         await prewarmPromise;
       } catch (error) {
         if (!cancelled) console.log("Food search prewarm failed", error);
@@ -292,11 +293,18 @@ export default function MealSearchScreen() {
         return;
       }
       setSearching(true);
-      const foodDb = await getFoodDb();
-      const next = await foodDb.searchFoodsAsync(submittedQuery, 20);
-      if (!cancelled) {
-        setSearchResults(next);
-        setSearching(false);
+      setSearchError(null);
+      try {
+        const foodDb = await getFoodDb();
+        const next = await foodDb.searchFoodsAsync(submittedQuery, 20);
+        if (!cancelled) setSearchResults(next);
+      } catch {
+        if (!cancelled) {
+          setSearchResults([]);
+          setSearchError("Couldn't search foods. Tap Search to try again.");
+        }
+      } finally {
+        if (!cancelled) setSearching(false);
       }
     })();
     return () => {
@@ -309,6 +317,7 @@ export default function MealSearchScreen() {
       setQuery("");
       setSubmittedQuery("");
       setSearchResults([]);
+      setSearchError(null);
       setSearchNonce(0);
       setSearching(false);
       setStaged({});
@@ -503,19 +512,16 @@ export default function MealSearchScreen() {
     setQuery("");
     setSubmittedQuery("");
     setSearchResults([]);
+    setSearchError(null);
     setSearching(false);
   };
 
   const runSearch = () => {
     if (!canSearch) return;
     setSearching(true);
-    void (async () => {
-      const foodDb = await getFoodDb();
-      if (!prewarmPromise) prewarmPromise = foodDb.prewarmFoodSearch();
-      await prewarmPromise;
-      setSubmittedQuery(query.trim());
-      setSearchNonce((n) => n + 1);
-    })();
+    setSearchError(null);
+    setSubmittedQuery(query.trim());
+    setSearchNonce((n) => n + 1);
   };
 
   const lookupBarcode = async (barcode: string) => {
@@ -832,7 +838,8 @@ export default function MealSearchScreen() {
 
           {tab === "search" && !canSearch ? <Text style={styles.subText}>Type at least 2 characters or scan a barcode.</Text> : null}
           {tab === "search" && searching ? <Text style={styles.subText}>Searching...</Text> : null}
-          {!searching && tab === "search" && submittedQuery.trim().length >= 2 && searchResults.length === 0 ? (
+          {tab === "search" && searchError ? <Text style={styles.subText}>{searchError}</Text> : null}
+          {!searching && !searchError && tab === "search" && submittedQuery.trim().length >= 2 && searchResults.length === 0 ? (
             <Text style={styles.subText}>No matching foods in the current database. Try another food name, scan a barcode, or choose Enter food manually.</Text>
           ) : null}
 
