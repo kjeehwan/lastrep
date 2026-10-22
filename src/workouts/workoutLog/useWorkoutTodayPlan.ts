@@ -9,9 +9,14 @@ import { buildDeterministicTodayPlan } from "../../services/decision/todayPlanEn
 import { hashDecisionInputs } from "../../services/decision/inputHash";
 import { showAppAlert } from "../../ui/appDialog";
 
-export function useWorkoutTodayPlan(uid: string | null, plannedWorkout: PlannedWorkoutSummary) {
+export function useWorkoutTodayPlan(uid: string | null, plannedWorkout: PlannedWorkoutSummary, onReviewed?: () => void) {
   const [plan, setPlan] = useState<LastResultPayload | null>(null);
-  const [visible, setVisible] = useState(false);
+  const [visible, updateVisible] = useState(false);
+  const visibleRef = useRef(false);
+  const setVisible = useCallback((value: boolean) => {
+    visibleRef.current = value;
+    updateVisible(value);
+  }, []);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [recovery, setRecovery] = useState<RecoveryInputs>({ soreness: 4, fatigue: 4, motivation: 6 });
@@ -32,7 +37,7 @@ export function useWorkoutTodayPlan(uid: string | null, plannedWorkout: PlannedW
     requestRef.current += 1;
     setPlan(null); setVisible(false); setBusy(false); setError(null);
     setInputsChanged(false); setContextVisible(false); setContextSaving(false);
-  }, []);
+  }, [setVisible]);
 
   const review = useCallback(async () => {
     if (!uid || !mountedRef.current) return;
@@ -46,6 +51,7 @@ export function useWorkoutTodayPlan(uid: string | null, plannedWorkout: PlannedW
       const result = buildDeterministicTodayPlan(snapshot.inputs, snapshot.workouts, new Date(), EXERCISE_CATALOG, snapshot.sleepTargetHours);
       const payload = { createdAt: Timestamp.now(), inputs: snapshot.inputs, result };
       setPlan(payload);
+      if (visibleRef.current) onReviewed?.();
       setRecovery(snapshot.recovery);
       setInputsChanged(false);
       void updateDoc(doc(db, "users", uid), {
@@ -59,7 +65,7 @@ export function useWorkoutTodayPlan(uid: string | null, plannedWorkout: PlannedW
     } finally {
       if (request === requestRef.current && uidRef.current === uid) setBusy(false);
     }
-  }, [uid, plannedWorkout, inputsChanged, recovery]);
+  }, [uid, plannedWorkout, inputsChanged, recovery, onReviewed, setVisible]);
 
   const changeRecovery = (key: keyof RecoveryInputs, value: number) => {
     const next = { ...recovery, [key]: Math.round(value) };
