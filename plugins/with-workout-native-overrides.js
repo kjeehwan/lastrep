@@ -33,6 +33,9 @@ module.exports = function withWorkoutNativeOverrides(config) {
         "workoutnative/WorkoutSetListManager.kt",
         "workoutnative/WorkoutSetListPackage.kt",
         "workoutnative/WorkoutSetListView.kt",
+        "timewheel/MealTimeWheelView.kt",
+        "timewheel/MealTimeWheelManager.kt",
+        "timewheel/MealTimeWheelPackage.kt",
       ];
 
       for (const rel of templates) {
@@ -62,6 +65,8 @@ module.exports = function withWorkoutNativeOverrides(config) {
         "// add(MyReactNativePackage())",
         "              add(WorkoutGestureTextInputPackage())\n              add(WorkoutSetListPackage())"
       );
+      mainApp = injectOnce(mainApp, "import com.facebook.react.defaults.DefaultReactNativeHost", `import ${packageName}.timewheel.MealTimeWheelPackage`);
+      mainApp = injectOnce(mainApp, "add(WorkoutSetListPackage())", "        add(MealTimeWheelPackage())");
       fs.writeFileSync(mainApplicationPath, mainApp, "utf8");
 
       const buildGradlePath = path.join(projectRoot, "android", "app", "build.gradle");
