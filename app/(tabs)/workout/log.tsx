@@ -3642,16 +3642,20 @@ export default function WorkoutLog() {
       ) : null}
 
       <View style={styles.sessionControls}>
-        <View style={styles.sessionActionRow}>
+        <View style={[styles.sessionActionRow, styles.sessionActionGroupRule]}>
           <TouchableOpacity style={styles.sessionAction} onPress={() => setShowMyRoutinesModal(true)}><Text style={styles.linkText}>My routines</Text></TouchableOpacity>
+          <View style={styles.sessionActionDivider} />
           <TouchableOpacity style={[styles.sessionAction, styles.sessionActionRight]} onPress={beginCreateRoutine}><Text style={styles.linkText}>Create routine</Text></TouchableOpacity>
         </View>
         <View style={styles.sessionActionRow}>
           <TouchableOpacity style={styles.sessionAction} onPress={handleRepeatPastWorkoutPress}><Text style={styles.linkText}>Repeat past workout</Text></TouchableOpacity>
+          <View style={styles.sessionActionDivider} />
           <TouchableOpacity style={[styles.sessionAction, styles.sessionActionRight]} onPress={() => setShowSetup(true)}><Text style={styles.linkText}>Recommend workout</Text></TouchableOpacity>
         </View>
-        {routineBuilderMode ? <TouchableOpacity style={styles.textAction} onPress={() => setRoutineBuilderMode(false)}><Text style={styles.linkText}>Exit builder</Text></TouchableOpacity> : null}
-        {exercises.length ? <TouchableOpacity style={styles.textAction} onPress={discardWorkout}><Text style={[styles.linkText, { color: colors.danger }]}>Discard workout</Text></TouchableOpacity> : null}
+        {routineBuilderMode || exercises.length ? <View style={styles.sessionActionFooter}>
+          {routineBuilderMode ? <TouchableOpacity style={styles.textAction} onPress={() => setRoutineBuilderMode(false)}><Text style={styles.linkText}>Exit builder</Text></TouchableOpacity> : null}
+          {exercises.length ? <TouchableOpacity style={styles.textAction} onPress={discardWorkout}><Text style={[styles.linkText, { color: colors.danger }]}>Discard workout</Text></TouchableOpacity> : null}
+        </View> : null}
       </View>
 
       {exerciseCards}
@@ -5452,8 +5456,11 @@ const createStyles = (colors: NotebookColors) => { const base = notebookSheet({
   checkbox: { width: 20, height: 20, borderWidth: 1, borderRadius: 4, borderColor: colors.border, backgroundColor: colors.surface, justifyContent: "center", alignItems: "center" },
   checkboxChecked: { backgroundColor: colors.primary, borderColor: colors.primary }, cardioCheckboxMark: { color: colors.onPrimary, fontSize: 12, fontWeight: "700" },
   answerTextActive: { color: colors.onPrimary }, groupChipTextActive: { color: colors.onPrimary },
-  sessionControls: { paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.rule },
-  sessionActionRow: { flexDirection: "row", gap: 16 },
+  sessionControls: { paddingVertical: 4, borderBottomWidth: 1, borderBottomColor: colors.rule },
+  sessionActionRow: { flexDirection: "row", gap: 12, paddingVertical: 8 },
+  sessionActionGroupRule: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.rule },
+  sessionActionDivider: { width: StyleSheet.hairlineWidth, backgroundColor: colors.rule, marginVertical: 12 },
+  sessionActionFooter: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.rule, paddingVertical: 8 },
   sessionAction: { flex: 1, minHeight: 48, justifyContent: "center", paddingVertical: 8 },
   sessionActionRight: { alignItems: "flex-end" },
   routineMenuRow: { minHeight: 52, paddingVertical: 12, borderTopWidth: 1, borderTopColor: colors.rule, justifyContent: "center" },
