@@ -13,6 +13,7 @@ export const BODY_COMPOSITION_FIELDS = {
   lastSyncedAt: "lastSyncedAt",
   originAppPackage: "originAppPackage",
   originLabel: "originLabel",
+  importFingerprint: "importFingerprint",
 } as const;
 
 export type BodyCompositionSource = (typeof BODY_COMPOSITION_SOURCES)[number];
@@ -40,6 +41,7 @@ export interface BodyCompositionHistoryEntry {
 }
 
 export interface BodyCompositionProfile {
+  importFingerprint?: string | null;
   schemaVersion: number;
   manual: BodyCompositionMetricSnapshot;
   synced: BodyCompositionMetricSnapshot;

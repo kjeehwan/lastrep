@@ -37,6 +37,8 @@ focus. Browser prototypes are design studies, not production account screens.
   v37 native crash evidence, crop-result compatibility fix and release checks.
 - [Health Connect permissions and help](docs/health-connect-permissions-guidance.md):
   partial-access requests, settings fallback and concise source-app instructions.
+- [Internal testing v40 follow-up](docs/internal-testing-v40-follow-up.md):
+  accepted Play checks and repeated body-sync feedback/timestamp correction.
 - [Food catalog maintenance](docs/food-catalog-maintenance.md): reviewed metadata,
   sourced additions and the repeatable coverage audit.
 - [Exercise search review](docs/exercise-search-quality-review.md): shared Add /

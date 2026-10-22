@@ -1,5 +1,6 @@
 import { BODY_COMPOSITION_HISTORY_LIMIT, compareHistoryEntries, normalizeBodyCompositionHistory } from "./normalizeBodyCompositionHistory";
 import { Platform } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { doc, getDoc, runTransaction, setDoc, Timestamp } from "firebase/firestore";
 import { deleteMeasurementHistory, editMeasurementHistory, snapshotAfterMeasurementDeletion } from "./measurementEditing";
 import type { Permission } from "react-native-health-connect";
@@ -231,7 +232,8 @@ export const buildBodyCompositionProfile = (
   lastSyncedAt: Timestamp | null,
   originAppPackage: string | null,
   originLabel: string | null,
-  schemaVersion = BODY_COMPOSITION_SCHEMA_VERSION
+  schemaVersion = BODY_COMPOSITION_SCHEMA_VERSION,
+  importFingerprint: string | null = null
 ): BodyCompositionProfile => ({
   schemaVersion,
   manual,
@@ -240,6 +242,7 @@ export const buildBodyCompositionProfile = (
   lastSyncedAt,
   originAppPackage,
   originLabel,
+  importFingerprint,
 });
 
 export const getBodyCompositionProfile = async (
@@ -256,7 +259,8 @@ export const getBodyCompositionProfile = async (
     normalizeString(data?.[BODY_COMPOSITION_FIELDS.originLabel]),
     typeof data?.[BODY_COMPOSITION_FIELDS.schemaVersion] === "number"
       ? Number(data[BODY_COMPOSITION_FIELDS.schemaVersion])
-      : 1
+      : 1,
+    normalizeString(data?.[BODY_COMPOSITION_FIELDS.importFingerprint])
   );
 };
 
@@ -418,9 +422,54 @@ const readLatestMetric = async (
   };
 };
 
+type BodyProvider = "health-connect" | "samsung-health";
+const bodyCheckKey = (uid: string, provider: BodyProvider) => `body-last-check:${provider}:${uid}`;
+
+// A successful check is separate from importing a changed measurement.
+const recordBodyCheck = async (
+  uid: string, provider: BodyProvider, now: Date, read: () => Promise<BodyCompositionSyncResult>
+): Promise<BodyCompositionSyncResult> => {
+  const result = await read();
+  if (result.status === "success" || result.status === "no_data") {
+    await AsyncStorage.setItem(bodyCheckKey(uid, provider), now.toISOString()).catch(() => undefined);
+  }
+  return result;
+};
+
+const unchangedBodySnapshot = (
+  profile: BodyCompositionProfile, next: BodyCompositionMetricSnapshot,
+  origin: string | null, hasProviderTime: boolean
+) => {
+  const previous = profile.synced;
+  return previous.source === "health" && previous.recordedAt != null &&
+    profile.originAppPackage === origin && previous.originLabel === next.originLabel &&
+    (!hasProviderTime || previous.recordedAt.toMillis() === next.recordedAt?.toMillis()) &&
+    previous.weightKg === next.weightKg && previous.bodyFatPercent === next.bodyFatPercent &&
+    previous.leanBodyMassKg === next.leanBodyMassKg &&
+    previous.skeletalMuscleMassKg === next.skeletalMuscleMassKg &&
+    previous.legacyMuscleMassKg === next.legacyMuscleMassKg;
+};
+
+const unchangedBodyImport = async (
+  uid: string, profile: BodyCompositionProfile, next: BodyCompositionMetricSnapshot,
+  origin: string | null, hasProviderTime: boolean, fingerprint: string
+) => {
+  if (profile.importFingerprint != null) return profile.importFingerprint === fingerprint;
+  if (!unchangedBodySnapshot(profile, next, origin, hasProviderTime)) return false;
+  // Seed old profiles without reporting an import or advancing its timestamp.
+  await setDoc(doc(db, USERS_COLLECTION, uid), {
+    [USER_BODY_COMPOSITION_FIELD]: { [BODY_COMPOSITION_FIELDS.importFingerprint]: fingerprint },
+  }, { merge: true });
+  return true;
+};
+
 export const syncBodyCompositionFromHealthConnect = async (
   uid: string,
   now = new Date()
+): Promise<BodyCompositionSyncResult> => recordBodyCheck(uid, "health-connect", now, () => importBodyFromHealthConnect(uid, now));
+
+const importBodyFromHealthConnect = async (
+  uid: string, now: Date
 ): Promise<BodyCompositionSyncResult> => {
   if (Platform.OS !== "android") return { status: "unsupported" };
   try {
@@ -468,6 +517,11 @@ export const syncBodyCompositionFromHealthConnect = async (
       source: "health",
       originLabel,
     };
+    const fingerprint = JSON.stringify(["health-connect",
+      ...[weight, bodyFat, leanBodyMass].map(metric => metric.value == null ? null : metric)]);
+    if (await unchangedBodyImport(uid, profile, syncedSnapshot, originAppPackage, typeof recordedAtMs === "number", fingerprint)) {
+      return { status: "no_data" };
+    }
     const historyEntry: BodyCompositionHistoryEntry = {
       recordedAt: syncedSnapshot.recordedAt,
       source: "health",
@@ -485,6 +539,7 @@ export const syncBodyCompositionFromHealthConnect = async (
         [USER_BODY_COMPOSITION_FIELD]: {
           [BODY_COMPOSITION_FIELDS.schemaVersion]: BODY_COMPOSITION_SCHEMA_VERSION,
           [BODY_COMPOSITION_FIELDS.synced]: syncedSnapshot,
+          [BODY_COMPOSITION_FIELDS.importFingerprint]: fingerprint,
           [BODY_COMPOSITION_FIELDS.lastSyncedAt]: syncedAt,
           [BODY_COMPOSITION_FIELDS.originAppPackage]: originAppPackage,
           [BODY_COMPOSITION_FIELDS.originLabel]: originLabel,
@@ -503,6 +558,10 @@ export const syncBodyCompositionFromHealthConnect = async (
 export const syncBodyCompositionFromSamsungHealth = async (
   uid: string,
   now = new Date()
+): Promise<BodyCompositionSyncResult> => recordBodyCheck(uid, "samsung-health", now, () => importBodyFromSamsungHealth(uid, now));
+
+const importBodyFromSamsungHealth = async (
+  uid: string, now: Date
 ): Promise<BodyCompositionSyncResult> => {
   if (Platform.OS !== "android") return { status: "unsupported" };
   try {
@@ -553,6 +612,13 @@ export const syncBodyCompositionFromSamsungHealth = async (
       source: "health",
       originLabel,
     };
+    const hasProviderTime = typeof latest.recordedAtMs === "number" && Number.isFinite(latest.recordedAtMs);
+    const fingerprint = JSON.stringify(["samsung-health", originAppPackage,
+      hasProviderTime ? latest.recordedAtMs : null, weightKg, bodyFatPercent,
+      leanBodyMassKg, skeletalMuscleMassKg, legacyMuscleMassKg]);
+    if (await unchangedBodyImport(uid, profile, syncedSnapshot, originAppPackage, hasProviderTime, fingerprint)) {
+      return { status: "no_data" };
+    }
     const historyEntry: BodyCompositionHistoryEntry = {
       recordedAt,
       source: "health",
@@ -570,6 +636,7 @@ export const syncBodyCompositionFromSamsungHealth = async (
         [USER_BODY_COMPOSITION_FIELD]: {
           [BODY_COMPOSITION_FIELDS.schemaVersion]: BODY_COMPOSITION_SCHEMA_VERSION,
           [BODY_COMPOSITION_FIELDS.synced]: syncedSnapshot,
+          [BODY_COMPOSITION_FIELDS.importFingerprint]: fingerprint,
           [BODY_COMPOSITION_FIELDS.lastSyncedAt]: syncedAt,
           [BODY_COMPOSITION_FIELDS.originAppPackage]: originAppPackage,
           [BODY_COMPOSITION_FIELDS.originLabel]: originLabel,
@@ -605,7 +672,8 @@ export const autoSyncBodyCompositionFromHealthConnectIfEligible = async (
 
     const profile = await getBodyCompositionProfile(uid);
     const minIntervalMinutes = options?.minIntervalMinutes ?? 60;
-    const lastSyncedAt = profile.lastSyncedAt?.toDate() ?? null;
+    const lastCheck = await AsyncStorage.getItem(bodyCheckKey(uid, "health-connect")).catch(() => null);
+    const lastSyncedAt = lastCheck ? new Date(lastCheck) : profile.lastSyncedAt?.toDate() ?? null;
     if (lastSyncedAt) {
       const minutesSinceLastSync = (Date.now() - lastSyncedAt.getTime()) / (60 * 1000);
       if (minutesSinceLastSync < minIntervalMinutes) return "skipped";
@@ -635,7 +703,8 @@ export const autoSyncBodyCompositionFromSamsungHealthIfEligible = async (
 
     const profile = await getBodyCompositionProfile(uid);
     const minIntervalMinutes = options?.minIntervalMinutes ?? 60;
-    const lastSyncedAt = profile.lastSyncedAt?.toDate() ?? null;
+    const lastCheck = await AsyncStorage.getItem(bodyCheckKey(uid, "samsung-health")).catch(() => null);
+    const lastSyncedAt = lastCheck ? new Date(lastCheck) : profile.lastSyncedAt?.toDate() ?? null;
     if (lastSyncedAt) {
       const minutesSinceLastSync = (Date.now() - lastSyncedAt.getTime()) / (60 * 1000);
       if (minutesSinceLastSync < minIntervalMinutes) return "skipped";

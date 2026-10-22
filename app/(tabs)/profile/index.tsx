@@ -1098,7 +1098,7 @@ function ProfileContent() {
             : "Body composition synced from Health Connect."
         );
       } else if (bodyResult.status === "no_data") {
-        messages.push("No body composition data found.");
+        messages.push("No new body composition data found.");
       } else if (bodyResult.status === "permission_denied") {
         messages.push("Body composition permission missing.");
       } else if (bodyResult.status === "error") {
@@ -1578,7 +1578,7 @@ function ProfileContent() {
   const titles: Record<ProfileEditor, string> = { identity: "Profile identity", training: "Training phase", diet: "Diet phase", availability: "Days available", units: "Units and effort", body: "Body composition", tdee: "TDEE calculator", nutrition: "Nutrition targets", sleep: "Sleep target" };
   const metricField = (label: string, value: string, onChangeText: (text: string) => void, unit: string, placeholder: string) => <ProfileField key={label} inline label={label} value={value} onChangeText={onChangeText} unit={unit} placeholder={placeholder} keyboardType="decimal-pad" autoFocus={editor?.focus === label} />;
   const healthRows = [
-    ["Status", healthConnectionStatus], ["Supported data", "Sleep, Body composition"],
+    ["Status", healthConnectionStatus],
     ["Sleep", displayedSleepStatus], ["Body composition", displayedBodyStatus],
     [sleepSyncRowLabel, displayedLastSleepSyncLabel], [bodySyncRowLabel, displayedLastBodySyncLabel],
   ];
