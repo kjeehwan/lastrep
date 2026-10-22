@@ -1,6 +1,6 @@
 # Lastrep Training Notebook Design Specification
 
-Version: 1.36 | Date: October 22, 2026
+Version: 1.37 | Date: October 23, 2026
 
 Status: Workout, Home, Nutrition, Sleep, Profile and Settings browser design
 directions approved through iterative review. Shared rules below incorporate that
@@ -778,6 +778,24 @@ states honestly; do not invent a smooth trend from one record.
   existing behavior. Do not pretend that every modal is swipe-dismissable today.
 - Gesture dismissal, if added, must not compete with form scrolling or cause
   accidental draft loss. It is not required for the first mockup implementation.
+
+### Correct a saved workout
+
+- Calendar day details provide **Edit details** for each saved workout. Keep this
+  separate from repeating a workout into the active draft.
+- Edit the workout date with a calendar and duration with the same borderless,
+  shaded numeric boxes as Set Cardio Time: hours and minutes separated by a colon,
+  labels beneath. Select existing text on focus; duration hours do not wrap.
+- Save starts disabled when unchanged. Missing duration remains blank, distinct
+  from zero. Cancel, outside tap and Android Back discard edits; closing just
+  the date picker preserves the duration draft. Never dismiss during a save.
+- Apply corrections to the existing record. Preserve exercises, sets, notes,
+  feedback and creation time; update calendar grouping and summaries. Keep other
+  workouts on the destination date and leave the current draft/timer untouched.
+- Retain failed edits for retry. A stale or deleted record requires refreshing
+  before applying another correction. Confirm successful changes inline.
+- Short keyboard windows scroll the editor to the focused field and its actions;
+  retain native focus and entered values through rotation.
 
 ### Finish and discard
 

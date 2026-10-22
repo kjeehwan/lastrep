@@ -22,6 +22,16 @@ Android 10 and Android 14+ have not been checked for this change.
 
 ## Keyboard layout
 
+The saved-workout details editor opts into `androidBehavior="padding"` on
+`KeyboardAwareModalFrame`. Android's height behavior can retain the original
+portrait height through rotation; remounting the frame loses native focus.
+Padding avoids both problems. In short windows this editor also uses an 8 dp
+viewport margin and reduced vertical card padding so a focused numeric field
+fits above the landscape keyboard. `AdaptiveModalCard` retains its 32 dp margin
+and the modal frame retains height behavior for other callers by default.
+This opt-in path was checked on the Android 16 emulator with the keyboard open
+through rotation, plus portrait typing/cancellation on Samsung Android 13.
+
 Put `KeyboardAwareModalFrame` immediately inside the native Modal. Keyboard
 avoidance around a bottom-aligned card alone is not sufficient. Do not assume
 the underlying page's keyboard-avoiding view controls a separate modal window.
