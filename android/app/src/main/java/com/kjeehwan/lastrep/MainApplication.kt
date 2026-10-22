@@ -16,6 +16,7 @@ import com.kjeehwan.lastrep.gesture.WorkoutGestureTextInputPackage
 import com.kjeehwan.lastrep.samsunghealth.SamsungHealthBodyCompositionPackage
 import com.kjeehwan.lastrep.workoutnative.WorkoutSetListPackage
 import com.kjeehwan.lastrep.timewheel.MealTimeWheelPackage
+import com.kjeehwan.lastrep.systembars.NotebookSystemBarsPackage
 
 import expo.modules.ApplicationLifecycleDispatcher
 import expo.modules.ExpoReactHostFactory
@@ -26,6 +27,7 @@ class MainApplication : Application(), ReactApplication {
         add(WorkoutGestureTextInputPackage())
         add(WorkoutSetListPackage())
         add(MealTimeWheelPackage())
+        add(NotebookSystemBarsPackage())
         add(SamsungHealthBodyCompositionPackage())
       }
 

@@ -1,5 +1,27 @@
 # Input modal keyboard guardrails
 
+## Android popup status bars
+
+`NotebookModal` includes `NotebookSystemBars`, a noninteractive native view that
+sets status-icon appearance on the popup's own window. Android dialogs can retain
+light icons even when the underlying Activity correctly requests dark icons.
+Updating the Activity's React Native StatusBar alone does not resolve that case.
+Apply the notebook theme on attachment, theme changes and regained window focus;
+leave navigation-bar behavior and the underlying Activity unchanged. Keep the
+native source, prebuild template, package registration and verifier in sync.
+
+On October 22, 2026 a fresh development APK was built and installed on the
+connected Samsung Android 13 phone. Meal time and Home Calendar showed readable
+dark status icons in Light and light icons in Dark. Native window inspection
+confirmed the dialog's icon appearance matched the selected theme. Cancel,
+outside-tap dismissal and Android Back worked; page status icons remained
+readable after dismissal. Light was restored, and no meal or calendar data was
+saved. The workout draft fingerprint was unchanged across the APK update and
+checks. TypeScript, lint, native configuration verification and web export passed.
+Android 10 and Android 14+ have not been checked for this change.
+
+## Keyboard layout
+
 Put `KeyboardAwareModalFrame` immediately inside the native Modal. Keyboard
 avoidance around a bottom-aligned card alone is not sufficient. Do not assume
 the underlying page's keyboard-avoiding view controls a separate modal window.
