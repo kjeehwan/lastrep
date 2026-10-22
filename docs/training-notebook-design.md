@@ -1,6 +1,6 @@
 # Lastrep Training Notebook Design Specification
 
-Version: 1.33 | Date: October 22, 2026
+Version: 1.34 | Date: October 22, 2026
 
 Status: Workout, Home, Nutrition, Sleep, Profile and Settings browser design
 directions approved through iterative review. Shared rules below incorporate that
@@ -722,6 +722,10 @@ After loading, show a compact source/summary; details are expandable.
   generic muscle/equipment matches. All includes these variations across catalog
   body-part labels (e.g. Back and Legs deadlifts); explicit body-part filters stay
   strict. Generic compound/isolation labels do not establish movement similarity.
+- Resolve normalized names and genuine aliases. A clear movement name absent
+  from the catalog can suggest existing family peers without inventing exercise
+  metadata. Unclear custom names require explicit search. Keep later matches
+  reachable with Show more exercises instead of truncating the entire search.
 - Apply the same relevance gate to every catalog entry, including unfamiliar
   names: require a named family, a specific movement-pattern/primary-muscle match,
   or a meaningful name/primary-muscle match. Keep mobility, resistance, plyometrics
@@ -775,6 +779,12 @@ states honestly; do not invent a smooth trend from one record.
 4. Only then offer the existing optional source routine update, when applicable.
 5. Confirm `Routine updated` distinctly, without implying saving required updating.
 
+Ask recommendation feedback only for features used in the current workout.
+Name Recommend workout and Today's Plan review separately; keep their helpfulness
+answers separate when both were used. A failed review does not count as use.
+Remember use in the draft across reopening, and clear it when a different workout
+replaces that session. Ordinary workouts must save without irrelevant questions.
+
 Discard is a separate confirmation: title `Discard workout?`, concise loss
 description, stacked full-width `Keep workout` and `Discard workout` actions.
 Do not invent autosaved cloud recovery. Completed data is never destroyed just
@@ -801,6 +811,9 @@ a particular dense history view is explicitly designed otherwise.
   by content, not only by device-name detection.
 - With keyboard open, the focused field must automatically become visible and
   remain visible after rotation. Manual scrolling is fallback, not the target UX.
+  Exercise notes own their focus scrolling separately from native set rows. In
+  landscape with the keyboard open, compact the Workout header's vertical padding
+  while keeping its controls and touch targets intact.
 - In short keyboard windows or enlarged text, a fixed footer must not consume the
   entire editor. Move actions into the scrollable body when needed so an active
   field remains visible and actions remain reachable. Retain Android Back dismissal.

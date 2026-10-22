@@ -3,6 +3,11 @@
 October 20, 2026. Scope: Add exercise and the inline Replace exercise picker.
 The routine editor's separate search is outside this pass.
 
+October 22 follow-up: [Workout and food-search usability](workout-search-usability.md)
+covers uncatalogued movement names (including Pendulum Squat), alias resolution,
+additional result pages and fresh emulator/phone checks. The older custom-name
+limitation below describes the October 20 implementation.
+
 ## Findings and changes
 
 - Both screens previously accepted any matching query word or arbitrary letter
