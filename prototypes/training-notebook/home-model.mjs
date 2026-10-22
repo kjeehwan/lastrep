@@ -1,3 +1,4 @@
+import { workoutDraft } from './home-workout-details.mjs';
 export const TODAY = '2026-10-15';
 export function trendObservationDate(current, index) {
   return `2026-10-${String((current ? 12 : 6) + index).padStart(2, '0')}`;
@@ -18,6 +19,9 @@ export const homeStates = [
   ['error', 'Refresh failed', 'Keep saved values, disclose the refresh failure and offer Retry.'],
   ['calendar', 'Calendar', 'Minimal record index; tap a date for workout or rest-day detail.'],
   ['workout-day', 'Workout day details', 'Close returns to the calendar, not Home.'],
+  ['workout-edit', 'Edit saved workout details', 'Correct the date and duration without changing the exercises or current workout.'],
+  ['workout-edit-failure', 'Workout details / save failed', 'A simulated failed save keeps your edits; retry or cancel.'],
+  ['workout-edit-missing', 'Workout details / no duration', 'Older records without a duration stay blank until you enter one.'],
   ['rest-day', 'Rest day details', 'Rest day with one empty-workout message.'],
   ['training', 'Training phase', 'Selecting a different phase starts week 1; cancel changes nothing.'],
   ['diet', 'Diet phase', 'Compact selectors, without a separate Current phases card.'],
@@ -71,6 +75,18 @@ export function homeFixture(example = 'returning') {
     s.editDate ??= selectedObservation(s)?.date ?? null;
     s.addDraft = s.mode === 'add' ? { ...s.form } : {};
     s.editDraft = s.mode === 'edit' ? { ...s.form } : valuesForDate(s.records, s.editDate, s.unit);
+  }
+  s.workouts = s.hasWorkouts ? Object.entries(workoutDays).map(([date, title], i) => ({ id: `sample-${i}`, date, title, durationMin: 62 })) : [];
+  if (example.startsWith('workout-edit')) {
+    s.editWorkoutId = s.workouts.find(w => w.date === s.calendarDate).id;
+    const workout = s.workouts.find(w => w.id === s.editWorkoutId);
+    if (example === 'workout-edit-missing') workout.durationMin = null;
+    s.workoutDraft = workoutDraft(workout);
+    s.modal = 'workout-edit';
+    if (example === 'workout-edit-failure') {
+      s.workoutDraft.minutes = '15';
+      s.workoutError = "Couldn't save. Check your connection and try again.";
+    }
   }
   return s;
 }

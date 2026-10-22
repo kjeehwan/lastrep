@@ -9,7 +9,7 @@ import { popupBottomSpace } from "./notebook/popupGeometry";
 /** Keeps dialog content reachable in short landscape and resized windows. */
 export const ModalInputFocusContext = React.createContext<(() => void) | null>(null);
 
-export function AdaptiveModalCard({ children, style, contentSized = false, contentContainerStyle, footer, focusPlacement = "visible", animateFocus = false }: {
+export function AdaptiveModalCard({ children, style, contentSized = false, contentContainerStyle, footer, focusPlacement = "visible", animateFocus = false, viewportMargin = 32 }: {
   children: ReactNode;
   style?: StyleProp<ViewStyle>;
   contentSized?: boolean;
@@ -17,6 +17,7 @@ export function AdaptiveModalCard({ children, style, contentSized = false, conte
   footer?: ReactNode;
   focusPlacement?: "visible" | "start";
   animateFocus?: boolean;
+  viewportMargin?: number;
 }) {
   const tabs = React.useContext(BottomTabBarHeightContext);
   const { fontsLoaded } = useNotebook();
@@ -69,7 +70,7 @@ export function AdaptiveModalCard({ children, style, contentSized = false, conte
     const hide = Keyboard.addListener("keyboardDidHide", () => setKeyboardTop(null));
     return () => { show.remove(); change.remove(); hide.remove(); };
   }, []);
-  const windowHeight = modalViewportHeight(height, keyboardTop, insets.top, fontsLoaded ? popupBottomSpace(insets.bottom, tabs, keyboardTop != null) : insets.bottom);
+  const windowHeight = modalViewportHeight(height, keyboardTop, insets.top, fontsLoaded ? popupBottomSpace(insets.bottom, tabs, keyboardTop != null) : insets.bottom, viewportMargin);
   const requestedHeight = StyleSheet.flatten(style)?.maxHeight;
   const availableHeight = Math.min(windowHeight, contentSized && typeof requestedHeight === "number" ? requestedHeight : Infinity);
   const scrollFooter = modalFooterShouldScroll(availableHeight, fontScale);
