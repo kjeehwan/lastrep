@@ -1,6 +1,6 @@
 # Lastrep Training Notebook Design Specification
 
-Version: 1.32 | Date: October 21, 2026
+Version: 1.33 | Date: October 22, 2026
 
 Status: Workout, Home, Nutrition, Sleep, Profile and Settings browser design
 directions approved through iterative review. Shared rules below incorporate that
@@ -1741,6 +1741,10 @@ change-token/deletion reconciliation, stage-aware aggregation or timezone/DST.
   replacement. Keep internal exclusion markers without presenting obsolete totals.
   Label the daily total and selected graph value Time asleep when all counted
   time has complete stages; otherwise show May include awake time.
+  Keep that qualifier concise. An information button beside the daily qualifier
+  opens a short explanation: complete stages exclude known awake time; other
+  entries use recorded duration and may include awake time. Keep this explanation
+  in the help popup rather than expanding the inline label.
 - History-chart selection is independent of the date being logged: bar taps
   update the graph date, duration and weekly statistics only. Use the date/calendar
   control to change the summary and session list; this resets graph selection.
