@@ -1,9 +1,10 @@
+import { workoutDraft, workoutDetails } from './home-workout-details.mjs';
 import './input-behavior.mjs';
 import { demoAvatar } from './notebook-avatar.mjs';
 import { readNotebookPreferences, writeNotebookPreferences } from './notebook-preferences.mjs';
 import { setReviewState } from './review-state-picker.mjs';
 import { readCheckIn, writeCheckIn, clearCheckIn, checkInFields } from './check-in.mjs';
-import { TODAY, trendObservationDate, metrics, homeStates, homeFixture, observations, selectedObservation, displayValue, valuesForDate, phaseWeeks, changePhase, phaseOnDate, readiness, saveMeasurement, workoutDays, calendarCells } from './home-model.mjs';
+import { TODAY, trendObservationDate, metrics, homeStates, homeFixture, observations, selectedObservation, displayValue, valuesForDate, phaseWeeks, changePhase, phaseOnDate, readiness, saveMeasurement, calendarCells } from './home-model.mjs';
 
 const $ = q => document.querySelector(q);
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -110,17 +111,37 @@ function dialog(title, body, footer = '') {
 }
 function calendar() {
   const title = new Date(`${s.calendarMonth}-01T12:00:00`).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-  return dialog('Calendar', `<div class="calendar-toolbar"><button class="icon-button" data-action="month" data-step="-1" aria-label="Previous month">${icon('left')}</button><h3>${title}</h3><button class="icon-button" data-action="month" data-step="1" aria-label="Next month">${icon('right')}</button></div><div class="calendar-grid">${['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((label, i) => `<span class="calendar-weekday" aria-label="${['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][i]}">${label}</span>`).join('')}${calendarCells(s.calendarMonth).map(date => date ? `<button class="calendar-day ${date === TODAY ? 'today' : ''} ${date === s.calendarDate ? 'selected' : ''} ${s.hasWorkouts && workoutDays[date] ? 'recorded' : ''}" data-action="day" data-date="${date}" aria-label="${dateLabel(date)}${date === TODAY ? ', today' : ''}, ${s.hasWorkouts && workoutDays[date] ? 'workout recorded' : 'no workout recorded'}">${Number(date.slice(-2))}</button>` : '<span></span>').join('')}</div><div class="calendar-footer">${btn('Today', 'calendar-today')}${p('● Workout recorded', 'chart-hint')}</div>`);
+  return dialog('Calendar', `<div class="calendar-toolbar"><button class="icon-button" data-action="month" data-step="-1" aria-label="Previous month">${icon('left')}</button><h3>${title}</h3><button class="icon-button" data-action="month" data-step="1" aria-label="Next month">${icon('right')}</button></div><div class="calendar-grid">${['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((label, i) => `<span class="calendar-weekday" aria-label="${['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][i]}">${label}</span>`).join('')}${calendarCells(s.calendarMonth).map(date => date ? `<button class="calendar-day ${date === TODAY ? 'today' : ''} ${date === s.calendarDate ? 'selected' : ''} ${s.workouts.some(w => w.date === date) ? 'recorded' : ''}" data-action="day" data-date="${date}" aria-label="${dateLabel(date)}${date === TODAY ? ', today' : ''}, ${s.workouts.some(w => w.date === date) ? 'workout recorded' : 'no workout recorded'}">${Number(date.slice(-2))}</button>` : '<span></span>').join('')}</div><div class="calendar-footer">${btn('Today', 'calendar-today')}${p('● Workout recorded', 'chart-hint')}</div>`);
 }
 function dayDetails() {
-  const title = s.hasWorkouts && workoutDays[s.calendarDate];
+  const dayWorkouts = s.workouts.filter(w => w.date === s.calendarDate);
+  const title = dayWorkouts[0]?.title;
   const priorTraining = phaseOnDate(s, 'training', s.calendarDate);
   const priorDiet = phaseOnDate(s, 'diet', s.calendarDate);
   const kg = value => displayValue(value, 'weight', s.unit);
   const chest = [['Bench press', `3 sets · ${kg(105)} ${s.unit} × 3 @ 10`], ['Incline dumbbell press', '3 sets · Mixed loads and reps'], ['Cable fly', `2 sets · ${kg(20)} ${s.unit} × 12`], ['Tricep pushdown', `3 sets · ${kg(35)} ${s.unit} × 10`]];
-  const exercises = title === 'Chest + Triceps' ? chest : title === 'Posterior legs' ? [['Seated leg curl', '3 sets · 12 reps'], ['Romanian deadlift', '3 sets · 8 reps'], ['Standing calf raise', '3 sets · 15 reps']] : title === 'Anterior legs' ? [['Leg press', '3 sets · 10 reps'], ['Leg extension', '3 sets · 12 reps'], ['Standing calf raise', '3 sets · 15 reps']] : [['Chest-supported row', '3 sets · 10 reps'], ['Lat pulldown', '3 sets · 12 reps'], ['Dumbbell curl', '3 sets · 10 reps']];
-  return dialog(title ? 'Workout Day' : 'Rest Day', `${p(dateLabel(s.calendarDate))}<div class="day-phases"><span>Training<strong>${priorTraining}</strong></span><span>Diet<strong>${priorDiet}</strong></span></div>${title ? `<h3>${title}</h3>${p(`1 workout · ${title === 'Chest + Triceps' ? '11' : '9'} sets${title === 'Chest + Triceps' ? ` · ${kg(3247)} ${s.unit} volume` : ''}`)}${exercises.map(([name, detail]) => `<div class="day-exercise"><h4>${name}</h4>${p(detail)}</div>`).join('')}` : p('No workouts logged.')}`, btn('Back to calendar', 'calendar', 'primary'));
+  const workoutRows = dayWorkouts.map(workout => {
+    const title = workout.title;
+    const exercises = title === 'Chest + Triceps' ? chest : title === 'Posterior legs' ? [['Seated leg curl', '3 sets · 12 reps'], ['Romanian deadlift', '3 sets · 8 reps'], ['Standing calf raise', '3 sets · 15 reps']] : title === 'Anterior legs' ? [['Leg press', '3 sets · 10 reps'], ['Leg extension', '3 sets · 12 reps'], ['Standing calf raise', '3 sets · 15 reps']] : [['Chest-supported row', '3 sets · 10 reps'], ['Lat pulldown', '3 sets · 12 reps'], ['Dumbbell curl', '3 sets · 10 reps']];
+    const duration = workout.durationMin == null ? 'Duration not recorded' : `${Math.floor(workout.durationMin / 60)} h ${workout.durationMin % 60} min`;
+    return `<section class="saved-workout"><div class="saved-workout-heading"><h3>${esc(title)}</h3>${btn('Edit details', 'workout-edit', 'text', `data-id="${workout.id}" aria-label="Edit details for ${esc(title)}"`)}</div>${p(`${duration} · ${title === 'Chest + Triceps' ? '11' : '9'} sets`, 'chart-hint')}${exercises.map(([name, detail]) => `<div class="day-exercise"><h4>${name}</h4>${p(detail)}</div>`).join('')}</section>`;
+  }).join('');
+  return dialog(title ? 'Workout Day' : 'Rest Day', `${s.workoutSaved ? '<p class="workout-saved" role="status">' + icon('check') + 'Workout details updated</p>' : ''}${p(dateLabel(s.calendarDate))}<div class="day-phases"><span>Training<strong>${priorTraining}</strong></span><span>Diet<strong>${priorDiet}</strong></span></div>${title ? workoutRows : p('No workouts logged.')}`, btn('Back to calendar', 'calendar', 'primary'));
 }
+function selectedWorkout() { return s.workouts.find(w => w.id === s.editWorkoutId); }
+function workoutDirty() {
+  try { const next = workoutDetails(s.workoutDraft, TODAY), old = selectedWorkout(); return next.date !== old.date || next.durationMin !== old.durationMin; }
+  catch { return true; }
+}
+function workoutEditor() {
+  const workout = selectedWorkout(), draft = s.workoutDraft;
+  return dialog('Edit workout details', `<div class="workout-editor-intro"><h3>${esc(workout.title)}</h3>${p('Update this saved workout.', 'chart-hint')}</div><div class="workout-date-field"><span id="workout-date-label">Workout date</span><button class="workout-date-button" data-action="workout-date" aria-labelledby="workout-date-label workout-date-value"><span id="workout-date-value">${dateLabel(draft.date)}</span>${icon('calendar')}</button></div><fieldset class="workout-duration"><legend>Duration</legend><div class="workout-duration-fields">${['hours', 'minutes'].map(key => `<label for="workout-${key}"><input id="workout-${key}" data-workout-field="${key}" value="${esc(draft[key])}" inputmode="numeric" maxlength="2" placeholder="—" aria-describedby="workout-duration-hint workout-edit-error"><span>${key === 'hours' ? 'Hours' : 'Minutes'}</span></label>`).join('<span class="workout-duration-colon" aria-hidden="true">:</span>')}</div><p id="workout-duration-hint" class="chart-hint">${workout.durationMin == null ? 'No duration was recorded. Leave both fields blank to keep it that way.' : 'Tap a number to edit the duration.'}</p></fieldset><p id="workout-edit-error" class="form-error" role="alert">${esc(s.workoutError || '')}</p>`, btn(s.workoutError?.startsWith("Couldn't") ? 'Try again' : 'Save changes', 'workout-save', 'primary', workoutDirty() ? '' : 'disabled') + btn('Cancel', 'close'));
+}
+function workoutDatePicker() {
+  const month = new Date(`${s.workoutMonth}-01T12:00:00`).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  return dialog('Workout date', `<div class="calendar-toolbar"><button class="icon-button" data-action="workout-month" data-step="-1" aria-label="Previous month">${icon('left')}</button><h3>${month}</h3><button class="icon-button" data-action="workout-month" data-step="1" aria-label="Next month">${icon('right')}</button></div><div class="calendar-grid">${['M','T','W','T','F','S','S'].map(d => `<span class="calendar-weekday">${d}</span>`).join('')}${calendarCells(s.workoutMonth).map(date => date ? `<button class="calendar-day ${date === s.workoutDraft.date ? 'selected' : ''}" data-action="workout-pick-date" data-date="${date}" aria-label="${dateLabel(date)}" aria-pressed="${date === s.workoutDraft.date}" ${date > TODAY ? 'disabled' : ''}>${Number(date.slice(-2))}</button>` : '<span></span>').join('')}</div>`, btn('Cancel', 'close'));
+}
+
 function measurement() {
   const date = s.mode === 'edit' ? s.editDate : TODAY;
   return dialog('Body composition data', `<div class="measurement-mode"><button class="${s.mode === 'add' ? 'selected' : ''}" data-action="measurement-mode" data-mode="add" aria-pressed="${s.mode === 'add'}">Add today<small>${shortDate(TODAY)}</small></button>${s.editDate ? `<button class="${s.mode === 'edit' ? 'selected' : ''}" data-action="measurement-mode" data-mode="edit" aria-pressed="${s.mode === 'edit'}">Edit ${shortDate(s.editDate)}<small>Recorded data</small></button>` : ''}</div>${p(`${s.mode === 'edit' ? 'Editing' : 'Adding for'} ${dateLabel(date)}`)}<div>${metrics.map(([key, label, unit]) => {
@@ -143,6 +164,8 @@ function modal() {
   switch (s.modal) {
     case 'calendar': return calendar();
     case 'day': return dayDetails();
+    case 'workout-edit': return workoutEditor();
+    case 'workout-date': return workoutDatePicker();
     case 'training': case 'diet': return phaseDialog(s.modal);
     case 'measurement': return measurement();
     case 'delete': return dialog('Delete body data?', `${p(`Delete all body measurements saved for ${dateLabel(s.editDate)} in this mock session?`)}${p('This does not delete records from a connected health service.')}`, btn('Delete data', 'delete-measurement', 'danger') + btn('Keep data', 'keep-data', 'primary'));
@@ -180,11 +203,15 @@ function render(preserve = true) {
 }
 function notify(message) { s.toast = message; clearTimeout(toastTimer); render(); toastTimer = setTimeout(() => { s.toast = ''; render(); }, 4500); }
 function open(modalName) { s.error = ''; s.modal = modalName; if (modalName === 'check-in') s.checkInDraft = structuredClone({ ratings: s.ratings, pain: s.pain ?? 'None', activity: s.activity ?? '', note: s.note ?? '' }); render(false); }
-function close() { s.modal = s.modal === 'day' ? 'calendar' : s.modal === 'delete' ? 'measurement' : ''; s.error = ''; render(false); }
+function close() { s.modal = s.modal === 'workout-date' ? 'workout-edit' : s.modal === 'workout-edit' ? 'day' : s.modal === 'day' ? 'calendar' : s.modal === 'delete' ? 'measurement' : ''; s.error = ''; render(false); }
 function beginMeasurement() { const selected = selectedObservation(s); s.editDate = selected?.date ?? null; s.mode = 'add'; s.form = {}; s.addDraft = {}; s.editDraft = valuesForDate(s.records, s.editDate, s.unit); s.definition = ''; open('measurement'); }
 
 $('#stage').addEventListener('input', event => {
   const el = event.target;
+  if (el.dataset.workoutField) {
+    s.workoutDraft[el.dataset.workoutField] = el.value;
+    const save = $('[data-action="workout-save"]'); if (save) save.disabled = !workoutDirty();
+  }
   if (el.dataset.measure) { s.form[el.dataset.measure] = el.value; s.error = ''; }
   if (el.dataset.rating) { s.checkInDraft ??= structuredClone({ ratings: s.ratings, pain: s.pain ?? 'None', activity: s.activity ?? '', note: s.note ?? '' }); s.checkInDraft.ratings[el.dataset.rating] = Number(el.value); document.querySelector('#rating-' + el.dataset.rating).textContent = el.value + '/10'; el.setAttribute('aria-valuetext', el.value + ' out of 10'); }
   if (el.dataset.draft && s.checkInDraft) s.checkInDraft[el.dataset.draft === 'dailyNote' ? 'note' : el.dataset.draft] = el.value;
@@ -220,10 +247,22 @@ $('#stage').addEventListener('click', event => {
     case 'keep-data': s.modal = 'measurement'; render(false); return;
     case 'delete-measurement': s.records = s.records.filter(row => row.date !== s.editDate); s.selected = observations(s.records, s.metric).at(-1)?.date ?? null; s.modal = ''; notify('Selected date removed from this mock session.'); return;
     case 'phase': changePhase(s, d.kind, d.value); writeNotebookPreferences({ profile: { training: s.training, diet: s.diet, phaseHistory: s.phaseHistory } }); s.modal = ''; notify('Phase updated in this mock Home and Profile.'); return;
+    case 'workout-edit': s.editWorkoutId = d.id; s.workoutDraft = workoutDraft(selectedWorkout()); s.workoutError = ''; s.workoutSaved = false; s.modal = 'workout-edit'; render(false); return;
+    case 'workout-date': s.workoutMonth = s.workoutDraft.date.slice(0, 7); s.modal = 'workout-date'; render(false); return;
+    case 'workout-month': { const date = new Date(`${s.workoutMonth}-01T12:00:00`); date.setMonth(date.getMonth() + Number(d.step)); s.workoutMonth = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`; render(false); return; }
+    case 'workout-pick-date': s.workoutDraft.date = d.date; s.workoutError = ''; s.modal = 'workout-edit'; render(false); return;
+    case 'workout-save': {
+      try {
+        const changes = workoutDetails(s.workoutDraft, TODAY);
+        Object.assign(selectedWorkout(), changes); s.calendarDate = changes.date; s.calendarMonth = changes.date.slice(0, 7);
+        s.workoutSaved = true; s.modal = 'day'; s.workoutError = ''; render(false);
+      } catch (error) { s.workoutError = error.message; render(); }
+      return;
+    }
     case 'calendar': s.modal = 'calendar'; render(false); return;
     case 'calendar-today': s.calendarMonth = TODAY.slice(0, 7); s.calendarDate = TODAY; render(false); return;
     case 'month': { const date = new Date(`${s.calendarMonth}-01T12:00:00`); date.setMonth(date.getMonth() + Number(d.step)); s.calendarMonth = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`; render(false); return; }
-    case 'day': s.calendarDate = d.date; s.modal = 'day'; render(false); return;
+    case 'day': s.workoutSaved = false; s.calendarDate = d.date; s.modal = 'day'; render(false); return;
     case 'pain': s.checkInDraft ??= structuredClone({ ratings: s.ratings, pain: s.pain ?? 'None', activity: s.activity ?? '', note: s.note ?? '' }); s.checkInDraft.pain = d.value; render(); return;
     case 'save-check-in': {
       const ratings = s.checkInDraft?.ratings ?? s.ratings;

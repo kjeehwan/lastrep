@@ -10,7 +10,24 @@ main screen design directions are approved. None replaces a Lastrep application 
 
 **Home study:** after starting the server, open
 **http://127.0.0.1:4317/home.html**. The studies link to one another from the
-review sidebar. Home has 25 example states; its design direction is approved.
+review sidebar. Home has 28 example states, including the saved-workout candidate
+below; its previous design baseline is approved.
+
+### Saved workout details candidate
+
+Open **http://127.0.0.1:4317/home.html#workout-edit** for the proposed editor.
+From Calendar, choose a recorded day, then **Edit details** beside the workout.
+Change its date using the calendar or enter hours/minutes; **Save changes** returns
+to that workout on its new day. Cancel, outside tap and Escape discard the editor
+changes. Cancelling the date picker returns to the editor with its duration draft.
+The calendar retains other workouts when moving onto an already recorded day.
+
+Review states **Workout details / save failed** and **Workout details / no
+duration** demonstrate retained edits with retry and an older missing duration.
+Compare Dark paper, compact, landscape and 200% text using the existing controls.
+This design is approved. Edits affect only temporary Home calendar
+fixtures; reset/reload clears them. Other studies, weekly trend examples and real
+workout records are unchanged. This does not implement native saved-workout edits.
 
 **Nutrition study:** **http://127.0.0.1:4317/nutrition.html**. It has 44 example
 states and shares the approved notebook typography, colors and control rules.
