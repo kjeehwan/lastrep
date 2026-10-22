@@ -68,7 +68,7 @@ import { isExpectedOfflineError } from "../../../src/utils/networkErrors";
 import { scheduleAfterInteractions } from "../../../src/utils/scheduleAfterInteractions";
 import { scheduleAfterPaint } from "../../../src/utils/scheduleAfterPaint";
 import { popPendingExerciseSelection } from "../../../src/workouts/addExerciseBridge";
-import { getExerciseSubstitutions, indexExerciseSearch, replacementSearchOptions } from "../../../src/workouts/exerciseSearch";
+import { getExerciseSubstitutions, indexExerciseSearch, replacementSearchOptions, resolveReplacementTarget } from "../../../src/workouts/exerciseSearch";
 import { loadFreeExerciseDbCatalog } from "../../../src/workouts/freeExerciseDbCatalog";
 import { resolveFreeExerciseDbImagesForNames } from "../../../src/workouts/freeExerciseDbImages";
 import {
@@ -439,6 +439,7 @@ export default function WorkoutLog() {
   const [freeDbCatalog, setFreeDbCatalog] = useState<ExerciseCatalogItem[]>([]);
   const [replaceTarget, setReplaceTarget] = useState<string | null>(null);
   const [replaceSearch, setReplaceSearch] = useState("");
+  const [replacementPage, setReplacementPage] = useState({ key: "", limit: 24 });
   const [replaceGroup, setReplaceGroup] = useState<string>("all");
   const [recommendationFocus, setRecommendationFocus] = useState<RecommendationFocusId>("auto");
   const [showExerciseDemo, setShowExerciseDemo] = useState(false);
@@ -933,11 +934,11 @@ export default function WorkoutLog() {
 
   const getSubstitutionCandidates = useCallback(
     (exerciseName: string, limit = 16) => {
-      const target = findCatalogExercise(exerciseName);
+      const target = resolveReplacementTarget(exerciseSearchIndex, exerciseName);
       if (!target) return [];
       return getExerciseSubstitutions(mergedCatalog, target, limit);
     },
-    [findCatalogExercise, mergedCatalog]
+    [exerciseSearchIndex, mergedCatalog]
   );
 
   const replacementOptions = useMemo(() => {
@@ -948,11 +949,14 @@ export default function WorkoutLog() {
       index: exerciseSearchIndex,
       query: replaceSearch,
       group: replaceGroup === "all" ? "all" : (replaceGroup as ExerciseGroupKey),
-      targetName: target.name,
-      targetGroup: findCatalogExercise(target.name)?.group,
+      targetName: resolveReplacementTarget(exerciseSearchIndex, target.name)?.name ?? target.name,
+      targetGroup: resolveReplacementTarget(exerciseSearchIndex, target.name)?.group,
+      limit: Number.POSITIVE_INFINITY,
       suggestions: replaceSearch.trim() ? [] : getSubstitutionCandidates(target.name, Number.POSITIVE_INFINITY),
     });
-  }, [replaceGroup, replaceSearch, replaceTarget, exercises, findCatalogExercise, getSubstitutionCandidates, exerciseSearchIndex]);
+  }, [replaceGroup, replaceSearch, replaceTarget, exercises, getSubstitutionCandidates, exerciseSearchIndex]);
+  const replacementPageKey = JSON.stringify([replaceTarget, replaceSearch, replaceGroup]);
+  const replacementLimit = replacementPage.key === replacementPageKey ? replacementPage.limit : 24;
 
   const loadPastWorkouts = useCallback(async () => {
     try {
@@ -3115,7 +3119,7 @@ export default function WorkoutLog() {
                     {ex.name}
                   </Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.iconButton} onPress={() => cardActions.openExerciseActions(ex.id)}>
+                <TouchableOpacity accessibilityRole="button" accessibilityLabel={`${ex.name} actions`} style={styles.iconButton} onPress={() => cardActions.openExerciseActions(ex.id)}>
                   <Ionicons name="ellipsis-horizontal" size={18} color={colors.muted} />
                 </TouchableOpacity>
               </View>
@@ -3174,7 +3178,7 @@ export default function WorkoutLog() {
                     keyboardShouldPersistTaps="handled"
                     scrollEventThrottle={16}
                   >
-                    {replacementOptions.map((item) => (
+                    {replacementOptions.slice(0, replacementLimit).map((item) => (
                       <TouchableOpacity
                         key={`${item.id}-${ex.id}`}
                         style={styles.pickerRow}
@@ -3189,11 +3193,16 @@ export default function WorkoutLog() {
                         </View>
                       </TouchableOpacity>
                     ))}
+                    {replacementOptions.length > replacementLimit ? <TouchableOpacity
+                      accessibilityRole="button" style={styles.routineMenuRow}
+                      onPress={() => setReplacementPage({ key: replacementPageKey, limit: replacementLimit + 24 })}>
+                      <Text style={styles.linkText}>Show more exercises</Text>
+                    </TouchableOpacity> : null}
                     {replacementOptions.length === 0 ? (
                       <Text style={styles.replacementEmptyText}>
                         {exerciseCatalogItem
                           ? "No close alternatives found. Search for another exercise."
-                          : "Custom exercises do not have automatic alternatives. Search for the exercise you want instead."}
+                          : "No clear movement match. Search for the exercise you want instead."}
                       </Text>
                     ) : null}
                   </ScrollView>
@@ -3515,7 +3524,7 @@ export default function WorkoutLog() {
               ) : null}
             </View>
           );
-        }), [exercises, exerciseUnits, getExerciseMode, effortScale, previousExerciseSetsByName, findCatalogExercise, restTimerByExercise, replaceTarget, replaceSearch, replaceGroup, replacementOptions, isTabletLayout, formatLastSetSummary, scrollNativeGesture, getExerciseZone, undoDeletedSet, cardActions, styles, colors, fontScale, editingSet, cardioTimeTarget, cardioDistanceTarget, showCardioTimeModal, showCardioDistanceModal]);
+        }), [exercises, exerciseUnits, getExerciseMode, effortScale, previousExerciseSetsByName, findCatalogExercise, restTimerByExercise, replaceTarget, replaceSearch, replaceGroup, replacementOptions, replacementLimit, replacementPageKey, isTabletLayout, formatLastSetSummary, scrollNativeGesture, getExerciseZone, undoDeletedSet, cardActions, styles, colors, fontScale, editingSet, cardioTimeTarget, cardioDistanceTarget, showCardioTimeModal, showCardioDistanceModal]);
 
   return (
     <SafeAreaView style={styles.screen} edges={["top", "left", "right"]}>
