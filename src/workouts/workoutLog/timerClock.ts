@@ -1,4 +1,4 @@
-export type ElapsedClock = { elapsedSeconds: number; startedAtMs: number | null };
+export type ElapsedClock = { elapsedSeconds: number; startedAtMs: number | null; hasStarted?: boolean };
 export type RestClock = { remainingSec: number; running: boolean; endsAtMs?: number };
 
 export function nextRestDeadlineDelay(clocks: Record<string, RestClock>, nowMs: number): number | null {
@@ -11,11 +11,15 @@ export function elapsedAt(clock: ElapsedClock, nowMs: number): number {
 }
 
 export function startElapsed(clock: ElapsedClock, nowMs: number): ElapsedClock {
-  return clock.startedAtMs == null ? { ...clock, startedAtMs: nowMs - clock.elapsedSeconds * 1000 } : clock;
+  return clock.startedAtMs == null ? { ...clock, hasStarted: true, startedAtMs: nowMs - clock.elapsedSeconds * 1000 } : clock;
+}
+
+export function autoStartElapsed(clock: ElapsedClock, nowMs: number): ElapsedClock {
+  return clock.hasStarted || clock.startedAtMs != null || clock.elapsedSeconds > 0 ? clock : startElapsed(clock, nowMs);
 }
 
 export function pauseElapsed(clock: ElapsedClock, nowMs: number): ElapsedClock {
-  return { elapsedSeconds: elapsedAt(clock, nowMs), startedAtMs: null };
+  return { ...clock, elapsedSeconds: elapsedAt(clock, nowMs), startedAtMs: null };
 }
 
 export function advanceRest(clock: RestClock, nowMs: number): RestClock {

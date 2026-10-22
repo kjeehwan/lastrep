@@ -1,8 +1,11 @@
 import { useNotebook, notebookSheet } from "../../ui/notebook/Notebook";
 import { NotebookModal } from "../../ui/notebook/NotebookModal";
 import { notebookFonts } from "../../ui/notebook/tokens";
-import React, { useState } from "react";
-import { Modal, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { Modal, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View, useWindowDimensions } from "react-native";
+import { centeredTimeIndex, wrapTimePart } from "../timeWheel";
+import MealTimeWheel, { nativeMealTimeWheelAvailable } from "../../components/MealTimeWheel";
+import type { MealTimeWheelProps } from "../../components/MealTimeWheel.types";
 import type { NutritionMeal } from "../../contracts";
 import { AdaptiveModalCard } from "../../ui/AdaptiveModalCard";
 import { KeyboardAwareModalFrame } from "../../ui/KeyboardAwareModalFrame";
@@ -58,9 +61,11 @@ export function MealOrganizationEditor({ uid, section, sections, meals, dateKey,
   const [mode, setMode] = useState<"menu" | "name" | "time">(initialMode);
   const [name, setName] = useState<string | null>(null);
   const clock = formatMealTime(sectionMealTime(meals));
-  const [hours, setHours] = useState(() => clock === "Set time" ? "" : clock.split(":")[0]);
-  const [minutesText, setMinutesText] = useState(() => clock === "Set time" ? "" : clock.split(":")[1]);
+  const [hours, setHours] = useState(() => clock === "Set time" ? "00" : clock.split(":")[0]);
+  const [minutesText, setMinutesText] = useState(() => clock === "Set time" ? "00" : clock.split(":")[1]);
   const [pending, setPending] = useState(false);
+  const [hourScrolling, setHourScrolling] = useState(false);
+  const [minuteScrolling, setMinuteScrolling] = useState(false);
   const [error, setError] = useState("");
   const close = () => { if (!pending) onClose(); };
   const save = async () => {
@@ -81,7 +86,7 @@ export function MealOrganizationEditor({ uid, section, sections, meals, dateKey,
     } catch { setError("Could not save changes. Please try again."); }
     finally { setPending(false); }
   };
-  return <ModalView transparent animationType="fade" visible onRequestClose={close}>
+  return <ModalView transparent animationType={mode === "time" ? "none" : "fade"} visible onRequestClose={close}>
     <KeyboardAwareModalFrame style={styles.overlay}>
       <Pressable style={StyleSheet.absoluteFill} onPress={close} accessibilityLabel="Close meal options" />
       <AdaptiveModalCard contentSized style={styles.modal}>
@@ -97,8 +102,8 @@ export function MealOrganizationEditor({ uid, section, sections, meals, dateKey,
           {mode === "name" ? <TextInput disableFullscreenUI selectTextOnFocus accessibilityLabel="Meal name" style={styles.input}
             value={name ?? mealLabel(section, labels)} onChangeText={setName} editable={!pending} maxLength={24} autoCapitalize="sentences"
             placeholder="e.g. Post-workout" placeholderTextColor={fontsLoaded ? colors.muted : "#a5acc1"} /> : fontsLoaded ? <View style={styles.row}>
-            <TimePart label="Hour" count={24} value={hours} onChange={setHours} disabled={pending} />
-            <TimePart label="Minute" count={60} value={minutesText} onChange={setMinutesText} disabled={pending} />
+            <TimePart label="Hour" count={24} value={hours} onChange={setHours} onScrolling={setHourScrolling} disabled={pending} />
+            <TimePart label="Minute" count={60} value={minutesText} onChange={setMinutesText} onScrolling={setMinuteScrolling} disabled={pending} />
           </View> : <View style={styles.row}>
             <View style={{ flex: 1 }}><Text style={styles.description}>Hour (0-23)</Text>
               <TextInput accessibilityLabel="Meal hour" style={styles.input} value={hours} onChangeText={setHours} maxLength={2}
@@ -111,7 +116,7 @@ export function MealOrganizationEditor({ uid, section, sections, meals, dateKey,
           </View>}
           {mode === "name" ? <View style={[styles.row, { alignItems: "center", marginBottom: 12 }]}><Text style={[styles.text, { flex: 1 }]}>Use as default for other dates</Text><View style={{ borderWidth: 1, borderColor: colors.border, borderRadius: 18, backgroundColor: colors.subtle, paddingHorizontal: 3 }}><Switch accessibilityLabel="Use as default for other dates" value={useAsDefault} onValueChange={setUseAsDefault} disabled={pending} trackColor={{ false: colors.border, true: colors.ink }} thumbColor={useAsDefault ? colors.surface : colors.ink} /></View></View> : null}
           <Text accessibilityLiveRegion="polite" style={styles.error}>{error || " "}</Text>
-          <Pressable disabled={pending || !ready} style={[styles.button, styles.selected]} onPress={() => void save()}><Text style={styles.text}>{pending ? "Saving..." : "Save"}</Text></Pressable>
+          <Pressable disabled={pending || !ready || (mode === "time" && (hourScrolling || minuteScrolling))} style={[styles.button, styles.selected]} onPress={() => void save()}><Text style={styles.text}>{pending ? "Saving..." : "Save"}</Text></Pressable>
         </>}
         <Pressable disabled={pending} style={styles.button} onPress={close}><Text style={styles.text}>{mode === "menu" ? "Close" : "Cancel"}</Text></Pressable>
       </AdaptiveModalCard>
@@ -133,17 +138,92 @@ const legacyStyles = StyleSheet.create({
   error: { color: "#fca5a5", fontSize: 13, marginBottom: 12 },
 });
 
-function TimePart({ label, count, value, onChange, disabled }: { label: string; count: number; value: string; onChange: (value: string) => void; disabled: boolean }) {
+type TimePartProps = { label: string; count: number; value: string; onChange: (value: string) => void; onScrolling: (value: boolean) => void; disabled: boolean };
+
+const TimePart = React.memo(function TimePart(props: TimePartProps) {
+  return nativeMealTimeWheelAvailable ? <NativeTimePart {...props} /> : <FallbackTimePart {...props} />;
+});
+
+function NativeTimePart({ label, count, value, onChange, onScrolling, disabled }: TimePartProps) {
   const { colors } = useNotebook();
-  const data = Array.from({ length: count }, (_, index) => String(index).padStart(2, "0"));
-  const selected = value === "" ? 0 : Math.min(count - 1, Math.max(0, Number(value)));
-  const [initialOffset] = useState(() => ({ x: 0, y: Math.max(0, selected - 1) * 48 }));
+  const { fontScale } = useWindowDimensions();
+  const rowHeight = Math.max(48, Math.ceil(32 * fontScale + 16));
+  const change = useCallback<MealTimeWheelProps["onWheelChange"]>(event => {
+    const { value: next, scrolling } = event.nativeEvent;
+    if (!scrolling) onChange(String(next).padStart(2, "0"));
+    onScrolling(scrolling);
+  }, [onChange, onScrolling]);
   return <View style={{ flex: 1, gap: 8 }}>
     <Text style={{ color: colors.muted, fontFamily: notebookFonts.body, fontSize: 16 }}>{label}</Text>
-    <ScrollView nestedScrollEnabled contentOffset={initialOffset} style={{ height: 192, borderWidth: 1, borderColor: colors.rule, borderRadius: 4 }}>
-      {data.map((item) => <Pressable key={item} accessibilityLabel={`${label} ${item}`} accessibilityState={{ selected: value === item, disabled }} disabled={disabled} onPress={() => onChange(item)} style={{ height: 48, alignItems: "center", justifyContent: "center", backgroundColor: value === item ? colors.subtle : colors.surface }}>
-        <Text style={{ color: colors.ink, fontFamily: value === item ? notebookFonts.semibold : notebookFonts.body, fontSize: 18 }}>{item}</Text>
-      </Pressable>)}
-    </ScrollView>
+    <View style={{ height: rowHeight * 3, borderWidth: 1, borderColor: colors.rule, borderRadius: 4, overflow: "hidden" }}>
+      <View pointerEvents="none" style={{ position: "absolute", top: rowHeight, left: 0, right: 0, height: rowHeight, backgroundColor: colors.subtle, borderTopWidth: 1, borderBottomWidth: 1, borderColor: colors.rule }} />
+      <MealTimeWheel count={count} initialValue={value === "" ? 0 : Number(value)} inkColor={colors.ink} numberSize={18}
+        accessibilityLabel={label} partLabel={label} enabled={!disabled} onWheelChange={change} style={{ width: "100%", height: "100%" }} />
+    </View>
+  </View>;
+}
+
+function FallbackTimePart({ label, count, value, onChange, onScrolling, disabled }: TimePartProps) {
+  const { colors } = useNotebook();
+  const { fontScale } = useWindowDimensions();
+  const rowHeight = Math.max(48, Math.ceil(32 * fontScale + 16));
+  const scroll = useRef<ScrollView>(null);
+  const settling = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const offset = useRef(0);
+  const moving = useRef(false);
+  const dragging = useRef(false);
+  const selected = value === "" ? 0 : wrapTimePart(Number(value), count);
+  const selectedRef = useRef(selected);
+  useEffect(() => { selectedRef.current = selected; }, [selected]);
+  // contentOffset is a native command, not a controlled selection. Passing the
+  // old selected offset again when Save's state changes can cancel the gesture.
+  const [initialOffset] = useState(() => ({ x: 0, y: centeredTimeIndex(selected, count) * rowHeight }));
+  const cancelSettle = () => { if (settling.current !== null) clearTimeout(settling.current); settling.current = null; };
+  useEffect(() => {
+    const y = centeredTimeIndex(selectedRef.current, count) * rowHeight;
+    offset.current = y;
+    scroll.current?.scrollTo({ y, animated: false });
+  }, [count, rowHeight]);
+  useEffect(() => () => { if (settling.current !== null) clearTimeout(settling.current); }, []);
+  const select = (index: number) => {
+    cancelSettle();
+    moving.current = false;
+    dragging.current = false;
+    const next = wrapTimePart(index, count);
+    const y = centeredTimeIndex(next, count) * rowHeight;
+    offset.current = y;
+    scroll.current?.scrollTo({ y, animated: false });
+    onChange(String(next).padStart(2, "0"));
+    onScrolling(false);
+  };
+  const settle = (y: number) => select(Math.round(y / rowHeight));
+  return <View style={{ flex: 1, gap: 8 }}>
+    <Text style={{ color: colors.muted, fontFamily: notebookFonts.body, fontSize: 16 }}>{label}</Text>
+    <View accessible accessibilityRole="adjustable" accessibilityLabel={label} accessibilityValue={{ text: value === "" ? "Not set" : value }} accessibilityState={{ disabled }}
+      accessibilityActions={[{ name: "increment" }, { name: "decrement" }]}
+      onAccessibilityAction={event => { if (!disabled) select(selected + (event.nativeEvent.actionName === "increment" ? 1 : -1)); }}
+      style={{ height: rowHeight * 3, borderWidth: 1, borderColor: colors.rule, borderRadius: 4, overflow: "hidden" }}>
+      <View pointerEvents="none" style={{ position: "absolute", top: rowHeight, left: 0, right: 0, height: rowHeight, backgroundColor: colors.subtle, borderTopWidth: 1, borderBottomWidth: 1, borderColor: colors.rule }} />
+      <ScrollView ref={scroll} nestedScrollEnabled scrollEnabled={!disabled} showsVerticalScrollIndicator={false}
+        contentOffset={initialOffset} contentContainerStyle={{ paddingVertical: rowHeight }}
+        snapToInterval={rowHeight} decelerationRate="fast" scrollEventThrottle={16}
+        onScroll={event => { if (moving.current) offset.current = event.nativeEvent.contentOffset.y; }}
+        onScrollBeginDrag={() => { cancelSettle(); moving.current = true; dragging.current = true; onScrolling(true); }}
+        onMomentumScrollBegin={() => { if (moving.current) cancelSettle(); }}
+        onScrollEndDrag={event => {
+          dragging.current = false;
+          offset.current = event.nativeEvent.contentOffset.y;
+          cancelSettle();
+          settling.current = setTimeout(() => { if (moving.current) settle(offset.current); }, 200);
+        }}
+        onMomentumScrollEnd={event => { if (moving.current && !dragging.current) settle(event.nativeEvent.contentOffset.y); }}>
+        {Array.from({ length: count * 5 }, (_, index) => {
+          const item = String(wrapTimePart(index, count)).padStart(2, "0");
+          return <Pressable key={index} accessible={false} disabled={disabled} onPress={() => select(index)} style={{ height: rowHeight, alignItems: "center", justifyContent: "center" }}>
+            <Text style={{ color: colors.ink, fontFamily: value === item ? notebookFonts.semibold : notebookFonts.body, fontSize: 18 }}>{item}</Text>
+          </Pressable>;
+        })}
+      </ScrollView>
+    </View>
   </View>;
 }

@@ -44,7 +44,8 @@ focus. Browser prototypes are design studies, not production account screens.
 - [Exercise search review](docs/exercise-search-quality-review.md): shared Add /
   Replace ranking, catalog coverage and native splash follow-up.
 - [Workout and food-search usability](docs/workout-search-usability.md): note
-  keyboard visibility, relevant feedback, replacement peers and search timings.
+  keyboard visibility, relevant feedback, replacement peers, search timings,
+  timer auto-start and native meal-time wheels.
 
 ## Stack and Layout
 

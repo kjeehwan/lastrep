@@ -15,6 +15,7 @@ import com.facebook.react.defaults.DefaultReactNativeHost
 import com.kjeehwan.lastrep.gesture.WorkoutGestureTextInputPackage
 import com.kjeehwan.lastrep.samsunghealth.SamsungHealthBodyCompositionPackage
 import com.kjeehwan.lastrep.workoutnative.WorkoutSetListPackage
+import com.kjeehwan.lastrep.timewheel.MealTimeWheelPackage
 
 import expo.modules.ApplicationLifecycleDispatcher
 import expo.modules.ExpoReactHostFactory
@@ -24,6 +25,7 @@ class MainApplication : Application(), ReactApplication {
       PackageList(this).packages.apply {
         add(WorkoutGestureTextInputPackage())
         add(WorkoutSetListPackage())
+        add(MealTimeWheelPackage())
         add(SamsungHealthBodyCompositionPackage())
       }
 

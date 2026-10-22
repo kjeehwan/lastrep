@@ -470,6 +470,8 @@ export default function WorkoutLog() {
     getElapsedSeconds,
     running: workoutTimerRunning,
     startedAtMs: workoutTimerStartedAtMs,
+    hasStarted: workoutTimerHasStarted,
+    startIfNeverStarted: autoStartWorkoutTimer,
     restore: restoreElapsedTimer,
     start: startElapsedTimer,
     pause: pauseElapsedTimer,
@@ -591,10 +593,11 @@ export default function WorkoutLog() {
       elapsedSeconds,
       workoutTimerRunning,
       workoutTimerStartedAtMs,
+      workoutTimerHasStarted,
       restTimerByExercise,
       recommendationUsage,
     }),
-    [exercises, exerciseUnits, sessionTitle, sessionDateText, elapsedSeconds, workoutTimerRunning, workoutTimerStartedAtMs, restTimerByExercise, recommendationUsage]
+    [exercises, exerciseUnits, sessionTitle, sessionDateText, elapsedSeconds, workoutTimerRunning, workoutTimerStartedAtMs, workoutTimerHasStarted, restTimerByExercise, recommendationUsage]
   );
   const availableWeightsPreferences = useAvailableWeights(activeUid);
   // Guidance depends on prescriptions, not per-second timer display updates.
@@ -1122,7 +1125,7 @@ export default function WorkoutLog() {
           setRestTimerByExercise({});
           setSessionTitle("");
           setSessionDateText(toLocalDateKey(new Date()));
-          setElapsedDuration(0);
+          resetElapsedTimer();
           return;
         }
         if (raw) {
@@ -1207,7 +1210,9 @@ export default function WorkoutLog() {
               ? Math.max(0, Math.round(parsed.elapsedSeconds))
               : 0,
             parsed.workoutTimerRunning === true && typeof parsed.workoutTimerStartedAtMs === "number" && Number.isFinite(parsed.workoutTimerStartedAtMs) && parsed.workoutTimerStartedAtMs <= Date.now()
-              ? parsed.workoutTimerStartedAtMs : null
+              ? parsed.workoutTimerStartedAtMs : null,
+            parsed.workoutTimerHasStarted === true || parsed.elapsedSeconds > 0 || parsed.workoutTimerRunning === true ||
+              (parsed.workoutTimerHasStarted == null && parsed.exercises?.some((ex: Exercise) => ex.sets?.some(set => set.done)))
           );
         }
       } catch (e) {
@@ -1243,7 +1248,7 @@ export default function WorkoutLog() {
     loadRoutines,
     auth,
     getDraftKey,
-    setElapsedDuration,
+    resetElapsedTimer,
     restoreElapsedTimer,
     routerParams.todayPlanApplied,
   ]);
@@ -1628,6 +1633,7 @@ export default function WorkoutLog() {
     const nextDone = !targetSet.done;
     setSetDone(exerciseId, setIndex, nextDone);
     if (nextDone) {
+      if (!routineBuilderMode) autoStartWorkoutTimer();
       lastCompletedSetByExerciseRef.current[exerciseId] = setIndex;
       startRestTimer(exerciseId);
       return;
@@ -2221,7 +2227,7 @@ export default function WorkoutLog() {
     setExercises(nextExercises);
     setSessionTitle(workout.title || "Workout");
     setSessionDateText(toLocalDateKey(workout.date));
-    setElapsedDuration(
+    restoreElapsedTimer(
       typeof workout.durationMin === "number" && Number.isFinite(workout.durationMin)
         ? Math.max(0, Math.round(workout.durationMin * 60))
         : 0
@@ -2278,7 +2284,7 @@ export default function WorkoutLog() {
     setRestTimerByExercise({});
     setSessionTitle("");
     setSessionDateText(toLocalDateKey(new Date()));
-    setElapsedDuration(0);
+    resetElapsedTimer();
     setBaselineDate(null);
     setFollowedAnswer(null);
     setHelpfulAnswer(null);
@@ -2415,7 +2421,7 @@ export default function WorkoutLog() {
       setRestTimerByExercise({});
       setSessionTitle("");
       setSessionDateText(toLocalDateKey(new Date()));
-      setElapsedDuration(0);
+      resetElapsedTimer();
       setRecommendationSummary([]);
       setLastAppliedRoutineId(null);
       setBaselineDate(null);
@@ -2497,7 +2503,7 @@ export default function WorkoutLog() {
     setRestTimerByExercise({});
     setSessionTitle("");
     setSessionDateText(toLocalDateKey(new Date()));
-    setElapsedDuration(0);
+    resetElapsedTimer();
     setRoutineBuilderMode(true);
     setShowRoutineStartModal(false);
   };
@@ -2733,7 +2739,7 @@ export default function WorkoutLog() {
     setSessionTitle(options.deload ? `${routine.name} (Deload)` : routine.name);
     if (mode === "replace") {
       setSessionDateText(toLocalDateKey(new Date()));
-      setElapsedDuration(0);
+      resetElapsedTimer();
       setLastAppliedRoutineId(options.deload ? null : routine.id);
       setUiFeedback(options.deload ? `Applied deload for "${routine.name}".` : `Applied "${routine.name}".`);
     } else {
@@ -2972,7 +2978,7 @@ export default function WorkoutLog() {
       });
       setSessionTitle(`${pickedTemplate.name} (Recommended)`);
       setSessionDateText(toLocalDateKey(new Date()));
-      setElapsedDuration(0);
+      resetElapsedTimer();
       const plannedHardSetCount = recommendedExercises.reduce((sum, exercise) => sum + exercise.sets.length, 0);
       setRecommendationSummary([
         `${selectedFocus?.label ?? pickedTemplate.name} | ${selectedLength.title} | ${plannedHardSetCount} planned hard sets.`,
@@ -3560,7 +3566,7 @@ export default function WorkoutLog() {
         elapsedSeconds={elapsedSeconds}
         startedAtMs={workoutTimerStartedAtMs}
         timerRunning={workoutTimerRunning}
-        timerStarted={elapsedSeconds > 0}
+        timerStarted={workoutTimerHasStarted}
         trainingPhase={sessionPhase}
         onTitleChange={setSessionTitle}
         onDatePress={openDatePicker}
@@ -3636,16 +3642,20 @@ export default function WorkoutLog() {
       ) : null}
 
       <View style={styles.sessionControls}>
-        <View style={styles.sessionActionRow}>
+        <View style={[styles.sessionActionRow, styles.sessionActionGroupRule]}>
           <TouchableOpacity style={styles.sessionAction} onPress={() => setShowMyRoutinesModal(true)}><Text style={styles.linkText}>My routines</Text></TouchableOpacity>
+          <View style={styles.sessionActionDivider} />
           <TouchableOpacity style={[styles.sessionAction, styles.sessionActionRight]} onPress={beginCreateRoutine}><Text style={styles.linkText}>Create routine</Text></TouchableOpacity>
         </View>
         <View style={styles.sessionActionRow}>
           <TouchableOpacity style={styles.sessionAction} onPress={handleRepeatPastWorkoutPress}><Text style={styles.linkText}>Repeat past workout</Text></TouchableOpacity>
+          <View style={styles.sessionActionDivider} />
           <TouchableOpacity style={[styles.sessionAction, styles.sessionActionRight]} onPress={() => setShowSetup(true)}><Text style={styles.linkText}>Recommend workout</Text></TouchableOpacity>
         </View>
-        {routineBuilderMode ? <TouchableOpacity style={styles.textAction} onPress={() => setRoutineBuilderMode(false)}><Text style={styles.linkText}>Exit builder</Text></TouchableOpacity> : null}
-        {exercises.length ? <TouchableOpacity style={styles.textAction} onPress={discardWorkout}><Text style={[styles.linkText, { color: colors.danger }]}>Discard workout</Text></TouchableOpacity> : null}
+        {routineBuilderMode || exercises.length ? <View style={styles.sessionActionFooter}>
+          {routineBuilderMode ? <TouchableOpacity style={styles.textAction} onPress={() => setRoutineBuilderMode(false)}><Text style={styles.linkText}>Exit builder</Text></TouchableOpacity> : null}
+          {exercises.length ? <TouchableOpacity style={styles.textAction} onPress={discardWorkout}><Text style={[styles.linkText, { color: colors.danger }]}>Discard workout</Text></TouchableOpacity> : null}
+        </View> : null}
       </View>
 
       {exerciseCards}
@@ -5446,8 +5456,11 @@ const createStyles = (colors: NotebookColors) => { const base = notebookSheet({
   checkbox: { width: 20, height: 20, borderWidth: 1, borderRadius: 4, borderColor: colors.border, backgroundColor: colors.surface, justifyContent: "center", alignItems: "center" },
   checkboxChecked: { backgroundColor: colors.primary, borderColor: colors.primary }, cardioCheckboxMark: { color: colors.onPrimary, fontSize: 12, fontWeight: "700" },
   answerTextActive: { color: colors.onPrimary }, groupChipTextActive: { color: colors.onPrimary },
-  sessionControls: { paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.rule },
-  sessionActionRow: { flexDirection: "row", gap: 16 },
+  sessionControls: { paddingVertical: 4, borderBottomWidth: 1, borderBottomColor: colors.rule },
+  sessionActionRow: { flexDirection: "row", gap: 12, paddingVertical: 8 },
+  sessionActionGroupRule: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.rule },
+  sessionActionDivider: { width: StyleSheet.hairlineWidth, backgroundColor: colors.rule, marginVertical: 12 },
+  sessionActionFooter: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.rule, paddingVertical: 8 },
   sessionAction: { flex: 1, minHeight: 48, justifyContent: "center", paddingVertical: 8 },
   sessionActionRight: { alignItems: "flex-end" },
   routineMenuRow: { minHeight: 52, paddingVertical: 12, borderTopWidth: 1, borderTopColor: colors.rule, justifyContent: "center" },

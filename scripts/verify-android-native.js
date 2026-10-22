@@ -48,6 +48,8 @@ if (!mainApplication) {
   else ok("MainApplication.kt registers WorkoutGestureTextInputPackage");
   if (!hasSetListAdd) fail("MainApplication.kt missing add(WorkoutSetListPackage())");
   else ok("MainApplication.kt registers WorkoutSetListPackage");
+  if (!mainApplication.includes("add(MealTimeWheelPackage())")) fail("MainApplication.kt missing add(MealTimeWheelPackage())");
+  else ok("MainApplication.kt registers MealTimeWheelPackage");
 }
 
 const requiredNativeFiles = [
@@ -57,6 +59,9 @@ const requiredNativeFiles = [
   "workoutnative/WorkoutSetListManager.kt",
   "workoutnative/WorkoutSetListPackage.kt",
   "workoutnative/WorkoutSetListView.kt",
+  "timewheel/MealTimeWheelManager.kt",
+  "timewheel/MealTimeWheelPackage.kt",
+  "timewheel/MealTimeWheelView.kt",
 ];
 
 for (const rel of requiredNativeFiles) {
@@ -65,6 +70,11 @@ for (const rel of requiredNativeFiles) {
     fail(`Missing native file: ${full}`);
   } else {
     ok(`Native file present: ${rel}`);
+    if (rel.startsWith("timewheel/")) {
+      const template = read(path.join(projectRoot, "native-overrides", "android-kotlin", rel));
+      const expected = template?.replaceAll("__PACKAGE__", packageName).replace(/\r\n/g, "\n");
+      if (read(full).replace(/\r\n/g, "\n") !== expected) fail(`Native time wheel differs from its prebuild template: ${rel}`);
+    }
   }
 }
 
