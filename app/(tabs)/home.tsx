@@ -1,3 +1,5 @@
+import { EditWorkoutDetailsSheet } from "../../src/home/EditWorkoutDetailsSheet";
+import { recordedDuration, workoutDurationLabel } from "../../src/workouts/workoutDetails";
 import { NotebookInfoButton } from "../../src/ui/notebook/NotebookInfoButton";
 import { PopupBackdrop } from "../../src/ui/PopupBackdrop";
 import { NotebookProvider, useNotebook, useNotebookStyles, notebookSheet } from "../../src/ui/notebook/Notebook";
@@ -244,6 +246,9 @@ function Home() {
   const [returnToCalendar, setReturnToCalendar] = useState(false);
   const [phaseHistory, setPhaseHistory] = useState<{ training: unknown; diet: unknown }>({ training: [], diet: [] });
   const [showDayModal, setShowDayModal] = useState(false);
+  const [editingWorkout, setEditingWorkout] = useState<WorkoutSummary | null>(null);
+  const [workoutDetailsSaved, setWorkoutDetailsSaved] = useState(false);
+  const workoutRevision = useRef(0);
   const [calendarMonth, setCalendarMonth] = useState(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
@@ -290,6 +295,10 @@ function Home() {
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (user) => {
+      setEditingWorkout(null);
+      setWorkoutDetailsSaved(false);
+      setShowDayModal(false);
+      workoutRevision.current += 1;
       setProfileDataLoaded(false);
       setUserNickname(null);
       setProfilePhotoUri(null);
@@ -537,6 +546,7 @@ function Home() {
     if (homeInsightsRequestRef.current) return homeInsightsRequestRef.current;
     let request: Promise<void> | null = null;
     request = (async () => {
+      const requestedRevision = workoutRevision.current;
       setWorkoutsLoading(true);
       setHomeContextLoaded(false);
       setInsightsError(null);
@@ -556,6 +566,7 @@ function Home() {
             id: docSnap.id,
             title: typeof data?.title === "string" ? data.title : "Workout",
             date: rawDate,
+            durationMin: recordedDuration(data.durationMin),
             trainingPhase: typeof data?.trainingPhase === "string" ? data.trainingPhase : null,
             exercises: (data?.exercises ?? []).map((exercise: any) => ({
               name: typeof exercise?.name === "string" ? exercise.name : "Exercise",
@@ -578,7 +589,7 @@ function Home() {
             })),
           });
         });
-        setWorkouts(parsedWorkouts);
+        if (workoutRevision.current === requestedRevision && auth.currentUser?.uid === uid) setWorkouts(parsedWorkouts);
         if (auth.currentUser?.uid === uid) {
           setWorkoutHistoryStatus({ uid, hasWorkouts: !workoutsSnap.empty });
         }
@@ -1126,6 +1137,7 @@ function Home() {
   };
 
   const closeDayDetails = () => {
+    setWorkoutDetailsSaved(false);
     setShowDayModal(false);
     if (returnToCalendar) calendarRef.current?.open();
     setReturnToCalendar(false);
@@ -1389,13 +1401,14 @@ function Home() {
           <AdaptiveModalCard contentSized style={styles.modalCard}>
             <View style={[styles.calendarModalHeaderRow, { marginBottom: 16 }]}>
               <Text style={styles.modalTitle}>Calendar</Text>
-              <TouchableOpacity onPress={() => calendarRef.current?.close()} style={styles.calendarCloseButton}>
+              <TouchableOpacity accessibilityRole="button" accessibilityLabel="Close calendar" onPress={() => calendarRef.current?.close()} style={styles.calendarCloseButton}>
                 <Ionicons name="close" size={18} color={colors.ink} />
               </TouchableOpacity>
             </View>
             <View style={styles.calendarHeaderRow}>
               <TouchableOpacity
                 style={styles.calendarNavButton}
+                accessibilityRole="button" accessibilityLabel="Previous month"
                 onPress={() =>
                   setCalendarMonth(
                     (previous) => new Date(previous.getFullYear(), previous.getMonth() - 1, 1)
@@ -1409,6 +1422,7 @@ function Home() {
               </Text>
               <TouchableOpacity
                 style={styles.calendarNavButton}
+                accessibilityRole="button" accessibilityLabel="Next month"
                 onPress={() =>
                   setCalendarMonth(
                     (previous) => new Date(previous.getFullYear(), previous.getMonth() + 1, 1)
@@ -1515,12 +1529,13 @@ function Home() {
 
       <HomeTrendOverlay ref={trendsRef} workouts={workouts} nowMs={nowMs} weightUnit={weightUnit} energyUnit={energyUnit} workoutsWeeklyHistory={workoutsWeeklyHistory} volumeDailyHistoryAll={volumeDailyHistoryAll} nutritionAdherenceHistory={nutritionAdherenceHistory} nutritionCalorieHistory={nutritionCalorieHistory} sleepHistory={sleepHistory} sorenessHistory={sorenessHistory} fatigueHistory={fatigueHistory} motivationHistory={motivationHistory} recoveryReadiness={recoveryReadiness} workoutsHeatmap={workoutsHeatmap} onDay={(key) => { setSelectedDateKey(key); setReturnToCalendar(false); setShowDayModal(true); }} />
 
-      <Modal visible={showDayModal} transparent animationType="fade" onRequestClose={closeDayDetails}>
+      <Modal visible={showDayModal && !editingWorkout} transparent animationType="fade" onRequestClose={closeDayDetails}>
         <PopupBackdrop style={styles.modalBackdrop} onClose={closeDayDetails}>
           <AdaptiveModalCard contentSized style={styles.modalCard}>
             <Text style={styles.modalTitle}>{selectedDayWorkouts.length ? "Workout Day" : "Rest Day"}</Text>
+            {workoutDetailsSaved ? <Text accessibilityRole="alert" style={styles.cardText}>✓ Workout details updated</Text> : null}
             <Text style={styles.noticeSub}>{selectedDateKey}</Text>
-            <Text style={styles.cardText}>{selectedDaySummary ? `${selectedDaySummary.workoutCount} workout(s), ${selectedDaySummary.totalSets} sets, ${Math.round(convertKgToUnit(selectedDaySummary.totalVolumeKg, weightUnit))} ${weightUnit} volume` : "No workouts logged"}</Text>
+            <Text style={styles.cardText}>{selectedDaySummary ? `${selectedDaySummary.workoutCount} workout(s), ${selectedDaySummary.totalSets} sets, ${Math.round(convertKgToUnit(selectedDaySummary.totalVolumeKg, weightUnit))} ${weightUnit}` : "No workouts logged"}</Text>
             {selectedTrainingPhase || selectedDietPhase ? <Text style={styles.noticeSub}>{[selectedTrainingPhase && `Training: ${selectedTrainingPhase}`, selectedDietPhase && `Diet: ${selectedDietPhase}`].filter(Boolean).join(" | ")}</Text> : null}
             {selectedProgramEntry ? <Text style={styles.noticeSub}>Program: {selectedProgramEntry.type === "rest" ? "Rest" : `Day ${selectedProgramEntry.dayNumber} (${selectedProgramEntry.title})`}</Text> : null}
 
@@ -1528,14 +1543,17 @@ function Home() {
               {selectedDayWorkouts.length === 0 ? null : (
                 selectedDayWorkouts.map((workout) => (
                   <View key={workout.id} style={styles.dayWorkoutCard}>
+                    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
                     <Text style={styles.dayWorkoutTitle}>{workout.title}</Text>
+                    <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Edit details for ${workout.title}`} style={{ minHeight: 44, justifyContent: "center" }} onPress={() => { setWorkoutDetailsSaved(false); setEditingWorkout(workout); }}><Text style={{ color: colors.accent, fontFamily: notebookFonts.semibold, fontSize: 16 }}>Edit details</Text></TouchableOpacity>
+                    </View>
+                    <Text style={styles.noticeSub}>{workoutDurationLabel(workout.durationMin)}</Text>
                     <Text style={styles.noticeSub}>
                       {workout.trainingPhase ? `${workout.trainingPhase} - ` : ""}
                       {workout.date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                     </Text>
                     <Text style={styles.noticeSub}>
                       {getWorkoutSetCount(workout)} sets - {Math.round(convertKgToUnit(getWorkoutVolumeKg(workout), weightUnit))} {weightUnit}
-                      volume
                     </Text>
                     {workout.exercises.map((exercise, exerciseIndex) => (
                       <View key={`${workout.id}-${exercise.name}-${exerciseIndex}`} style={styles.dayExerciseBlock}>
@@ -1584,6 +1602,15 @@ function Home() {
           </AdaptiveModalCard>
         </PopupBackdrop>
       </Modal>
+
+      {uid && editingWorkout ? <EditWorkoutDetailsSheet key={`${uid}:${editingWorkout.id}`} uid={uid} workout={editingWorkout} onClose={() => setEditingWorkout(null)} onRefresh={() => { setEditingWorkout(null); void loadHomeInsights(); }} onSaved={details => {
+        if (auth.currentUser?.uid !== uid) return;
+        workoutRevision.current += 1;
+        setWorkouts(current => current.map(workout => workout.id === editingWorkout.id ? { ...workout, ...details } : workout).sort((a, b) => b.date.getTime() - a.date.getTime()));
+        setSelectedDateKey(toDateKey(details.date));
+        setCalendarMonth(new Date(details.date.getFullYear(), details.date.getMonth(), 1));
+        setWorkoutDetailsSaved(true); setEditingWorkout(null);
+      }} /> : null}
 
       <Modal visible={showProfileModal} transparent animationType="fade" onRequestClose={() => setShowProfileModal(false)}>
           <PopupBackdrop style={[styles.modalBackdrop, { justifyContent: "center", paddingHorizontal: 20 }]} onClose={() => setShowProfileModal(false)}>

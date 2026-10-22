@@ -21,6 +21,7 @@ export type WorkoutSummary = {
   id: string;
   title: string;
   date: Date;
+  durationMin?: number | null;
   trainingPhase: string | null;
   exercises: WorkoutExercise[];
 };

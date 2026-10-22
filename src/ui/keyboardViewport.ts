@@ -1,6 +1,6 @@
-export function modalViewportHeight(windowHeight: number, keyboardTop: number | null, topInset: number, bottomInset: number) {
+export function modalViewportHeight(windowHeight: number, keyboardTop: number | null, topInset: number, bottomInset: number, margin = 32) {
   const visibleHeight = keyboardTop == null ? windowHeight : Math.min(windowHeight, keyboardTop);
-  return Math.max(48, visibleHeight - topInset - bottomInset - 32);
+  return Math.max(48, visibleHeight - topInset - bottomInset - margin);
 }
 
 export function focusedInputScrollOffset(offset: number, viewportTop: number, viewportHeight: number, inputTop: number, inputHeight: number) {
