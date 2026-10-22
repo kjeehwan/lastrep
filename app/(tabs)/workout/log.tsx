@@ -6,6 +6,7 @@ import { lastResistanceSet } from "../../../src/workouts/workoutLog/setPresentat
 import { useNotebook, useNotebookStyles, notebookSheet } from "../../../src/ui/notebook/Notebook";
 import { notebookFonts, type NotebookColors } from "../../../src/ui/notebook/tokens";
 import { useEventCallbacks } from "../../../src/hooks/useEventCallbacks";
+import { useInputVisibility } from "../../../src/ui/useInputVisibility";
 import { KeyboardAwareModalFrame } from "../../../src/ui/KeyboardAwareModalFrame";
 import { Ionicons } from "@expo/vector-icons";
 import { useNow } from "../../../src/hooks/useNow";
@@ -419,6 +420,7 @@ export default function WorkoutLog() {
   const isFocused = useIsFocused();
   const guidanceNowMs = useNow(60_000, isFocused);
   const { width, height, fontScale } = useWindowDimensions();
+  const { scrollRef: noteScrollRef, onInputFocus: revealNote, onLayout: revealNoteOnLayout, onScroll: trackNoteScroll } = useInputVisibility();
   const [showSetup, setShowSetup] = useState(false);
   const [showSetTypeHelp, setShowSetTypeHelp] = useState(false);
   const [editingSet, setEditingSet] = useState<string | null>(null);
@@ -3046,7 +3048,7 @@ export default function WorkoutLog() {
     }
   };
 
-  const cardActions = useEventCallbacks({ openExerciseDemo, openExerciseHistory, openExerciseActions, setReplaceSearch, setReplaceGroup, replaceExercise, updateExerciseNotes, openTempoEditor, openRestTimerModal, updateSetWeight, updateSetReps, updateSetRpe, toggleSetDone, removeSetWithUndo, openSetMenu, copyLastSetToCurrent, openCardioTimeModal, openCardioDistanceModal, setExercises, updateCardioSessionType, updateCardioEffortLevel, addEmptySet, duplicateLastSet, undoRemoveSet });
+  const cardActions = useEventCallbacks({ revealNote: revealNote, openExerciseDemo, openExerciseHistory, openExerciseActions, setReplaceSearch, setReplaceGroup, replaceExercise, updateExerciseNotes, openTempoEditor, openRestTimerModal, updateSetWeight, updateSetReps, updateSetRpe, toggleSetDone, removeSetWithUndo, openSetMenu, copyLastSetToCurrent, openCardioTimeModal, openCardioDistanceModal, setExercises, updateCardioSessionType, updateCardioEffortLevel, addEmptySet, duplicateLastSet, undoRemoveSet });
   // Cache unchanged card JSX so navigation and background context updates don't rebuild every row.
   const exerciseCards = useMemo(() => exercises.map((ex, exerciseIndex) => {
           const unit = exerciseUnits[ex.id] || "kg";
@@ -3172,7 +3174,8 @@ export default function WorkoutLog() {
               </View>
               <View style={styles.exerciseMetaNotesSingle}>
                 <Text style={styles.noteLabel}>Note</Text>
-                <TextInput disableFullscreenUI placeholder="Keep the last rep controlled" placeholderTextColor={colors.muted} accessibilityLabel={`${ex.name} note`} value={ex.notes ?? ""} onChangeText={(v) => cardActions.updateExerciseNotes(ex.id, v)} style={[styles.input, styles.metaInput]} />
+                <TextInput disableFullscreenUI placeholder="Keep the last rep controlled" placeholderTextColor={colors.muted} accessibilityLabel={`${ex.name} note`}
+                        onFocus={cardActions.revealNote} value={ex.notes ?? ""} onChangeText={(v) => cardActions.updateExerciseNotes(ex.id, v)} style={[styles.input, styles.metaInput]} />
               </View>
               <View
                 style={[
@@ -3488,9 +3491,12 @@ export default function WorkoutLog() {
         keyboardVerticalOffset={Platform.OS === "ios" ? insets.top : 0}
       >
         <View style={styles.scrollShell}>
-        <NotebookHeader title={routineBuilderMode ? "Routine builder" : "Workout"} onBack={handleGoBack} action={exercises.length ? routineBuilderMode ? "Save" : "Finish" : undefined} onAction={routineBuilderMode ? openCreateRoutineModal : finishWorkout} disabled={saving} />
+        <NotebookHeader compact={keyboardHeight > 0 && width > height} title={routineBuilderMode ? "Routine builder" : "Workout"} onBack={handleGoBack} action={exercises.length ? routineBuilderMode ? "Save" : "Finish" : undefined} onAction={routineBuilderMode ? openCreateRoutineModal : finishWorkout} disabled={saving} />
         <GestureDetector gesture={scrollNativeGesture}>
           <ScrollView
+            ref={noteScrollRef}
+            onLayout={revealNoteOnLayout}
+            onScroll={trackNoteScroll}
             style={styles.container}
             contentContainerStyle={[styles.content, { paddingBottom: 140 + keyboardHeight }]}
             keyboardShouldPersistTaps="handled"
