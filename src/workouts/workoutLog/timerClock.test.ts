@@ -1,7 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { advanceRest, elapsedAt, nextRestDeadlineDelay, pauseElapsed, pauseRest, startElapsed, startRest } from "./timerClock";
+import { autoStartElapsed, advanceRest, elapsedAt, nextRestDeadlineDelay, pauseElapsed, pauseRest, startElapsed, startRest } from "./timerClock";
 
 describe("timestamp-based workout timers", () => {
+  it("auto-starts only a never-started clock, preserving even a sub-second manual pause", () => {
+    const initial = { elapsedSeconds: 0, startedAtMs: null };
+    const started = autoStartElapsed(initial, 100000);
+    expect(elapsedAt(started, 105000)).toBe(5);
+    expect(autoStartElapsed(started, 110000)).toBe(started);
+    const paused = pauseElapsed(started, 100100);
+    expect(paused.elapsedSeconds).toBe(0);
+    expect(autoStartElapsed(JSON.parse(JSON.stringify(paused)), 110000).startedAtMs).toBeNull();
+    const adjusted = { elapsedSeconds: 60, startedAtMs: null };
+    expect(autoStartElapsed(adjusted, 110000)).toBe(adjusted);
+  });
   it("stops a restored zero-second clock whose deadline has passed", () => {
     const ended = advanceRest({ remainingSec: 0, running: true, endsAtMs: 100000 }, 110000);
     expect(ended).toEqual({ remainingSec: 0, running: false });

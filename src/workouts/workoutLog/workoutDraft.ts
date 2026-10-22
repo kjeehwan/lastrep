@@ -8,6 +8,7 @@ export type WorkoutDraftSnapshot<TExercises, TUnits> = {
   sessionDateText: string;
   elapsedSeconds: number;
   workoutTimerRunning: boolean;
+  workoutTimerHasStarted?: boolean;
   workoutTimerStartedAtMs?: number | null;
   restTimerByExercise?: Record<string, RestClock>;
   recommendationUsage?: RecommendationUsage;
