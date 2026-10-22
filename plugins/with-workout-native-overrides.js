@@ -36,6 +36,7 @@ module.exports = function withWorkoutNativeOverrides(config) {
         "timewheel/MealTimeWheelView.kt",
         "timewheel/MealTimeWheelManager.kt",
         "timewheel/MealTimeWheelPackage.kt",
+        "systembars/NotebookSystemBarsPackage.kt",
       ];
 
       for (const rel of templates) {
@@ -67,6 +68,8 @@ module.exports = function withWorkoutNativeOverrides(config) {
       );
       mainApp = injectOnce(mainApp, "import com.facebook.react.defaults.DefaultReactNativeHost", `import ${packageName}.timewheel.MealTimeWheelPackage`);
       mainApp = injectOnce(mainApp, "add(WorkoutSetListPackage())", "        add(MealTimeWheelPackage())");
+      mainApp = injectOnce(mainApp, "import com.facebook.react.defaults.DefaultReactNativeHost", `import ${packageName}.systembars.NotebookSystemBarsPackage`);
+      mainApp = injectOnce(mainApp, "add(MealTimeWheelPackage())", "        add(NotebookSystemBarsPackage())");
       fs.writeFileSync(mainApplicationPath, mainApp, "utf8");
 
       const buildGradlePath = path.join(projectRoot, "android", "app", "build.gradle");

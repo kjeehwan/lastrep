@@ -1,6 +1,6 @@
 # Lastrep Training Notebook Design Specification
 
-Version: 1.35 | Date: October 22, 2026
+Version: 1.36 | Date: October 22, 2026
 
 Status: Workout, Home, Nutrition, Sleep, Profile and Settings browser design
 directions approved through iterative review. Shared rules below incorporate that
@@ -752,6 +752,10 @@ states honestly; do not invent a smooth trend from one record.
   necessary), with an internal scroll area rather than empty tall sheets.
 - Heading/Close is outside body scrolling where practical. Actions remain
   reachable. Android Back and outside tap dismiss non-destructive sheets.
+- Keep the Android clock and status icons legible while a popup is open. Use
+  dark icons above light surfaces and light icons above dark surfaces, including
+  the popup's own native window. Preserve the page's appearance on dismissal;
+  do not hide the clock to avoid contrast problems.
 - Popup cards stay above the persistent bottom tab bar, with 12 dp clearance;
   use the actual tab-bar height, including its safe area, rather than adding
   the Android inset twice. With the keyboard open, reserve keyboard space

@@ -91,6 +91,9 @@ npm.cmd run start:dev-client
 ```
 
 Check whether Metro already owns port 8081 before starting another instance.
+Stop Metro before switching through revisions that add or remove files, and
+restart it after the final revision is in place. An app connected during that
+transition can receive a temporary missing-module error from the incomplete tree.
 For USB testing, connect/unlock the phone and confirm authorization with
 `adb devices -l`. Reconnection may require restoring port forwarding and reloading
 the app. Confirm the latest UI is visible before interpreting a test result.
