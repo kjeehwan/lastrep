@@ -2,7 +2,7 @@ import React, { useCallback, useMemo, useState } from "react";
 import { BackHandler, Linking, Platform, Pressable, ScrollView, Text, TextInput, View, useWindowDimensions } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect, useRouter, Redirect } from "expo-router";
-import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react-native";
+import { ChevronDown, ChevronLeft, ChevronRight, Info } from "lucide-react-native";
 import { doc, setDoc } from "firebase/firestore";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { db } from "../config/firebaseConfig";
@@ -71,7 +71,7 @@ function SleepJournalView({ data }: { data: ReturnType<typeof useSleepJournal> }
   const chartSelected = chartDate ?? selected;
   const [anchor, setAnchor] = useState<string | null>(null);
   const chartAnchor = anchor ?? (selected < shiftSleepDate(today, -13) ? selected : today);
-  const [sheet, setSheet] = useState<"calendar" | "entry" | "target" | "setup" | "sync" | "detail" | null>(null);
+  const [sheet, setSheet] = useState<"calendar" | "entry" | "target" | "setup" | "sync" | "detail" | "totalHelp" | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null), [detailId, setDetailId] = useState<string | null>(null);
   const [excludeConfirm, setExcludeConfirm] = useState(false);
   const [syncing, setSyncing] = useState(false), [saving, setSaving] = useState(false);
@@ -144,7 +144,10 @@ function SleepJournalView({ data }: { data: ReturnType<typeof useSleepJournal> }
       {data.entries.filter((entry) => entry.dateKey === "undated" && !entry.excluded).map((entry) => <View key={entry.id} style={{ gap: 8 }}><Text style={muted}>Older saved total: {sleepDurationText(entry.hours)}. Its diary date is unavailable. Choose the correct date above before assigning it.</Text><SleepButton label={`Assign to ${sleepDisplayDate(selected)}`} onPress={() => { setEditingId(entry.id); setSheet("entry"); }} /></View>)}
       <View style={{ gap: 12 }}>
         <Text accessibilityLabel={data.loading && !data.entries.length ? "Loading saved sleep" : sleepDurationText(row?.hours ?? null)} style={{ color: colors.ink, fontFamily: notebookFonts.editorial, fontSize: row && fontScale < 1.5 ? 42 : 32 }}>{data.loading && !data.entries.length ? "Loading saved sleep..." : row ? <>{Math.floor(Math.round(row.hours * 60) / 60)}<Text style={muted}> h </Text>{String(Math.round(row.hours * 60) % 60).padStart(2, "0")}<Text style={muted}> min</Text></> : "Not recorded"}</Text>
-        {row ? <Text style={muted}>{row.mayIncludeAwakeTime ? "May include awake time" : "Time asleep"}</Text> : null}
+        {row ? <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+          <Text style={{ ...muted, flexShrink: 1 }}>{row.mayIncludeAwakeTime ? "May include awake time" : "Time asleep"}</Text>
+          <Pressable accessibilityRole="button" accessibilityLabel="About sleep totals" onPress={() => setSheet("totalHelp")} style={{ width: 44, minHeight: 44, alignItems: "center", justifyContent: "center" }}><Info size={18} strokeWidth={1.5} color={colors.muted} /></Pressable>
+        </View> : null}
         <Text style={muted}>{row ? (() => { const delta = Math.round((row.hours - data.target) * 60); return delta === 0 ? "Matches your target" : `${Math.abs(delta)} min ${delta < 0 ? "below" : "above"} your target`; })() : "Record sleep manually, or sync supported health data."}</Text>
         {row ? <View style={{ gap: 4 }}>
           <Text style={muted}>{row.mixed ? "Manual + Health Connect" : row.source === "health" ? "Health Connect" : "Manual entry"}{row.sessionCount ? ` / ${row.sessionCount} ${row.sessionCount === 1 ? "session" : "sessions"}` : " / Older daily total"}</Text>
@@ -177,6 +180,9 @@ function SleepJournalView({ data }: { data: ReturnType<typeof useSleepJournal> }
         {connected ? <><SleepButton label={syncing ? "Syncing..." : "Sync sleep"} primary disabled={syncing || isOffline} onPress={() => void sync()} /><SleepButton label="Manage health access" onPress={goHealth} /></> : data.availability === "available" ? <SleepButton label={data.consent ? "Review health access" : "Connect health data"} onPress={goHealth} /> : data.availability !== "unsupported" && data.availability !== "checking" ? <SleepButton label="Set up Health Connect" onPress={() => setSheet("setup")} /> : null}
       </View>
     </ScrollView>
+    {sheet === "totalHelp" ? <SleepSheet title="How sleep totals work" onClose={() => setSheet(null)} footer={<SleepButton label="Close" onPress={() => setSheet(null)} />}>
+      <Text style={text}>Known awake time is excluded when complete sleep stages are available. Other entries use their recorded duration, which may include awake time.</Text>
+    </SleepSheet> : null}
     {sheet === "calendar" ? <SleepSheet title="Sleep date" onClose={() => setSheet(null)}><SleepCalendar selected={selected} onSelect={(date) => { chooseDate(date); setSheet(null); }} /></SleepSheet> : null}
     {sheet === "entry" && data.account ? <SleepEntryEditor uid={data.account.uid} selected={selected} entry={data.entries.find((entry) => entry.id === editingId) ?? null} onClose={() => setSheet(null)} onSaved={(date) => { chooseDate(date); setSheet(null); void data.refresh(); }} /> : null}
     {sheet === "target" && data.account ? <SleepTargetEditor uid={data.account.uid} target={data.target} onClose={() => setSheet(null)} /> : null}
