@@ -1,6 +1,6 @@
 # Lastrep Training Notebook Design Specification
 
-Version: 1.34 | Date: October 22, 2026
+Version: 1.35 | Date: October 22, 2026
 
 Status: Workout, Home, Nutrition, Sleep, Profile and Settings browser design
 directions approved through iterative review. Shared rules below incorporate that
@@ -465,9 +465,11 @@ Finish CTA that competes with it. When routine builder is active, replace this
 with `Save routine` and clearly show `Routine builder`; do not show workout timers
 or falsely count routine editing as a completed workout.
 
-Move Discard into a labeled session overflow menu. It remains easy to find but
-does not sit beside the most frequently tapped input. This is a proposed
-placement change; preserve destructive confirmation and existing draft semantics.
+Setup actions form three groups: My routines / Create routine, Repeat past
+workout / Recommend workout, then Discard workout when a draft exists. Separate
+groups with fine horizontal rules and the paired actions with subtle inset
+vertical rules. Allow labels to wrap at larger text sizes without shrinking
+touch targets. Preserve Discard confirmation and existing draft semantics.
 
 ### Reference portrait wireframe
 
@@ -638,6 +640,10 @@ Do not introduce drag-to-reorder in this design pass.
 
 - Session timer lives in session heading; tap opens existing adjustment controls.
   Pause/resume are explicit controls in that view, not an unlabeled clock icon.
+- Completing a set starts a session timer that has never started. Do not restart
+  an intentionally paused timer, including after reopening or a sub-second pause.
+  New/discarded/completed sessions reset that history; appending a routine does
+  not. Routine-builder completion controls do not start workout timers.
 - When rest is active, dock a 56-high row above bottom navigation: exercise name,
   remaining time, Pause/Resume, Skip. Long names truncate here only; full name is
   accessible in the timer detail. At narrow widths, use a two-row dock up to 88.
@@ -1474,6 +1480,14 @@ sections/reordering, rather than assuming only the six initial slots are allowed
 
 ### Native Nutrition review refinements (October 17)
 
+- Meal-time hour/minute wheels wrap in both directions and center the selected
+  value after tapping or scrolling. Keep Save disabled until a moving wheel
+  settles. Cancel retains the saved time. Provide adjustable accessibility actions
+  and size wheel rows for the user's text scale.
+  Android uses native number pickers so gesture capture, wrapping and snapping
+  stay on the UI thread. Preserve notebook borders, center highlight and palette;
+  avoid constructing repeated JavaScript number rows on Android. Open the time
+  sheet directly without a fade, and do not open the keyboard on wheel taps.
 - Nutrition uses a fork-and-knife outline, not the earlier apple symbol.
 - Keep only one divider below a subpage toolbar. The first content section must
   not add a second top rule. Later ledger sections retain their own separators.

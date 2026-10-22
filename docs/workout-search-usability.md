@@ -124,3 +124,97 @@ Food search felt somewhat faster. Jumping Jacks currently has no close automatic
 replacement; this remains a catalog/family-coverage limitation, not a claim that
 all exercises have alternatives. Commit, push, PR review and merge were then
 authorized before the next three-task batch.
+
+The four fixes were split into focused commits plus shared documentation, pushed
+in PR #54, manually reviewed and merged as `1ccdcc1`. PR and post-merge Quality
+Checks passed. The review was performed by the implementation author.
+
+## Timer, meal-time wheel and setup-action follow-up
+
+Implemented sequentially, with each task phone-checked before starting the next.
+
+- The first completed set starts a never-started workout timer. A persisted
+  started flag distinguishes a pause from a new timer, even at zero elapsed
+  seconds. Legacy completed-set drafts retain their paused state. New sessions,
+  discard, successful completion and replacement routines reset this flag;
+  duration adjustments retain it. Routine-builder set completion does not start
+  the session timer.
+- Meal-time wheels wrap hours/minutes in either direction and center tapped or
+  scrolled selections. Android now uses native number pickers, as detailed below;
+  other platforms retain the JavaScript fallback. Rows respect text scale,
+  accessibility exposes adjustable values, and Save waits for both wheels to stop.
+- Workout setup has three separated groups: My routines / Create routine,
+  Repeat past workout / Recommend workout, and Discard. Fine horizontal rules
+  separate groups; inset vertical rules separate paired actions. Labels can wrap.
+
+Samsung Android 13 checks used a backed-up, temporary local workout draft, with
+no workout/routine/meal saves or replacements. Completing the first set started
+and persisted the timer; reopening retained a pause; completing another set
+did not resume it. Meal-time taps crossed 23:59 to 00:00 and back, and native
+swipes selected and centered values. Cancel/reopen retained the original meal
+time. Light and dark presentations were inspected. Setup actions opened the
+expected dialogs and were safely dismissed, including Keep editing on Discard.
+Paired labels remained legible at 1.5 system text scale; landscape scrolling
+reached Discard. Original appearance, text scale, rotation and local draft were
+restored. User accepted the timer and setup-action grouping. The user found an
+intermittent wheel rebound during normal swiping; the initial native checks did
+not establish reliable scrolling.
+
+Fresh aggregate checks: TypeScript, lint and web export passed; 723 tests passed,
+22 skipped. The skip count remains the ordinary emulator-dependent exclusions.
+The user accepted the timer and setup grouping, then accepted the native-wheel
+replacement below. Split commits, push, PR review and merge were authorized.
+The production AAB remains postponed; no AAB or deployment is part of this batch.
+
+### Meal-time wheel rebound correction
+
+Keep the native `contentOffset` prop fixed at its initial position. Re-rendering
+to disable Save during a swipe must not send the old selection back to Android.
+Selection changes no longer trigger a second positioning effect; explicit tap,
+settling and text-scale changes own positioning. Settling reads the gesture's
+final offset, and a late momentum-end event cannot commit during a newer drag.
+
+Fresh TypeScript, lint and all 723 tests passed (22 skipped). This intermediate
+approach was superseded by the native Android replacement after further user
+feedback about opening and selection delays.
+
+Phone regression: slow, fast and reverse swipes changed both hours and minutes
+and retained the new values in a delayed second observation, across six gesture
+cases. The test time was canceled; reopening retained the saved meal time.
+
+### Native Android wheel responsiveness
+
+The user still reported slow opening and delayed number capture after the rebound
+fix. On the same Samsung Android 13 phone, temporary React profiling measured
+the 420 JavaScript number rows at 1,178/1,186 ms to mount and 537/562 ms for the
+initial update. The selected values being eventually correct did not establish
+smooth interaction.
+
+Android now uses two platform NumberPicker controls. Android owns scrolling,
+flinging, wrapping and centering; JavaScript mirrors the settled values for Save.
+Initial values are applied once, so later JavaScript renders cannot interrupt a
+native gesture. Touches stay with the wheel rather than scrolling its enclosing
+sheet. Native labels distinguish Hour and Minute, and tapping the center does
+not open the keyboard. The sheet opens without a fade. No new library or private
+Android API is used; the app's existing minimum Android API is 29.
+
+Native templates, tracked Android sources, registration and prebuild generation
+are maintained together. Native verification checks template/source agreement.
+An isolated prebuild fixture verified an alternate package name and idempotent
+registration on a second run. Other platforms and older dev clients retain the
+fallback; these Android measurements do not establish their performance.
+
+On-phone development React profiling measured native-wheel mounts at 16–19 ms
+(a later warm mount was 10 ms), with sampled updates around 0.2–3 ms. These are
+JavaScript render durations, not complete tap-to-open or production latency.
+Temporary profiling and state-inspection hooks are removed from the final code.
+
+Phone checks covered slow, fast and reverse swipes on both wheels, rapid 08-to-12
+hour taps, and 23:59 / 00:00 wrapping in both directions. Visible values matched
+the state Save would use after every tested gesture. Saved meal times were not
+changed, and the existing workout draft's content fingerprint was unchanged.
+Light/dark presentation and native accessibility labels were checked. The
+original appearance choice was restored. An unset time's displayed 00:00 also
+initializes the editable value to 00:00; nothing is persisted until Save.
+The user reported that the native replacement was much better and authorized
+split commits, push, review and merge for the completed three-task batch.
