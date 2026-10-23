@@ -21,6 +21,10 @@ export const profileStates = [
   ['tdee-empty', 'TDEE / incomplete', 'No estimate or active Apply button when required data is absent.'],
   ['nutrition', 'Nutrition targets', 'Calorie targets by phase, plus the separate protein target.'],
   ['sleep', 'Sleep target', 'Same saved preference as the Sleep study, staged until Save changes.'],
+  ['activity', 'Daily activity / ready', 'Steps permission is separate from sleep and body-data access.'],
+  ['activity-permission', 'Daily activity / permission needed', 'Sleep/body sync still work while steps access is missing.'],
+  ['activity-only', 'Daily activity / steps only', 'Steps can be connected while sleep and body-data access are off.'],
+  ['activity-connect', 'Daily activity / connect', 'The consent preview includes steps without changing nutrition targets.'],
   ['health', 'Health sync / connected', 'Consent, permissions, saved records and last sync are separate.'],
   ['disconnected', 'Health sync / disconnected', 'Saved account timestamps remain visible without claiming a current connection.'],
   ['consent', 'Health sync / consent', 'Disclosure before the separately simulated device-permission step.'],
@@ -75,6 +79,12 @@ export function accountFixture(page, id = 'overview', shared = null) {
   const s = { page, id, saved: structuredClone(saved), draft: structuredClone(saved), modal: '', error: '', notice: '', leaveTo: './home.html', loading: id === 'loading', offline: id === 'offline',
     access: !['free', 'unconfirmed'].includes(id), paid: !['free', 'grant', 'notFound', 'unconfirmed', 'dev'].includes(id), dev: id === 'dev', checking: id === 'checking', restoring: id === 'restoring', feedback: '',
     health: { consent: true, sleep: true, body: true, available: true, lastSleepSync: 'Oct 15, 08:12', lastBodySync: 'Oct 15, 08:15', savedSleep: 'Oct 15, 2026', savedBody: 'Oct 15, 2026' }, syncBusy: false, failSave: id === 'save-error' };
+  if (page === 'profile' && id.startsWith('activity')) {
+    s.activityStudy = true; s.health.steps = !['activity-permission', 'activity-connect'].includes(id);
+    s.health.lastActivitySync = id === 'activity' ? 'Oct 15, 14:10' : null;
+    if (id === 'activity-only') { s.health.sleep = false; s.health.body = false; }
+    if (id === 'activity-connect') s.health.consent = false;
+  }
   if (page === 'settings') {
     if (restoreMessages[id]) s.feedback = restoreMessages[id];
     if (id === 'restoring') s.feedback = restoreMessages.loading;
@@ -97,7 +107,7 @@ export function accountFixture(page, id = 'overview', shared = null) {
 }
 export const isDirty = s => JSON.stringify(s.saved) !== JSON.stringify(s.draft);
 export function phaseWeek(since) { return since ? Math.max(1, Math.floor((Date.parse(ACCOUNT_DAY) - Date.parse(since)) / 604800000) + 1) : null; }
-export function healthStatus(h) { return !h.available ? 'Unavailable on this device' : !h.consent ? 'Not connected' : !h.sleep && !h.body ? 'Permission needed' : 'Connected'; }
+export function healthStatus(h) { return !h.available ? 'Unavailable on this device' : !h.consent ? 'Not connected' : !h.sleep && !h.body && !h.steps ? 'Permission needed' : 'Connected'; }
 export function validateProfile(d) {
   if (!d.name.trim() || d.name.length > 40) throw Error('Use a nickname between 1 and 40 characters.');
   if (d.description.length > 240) throw Error('Keep the description within 240 characters.');
@@ -123,3 +133,5 @@ export function tdeeEstimate(d) {
   return Math.round((10 * weight + 6.25 * height - 5 * age + (d.tdee.sex === 'male' ? 5 : -161)) * activity);
 }
 export function applyTdee(d) { const estimate = tdeeEstimate(d); if (estimate == null) throw Error('Enter age, height and body weight first.'); d.calories = { Cut: String(Math.max(0, estimate - 400)), Maintain: String(estimate), Bulk: String(estimate + 300) }; }
+
+export function stepsAccessStatus(h) { return !h.available ? 'Unavailable' : !h.consent ? 'Not connected' : h.steps ? 'Ready' : 'Not allowed'; }
