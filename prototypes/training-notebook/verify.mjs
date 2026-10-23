@@ -31,5 +31,5 @@ test('unit conversion preserves blank loads and returns approximately original v
 });
 test('review states are unique and cover required groups', () => {
   assert.equal(new Set(states.map(s => s[1])).size, states.length);
-  assert.equal(new Set(states.map(s => s[0])).size, 7);
+  assert.equal(new Set(states.map(s => s[0])).size, 8);
 });
