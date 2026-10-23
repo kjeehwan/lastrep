@@ -1,6 +1,6 @@
 # Lastrep Training Notebook Design Specification
 
-Version: 1.37 | Date: October 23, 2026
+Version: 1.39 | Date: October 23, 2026
 
 Status: Workout, Home, Nutrition, Sleep, Profile and Settings browser design
 directions approved through iterative review. Shared rules below incorporate that
@@ -22,6 +22,13 @@ settings-notebook-migration.md for boundaries and actual
 verification coverage.
 The initial Figma pair records an earlier Workout revision; the local browser
 prototype and decisions below capture the subsequent approved refinements.
+
+## Shared input surfaces (October 23 follow-up)
+
+All editable input fields across screens and popups use the Workout kg/Reps/RPE
+field surface: `input` is #FFFCF5 in Light and #242521 in Dark. Use the shared
+NotebookTextInput for ordinary React Native fields and the same token in native
+controls. Preserve field borders, focus indicators, validation and keyboard reveal.
 
 ## 1. Purpose and scope
 
@@ -612,6 +619,33 @@ Do not introduce horizontal scrolling for the entire workout page.
 - Add set and Duplicate last set are separate minimum-44-high actions below table.
 - Do not permanently add another delete icon per row. Set marker opens compact
   set options; preserve existing supported set types and deletion.
+
+### Warm-up helper (approved October 23)
+
+- Place **+ Add warm-up** left aligned between Note and the resistance set-table
+  headers. Keep it a text action, consistent with + Add set.
+- The user plans working sets first. Preview editable warm-up weights/reps, then
+  insert only new warm-up rows immediately before the first working set. Preserve
+  existing sets, effort, completion flags, notes and active timer.
+- Show plain total weights including the bar (20 kg, without an empty-bar suffix).
+  Center Set / weight-unit / Reps headings over their columns. All warm-up rows
+  show W. Working sets number independently from 1. Last values align only to
+  corresponding non-warm-up sets in the previous workout; warm-up Last is blank.
+- Use the same swipe-delete interaction as the Workout set rows. On Android a
+  full left swipe deletes the preview row, with Undo. Tapping W offers a
+  non-swipe Delete action. Cancel, outside tap and Android Back discard preview edits.
+- Remember the last added setup per account and exercise on this device. Preserve
+  fixed first-row loads in canonical units; adapt proportional rows to the first
+  working load using saved available-weight settings. Missing working weight can
+  be supplied as a preview reference without filling the working set.
+- Existing warm-ups remain visible and unchanged; match suggestions by occurrence
+  to avoid inserting them twice. Explicit + Add a set rows may repeat existing
+  kg and reps. Deleting a set in today's workout does not rewrite the remembered
+  setup; reopening may offer that missing row again, requiring confirmation.
+  Never add or replace warm-ups automatically.
+- The approved Bench press example is 100 kg x 8 working sets with 20 x 4,
+  60 x 4 and optional 80 x 2 warm-ups. These are editable examples, not universal
+  prescriptions. Native verification is recorded in workout-warmup-helper.md.
 
 ### Cardio and bodyweight
 

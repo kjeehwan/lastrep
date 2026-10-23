@@ -46,6 +46,8 @@ focus. Browser prototypes are design studies, not production account screens.
 - [Workout and food-search usability](docs/workout-search-usability.md): note
   keyboard visibility, relevant feedback, replacement peers, search timings,
   timer auto-start and native meal-time wheels.
+- [Warm-up set helper](docs/workout-warmup-helper.md): approved preview, native
+  insertion, remembered per-exercise setups and verification.
 - [Saved workout corrections](docs/saved-workout-details.md): date/duration editing,
   record-preservation guards and native verification.
 
