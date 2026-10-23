@@ -2251,3 +2251,14 @@ family as Profile sections such as Identity, Training and Units. Keep Daily
 movement and Body composition as smaller sans-serif subheadings and numeric
 values in Source Sans Semibold. This alignment does not change the Home title,
 workout name or supporting-action typography.
+
+
+### Daily steps totals and saved-account labels
+
+Query the full local calendar day, ending at the next local midnight, for the
+current day's aggregate. Providers may store a running total in a record that
+spans the day; a now-cutoff can proportionally reduce it. Use calendar boundaries
+through DST and preserve Health Connect source priority rather than summing raw
+records. The displayed Updated time is the read time. Without local consent or
+access, retain dated imported account values and explicitly label Saved account
+data; the existence of a saved value does not imply this installation is connected.

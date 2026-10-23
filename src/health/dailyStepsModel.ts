@@ -1,7 +1,10 @@
 export type DailyStepsSnapshot = { dateKey: string; timeZone: string; steps: number | null; asOfMs: number };
 export function localStepsWindow(now = new Date()) {
   const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  return { dateKey: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone, startTime: start.toISOString(), endTime: now.toISOString() };
+  // Providers can export a running daily total in a record ending at day end.
+  // Cutting that record at now makes Health Connect prorate its count.
+  const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  return { dateKey: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone, startTime: start.toISOString(), endTime: end.toISOString() };
 }
 export function parseDailySteps(raw: unknown): DailyStepsSnapshot | null {
   if (!raw || typeof raw !== "object") return null;

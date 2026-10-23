@@ -61,6 +61,13 @@ finally { Pop-Location }
 An actual AAB build remains a separate user-authorized step.
 
 1. Confirm intended source, appropriate checks and a fresh Expo Doctor result.
+   For health-import changes, compare the dev app's value with the source on a
+   real phone before building, checking the source record interval and query
+   range as well as permissions/display. For daily steps, include a running
+   whole-day record whose end is later than now, compare the full local-day
+   aggregate, and cover local midnight/DST boundaries. A nonempty count or an
+   emulator record ending at now does not establish provider-total correctness.
+   Keep actual health records/values out of tracked verification notes.
 2. Recheck the latest Play version and EAS remote counter before choosing a
    version code. Direct Gradle builds do not increment EAS's remote counter.
    Coordinate the counter after a local release so a later cloud build cannot

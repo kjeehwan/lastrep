@@ -64,7 +64,7 @@ function bodyChart(rows, selected) {
 function dailyMovement() {
   const a = s.activity;
   if (!a) return '';
-  const status = a.status === 'permission' ? 'Steps access not connected' : a.status === 'disconnected' ? 'Saved \u00b7 Sync not connected' : 'Health Connect';
+  const status = a.status === 'permission' ? 'Steps access not connected' : a.status === 'disconnected' ? 'Saved account data \u00b7 Steps not connected' : 'Health Connect';
   const date = a.date === TODAY ? 'Today' : shortDate(a.date);
   return `<div class="daily-movement" aria-label="Daily movement"><div class="movement-heading"><h4>Daily movement</h4><button class="icon-button" data-action="open" data-modal="movement-help" aria-label="About daily movement">${notebookInfoIcon('info')}</button></div><dl class="movement-values"><div><dt>Steps</dt><dd>${a.steps == null ? '<span class="movement-missing">Not available</span>' : a.steps.toLocaleString('en-US')}</dd></div>${a.caloriesSupported ? `<div><dt>Activity calories</dt><dd>${a.calories == null ? '<span class="movement-missing">Not available</span>' : a.calories.toLocaleString('en-US') + ' <small>kcal</small>'}<small class="movement-coverage">Recorded activity only</small></dd></div>` : ''}</dl><div class="movement-source"><span>${date} \u00b7 ${status}${a.status === 'connected' && a.steps != null ? ` \u00b7 Updated ${a.synced}` : ''}</span>${a.status === 'permission' ? btn('Connect steps', 'open', 'text', 'data-modal="movement-connect"') : ''}</div></div>`;
 }

@@ -41,7 +41,9 @@ const service = () => import("./dailySteps");
 it("uses local midnight across daylight-saving changes without a fixed 24-hour offset", () => {
   vi.stubEnv("TZ", "America/New_York");
   expect(localStepsWindow(new Date("2026-03-08T16:00:00Z")).startTime).toBe("2026-03-08T05:00:00.000Z");
+  expect(localStepsWindow(new Date("2026-03-08T16:00:00Z")).endTime).toBe("2026-03-09T04:00:00.000Z");
   expect(localStepsWindow(new Date("2026-11-01T17:00:00Z")).startTime).toBe("2026-11-01T04:00:00.000Z");
+  expect(localStepsWindow(new Date("2026-11-01T17:00:00Z")).endTime).toBe("2026-11-02T05:00:00.000Z");
 });
 
 it("uses the local calendar midnight and rejects malformed snapshots", () => {
@@ -49,6 +51,7 @@ it("uses the local calendar midnight and rejects malformed snapshots", () => {
   const w = localStepsWindow(now);
   expect(new Date(w.startTime).getHours()).toBe(0);
   expect(new Date(w.startTime).getDate()).toBe(now.getDate());
+  expect(new Date(w.endTime)).toEqual(new Date(2026, 9, 24));
   expect(w.dateKey).toBe("2026-10-23");
   const s = { dateKey: w.dateKey, timeZone: w.timeZone, steps: 0, asOfMs: now.getTime() };
   expect(parseDailySteps(s)).toEqual(s);
@@ -59,6 +62,20 @@ it("uses the local calendar midnight and rejects malformed snapshots", () => {
   expect(isCurrentSteps(s, now)).toBe(true);
   expect(isCurrentSteps(s, new Date(2026, 9, 24))).toBe(false);
   expect(isCurrentSteps({ ...s, timeZone: "other" }, now)).toBe(false);
+});
+
+it("reads the full daily total when a provider's record extends beyond the current time", async () => {
+  // Synthetic provider: its running total is recorded over the whole day.
+  // Health Connect proportionally scales counts if the query cuts the interval.
+  const start = new Date(2026, 9, 23).getTime();
+  const end = new Date(2026, 9, 24).getTime();
+  fake.aggregate.mockImplementation(async ({ timeRangeFilter }) => {
+    const overlap = Math.max(0, Math.min(Date.parse(timeRangeFilter.endTime), end) - Math.max(Date.parse(timeRangeFilter.startTime), start));
+    return { COUNT_TOTAL: Math.round(1440 * overlap / (end - start)), dataOrigins: ["synthetic-daily-source"] };
+  });
+  const state = await (await service()).refreshDailySteps("a", true, true);
+  expect(state.snapshot?.steps).toBe(1440);
+  expect(state.snapshot?.asOfMs).toBe(Date.now());
 });
 
 it("uses the aggregate instead of summing overlapping raw records and replaces corrected totals", async () => {
