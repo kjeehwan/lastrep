@@ -27,6 +27,7 @@ type LastPressEvent = NativeSyntheticEvent<{ index: number }>;
 
 type NativeProps = {
   onContentSizeChange?: (event: NativeSyntheticEvent<{ height: number }>) => void;
+  previewMode?: boolean;
   activeSetIndex?: number;
   editingSuspended?: boolean;
   onSetActivate?: (event: NativeSyntheticEvent<{ index: number }>) => void;

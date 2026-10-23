@@ -29,6 +29,9 @@ class WorkoutSetListManager : SimpleViewManager<WorkoutSetListView>() {
   @ReactProp(name = "fontFamily")
   fun setNotebookFont(view: WorkoutSetListView, value: String?) { view.setNotebookFont(value) }
 
+  @ReactProp(name = "previewMode", defaultBoolean = false)
+  fun setPreviewMode(view: WorkoutSetListView, value: Boolean) { view.setPreviewMode(value) }
+
   @ReactProp(name = "activeSetIndex", defaultInt = -1)
   fun setActiveSetIndex(view: WorkoutSetListView, value: Int) { view.setActiveSetIndex(value) }
 

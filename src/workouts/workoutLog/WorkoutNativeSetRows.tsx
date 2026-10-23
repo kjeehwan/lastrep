@@ -12,6 +12,7 @@ type NativeSetRow = {
 };
 
 type WorkoutNativeSetRowsProps = {
+  previewMode?: boolean;
   activeSetIndex: number;
   editingSuspended: boolean;
   onActivate: (index: number) => void;
@@ -32,6 +33,7 @@ type WorkoutNativeSetRowsProps = {
 
 /** Adapter between screen state and the Android-native resistance set list. */
 export function WorkoutNativeSetRows({
+  previewMode = false,
   activeSetIndex,
   editingSuspended,
   onActivate,
@@ -53,6 +55,7 @@ export function WorkoutNativeSetRows({
   const signature = `${listKey}:${rows.length}:${style.height}`;
   return (
     <WorkoutSetList
+      previewMode={previewMode}
       activeSetIndex={activeSetIndex}
       editingSuspended={editingSuspended}
       onSetActivate={({ nativeEvent }) => {

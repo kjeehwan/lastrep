@@ -1,9 +1,11 @@
 import { NotebookTextInput } from "../../../src/ui/notebook/NotebookTextInput";
+import { WarmupSetsSheet } from "../../../src/workouts/workoutLog/WarmupSetsSheet";
+import { insertWarmupSets, warmupKey, type WarmupRow, type WarmupPattern, type WarmupUnit } from "../../../src/workouts/workoutLog/warmupSets";
 import { Play, Clock3, Gauge, Check } from "lucide-react-native";
 import { NotebookHeader } from "../../../src/ui/notebook/NotebookHeader";
 import { notebookRowHeight } from "../../../src/ui/notebook/tokens";
 import { useNumberEntry } from "../../../src/ui/notebook/useNumberEntry";
-import { lastResistanceSet } from "../../../src/workouts/workoutLog/setPresentation";
+import { lastResistanceSet, setRowPresentation } from "../../../src/workouts/workoutLog/setPresentation";
 import { useNotebook, useNotebookStyles, notebookSheet } from "../../../src/ui/notebook/Notebook";
 import { notebookFonts, type NotebookColors } from "../../../src/ui/notebook/tokens";
 import { useEventCallbacks } from "../../../src/hooks/useEventCallbacks";
@@ -383,12 +385,12 @@ function indexPreviousExerciseSets(pastWorkouts: PastWorkout[]) {
   return map;
 }
 
-const getSetTypeMarker = (set: SetEntry, index: number) => {
+const getSetTypeMarker = (set: SetEntry, index: number, sets: SetEntry[]) => {
   const type = toSetType(set.setType);
   if (type === "warmup") return "W";
   if (type === "failure") return "F";
   if (type === "drop") return "D";
-  return `${index + 1}`;
+  return String(sets.slice(0, index + 1).filter(row => row.setType !== "warmup").length);
 };
 
 const formatDistanceInput = (distanceKm: number | null, unit: Unit) => {
@@ -433,6 +435,7 @@ export default function WorkoutLog() {
   const insets = useSafeAreaInsets();
   const isTabletLayout = Math.min(width, height) >= 600;
   const [exercises, setExercises] = useState<Exercise[]>([]);
+  const [warmupTarget, setWarmupTarget] = useState<{ uid: string; exercise: Exercise; unit: WarmupUnit; barbell: boolean } | null>(null);
   const [effortScale, setEffortScale] = useState<EffortScale>("rpe");
   const [exerciseUnits, setExerciseUnits] = useState<Record<string, Unit>>({});
   const [favoriteExercises, setFavoriteExercises] = useState<string[]>([]);
@@ -656,6 +659,7 @@ export default function WorkoutLog() {
       setRecommendationUsage(parseRecommendationUsage());
       resetGuidance();
       setAvailableWeightsTarget(null);
+      setWarmupTarget(null);
     });
     return unsubscribe;
   }, [auth, resetGuidance]);
@@ -1713,7 +1717,7 @@ export default function WorkoutLog() {
     const exercise = exercises.find((item) => item.id === exerciseId);
     if (!exercise) return;
     const previousSets = previousExerciseSetsByName.get(normalizeExerciseName(exercise.name)) ?? [];
-    const previous = previousSets[setIndex];
+    const previous = setRowPresentation(exercise.sets, previousSets)[setIndex]?.previous;
     if (!previous) {
       setUiFeedback("No previous set is available to copy.");
       return;
@@ -3093,7 +3097,27 @@ export default function WorkoutLog() {
     }
   };
 
-  const cardActions = useEventCallbacks({ revealNote: revealNote, openExerciseDemo, openExerciseHistory, openExerciseActions, setReplaceSearch, setReplaceGroup, replaceExercise, updateExerciseNotes, openTempoEditor, openRestTimerModal, updateSetWeight, updateSetReps, updateSetRpe, toggleSetDone, removeSetWithUndo, openSetMenu, copyLastSetToCurrent, openCardioTimeModal, openCardioDistanceModal, setExercises, updateCardioSessionType, updateCardioEffortLevel, addEmptySet, duplicateLastSet, undoRemoveSet });
+  const openWarmup = (id: string) => {
+    const uid = auth.currentUser?.uid, exercise = exercises.find(item => item.id === id);
+    if (!uid || !exercise || getExerciseMode(exercise.name) === "cardio") return;
+    Keyboard.dismiss(); setEditingSet(null);
+    const unit = exerciseUnits[id] === "lbs" ? "lbs" : "kg";
+    setWarmupTarget({ uid, exercise, unit, barbell: !!findCatalogExercise(exercise.name)?.equipment.some(value => value.toLowerCase().includes("barbell")) });
+  };
+  const applyWarmups = (rows: WarmupRow[], pattern: WarmupPattern): string | null => {
+    if (!warmupTarget || auth.currentUser?.uid !== warmupTarget.uid) return "Your account changed. Close this popup and try again.";
+    const current = exercises.find(item => item.id === warmupTarget.exercise.id);
+    if (!current || JSON.stringify(current.sets) !== JSON.stringify(warmupTarget.exercise.sets)) return "Your sets changed. Close this popup and reopen the helper.";
+    if (!rows.length) return "These warm-up sets are already in your workout.";
+    const sets = insertWarmupSets(current.sets, rows, warmupTarget.unit) as SetEntry[];
+    setExercises(previous => previous.map(exercise => exercise.id === current.id ? { ...exercise, sets } : exercise));
+    setEditingSet(null); setWarmupTarget(null); Keyboard.dismiss();
+    setUiFeedback(`${rows.length} warm-up set${rows.length === 1 ? "" : "s"} added.`);
+    void AsyncStorage.setItem(warmupKey(warmupTarget.uid, current.name), JSON.stringify(pattern)).catch(() => setUiFeedback("Warm-up sets added. Couldn't remember this setup on this device."));
+    return null;
+  };
+
+  const cardActions = useEventCallbacks({ openWarmup, revealNote: revealNote, openExerciseDemo, openExerciseHistory, openExerciseActions, setReplaceSearch, setReplaceGroup, replaceExercise, updateExerciseNotes, openTempoEditor, openRestTimerModal, updateSetWeight, updateSetReps, updateSetRpe, toggleSetDone, removeSetWithUndo, openSetMenu, copyLastSetToCurrent, openCardioTimeModal, openCardioDistanceModal, setExercises, updateCardioSessionType, updateCardioEffortLevel, addEmptySet, duplicateLastSet, undoRemoveSet });
   // Cache unchanged card JSX so navigation and background context updates don't rebuild every row.
   const exerciseCards = useMemo(() => exercises.map((ex, exerciseIndex) => {
           const unit = exerciseUnits[ex.id] || "kg";
@@ -3111,6 +3135,7 @@ export default function WorkoutLog() {
           const repsLabel = isCardio ? "Time" : "Reps";
           const rpeLabel = isCardio ? "Zone" : effortLabel(effortScale);
           const previousSets = previousExerciseSetsByName.get(normalizeExerciseName(ex.name)) ?? [];
+          const setDisplays = setRowPresentation(ex.sets, previousSets);
           const exerciseCatalogItem = findCatalogExercise(ex.name);
           const restTimer = restTimerByExercise[ex.id] ?? { remainingSec: 90, running: false };
           return (
@@ -3227,6 +3252,7 @@ export default function WorkoutLog() {
                 <NotebookTextInput disableFullscreenUI placeholder="Keep the last rep controlled" placeholderTextColor={colors.muted} accessibilityLabel={`${ex.name} note`}
                         onFocus={cardActions.revealNote} value={ex.notes ?? ""} onChangeText={(v) => cardActions.updateExerciseNotes(ex.id, v)} style={[styles.input, styles.metaInput]} />
               </View>
+              {!isCardio ? <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Add warm-up sets for ${ex.name}`} onPress={() => cardActions.openWarmup(ex.id)} style={{ alignSelf: "flex-start", minHeight: 44, justifyContent: "center" }}><Text style={styles.linkText}>+ Add warm-up</Text></TouchableOpacity> : null}
               <View
                 style={[
                   styles.setHeaderRow,
@@ -3268,10 +3294,10 @@ export default function WorkoutLog() {
               ) : Platform.OS === "android" && !isCardio ? (
                 <WorkoutNativeSetRows
                   activeSetIndex={ex.sets.findIndex((_set, index) => editingSet === `${ex.id}:${index}`)}
-                  editingSuspended={showCardioTimeModal || showCardioDistanceModal}
+                  editingSuspended={!!warmupTarget || showCardioTimeModal || showCardioDistanceModal}
                   onActivate={(index) => setEditingSet(`${ex.id}:${index}`)}
                   listKey={`native-set-list-${ex.id}-${ex.sets
-                    .map((set, idx) => `${idx}:${getSetTypeMarker(set, idx)}`)
+                    .map((set, idx) => `${idx}:${getSetTypeMarker(set, idx, ex.sets)}`)
                     .join("|")}-${String(unit).toLowerCase()}-${weightLabel}-${repsLabel}-${rpeLabel}`}
                   style={{ height: Math.max(ex.sets.length, 1) * notebookRowHeight(fontScale) }}
                   notebookColors={colors}
@@ -3280,8 +3306,8 @@ export default function WorkoutLog() {
                   repsLabel={repsLabel}
                   rpeLabel={effortScale === "rir" ? "0-4" : "6-10"}
                   rows={ex.sets.map((set, idx) => ({
-                    marker: getSetTypeMarker(set, idx),
-                    last: previousSets[idx] ? lastResistanceSet(previousSets[idx], unit, effortScale) : "-",
+                    marker: getSetTypeMarker(set, idx, ex.sets),
+                    last: set.setType === "warmup" ? "" : setDisplays[idx].previous ? lastResistanceSet(setDisplays[idx].previous!, unit, effortScale) : "-",
                     weight: set.weightText ?? formatWeightInput(set.weightKg, unit),
                     reps: set.reps,
                     rpe: effortInputValue(set, effortScale),
@@ -3334,18 +3360,18 @@ export default function WorkoutLog() {
                             accessibilityLabel={`Adjust set ${idx + 1} intensity`}
                           >
                             <Text style={[styles.setLabel, isTabletLayout && styles.setLabelTablet]}>
-                              {getSetTypeMarker(s, idx)}
+                              {getSetTypeMarker(s, idx, ex.sets)}
                             </Text>
                           </TouchableOpacity>
                         ) : null}
                         <TouchableOpacity
                           style={styles.lastSetButton}
                           onPress={() => cardActions.copyLastSetToCurrent(ex.id, idx)}
-                          disabled={!previousSets[idx]}
+                          disabled={!setDisplays[idx].previous}
                           accessibilityLabel={`Copy previous values into set ${idx + 1}`}
                         >
                           <Text style={styles.lastSetText}>
-                          {previousSets[idx] ? formatLastSetSummary(previousSets[idx]) : "-"}
+                          {s.setType === "warmup" ? "" : setDisplays[idx].previous ? formatLastSetSummary(setDisplays[idx].previous!) : "-"}
                           </Text>
                         </TouchableOpacity>
                         <View style={[styles.setInputsGroup, isTabletLayout && styles.setInputsGroupTablet, largeText && { flexBasis: "100%", flexWrap: "wrap" }]}>
@@ -3531,7 +3557,7 @@ export default function WorkoutLog() {
               ) : null}
             </View>
           );
-        }), [exercises, exerciseUnits, getExerciseMode, effortScale, previousExerciseSetsByName, findCatalogExercise, restTimerByExercise, replaceTarget, replaceSearch, replaceGroup, replacementOptions, replacementLimit, replacementPageKey, isTabletLayout, formatLastSetSummary, scrollNativeGesture, getExerciseZone, undoDeletedSet, cardActions, styles, colors, fontScale, editingSet, cardioTimeTarget, cardioDistanceTarget, showCardioTimeModal, showCardioDistanceModal]);
+        }), [exercises, exerciseUnits, getExerciseMode, effortScale, previousExerciseSetsByName, findCatalogExercise, restTimerByExercise, replaceTarget, replaceSearch, replaceGroup, replacementOptions, replacementLimit, replacementPageKey, isTabletLayout, formatLastSetSummary, scrollNativeGesture, getExerciseZone, undoDeletedSet, cardActions, styles, colors, fontScale, editingSet, warmupTarget, cardioTimeTarget, cardioDistanceTarget, showCardioTimeModal, showCardioDistanceModal]);
 
   return (
     <SafeAreaView style={styles.screen} edges={["top", "left", "right"]}>
@@ -4457,6 +4483,8 @@ export default function WorkoutLog() {
           </AdaptiveModalCard>
         </KeyboardAwareModalFrame>
       </Modal>
+
+      {warmupTarget && activeUid === warmupTarget.uid ? <WarmupSetsSheet key={`${warmupTarget.uid}:${warmupTarget.exercise.id}`} uid={warmupTarget.uid} name={warmupTarget.exercise.name} sets={warmupTarget.exercise.sets} unit={warmupTarget.unit} barbell={warmupTarget.barbell} settings={availableWeightsPreferences.values[weightPreferenceKey(warmupTarget.exercise.name)]} onClose={() => { Keyboard.dismiss(); setWarmupTarget(null); }} onApply={applyWarmups} /> : null}
 
       <Modal visible={showCardioTimeModal} transparent animationType="fade" onRequestClose={() => { setShowCardioTimeModal(false); setCardioTimeTarget(null); }}>
         <KeyboardAwareModalFrame style={styles.modalBackdrop}>
