@@ -8,6 +8,11 @@ export const metrics = [
   ['leanMass', 'Lean mass', 'kg'], ['skeletalMuscle', 'Skeletal muscle', 'kg'],
 ];
 export const homeStates = [
+  ['activity', 'Daily movement / steps', 'Proposed steps import inside Progress. Synthetic data; no native sync.'],
+  ['activity-calories', 'Future example / activity calories', 'Hypothetical only; calorie import is deferred after the phone data check.'],
+  ['activity-empty', 'Daily movement / no records', 'Missing records are unavailable, not zero steps or calories.'],
+  ['activity-permission', 'Daily movement / permission needed', 'Existing sleep/body access does not imply steps access.'],
+  ['activity-disconnected', 'Daily movement / saved data', 'Keep the dated saved value while sync is disconnected.'],
   ['returning', 'Returning user', 'A planned workout, saved measurements and a recovery check-in.'],
   ['new', 'First workout', 'No invented progress or readiness while the account is empty.'],
   ['rest', 'No workout selected', 'One clear start action without prescribing a rest day.'],
@@ -44,6 +49,7 @@ export function homeFixture(example = 'returning') {
     ...[['01', 80.8], ['04', 80.5], ['08', 80.65], ['12', 80.35], ['15', 80.15]].map(([day, weight]) => ({ date: `2026-10-${day}`, weight, source: 'Manual entry' })),
   ];
   const s = {
+    activity: example.startsWith('activity') ? { steps: 6482, calories: example === 'activity-calories' ? 245 : null, caloriesSupported: example === 'activity-calories', status: example === 'activity-permission' ? 'permission' : example === 'activity-disconnected' ? 'disconnected' : 'connected', date: TODAY, synced: '14:10' } : null,
     example, planned: true, started: true, hasWorkouts: true, mealLogged: true,
     connected: true, records, metric: 'weight', selected: TODAY,
     training: { phase: 'Hypertrophy', since: '2026-10-01' },
@@ -58,6 +64,8 @@ export function homeFixture(example = 'returning') {
     error: '', refreshFailed: example === 'error', loading: example === 'loading',
     toast: '', dismissedWelcome: false, trend: 'Workouts',
   };
+  if (example === 'activity-empty' || example === 'activity-permission') s.activity.steps = null;
+  if (example === 'activity-disconnected') s.activity.date = '2026-10-14';
   if (['new', 'empty'].includes(example)) { s.records = []; s.selected = null; }
   if (example === 'new') { s.hasWorkouts = false; s.planned = false; s.started = false; s.connected = false; s.mealLogged = false; s.sleep = null; s.ratings = { soreness: '', fatigue: '', motivation: '' }; s.training = { phase: 'Hypertrophy', since: null }; s.diet = { phase: 'Maintain', since: null }; s.phaseHistory = { training: [], diet: [] }; }
   if (example === 'rest') { s.planned = false; s.started = false; }

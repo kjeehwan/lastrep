@@ -1,6 +1,6 @@
 # Lastrep Training Notebook Design Specification
 
-Version: 1.39 | Date: October 23, 2026
+Version: 1.40 | Date: October 23, 2026
 
 Status: Workout, Home, Nutrition, Sleep, Profile and Settings browser design
 directions approved through iterative review. Shared rules below incorporate that
@@ -1317,8 +1317,9 @@ Progress, Readiness and Weekly Trends. It does not generate Today's Plan on Home
 5. Complete today's picture appears only for an unlogged meal or disconnected
    health sync. Header is inside a lightly outlined surface panel. No completed
    task checklist remains when both actions are irrelevant.
-6. Progress is a ledger section with a top rule, heading/Add-edit action,
-   measurement-type tabs, selected value/date, chart and source. No inner chart card.
+6. Progress is a ledger section with a top rule. Daily movement comes before
+   Body composition, which owns the Add/edit action, measurement tabs, selected
+   value/date, chart and source. No inner chart card.
 7. Readiness keeps its heading, score, explanation, four inputs and Edit recovery
    check-in inside a lightly outlined panel. The 88% fixture uses the current
    weighting, not a new scoring algorithm. Missing inputs produce an explicit
@@ -1972,7 +1973,10 @@ data becomes available, while preserving drafts for an already-loaded profile.
 
 Keep app consent, device permissions, saved-account timestamps and last-sync
 timestamps independent. Omit the redundant Supported data row; retain the
-individual Sleep and Body composition access states.
+individual Sleep, Body composition and Daily activity access states.
+Daily activity currently means steps only. Ready means consent and read access,
+not that records exist. A steps-only connection is Connected. Keep steps consent
+separate for returning users, and never require steps for sleep/body sync.
 Last-sync timestamps describe imported changes, not a successful reread of
 unchanged measurements. Show "No new body composition data found" for an
 unchanged body import and keep its last-sync timestamp/history unchanged.
@@ -2223,3 +2227,27 @@ and failed saves; show inline retry feedback on the actual step. Keep pending
 writes locked and prevent an account change from applying stale UI results.
 Do not assign a goal, phase, phase start date or generated routine during setup.
 Old goal/preview links may redirect into the new flow for compatibility.
+
+
+### Home daily movement: steps
+
+Show imported steps in Progress above Body composition, with the shared outlined
+information-circle button. Show the local date, Health Connect source and read
+time; offline/disconnected values retain their original date and a saved label.
+Missing records are Not available, distinct from an explicit zero. Connect steps
+opens Profile Health sync. Keep each data type optional, permission guidance
+before external settings navigation, and imported movement separate from manual
+body editing. Refresh only in the foreground; use Health Connect's daily aggregate
+rather than adding overlapping phone/watch records. Calories remain deferred;
+steps do not adjust nutrition targets or feed AI recommendations. Last activity
+sync describes the successful snapshot read, while sleep/body last-sync labels
+continue to describe imported changes.
+
+
+### Home section-heading alignment
+
+Progress, Readiness and Weekly Trends use the same 24px Source Serif heading
+family as Profile sections such as Identity, Training and Units. Keep Daily
+movement and Body composition as smaller sans-serif subheadings and numeric
+values in Source Sans Semibold. This alignment does not change the Home title,
+workout name or supporting-action typography.

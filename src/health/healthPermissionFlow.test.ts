@@ -2,16 +2,17 @@ import { expect, it, vi } from "vitest";
 import { manageHealthReadPermissions } from "./healthPermissionFlow";
 
 const sleep = { accessType: "read", recordType: "SleepSession" };
+const steps = { accessType: "read", recordType: "Steps" };
 const body = ["Weight", "BodyFat", "LeanBodyMass"].map((recordType) => ({ accessType: "read", recordType }));
 
 it("requests just missing reads when sleep access is already granted", async () => {
   const client = {
-    getGrantedPermissions: vi.fn().mockResolvedValueOnce([sleep]).mockResolvedValueOnce([sleep, ...body]),
-    requestPermission: vi.fn().mockResolvedValue([sleep, ...body]),
+    getGrantedPermissions: vi.fn().mockResolvedValueOnce([sleep]).mockResolvedValueOnce([sleep, steps, ...body]),
+    requestPermission: vi.fn().mockResolvedValue([sleep, steps, ...body]),
   };
   const settings = vi.fn();
   expect(await manageHealthReadPermissions(client, settings)).toBe("granted");
-  expect(client.requestPermission).toHaveBeenCalledWith(body);
+  expect(client.requestPermission).toHaveBeenCalledWith([steps, ...body]);
   expect(settings).not.toHaveBeenCalled();
 });
 
@@ -21,7 +22,7 @@ it("does not mistake unrelated or write-only grants for the requested reads", as
     requestPermission: vi.fn().mockResolvedValue([]),
   };
   expect(await manageHealthReadPermissions(client, vi.fn())).toBe("incomplete");
-  expect(client.requestPermission).toHaveBeenCalledWith([sleep, ...body]);
+  expect(client.requestPermission).toHaveBeenCalledWith([sleep, steps, ...body]);
 });
 
 it.each([{ granted: [] }, { granted: [sleep] }])("leaves declined or canceled requests in Lastrep with grants $granted", async ({ granted }) => {
@@ -37,7 +38,7 @@ it.each([{ granted: [] }, { granted: [sleep] }])("leaves declined or canceled re
 it("checks actual grants again after the chooser returns", async () => {
   const client = {
     getGrantedPermissions: vi.fn().mockResolvedValueOnce([]).mockResolvedValueOnce([sleep]),
-    requestPermission: vi.fn().mockResolvedValue([sleep, ...body]),
+    requestPermission: vi.fn().mockResolvedValue([sleep, steps, ...body]),
   };
   expect(await manageHealthReadPermissions(client, vi.fn())).toBe("incomplete");
   expect(client.getGrantedPermissions).toHaveBeenCalledTimes(2);
@@ -45,7 +46,7 @@ it("checks actual grants again after the chooser returns", async () => {
 
 it.each([[true, "settings_opened"], [false, "unavailable"], [null, "canceled"]] as const)("reviews existing access through settings (%s)", async (opened, result) => {
   const client = {
-    getGrantedPermissions: vi.fn().mockResolvedValue([sleep, ...body]),
+    getGrantedPermissions: vi.fn().mockResolvedValue([sleep, steps, ...body]),
     requestPermission: vi.fn(),
   };
   const settings = vi.fn().mockResolvedValue(opened);

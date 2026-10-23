@@ -53,3 +53,19 @@ test('restore copy exactly matches the native source', () => {
 test('no active paid purchase does not revoke a manual Premium grant', () => { const s=accountFixture('settings','notFound');assert.equal(s.access,true);assert.equal(s.paid,false);assert.equal(s.feedback,restoreMessages.notFound); });
 test('development build never masquerades as paid Play subscription',()=>{const s=accountFixture('settings','dev');assert.equal(s.dev,true);assert.equal(s.paid,false);});
 test('all review states are unique and construct without mutating defaults',()=>{for(const [page,states]of [['profile',profileStates],['settings',settingsStates]]){assert.equal(new Set(states.map(row=>row[0])).size,states.length);for(const [id]of states)assert.equal(accountFixture(page,id).id,id);}assert.equal(defaultProfile().name,'Daniel');});
+
+test('steps access is independent of other permissions and record availability', async () => {
+  const { stepsAccessStatus } = await import('./account-model.mjs');
+  const stepsOnly = accountFixture('profile', 'activity-only');
+  assert.equal(stepsOnly.health.sleep, false);
+  assert.equal(stepsOnly.health.body, false);
+  assert.equal(healthStatus(stepsOnly.health), 'Connected');
+  assert.equal(stepsAccessStatus(stepsOnly.health), 'Ready');
+  assert.equal(stepsOnly.health.lastActivitySync, null);
+  const missing = accountFixture('profile', 'activity-permission');
+  assert.equal(healthStatus(missing.health), 'Connected');
+  assert.equal(stepsAccessStatus(missing.health), 'Not allowed');
+  missing.health.available = false;
+  assert.equal(stepsAccessStatus(missing.health), 'Unavailable');
+  assert.equal(stepsAccessStatus(accountFixture('profile', 'activity-connect').health), 'Not connected');
+});

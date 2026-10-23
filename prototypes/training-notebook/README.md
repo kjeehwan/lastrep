@@ -13,6 +13,31 @@ main screen design directions are approved. None replaces a Lastrep application 
 review sidebar. Home has 28 example states, including the saved-workout candidate
 below; its previous design baseline is approved.
 
+### Daily movement candidate (awaiting review)
+
+Open **http://127.0.0.1:4317/home.html#activity**. Progress shows a compact
+Daily movement ledger above the existing body-composition tabs. Steps are the
+primary imported measure. Add/edit remains attached to Body composition.
+
+Use the review selector for no records, missing steps permission and disconnected
+saved data. The phone inspection found current Samsung Health steps, but only
+intermittent Total calories burned records. The initial proposal is steps only.
+Future example / activity calories remains a hypothetical separate example,
+not part of the initial implementation scope.
+The help button explains incomplete coverage and unchanged nutrition targets.
+Missing data is Not available, not zero; disconnected data retains its date.
+
+These examples contain synthetic records only. No app permissions, native sync,
+account storage or nutrition targets are changed. See
+[the activity study notes](../../docs/home-activity-study.md) for the proposed
+contract and completed read-only physical-device data check.
+
+The related Profile candidate is **http://127.0.0.1:4317/profile.html#activity**.
+Health sync includes Daily activity, with Ready meaning steps-read access rather
+than proof of records. Review #activity-permission, #activity-only and
+#activity-connect for separate access, consent and permission guidance. All help
+uses the shared information icon. Existing sleep/body sync remains independent.
+
 ### Warm-up helper candidate × awaiting review
 
 Open **http://127.0.0.1:4317/index.html#warmup**. Bench press has three

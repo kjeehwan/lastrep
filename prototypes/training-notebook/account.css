@@ -99,3 +99,5 @@
 .large-text .account-body-value{justify-content:flex-start;text-align:left}
 .account-device .account-version-row{grid-template-columns:24px minmax(0,1fr) auto}
 .account-version-row>span:last-child{color:var(--secondary);font-variant-numeric:tabular-nums}
+
+.account-device .account-help .icon-info{width:16px;height:16px;color:var(--secondary)}

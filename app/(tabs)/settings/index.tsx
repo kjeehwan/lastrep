@@ -25,6 +25,8 @@ import { PRIVACY_POLICY_URL, SUPPORT_EMAIL } from "../../../src/config/legalConf
 import { useEntitlement } from "../../../src/hooks/useEntitlement";
 import { showAppDialog } from "../../../src/ui/appDialog";
 import { clearProfilePhotoCache } from "../../../src/profile/profilePhotos";
+import { clearDailySteps } from "../../../src/health/dailySteps";
+import { clearHealthSyncConsent } from "../../../src/health/healthSyncConsent";
 import { isDevBillingBuild } from "../../../src/billing/revenuecat";
 import { usePurchaseRestore } from "../../../src/billing/usePurchaseRestore";
 import { returnFromSettingsToHome } from "../../../src/navigation/settingsNavigation";
@@ -238,6 +240,7 @@ function SettingsContent() {
               );
               await callable({ confirmDelete: true });
               if (uid) await clearProfilePhotoCache(uid).catch(() => undefined);
+              if (uid) await Promise.all([clearDailySteps(uid), clearHealthSyncConsent(uid)]).catch(() => undefined);
               setDeleteFeedback("Account deleted.");
               router.replace("/auth/sign-in");
             } catch (e) {
