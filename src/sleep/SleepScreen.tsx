@@ -1,5 +1,6 @@
+import { NotebookTextInput } from "../ui/notebook/NotebookTextInput";
 import React, { useCallback, useMemo, useState } from "react";
-import { BackHandler, Linking, Platform, Pressable, ScrollView, Text, TextInput, View, useWindowDimensions } from "react-native";
+import { BackHandler, Linking, Platform, Pressable, ScrollView, Text, View, useWindowDimensions } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect, useRouter, Redirect } from "expo-router";
 import { ChevronDown, ChevronLeft, ChevronRight, Info } from "lucide-react-native";
@@ -39,7 +40,7 @@ function SleepTargetEditor({ uid, target, onClose }: { uid: string; target: numb
   };
   return <SleepSheet title="Sleep target" onClose={() => { if (!saving) onClose(); }} footer={<><SleepButton label={saving ? "Saving..." : "Save target"} primary disabled={saving} onPress={() => void save()} /><SleepButton label="Cancel" disabled={saving} onPress={onClose} /></>}>
     <Text style={text}>Daily target in hours</Text>
-    <TextInput accessibilityLabel="Daily sleep target in hours" value={draft} onChangeText={setDraft} keyboardType="decimal-pad" selectTextOnFocus disableFullscreenUI placeholder="e.g. 7.5" placeholderTextColor={colors.muted} style={{ ...text, minHeight: 48, padding: 12, borderWidth: 1, borderColor: colors.border, borderRadius: 6 }} />
+    <NotebookTextInput accessibilityLabel="Daily sleep target in hours" value={draft} onChangeText={setDraft} keyboardType="decimal-pad" selectTextOnFocus disableFullscreenUI placeholder="e.g. 7.5" placeholderTextColor={colors.muted} style={{ ...text, minHeight: 48, padding: 12, borderWidth: 1, borderColor: colors.border, borderRadius: 6 }} />
     <Text style={{ ...text, color: colors.muted }}>Uses the same saved sleep target as Profile.</Text>
     {error ? <Text accessibilityRole="alert" style={{ ...text, color: colors.danger }}>{error}</Text> : null}
   </SleepSheet>;

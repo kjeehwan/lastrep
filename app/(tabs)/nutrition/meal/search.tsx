@@ -1,3 +1,4 @@
+import { NotebookTextInput } from "../../../../src/ui/notebook/NotebookTextInput";
 import { normalizeServingInfo } from "@/src/nutrition/servingLabel";
 import { ManualFoodEditor } from "@/src/nutrition/components/ManualFoodEditor";
 import { type ManualFood } from "@/src/nutrition/manualFood";
@@ -22,7 +23,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -773,7 +773,7 @@ export default function MealSearchScreen() {
         <View style={[styles.card, { borderTopWidth: 0, paddingTop: 0 }]}>
           <Text style={[styles.subText, { textAlign: "center" }]}>{(parseDateKey(selectedDateKey) ?? new Date()).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</Text>
           <View style={styles.searchInlineRow}>
-            <View style={[styles.input, { flex: 1, flexDirection: "row", alignItems: "center", paddingVertical: 0, paddingRight: 0 }]}><TextInput disableFullscreenUI
+            <View style={[styles.input, { flex: 1, flexDirection: "row", alignItems: "center", paddingVertical: 0, paddingRight: 0 }]}><NotebookTextInput disableFullscreenUI
               value={query}
               onChangeText={setQuery}
               style={[styles.searchInput, { color: colors.ink, fontFamily: notebookFonts.body, fontSize: 16, minHeight: 54, paddingVertical: 12 }]}
@@ -997,7 +997,7 @@ export default function MealSearchScreen() {
                   </TouchableOpacity>
                 ))}
               </View>
-              <View style={{ gap: 8 }}><Text style={styles.subText}>Amount</Text><View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}><TextInput disableFullscreenUI
+              <View style={{ gap: 8 }}><Text style={styles.subText}>Amount</Text><View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}><NotebookTextInput disableFullscreenUI
                 style={[styles.input, { flex: 1 }]}
                 selectTextOnFocus
                 accessibilityLabel="Food amount"
@@ -1067,7 +1067,7 @@ export default function MealSearchScreen() {
             )}
             {scannerMessage ? <><Text style={styles.scannerMessage}>{scannerMessage}</Text><TouchableOpacity disabled={scannerBusy} style={styles.secondaryBtn} onPress={() => { setScannerVisible(false); setManualFoodVisible(true); }}><Text style={styles.secondaryBtnText}>Enter food manually</Text></TouchableOpacity></> : null}
             <View style={styles.searchInlineRow}>
-              <TextInput disableFullscreenUI
+              <NotebookTextInput disableFullscreenUI
                 style={[styles.input, styles.searchInput]}
                 value={manualBarcode}
                 onChangeText={setManualBarcode}

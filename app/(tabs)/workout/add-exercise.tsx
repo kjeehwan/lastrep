@@ -1,3 +1,4 @@
+import { NotebookTextInput } from "../../../src/ui/notebook/NotebookTextInput";
 import { NotebookHeader } from "../../../src/ui/notebook/NotebookHeader";
 import { useNotebook, useNotebookStyles, notebookSheet } from "../../../src/ui/notebook/Notebook";
 import { type NotebookColors } from "../../../src/ui/notebook/tokens";
@@ -179,7 +180,7 @@ export default function AddExerciseScreen() {
 
         <View style={styles.topControls}>
           <View style={styles.searchField}>
-            <TextInput disableFullscreenUI
+            <NotebookTextInput disableFullscreenUI
               ref={searchInputRef}
               placeholder="Search exercises"
               placeholderTextColor={colors.muted}
@@ -271,7 +272,7 @@ export default function AddExerciseScreen() {
         />
 
         <View style={styles.customRow}>
-          <TextInput disableFullscreenUI
+          <NotebookTextInput disableFullscreenUI
             placeholder="Custom exercise"
             placeholderTextColor={colors.muted}
             value={customExercise}

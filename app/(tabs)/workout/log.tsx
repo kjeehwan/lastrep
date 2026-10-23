@@ -1,3 +1,4 @@
+import { NotebookTextInput } from "../../../src/ui/notebook/NotebookTextInput";
 import { Play, Clock3, Gauge, Check } from "lucide-react-native";
 import { NotebookHeader } from "../../../src/ui/notebook/NotebookHeader";
 import { notebookRowHeight } from "../../../src/ui/notebook/tokens";
@@ -3131,7 +3132,7 @@ export default function WorkoutLog() {
               </View>
               {replaceTarget === ex.id ? (
                 <View style={[styles.pickerCard, { marginTop: 10 }]}>
-                  <TextInput disableFullscreenUI
+                  <NotebookTextInput disableFullscreenUI
                     placeholder="Search to replace"
                     placeholderTextColor={colors.muted}
                     value={replaceSearch}
@@ -3223,7 +3224,7 @@ export default function WorkoutLog() {
               </View>
               <View style={styles.exerciseMetaNotesSingle}>
                 <Text style={styles.noteLabel}>Note</Text>
-                <TextInput disableFullscreenUI placeholder="Keep the last rep controlled" placeholderTextColor={colors.muted} accessibilityLabel={`${ex.name} note`}
+                <NotebookTextInput disableFullscreenUI placeholder="Keep the last rep controlled" placeholderTextColor={colors.muted} accessibilityLabel={`${ex.name} note`}
                         onFocus={cardActions.revealNote} value={ex.notes ?? ""} onChangeText={(v) => cardActions.updateExerciseNotes(ex.id, v)} style={[styles.input, styles.metaInput]} />
               </View>
               <View
@@ -3960,7 +3961,7 @@ export default function WorkoutLog() {
               ))}
             </View>
             <View style={styles.restCustomRow}>
-              <TextInput selectTextOnFocus disableFullscreenUI
+              <NotebookTextInput selectTextOnFocus disableFullscreenUI
                 placeholder="Custom (sec)"
                 placeholderTextColor={colors.muted}
                 keyboardType="numeric"
@@ -4294,7 +4295,7 @@ export default function WorkoutLog() {
         <KeyboardAwareModalFrame style={styles.modalBackdrop}>
           <AdaptiveModalCard style={styles.modalCard}>
             <Text style={styles.modalTitle}>{editingRoutineId ? "Update routine" : "Save routine"}</Text>
-            <TextInput disableFullscreenUI
+            <NotebookTextInput disableFullscreenUI
               placeholder="Routine name"
               placeholderTextColor={colors.muted}
               value={routineNameInput}
@@ -4409,7 +4410,7 @@ export default function WorkoutLog() {
             <Text style={styles.modalTitle}>Adjust duration</Text>
             <Text style={styles.modalText}>Set workout duration (hours and minutes).</Text>
             <View style={styles.durationFieldRow}>
-              <TextInput selectTextOnFocus disableFullscreenUI
+              <NotebookTextInput selectTextOnFocus disableFullscreenUI
                 placeholder="00"
                 placeholderTextColor={colors.muted}
                 value={durationAdjustHoursText}
@@ -4419,7 +4420,7 @@ export default function WorkoutLog() {
                 style={styles.durationFieldInput}
               />
               <Text style={styles.durationFieldColon}>:</Text>
-              <TextInput selectTextOnFocus disableFullscreenUI
+              <NotebookTextInput selectTextOnFocus disableFullscreenUI
                 placeholder="00"
                 placeholderTextColor={colors.muted}
                 value={durationAdjustMinutesText}
@@ -4462,7 +4463,7 @@ export default function WorkoutLog() {
           <AdaptiveModalCard style={styles.modalCard}>
             <Text style={styles.modalTitle}>Set Cardio Time</Text>
             <View style={styles.durationFieldRow}>
-              <TextInput selectTextOnFocus disableFullscreenUI
+              <NotebookTextInput selectTextOnFocus disableFullscreenUI
                 placeholder="00"
                 placeholderTextColor={colors.muted}
                 value={cardioTimeHoursText}
@@ -4472,7 +4473,7 @@ export default function WorkoutLog() {
                 style={styles.durationFieldInput}
               />
               <Text style={styles.durationFieldColon}>:</Text>
-              <TextInput selectTextOnFocus disableFullscreenUI
+              <NotebookTextInput selectTextOnFocus disableFullscreenUI
                 placeholder="00"
                 placeholderTextColor={colors.muted}
                 value={cardioTimeMinutesText}
@@ -4519,7 +4520,7 @@ export default function WorkoutLog() {
             <Text style={styles.modalTitle}>Set Distance</Text>
             <Text style={styles.modalText}>Whole and decimal values.</Text>
             <View style={styles.durationFieldRow}>
-              <TextInput selectTextOnFocus={false} disableFullscreenUI
+              <NotebookTextInput selectTextOnFocus={false} disableFullscreenUI
                 placeholder="0"
                 placeholderTextColor={colors.muted}
                 value={cardioDistanceWholeText}
@@ -4531,7 +4532,7 @@ export default function WorkoutLog() {
                 style={styles.durationFieldInput}
               />
               <Text style={styles.durationFieldColon}>.</Text>
-              <TextInput selectTextOnFocus={false} disableFullscreenUI
+              <NotebookTextInput selectTextOnFocus={false} disableFullscreenUI
                 placeholder="00"
                 placeholderTextColor={colors.muted}
                 value={cardioDistanceDecimalText}
@@ -4607,7 +4608,7 @@ export default function WorkoutLog() {
             {showFinishTitleInput ? (
               <>
                 <Text style={[styles.modalText, { marginTop: 12 }]}>Optional session title</Text>
-                <TextInput disableFullscreenUI
+                <NotebookTextInput disableFullscreenUI
                   placeholder="e.g., Upper body"
                   placeholderTextColor={colors.muted}
                   value={sessionTitle}

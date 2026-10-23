@@ -1,9 +1,10 @@
+import { NotebookTextInput } from "../ui/notebook/NotebookTextInput";
 import { useNotebook, useNotebookStyles, notebookSheet } from "../ui/notebook/Notebook";
 import type { NotebookColors } from "../ui/notebook/tokens";
 import { NotebookUtilityIcon } from "../ui/notebook/NotebookUtilityIcon";
 import { NotebookModal } from "../ui/notebook/NotebookModal";
 import React, { useState } from "react";
-import { Modal, Pressable, StyleSheet, Text, TextInput, View, useWindowDimensions } from "react-native";
+import { Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { KeyboardAwareModalFrame } from "../ui/KeyboardAwareModalFrame";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { AdaptiveModalCard } from "../ui/AdaptiveModalCard";
@@ -98,7 +99,7 @@ export function AddMeasurementSheet({ uid, weightUnit, onClose, onSaved, onDelet
                 </View>
                 <View style={[styles.inputRow, largeText && { width: "100%" }]}>
                   <View style={styles.valueField}>
-                    <TextInput value={values[key] || ""} onChangeText={(value) => setValues((previous) => ({ ...previous, [key]: value }))} keyboardType="decimal-pad" disableFullscreenUI editable={!saving && !confirmDelete} accessibilityLabel={label} accessibilityHint={!values[key] ? placeholder : undefined} style={styles.input} />
+                    <NotebookTextInput value={values[key] || ""} onChangeText={(value) => setValues((previous) => ({ ...previous, [key]: value }))} keyboardType="decimal-pad" disableFullscreenUI editable={!saving && !confirmDelete} accessibilityLabel={label} accessibilityHint={!values[key] ? placeholder : undefined} style={styles.input} />
                     {!values[key] ? <View pointerEvents="none" accessible={false} style={[StyleSheet.absoluteFill, styles.placeholderLayer]}><Text accessible={false} style={styles.placeholderText} numberOfLines={1}>{placeholder}</Text></View> : null}
                   </View>
                   <Text style={[styles.unit, fontsLoaded && { width: Math.ceil(26 * Math.max(1, fontScale)) }]}>{key === "bodyFatPercent" ? "%" : unit}</Text>

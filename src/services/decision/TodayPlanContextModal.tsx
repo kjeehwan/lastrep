@@ -1,3 +1,4 @@
+import { NotebookTextInput } from "../../ui/notebook/NotebookTextInput";
 import { useNotebook, useNotebookStyles, notebookSheet } from "../../ui/notebook/Notebook";
 import type { NotebookColors } from "../../ui/notebook/tokens";
 import { NotebookModal } from "../../ui/notebook/NotebookModal";
@@ -9,7 +10,6 @@ import {
   Platform,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   TouchableWithoutFeedback,
   View,
@@ -185,7 +185,7 @@ export function TodayPlanContextModal({ visible, context, plan, saving, onClose,
                 <ChoiceRow options={PAIN_SEVERITIES} value={painSeverity} onChange={setPainSeverity} />
                 <Text style={styles.label}>When it bothers you</Text>
                 <ChoiceRow options={PAIN_TRIGGERS} value={painTrigger} onChange={setPainTrigger} />
-                <TextInput
+                <NotebookTextInput
                   style={styles.input}
                   value={painNote}
                   onChangeText={setPainNote}
@@ -225,7 +225,7 @@ export function TodayPlanContextModal({ visible, context, plan, saving, onClose,
 
             <View style={styles.divider} />
             <Text style={styles.sectionTitle}>Anything else?</Text>
-            <TextInput
+            <NotebookTextInput
               style={[styles.input, styles.noteInput]}
               value={note}
               onChangeText={setNote}

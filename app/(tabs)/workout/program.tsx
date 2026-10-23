@@ -1,3 +1,4 @@
+import { NotebookTextInput } from "../../../src/ui/notebook/NotebookTextInput";
 import { AdaptiveModalCard } from "../../../src/ui/AdaptiveModalCard";
 import { KeyboardAwareModalFrame } from "../../../src/ui/KeyboardAwareModalFrame";
 import { Ionicons } from "@expo/vector-icons";
@@ -12,7 +13,7 @@ import {
   query,
 } from "firebase/firestore";
 import React, { useEffect, useMemo, useState } from "react";
-import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { NotebookModal as Modal } from "../../../src/ui/notebook/NotebookModal";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { auth, db } from "../../../src/config/firebaseConfig";
@@ -290,7 +291,7 @@ export default function WorkoutProgramScreen() {
               </Text>
               {day.type === "workout" ? (
                 <>
-                  <TextInput disableFullscreenUI
+                  <NotebookTextInput disableFullscreenUI
                     placeholder={`Session title for Day ${day.dayNumber}`}
                     placeholderTextColor="#7a7a8c"
                     value={day.title}
@@ -386,7 +387,7 @@ export default function WorkoutProgramScreen() {
             <Text style={styles.modalTitle}>
               {exercisePickerDay ? `Day ${exercisePickerDay.dayNumber} exercises` : "Pick exercises"}
             </Text>
-            <TextInput disableFullscreenUI
+            <NotebookTextInput disableFullscreenUI
               placeholder="Search exercises"
               placeholderTextColor="#7a7a8c"
               value={exerciseSearch}
