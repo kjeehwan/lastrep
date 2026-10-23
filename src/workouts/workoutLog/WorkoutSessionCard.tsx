@@ -1,7 +1,8 @@
+import { NotebookTextInput } from "../../ui/notebook/NotebookTextInput";
 import React from "react";
 import { useNotebook, useNotebookStyles, notebookSheet } from "../../ui/notebook/Notebook";
 import { notebookFonts, type NotebookColors } from "../../ui/notebook/tokens";
-import { Text, TextInput, TouchableOpacity, View } from "react-native";
+import { Text, TouchableOpacity, View } from "react-native";
 import { ElapsedTimerText } from "./TimerText";
 import { Play, Clock3 } from "lucide-react-native";
 
@@ -42,7 +43,7 @@ export function WorkoutSessionCard({
         <Text style={styles.timer}><ElapsedTimerText seconds={elapsedSeconds} startedAtMs={startedAtMs} /></Text>
       </TouchableOpacity>
     </View>
-    <TextInput disableFullscreenUI accessibilityLabel="Workout title" placeholder="Workout session" placeholderTextColor={colors.muted} value={title} onChangeText={onTitleChange} style={styles.sessionTitle} multiline />
+    <NotebookTextInput disableFullscreenUI accessibilityLabel="Workout title" placeholder="Workout session" placeholderTextColor={colors.muted} value={title} onChangeText={onTitleChange} style={styles.sessionTitle} multiline />
     <TouchableOpacity accessibilityRole="button" accessibilityLabel="Change training phase in Profile" onPress={onChangePhase} style={styles.phase}><Text style={styles.muted}>{trainingPhase}</Text></TouchableOpacity>
   </View>;
 }

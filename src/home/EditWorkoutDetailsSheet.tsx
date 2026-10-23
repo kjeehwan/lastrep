@@ -1,6 +1,7 @@
+import { NotebookTextInput } from "../ui/notebook/NotebookTextInput";
 import React, { useRef, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
-import { Keyboard, Text, TextInput, TouchableOpacity, View, useWindowDimensions } from "react-native";
+import { Keyboard, Text, TouchableOpacity, View, useWindowDimensions } from "react-native";
 import { mondayCalendarMatrix } from "./notebookPresentation";
 import { useOfflineStatus } from "../hooks/useOfflineStatus";
 import { KeyboardAwareModalFrame } from "../ui/KeyboardAwareModalFrame";
@@ -72,7 +73,7 @@ export function EditWorkoutDetailsSheet({ uid, workout, onClose, onSaved, onRefr
           <Text style={styles.label}>Duration</Text>
           <View style={styles.durationRow}>{(["hours", "minutes"] as const).map((part, index) => <React.Fragment key={part}>
             {index ? <Text accessible={false} style={styles.colon}>:</Text> : null}
-            <View style={styles.durationColumn}><TextInput selectTextOnFocus disableFullscreenUI editable={!saving && !conflict} keyboardType="number-pad" maxLength={2} placeholder="—" placeholderTextColor={colors.muted} value={draft[part]} onChangeText={value => { setDraft(old => ({ ...old, [part]: value })); setError(""); }} accessibilityLabel={part === "hours" ? "Hours" : "Minutes"} style={[styles.input, { minHeight: Math.max(52, Math.ceil(34 * fontScale + 20)) }]} /><Text style={styles.unit}>{part === "hours" ? "Hours" : "Minutes"}</Text></View>
+            <View style={styles.durationColumn}><NotebookTextInput selectTextOnFocus disableFullscreenUI editable={!saving && !conflict} keyboardType="number-pad" maxLength={2} placeholder="—" placeholderTextColor={colors.muted} value={draft[part]} onChangeText={value => { setDraft(old => ({ ...old, [part]: value })); setError(""); }} accessibilityLabel={part === "hours" ? "Hours" : "Minutes"} style={[styles.input, { minHeight: Math.max(52, Math.ceil(34 * fontScale + 20)) }]} /><Text style={styles.unit}>{part === "hours" ? "Hours" : "Minutes"}</Text></View>
           </React.Fragment>)}</View>
           <Text style={styles.muted}>{original.durationMin == null ? "No duration was recorded. Leave both fields blank to keep it that way." : "Tap a number to edit the duration."}</Text>
           {error ? <Text accessibilityRole="alert" accessibilityLiveRegion="polite" style={styles.error}>{error}</Text> : null}

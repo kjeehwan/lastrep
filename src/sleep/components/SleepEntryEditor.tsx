@@ -1,5 +1,6 @@
+import { NotebookTextInput } from "../../ui/notebook/NotebookTextInput";
 import React, { useState } from "react";
-import { Keyboard, Pressable, Text, TextInput, View, useWindowDimensions } from "react-native";
+import { Keyboard, Pressable, Text, View, useWindowDimensions } from "react-native";
 import { ChevronDown } from "lucide-react-native";
 import { collection, doc } from "firebase/firestore";
 import { db } from "../../config/firebaseConfig";
@@ -86,14 +87,14 @@ export function SleepEntryEditor({ uid, selected, entry: initialEntry, onClose, 
         <View style={{ flexDirection: fontScale >= 1.5 ? "column" : "row", gap: 20 }}>
           {(["bedtime", "wakeTime"] as const).map((field) => <View key={field} style={{ flex: 1, gap: 8 }}>
             <Text style={{ ...text, fontFamily: notebookFonts.semibold }}>{field === "bedtime" ? "Bedtime" : "Wake time"}</Text>
-            <TextInput accessibilityLabel={`${field === "bedtime" ? "Bedtime" : "Wake time"} in 24-hour HH:MM format`} value={field === "bedtime" ? bedtime : wakeTime} onChangeText={(raw) => { const digits = raw.replace(/\D/g, "").slice(0, 4); changeTime(field, digits.length > 2 ? `${digits.slice(0, 2)}:${digits.slice(2)}` : digits); }} keyboardType="number-pad" selectTextOnFocus disableFullscreenUI placeholder={field === "bedtime" ? "23:00" : "07:00"} placeholderTextColor={colors.muted} style={{ ...text, borderWidth: 1, borderColor: colors.border, borderRadius: 6, padding: 12, minHeight: 48, backgroundColor: colors.surface }} />
+            <NotebookTextInput accessibilityLabel={`${field === "bedtime" ? "Bedtime" : "Wake time"} in 24-hour HH:MM format`} value={field === "bedtime" ? bedtime : wakeTime} onChangeText={(raw) => { const digits = raw.replace(/\D/g, "").slice(0, 4); changeTime(field, digits.length > 2 ? `${digits.slice(0, 2)}:${digits.slice(2)}` : digits); }} keyboardType="number-pad" selectTextOnFocus disableFullscreenUI placeholder={field === "bedtime" ? "23:00" : "07:00"} placeholderTextColor={colors.muted} style={{ ...text, borderWidth: 1, borderColor: colors.border, borderRadius: 6, padding: 12, minHeight: 48, backgroundColor: colors.surface }} />
             <Pressable accessibilityRole="button" accessibilityLabel={`Change ${field === "bedtime" ? "bedtime" : "wake"} date`} onPress={() => { Keyboard.dismiss(); setDateField(field === "bedtime" ? "bed" : "wake"); }} style={{ minHeight: 44, flexDirection: "row", alignItems: "center", gap: 6 }}><Text style={{ ...text, color: colors.accent, flexShrink: 1 }}>{sleepDisplayDate(field === "bedtime" ? bedDate : wakeDate)}</Text><ChevronDown color={colors.accent} size={16} /></Pressable>
           </View>)}
         </View>
         <Text style={{ ...text, color: colors.muted }}>Drag B for bedtime or W for wake time, or type exact 24-hour times. Times use this device timezone. Calculated duration does not subtract time awake.</Text>
       </> : <View style={{ gap: 12 }}>
         <Text style={{ ...text, fontFamily: notebookFonts.semibold }}>Duration in hours</Text>
-        <TextInput accessibilityLabel="Sleep duration in hours" value={duration} onChangeText={(value) => { setDuration(value); setError(""); }} keyboardType="decimal-pad" selectTextOnFocus disableFullscreenUI placeholder="e.g. 7.5" placeholderTextColor={colors.muted} style={{ ...text, minHeight: 48, borderWidth: 1, borderColor: colors.border, borderRadius: 6, padding: 12 }} />
+        <NotebookTextInput accessibilityLabel="Sleep duration in hours" value={duration} onChangeText={(value) => { setDuration(value); setError(""); }} keyboardType="decimal-pad" selectTextOnFocus disableFullscreenUI placeholder="e.g. 7.5" placeholderTextColor={colors.muted} style={{ ...text, minHeight: 48, borderWidth: 1, borderColor: colors.border, borderRadius: 6, padding: 12 }} />
         {entry && entry.startMs == null ? <Text style={{ ...text, color: colors.muted }}>This saved record has no bedtime or wake time. No times have been invented.</Text> : null}
       </View>}
       <Text accessibilityLiveRegion="polite" style={{ ...text, fontFamily: notebookFonts.semibold, fontSize: 20 }}>{preview}</Text>

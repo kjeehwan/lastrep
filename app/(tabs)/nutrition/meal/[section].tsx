@@ -1,3 +1,4 @@
+import { NotebookTextInput } from "../../../../src/ui/notebook/NotebookTextInput";
 import { normalizeServingInfo } from "@/src/nutrition/servingLabel";
 import { Star, ArrowRightLeft, Trash2 } from "lucide-react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -26,7 +27,6 @@ import {
   ActivityIndicator,
     ScrollView,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -510,7 +510,7 @@ export default function MealSectionScreen() {
                     ))}
                   </View>
 
-                  <View style={{ gap: 8 }}><Text style={styles.subText}>Amount</Text><View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}><TextInput disableFullscreenUI
+                  <View style={{ gap: 8 }}><Text style={styles.subText}>Amount</Text><View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}><NotebookTextInput disableFullscreenUI
                     style={[styles.input, { flex: 1 }]}
                     selectTextOnFocus
                     accessibilityLabel="Food amount"
@@ -533,10 +533,10 @@ export default function MealSectionScreen() {
                 <>
                   <Text style={styles.subText}>Nutrition for the whole recorded amount. No weight is inferred.</Text>
                   <Text style={styles.subText}>Food name</Text>
-                  <TextInput accessibilityLabel="Food name" disableFullscreenUI selectTextOnFocus editable={!editorSaving} style={styles.input} value={manualName} onChangeText={setManualName} maxLength={80} />
+                  <NotebookTextInput accessibilityLabel="Food name" disableFullscreenUI selectTextOnFocus editable={!editorSaving} style={styles.input} value={manualName} onChangeText={setManualName} maxLength={80} />
                   <View style={styles.editRow}>
                     <Text style={styles.subText}>Calories</Text>
-                    <TextInput disableFullscreenUI
+                    <NotebookTextInput disableFullscreenUI
                       style={styles.input}
                       value={manualCalories}
                       onChangeText={setManualCalories}
@@ -547,7 +547,7 @@ export default function MealSectionScreen() {
                   </View>
                   <View style={styles.editRow}>
                     <Text style={styles.subText}>Protein (g)</Text>
-                    <TextInput disableFullscreenUI
+                    <NotebookTextInput disableFullscreenUI
                       style={styles.input}
                       value={manualProtein}
                       onChangeText={setManualProtein}
@@ -558,7 +558,7 @@ export default function MealSectionScreen() {
                   </View>
                   <View style={styles.editRow}>
                     <Text style={styles.subText}>Carbs (g)</Text>
-                    <TextInput disableFullscreenUI
+                    <NotebookTextInput disableFullscreenUI
                       style={styles.input}
                       value={manualCarbs}
                       onChangeText={setManualCarbs}
@@ -569,7 +569,7 @@ export default function MealSectionScreen() {
                   </View>
                   <View style={styles.editRow}>
                     <Text style={styles.subText}>Fat (g)</Text>
-                    <TextInput disableFullscreenUI
+                    <NotebookTextInput disableFullscreenUI
                       style={styles.input}
                       value={manualFats}
                       onChangeText={setManualFats}
@@ -604,7 +604,7 @@ export default function MealSectionScreen() {
           <AdaptiveModalCard contentSized style={styles.modalCard} contentContainerStyle={{ gap: 16 }}>
             <Text style={styles.modalTitle}>Save this meal</Text>
             <Text style={styles.subText}>Save all {sectionMeals.length} items for one-tap logging later.</Text>
-            <TextInput disableFullscreenUI
+            <NotebookTextInput disableFullscreenUI
               style={styles.input}
               value={savedMealName}
               onChangeText={setSavedMealName}

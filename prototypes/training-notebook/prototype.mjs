@@ -1,3 +1,4 @@
+import { workingSet, suggestWarmups, rememberWarmups, newWarmups, insertWarmups, warmupError, setDisplayRows } from './warmup.mjs';
 import './input-behavior.mjs';
 import { readNotebookPreferences } from './notebook-preferences.mjs';
 import { setReviewState } from './review-state-picker.mjs';
@@ -27,7 +28,7 @@ const paragraph = (str, cls = 'supporting') => `<p class="${cls}">${str}</p>`;
 const check = done => `<span class="checkmark ${done ? 'checked' : ''}">${done ? icon('check') : ''}</span>`;
 let serial = 0, s;
 let chosen = 'active', size = [390, 844], theme = false, large = false, scale = 'RPE', compare = true;
-let toastTimer;
+let toastTimer, warmupPointer, warmupSuppressUntil = 0;
 
 const modalMap = {
   routines: 'routines', recommend: 'recommend', 'exercise-menu': 'exercise-menu', 'set-options': 'set-options',
@@ -50,6 +51,12 @@ function makeState(id) {
   if (id === 'deleted') { const row = state.exercises[0].sets.splice(1, 1)[0]; state.undoSet = { id: 'bench', index: 1, row }; }
   if (id.startsWith('cardio')) { const e = exerciseFromCatalog('treadmill'); e.time = '20:00'; e.distance = '3.2'; if (id === 'cardio-selected') { e.zone = '2'; e.session = 'Steady'; e.effort = 'Moderate'; } state.exercises = [e]; state.title = 'Cardio session'; state.source = ''; state.selectedId = e.id; }
   if (id === 'bodyweight') { state.exercises = [exerciseFromCatalog('legraise'), exerciseFromCatalog('v-squat', 'Custom V Squat')]; state.title = 'Accessories'; state.source = ''; }
+  if (id.startsWith('warmup')) {
+    state.exercises = [exerciseFromCatalog('bench')];
+    state.exercises[0].sets = Array.from({ length: 3 }, () => ({ weight: id === 'warmup-adapted' ? '120' : id === 'warmup-missing' ? '' : '100', reps: '8', rpe: '', done: false, type: 'normal' }));
+    if (id === 'warmup-existing') state.exercises[0].sets.unshift({ weight: '20', reps: '4', rpe: '', done: false, type: 'warmup' });
+    state.modal = 'warmup'; state.warmup = prepareWarmup(state.exercises[0]);
+  }
   if (id === 'history-empty') state.selectedId = 'fly';
   return state;
 }
@@ -82,18 +89,18 @@ function planLabel() { return ({ none: "Today's Plan", busy: 'Reviewing workout.
 
 function resistance(e) {
   return `<div class="set-table" role="group" aria-label="${escape(e.name)} sets"><div class="set-grid table-header" aria-hidden="true"><span>Set</span><span>Last</span><span>${e.unit}</span><span>Reps</span><span>${scale}</span><span>Done</span></div>${e.sets.map((row, i) => {
-    const prev = e.previous[i], marker = ({ warmup: 'W', failure: 'F', drop: 'D' })[row.type] ?? i + 1;
-    return `<div class="set-grid set-row ${row.done ? 'completed' : ''}"><button class="set-marker" data-action="set-menu" ${attrs({ id: e.id, index: i })} aria-label="${escape(e.name)}, set ${i + 1}, ${row.type}, options">${marker}</button><button class="last-value" data-action="copy-last" ${attrs({ id: e.id, index: i })} ${prev ? '' : 'disabled'} aria-label="${escape(e.name)}, set ${i + 1}, copy previous ${escape(lastText(prev, scale))}, ${e.unit}, ${scale}">${escape(lastText(prev, scale))}</button>${['weight', 'reps', 'rpe'].map(k => `<label><span class="cell-label">${k === 'weight' ? e.unit : k === 'rpe' ? scale : 'Reps'}</span><input class="set-input" type="text" inputmode="${k === 'reps' ? 'numeric' : 'decimal'}" data-set="${e.id}" data-index="${i}" data-field="${k}" value="${escape(k === 'rpe' ? effortValue(row[k], scale) : row[k])}" aria-label="${escape(e.name)}, set ${i + 1}, ${k === 'weight' ? e.unit : k === 'rpe' ? scale : 'reps'}" autocomplete="off" spellcheck="false"></label>`).join('')}<button class="done" data-action="done" ${attrs({ id: e.id, index: i })} aria-label="${escape(e.name)}, set ${i + 1}, completed" aria-pressed="${row.done}">${check(row.done)}</button></div>`;
+    const { previous: prev, marker } = setDisplayRows(e)[i];
+    return `<div class="set-grid set-row ${row.done ? 'completed' : ''}"><button class="set-marker" data-action="set-menu" ${attrs({ id: e.id, index: i })} aria-label="${escape(e.name)}, set ${i + 1}, ${row.type}, options">${marker}</button>${row.type === 'warmup' ? '<span class="last-value" aria-hidden="true"></span>' : `<button class="last-value" data-action="copy-last" ${attrs({ id: e.id, index: i })} ${prev ? '' : 'disabled'} aria-label="${escape(e.name)}, set ${i + 1}, copy previous ${escape(lastText(prev, scale))}, ${e.unit}, ${scale}">${escape(lastText(prev, scale))}</button>`}${['weight', 'reps', 'rpe'].map(k => `<label><span class="cell-label">${k === 'weight' ? e.unit : k === 'rpe' ? scale : 'Reps'}</span><input class="set-input" type="text" inputmode="${k === 'reps' ? 'numeric' : 'decimal'}" data-set="${e.id}" data-index="${i}" data-field="${k}" value="${escape(k === 'rpe' ? effortValue(row[k], scale) : row[k])}" aria-label="${escape(e.name)}, set ${i + 1}, ${k === 'weight' ? e.unit : k === 'rpe' ? scale : 'reps'}" autocomplete="off" spellcheck="false"></label>`).join('')}<button class="done" data-action="done" ${attrs({ id: e.id, index: i })} aria-label="${escape(e.name)}, set ${i + 1}, completed" aria-pressed="${row.done}">${check(row.done)}</button></div>`;
   }).join('')}</div>`;
 }
 function bodyweight(e) {
-  return `<div class="section-stack"><div class="bodyweight-grid label muted"><span>Set</span><span>Last</span><span>Reps</span><span>${scale}</span><span>Done</span></div>${e.sets.map((row, i) => `<div class="bodyweight-grid bodyweight-row"><button class="set-marker" data-action="set-menu" ${attrs({ id: e.id, index: i })}>${i + 1}</button><span class="last-value">No record</span><label><span class="cell-label">Reps</span><input class="set-input" data-set="${e.id}" data-index="${i}" data-field="reps" value="${escape(row.reps)}" inputmode="numeric" aria-label="${e.name}, set ${i + 1}, reps"></label><label><span class="cell-label">${scale}</span><input class="set-input" data-set="${e.id}" data-index="${i}" data-field="rpe" value="${effortValue(row.rpe, scale)}" inputmode="decimal" aria-label="${e.name}, set ${i + 1}, ${scale}"></label><button class="done" data-action="done" ${attrs({ id: e.id, index: i })} aria-label="Complete ${e.name} set ${i + 1}" aria-pressed="${row.done}">${check(row.done)}</button></div>`).join('')}</div>`;
+  return `<div class="section-stack"><div class="bodyweight-grid label muted"><span>Set</span><span>Last</span><span>Reps</span><span>${scale}</span><span>Done</span></div>${e.sets.map((row, i) => `<div class="bodyweight-grid bodyweight-row"><button class="set-marker" data-action="set-menu" ${attrs({ id: e.id, index: i })}>${setDisplayRows(e)[i].marker}</button><span class="last-value">${row.type === 'warmup' ? '' : 'No record'}</span><label><span class="cell-label">Reps</span><input class="set-input" data-set="${e.id}" data-index="${i}" data-field="reps" value="${escape(row.reps)}" inputmode="numeric" aria-label="${e.name}, set ${i + 1}, reps"></label><label><span class="cell-label">${scale}</span><input class="set-input" data-set="${e.id}" data-index="${i}" data-field="rpe" value="${effortValue(row.rpe, scale)}" inputmode="decimal" aria-label="${e.name}, set ${i + 1}, ${scale}"></label><button class="done" data-action="done" ${attrs({ id: e.id, index: i })} aria-label="Complete ${e.name} set ${i + 1}" aria-pressed="${row.done}">${check(row.done)}</button></div>`).join('')}</div>`;
 }
 function cardio(e) {
   return `<div class="section-stack"><div class="cardio-fields">${field('Time / min:sec', `cardio-time-${e.id}`, e.time, 'e.g. 20:00')}${field('Distance / km', `cardio-distance-${e.id}`, e.distance, 'e.g. 3.2')}<div class="cardio-completion"><span class="label muted">Done</span><button class="done" data-action="cardio-done" data-id="${e.id}" aria-label="${escape(e.name)}, session completed" aria-pressed="${e.sets[0].done}">${check(e.sets[0].done)}</button></div></div><p class="label">Zone</p>${chips(['1', '2', '3', '4', '5'], e.zone, 'cardio-toggle', { id: e.id, field: 'zone' }, 5)}<p class="label">Session type</p>${chips(['Steady', 'Intervals', 'Recovery'], e.session, 'cardio-toggle', { id: e.id, field: 'session' })}<p class="label">Effort level</p>${chips(['Easy', 'Moderate', 'Hard'], e.effort, 'cardio-toggle', { id: e.id, field: 'effort' })}</div>`;
 }
 function exercise(e, index) {
-  return `<section class="exercise" data-exercise="${e.id}" aria-label="${escape(e.name)}"><div class="exercise-heading"><span class="ordinal">${String(index + 1).padStart(2, '0')}</span><button class="name" data-action="history" data-id="${e.id}">${escape(e.name)}</button><button class="icon-button" data-action="exercise-menu" data-id="${e.id}" aria-label="${escape(e.name)}, options">${icon('more')}</button></div><div class="exercise-controls ${e.mode === 'cardio' ? 'cardio-controls' : ''}"><button data-action="demo" data-id="${e.id}">${icon('play')}Demo</button><button data-action="rest-detail" data-id="${e.id}">${icon('clock')}Rest ${time(e.rest)}</button>${e.mode !== 'cardio' ? `<button class="tempo-control" data-action="open" data-modal="tempo" data-id="${e.id}">${icon('speedometer')}<span>Tempo</span>${e.tempo ? `<span>${escape(e.tempo)}</span>` : ''}</button>` : ''}</div><div class="exercise-note">${field('Note', `note-${e.id}`, e.notes, 'e.g. Keep the last rep controlled')}</div>${e.mode === 'cardio' ? cardio(e) : e.mode === 'bodyweight' ? bodyweight(e) : resistance(e)}${e.mode !== 'cardio' ? `<div class="set-actions">${button('+ Add set', 'add-set', 'text', { id: e.id })}${button('Duplicate last set', 'duplicate-set', 'text', { id: e.id })}</div>` : ''}${s.undoSet?.id === e.id ? `<div class="inline-undo"><span>Set deleted</span>${button('Undo', 'undo-set')}</div>` : ''}</section>`;
+  return `<section class="exercise" data-exercise="${e.id}" aria-label="${escape(e.name)}"><div class="exercise-heading"><span class="ordinal">${String(index + 1).padStart(2, '0')}</span><button class="name" data-action="history" data-id="${e.id}">${escape(e.name)}</button><button class="icon-button" data-action="exercise-menu" data-id="${e.id}" aria-label="${escape(e.name)}, options">${icon('more')}</button></div><div class="exercise-controls ${e.mode === 'cardio' ? 'cardio-controls' : ''}"><button data-action="demo" data-id="${e.id}">${icon('play')}Demo</button><button data-action="rest-detail" data-id="${e.id}">${icon('clock')}Rest ${time(e.rest)}</button>${e.mode !== 'cardio' ? `<button class="tempo-control" data-action="open" data-modal="tempo" data-id="${e.id}">${icon('speedometer')}<span>Tempo</span>${e.tempo ? `<span>${escape(e.tempo)}</span>` : ''}</button>` : ''}</div><div class="exercise-note">${field('Note', `note-${e.id}`, e.notes, 'e.g. Keep the last rep controlled')}</div>${e.mode === 'resistance' ? `<div class="warmup-entry">${button('+ Add warm-up', 'open', 'text', { id: e.id, modal: 'warmup' })}</div>` : ''}${e.mode === 'cardio' ? cardio(e) : e.mode === 'bodyweight' ? bodyweight(e) : resistance(e)}${e.mode !== 'cardio' ? `<div class="set-actions">${button('+ Add set', 'add-set', 'text', { id: e.id })}${button('Duplicate last set', 'duplicate-set', 'text', { id: e.id })}</div>` : ''}${s.undoSet?.id === e.id ? `<div class="inline-undo"><span>Set deleted</span>${button('Undo', 'undo-set')}</div>` : ''}</section>`;
 }
 function empty() { return `<div class="empty-content"><span class="supporting">Thu, Oct 15</span><h1 class="editorial">Your next session</h1>${paragraph('Choose a routine or add your first exercise.')}<div style="height:12px"></div>${button('Choose routine', 'open', 'primary', { modal: 'routines' })}${button('Add exercise', 'search', '')}${button('Recommend workout', 'open', 'text', { modal: 'recommend' })}${button('Repeat past workout', 'repeat')}${button('Create routine', 'open', 'text', { modal: 'create-routine' })}</div>`; }
 function searchPage() {
@@ -143,6 +150,41 @@ function historyContent(e) {
   return `<div class="stats"><div><strong>${Number(current.estimate.toFixed(1))} ${e.unit}</strong><span>Latest estimated 1RM</span></div><div><strong>${Number(best.toFixed(1))} ${e.unit}</strong><span>Best estimated 1RM</span></div></div>${chart(sessions)}${paragraph(`Selected: Oct ${selected.day} · ${escape(selectedSet.weight)} ${e.unit} × ${escape(selectedSet.reps)}${selectedSet.rpe ? ` @ ${scale} ${effortValue(selectedSet.rpe, scale)}` : ''}`)}${[...sessions].reverse().map(session => `<div class="change-group"><h3>Oct ${session.day}, 2026</h3><table class="history-table"><thead><tr><th>Set</th><th>${e.unit}</th><th>Reps</th><th>${scale}</th></tr></thead><tbody>${session.sets.map((row, i) => `<tr><td>${i + 1}</td><td>${escape(row.weight)}</td><td>${escape(row.reps)}</td><td>${row.rpe ? effortValue(row.rpe, scale) : '—'}</td></tr>`).join('')}</tbody></table></div>`).join('')}${paragraph('Illustrative recorded sessions; no daily values are inferred.', 'mock-disclaimer')}`;
 }
 
+const warmupKey = e => `lastrep-study-warmup:${e.id}:${e.unit}`;
+function prepareWarmup(e) {
+  let remembered;
+  try { remembered = JSON.parse(sessionStorage.getItem(warmupKey(e)) ?? 'null'); } catch { /* use the example ramp */ }
+  if (!Array.isArray(remembered) || !remembered.length || remembered.some(row => !(row.reps > 0) || !(row.fixed > 0 || row.ratio > 0))) remembered = null;
+  const pattern = remembered ?? (e.id === 'bench' && e.unit === 'kg'
+    ? [{ fixed: 20, reps: 4 }, { ratio: .6, reps: 4 }, { ratio: .8, reps: 2 }]
+    : [{ ratio: .4, reps: 4 }, { ratio: .6, reps: 4 }, { ratio: .8, reps: 2 }]);
+  const weight = workingSet(e)?.weight ?? '';
+  const proposed = suggestWarmups(weight, pattern, s?.step ?? 2.5);
+  const rows = newWarmups(proposed, e.sets.filter(row => row.type === 'warmup'));
+  return { weight, rows, kept: proposed.filter(row => !rows.includes(row)), pattern, swiped: null, remembered: !!remembered, missing: !Number(weight) };
+}
+function warmupDialog(e) {
+  const draft = s.warmup, existing = e.sets.filter(row => row.type === 'warmup');
+  const count = newWarmups(draft.rows, existing).length, error = warmupError(draft.rows, draft.weight);
+  return dialogShell('Add warm-up sets', `<div class="warmup-context"><span class="supporting">${escape(e.name)}</span><strong>First working set</strong><span class="warmup-working">${escape(workingSet(e)?.weight || '\u2014')} ${e.unit} &times; ${escape(workingSet(e)?.reps || '\u2014')} reps</span></div>
+    ${draft.missing ? `<label class="field"><span>Working weight / ${e.unit}</span><input inputmode="decimal" data-warmup-weight value="${escape(draft.weight)}" placeholder="e.g. 100"></label>${button('Suggest sets', 'warmup-suggest', '')}${paragraph('Used for this preview; your working set stays unchanged.')}` : ''}
+    ${existing.length ? `<div class="warmup-existing"><span class="label muted">Already in your workout</span>${existing.map(row => `<div><span>W</span><span>${escape(row.weight)} ${e.unit} &times; ${escape(row.reps)} reps${row.done ? ' · Done' : ''}</span></div>`).join('')}</div>` : ''}
+    ${paragraph(draft.remembered ? 'Your last setup, adapted to this working weight.' : 'Adjust the weights and reps to suit your warm-up.')}
+    <div class="warmup-rows"><div class="warmup-columns label muted" aria-hidden="true"><span>Set</span><span>${e.unit}</span><span>Reps</span></div>${draft.rows.map((row, index) => `<div class="warmup-swipe"><button class="warmup-delete" data-action="warmup-remove" data-index="${index}" aria-label="Delete warm-up ${index + 1}" ${draft.swiped === index ? '' : 'aria-hidden="true" tabindex="-1"'}>Delete</button><div class="warmup-edit-row ${draft.swiped === index ? 'revealed' : ''}" data-warmup-swipe="${index}" tabindex="0" aria-label="Warm-up ${index + 1}. Swipe left or press Left Arrow to reveal Delete."><span class="warmup-number">W</span>${['weight', 'reps'].map(key => `<input class="set-input" inputmode="${key === 'weight' ? 'decimal' : 'numeric'}" value="${escape(row[key])}" data-warmup-field="${key}" data-warmup-row="${index}" aria-label="Warm-up ${index + 1}, ${key === 'weight' ? e.unit : 'reps'}">`).join('')}</div></div>`).join('')}</div>
+    <p class="supporting warmup-swipe-hint">Swipe left on a set to delete.</p>${button('+ Add a set', 'warmup-add-row', 'text')}
+    <p class="form-error warmup-error" role="status">${draft.rows.length && error ? escape(error) : ''}</p>
+    <p class="supporting warmup-memory">This setup is remembered for ${escape(e.name)} when you add it. Working sets stay unchanged.</p>`,
+    button(count ? `Add ${count} warm-up set${count === 1 ? '' : 's'}` : existing.length ? 'Warm-up sets already added' : 'Add warm-up sets', 'warmup-apply', 'primary', {}, !!error || !count) + button('Cancel', 'close', ''));
+}
+function updateWarmupAction() {
+  const draft = s.warmup, error = warmupError(draft.rows, draft.weight);
+  const count = newWarmups(draft.rows, getExercise().sets.filter(row => row.type === 'warmup')).length;
+  const apply = $('.interactive [data-action="warmup-apply"]');
+  apply.disabled = !!error || !count;
+  apply.textContent = count ? `Add ${count} warm-up set${count === 1 ? '' : 's'}` : getExercise().sets.some(row => row.type === 'warmup') ? 'Warm-up sets already added' : 'Add warm-up sets';
+  $('.interactive .warmup-error').textContent = error;
+}
+
 function modal() {
   const e = getExercise(), sum = summary(s.exercises), actions = (primary, a, secondary = 'Back to workout', sa = 'close') => button(primary, a, 'primary') + (secondary ? button(secondary, sa, '') : '');
   switch (s.modal) {
@@ -154,8 +196,9 @@ function modal() {
       const i = s.exercises.indexOf(e);
       return dialogShell(escape(e?.name ?? 'Exercise options'), `<div class="reorder-row">${icon('reorder')}${button('Up', 'move', '', { direction: -1 }, i === 0)}${button('Down', 'move', '', { direction: 1 }, i === s.exercises.length - 1)}</div>${button('Replace exercise', 'open', '', { modal: 'replace' })}${e?.mode === 'resistance' ? `${chips(['kg', 'lbs'], e.unit, 'unit')}${button('Available weights', 'open', '', { modal: 'weights' })}` : ''}<div class="divider"></div><button class="btn danger" data-action="delete-exercise">Delete exercise</button>`);
     }
+    case 'warmup': return warmupDialog(e);
     case 'replace': return dialogShell('Replace exercise', e?.custom ? paragraph('No automatic suggestions for a custom exercise. Add another exercise manually if needed.') : `${paragraph('Choose an alternative for this mock session.')}${button('Machine chest press', 'replace-exercise', '')}${button('Dumbbell bench press', 'replace-exercise', '')}`);
-    case 'set-options': return dialogShell('Set options', `${paragraph(`${escape(e?.name)} · Set ${s.setIndex + 1}`)}<h3>Set type</h3>${chips(['Normal', 'Warm-up', 'Failure', 'Drop'], ({ normal: 'Normal', warmup: 'Warm-up', failure: 'Failure', drop: 'Drop' })[e?.sets[s.setIndex]?.type], 'set-type', {}, 2)}${e?.mode === 'resistance' ? `<h3>Adjust baseline load</h3>${chips(['-10%', '-5%', '0%', '+5%', '+10%'], [], 'percentage', {}, 3)}` : ''}<div class="divider"></div><button class="btn danger" data-action="delete-set">Delete set</button>`);
+    case 'set-options': return dialogShell('Set options', `${paragraph(`${escape(e?.name)} · ${e?.sets[s.setIndex]?.type === 'warmup' ? 'Warm-up set' : `Set ${e ? setDisplayRows(e)[s.setIndex].marker : ''}`}`)}<h3>Set type</h3>${chips(['Normal', 'Warm-up', 'Failure', 'Drop'], ({ normal: 'Normal', warmup: 'Warm-up', failure: 'Failure', drop: 'Drop' })[e?.sets[s.setIndex]?.type], 'set-type', {}, 2)}${e?.mode === 'resistance' ? `<h3>Adjust baseline load</h3>${chips(['-10%', '-5%', '0%', '+5%', '+10%'], [], 'percentage', {}, 3)}` : ''}<div class="divider"></div><button class="btn danger" data-action="delete-set">Delete set</button>`);
     case 'rest-detail': return dialogShell('Rest timer', `<div class="stats"><div><strong data-clock="rest">${time(remaining() || e?.rest || 120)}</strong><span>${escape(e?.name ?? 'Bench press')}</span></div></div>${chips(['01:00', '01:30', '02:00', '03:00'], time(e?.rest ?? 120), 'rest-preset', {}, 2)}${field('Custom duration / seconds', 'restDuration', s.draft.restDuration ?? '', 'e.g. 90')}`, button(s.rest ? s.rest.deadline ? 'Pause' : 'Resume' : 'Start rest', s.rest ? 'pause-rest' : 'start-rest', 'primary') + button('Apply custom duration', 'custom-rest', '') + button('Skip rest', 'skip-rest', 'text'));
     case 'session-time': return dialogShell('Session timer', `<div class="stats"><div><strong data-clock="session">${time(s.elapsed)}</strong><span>Elapsed time</span></div></div>${field('Elapsed minutes', 'sessionMinutes', s.draft.sessionMinutes ?? '', 'e.g. 20')}`, actions(s.clockStart && s.clockStart !== 'paused' ? 'Pause timer' : 'Resume timer', 'pause-session') + button('Apply time', 'apply-time', 'text'));
     case 'weights': return dialogShell('Available weights', `${paragraph(escape(e?.name ?? 'Bench press'))}${field('Weight increment / kg', 'increment', s.draft.increment ?? String(s.step), 'e.g. 2.5')}${paragraph('Use the increment available at your gym. The mock adjustments round down to this increment.')}${s.draft.error ? paragraph(escape(s.draft.error), 'form-error') : ''}`, actions('Save settings', 'save-weights') + button('Clear settings', 'clear-weights', 'text'));
@@ -220,7 +263,7 @@ function render(preserve = true) {
   else if (s.modal) $('.interactive .sheet-head .close')?.focus({ preventScroll: true });
 }
 
-function openModal(name) { if (name === 'context') s.contextBefore = structuredClone({ ratings: s.ratings, pain: s.pain, activity: s.activity, note: s.note }); if (name === 'history') s.historyPoint = historySessions(getExercise()).length - 1; if (name === 'tempo') s.draft.tempo = getExercise()?.tempo ?? ''; s.keyboard = false; s.modal = name; render(); const body = $('.interactive .sheet-body'); if (body) body.scrollTop = 0; }
+function openModal(name) { if (name === 'warmup') s.warmup = prepareWarmup(getExercise()); if (name === 'context') s.contextBefore = structuredClone({ ratings: s.ratings, pain: s.pain, activity: s.activity, note: s.note }); if (name === 'history') s.historyPoint = historySessions(getExercise()).length - 1; if (name === 'tempo') s.draft.tempo = getExercise()?.tempo ?? ''; s.keyboard = false; s.modal = name; render(); const body = $('.interactive .sheet-body'); if (body) body.scrollTop = 0; }
 function performSave() { const current = s; s.modal = 'saving'; render(); setTimeout(() => { if (s !== current || s.modal !== 'saving') return; s.modal = s.deload ? 'deload-saved' : 'saved'; render(false); }, 650); }
 function generatePlan() { const current = s; s.disclosure = true; s.modal = 'plan-busy'; s.plan = 'busy'; render(false); setTimeout(() => { if (s !== current || s.modal !== 'plan-busy') return; s.plan = s.pain === 'None' || !adjustmentCount() ? 'ok' : 'changes'; s.modal = `plan-${s.plan}`; render(false); }, 650); }
 function mutateWorkout() { if (s.plan && !['none', 'applied'].includes(s.plan)) s.plan = 'stale'; }
@@ -249,6 +292,8 @@ $('#stage').addEventListener('input', event => {
   if (!el.closest('.interactive')) return;
   if (el.dataset.set) { el.setCustomValidity(''); el.removeAttribute('aria-invalid'); el.parentElement.querySelector('.field-error')?.remove(); el.removeAttribute('aria-describedby'); }
   if (el.dataset.set) { const e = getExercise(el.dataset.set), row = e.sets[Number(el.dataset.index)], k = el.dataset.field; row[k] = k === 'rpe' && scale === 'RIR' ? el.value === '' ? '' : String(10 - Number(el.value)) : el.value; mutateWorkout(); return; }
+  if (el.dataset.warmupField) { s.warmup.rows[Number(el.dataset.warmupRow)][el.dataset.warmupField] = el.value; updateWarmupAction(); return; }
+  if (el.hasAttribute('data-warmup-weight')) { s.warmup.weight = el.value; updateWarmupAction(); return; }
   if (el.hasAttribute('data-query')) { s.query = el.value; s.searchMode = 'ready'; render(); return; }
   if (el.dataset.rating) { s.ratings[el.dataset.rating] = Number(el.value); $(`#rating-${el.dataset.rating}`).value = `${el.value}/10`; el.setAttribute('aria-valuetext', el.value + ' out of 10'); return; }
   if (el.dataset.draft) {
@@ -280,7 +325,47 @@ $('#stage').addEventListener('focusin', event => {
   requestAnimationFrame(() => { const q = lastInput?.set ? `input[data-set="${lastInput.set}"][data-index="${lastInput.index}"][data-field="${lastInput.field}"]` : lastInput?.draft ? `[data-draft="${lastInput.draft}"]` : '[data-query]'; $(q, $('.interactive'))?.scrollIntoView({ block: 'nearest' }); });
 });
 $('#stage').addEventListener('pointerdown', event => { if (event.target.closest('[data-action="key"]')) event.preventDefault(); });
+$('#stage').addEventListener('pointerdown', event => {
+  const row = event.target.closest('.interactive [data-warmup-swipe]');
+  if (!row || event.button !== 0) return;
+  warmupPointer = { row, index: Number(row.dataset.warmupSwipe), id: event.pointerId, x: event.clientX, y: event.clientY, dragging: false, offset: s.warmup.swiped === Number(row.dataset.warmupSwipe) ? -88 : 0 };
+});
+$('#stage').addEventListener('pointermove', event => {
+  const gesture = warmupPointer;
+  if (!gesture || gesture.id !== event.pointerId) return;
+  const dx = event.clientX - gesture.x, dy = event.clientY - gesture.y;
+  if (!gesture.dragging && Math.abs(dy) > 12 && Math.abs(dy) >= Math.abs(dx)) { warmupPointer = null; return; }
+  if (!gesture.dragging && Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy)) {
+    gesture.dragging = true; gesture.row.setPointerCapture(event.pointerId);
+  }
+  if (!gesture.dragging) return;
+  if (event.cancelable) event.preventDefault();
+  gesture.row.style.transition = 'none';
+  gesture.row.style.transform = `translateX(${Math.max(-88, Math.min(0, gesture.offset + dx))}px)`;
+});
+$('#stage').addEventListener('pointerup', event => {
+  const gesture = warmupPointer; warmupPointer = null;
+  if (!gesture || gesture.id !== event.pointerId || !gesture.dragging) return;
+  s.warmup.swiped = gesture.offset + event.clientX - gesture.x < -40 ? gesture.index : null;
+  warmupSuppressUntil = performance.now() + 200; render();
+});
+$('#stage').addEventListener('pointercancel', () => {
+  if (warmupPointer?.dragging) {
+    warmupPointer.row.style.removeProperty('transition');
+    warmupPointer.row.style.removeProperty('transform');
+  }
+  warmupPointer = null;
+});
+$('#stage').addEventListener('keydown', event => {
+  if (!event.target.matches('[data-warmup-swipe]') || !['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+  event.preventDefault(); event.stopPropagation();
+  const index = Number(event.target.dataset.warmupSwipe);
+  s.warmup.swiped = event.key === 'ArrowLeft' ? index : null; render();
+  const target = event.key === 'ArrowLeft' ? `.interactive .warmup-delete[data-index="${index}"]` : `.interactive [data-warmup-swipe="${index}"]`;
+  $(target)?.focus({ preventScroll: true });
+});
 $('#stage').addEventListener('click', async event => {
+  if (performance.now() < warmupSuppressUntil) return;
   const b = event.target.closest('[data-action]'); if (!b || b.disabled || !b.closest('.interactive')) return;
   const d = b.dataset, action = d.action;
   if (action === 'outside' && event.target !== b) return;
@@ -315,9 +400,25 @@ $('#stage').addEventListener('click', async event => {
     case 'focus': s.focus = d.value; render(); return;
     case 'length': s.length = d.value; render(); return;
     case 'generate-workout': s.pendingRoutine = `${s.focus} / ${s.length} fixture`; if (s.exercises.length) openModal('replace-guard'); else chooseRoutine(); return;
+    case 'warmup-suggest': {
+      const proposed = suggestWarmups(s.warmup.weight, s.warmup.pattern, s.step);
+      s.warmup.rows = newWarmups(proposed, getExercise().sets.filter(row => row.type === 'warmup'));
+      s.warmup.kept = proposed.filter(row => !s.warmup.rows.includes(row)); render(); return;
+    }
+    case 'warmup-remove': s.warmup.rows.splice(Number(d.index), 1); s.warmup.swiped = null; render(); return;
+    case 'warmup-add-row': s.warmup.rows.push({ weight: '', reps: '', fixed: false, manual: true }); render(); return;
+    case 'warmup-apply': {
+      const draft = s.warmup;
+      if (warmupError(draft.rows, draft.weight)) { updateWarmupAction(); return; }
+      const additions = newWarmups(draft.rows, getExercise().sets.filter(row => row.type === 'warmup'));
+      if (!additions.length) return;
+      getExercise().sets = insertWarmups(getExercise().sets, additions);
+      try { sessionStorage.setItem(warmupKey(getExercise()), JSON.stringify(rememberWarmups([...draft.kept, ...draft.rows], draft.weight))); } catch { /* session storage is optional */ }
+      s.modal = ''; mutateWorkout(); toast(`${additions.length} warm-up sets added`); return;
+    }
     case 'exercise-menu': s.selectedId = d.id; openModal('exercise-menu'); return;
     case 'set-menu': s.selectedId = d.id; s.setIndex = Number(d.index); openModal('set-options'); return;
-    case 'copy-last': { const p = e.previous[Number(d.index)]; if (p) { const row = e.sets[Number(d.index)]; Object.assign(row, { weight: p.weight, reps: p.reps, rpe: p.rpe }); mutateWorkout(); render(); } return; }
+    case 'copy-last': { const p = setDisplayRows(e)[Number(d.index)].previous; if (p) { const row = e.sets[Number(d.index)]; Object.assign(row, { weight: p.weight, reps: p.reps, rpe: p.rpe }); mutateWorkout(); render(); } return; }
     case 'done': e.sets[Number(d.index)].done = !e.sets[Number(d.index)].done; mutateWorkout(); render(); return;
     case 'cardio-done': e.sets[0].done = !e.sets[0].done; render(); return;
     case 'add-set': e.sets.push({ weight: '', reps: '', rpe: '', done: false, type: 'normal' }); mutateWorkout(); render(); return;

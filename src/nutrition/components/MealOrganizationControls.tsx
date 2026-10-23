@@ -1,8 +1,9 @@
+import { NotebookTextInput } from "../../ui/notebook/NotebookTextInput";
 import { useNotebook, notebookSheet } from "../../ui/notebook/Notebook";
 import { NotebookModal } from "../../ui/notebook/NotebookModal";
 import { notebookFonts } from "../../ui/notebook/tokens";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Modal, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View, useWindowDimensions } from "react-native";
+import { Modal, Pressable, ScrollView, StyleSheet, Switch, Text, View, useWindowDimensions } from "react-native";
 import { centeredTimeIndex, wrapTimePart } from "../timeWheel";
 import MealTimeWheel, { nativeMealTimeWheelAvailable } from "../../components/MealTimeWheel";
 import type { MealTimeWheelProps } from "../../components/MealTimeWheel.types";
@@ -99,18 +100,18 @@ export function MealOrganizationEditor({ uid, section, sections, meals, dateKey,
           {onMoveDown ? <Pressable style={styles.button} onPress={onMoveDown}><Text style={styles.text}>Move down</Text></Pressable> : null}
         </> : <>
           <Text style={styles.description}>{mode === "name" ? `Rename for ${dateKey}. Other dates keep their own names or the default.` : `${mealLabel(section, labels)} · ${dateKey} · 24-hour time`}</Text>
-          {mode === "name" ? <TextInput disableFullscreenUI selectTextOnFocus accessibilityLabel="Meal name" style={styles.input}
+          {mode === "name" ? <NotebookTextInput disableFullscreenUI selectTextOnFocus accessibilityLabel="Meal name" style={styles.input}
             value={name ?? mealLabel(section, labels)} onChangeText={setName} editable={!pending} maxLength={24} autoCapitalize="sentences"
             placeholder="e.g. Post-workout" placeholderTextColor={fontsLoaded ? colors.muted : "#a5acc1"} /> : fontsLoaded ? <View style={styles.row}>
             <TimePart label="Hour" count={24} value={hours} onChange={setHours} onScrolling={setHourScrolling} disabled={pending} />
             <TimePart label="Minute" count={60} value={minutesText} onChange={setMinutesText} onScrolling={setMinuteScrolling} disabled={pending} />
           </View> : <View style={styles.row}>
             <View style={{ flex: 1 }}><Text style={styles.description}>Hour (0-23)</Text>
-              <TextInput accessibilityLabel="Meal hour" style={styles.input} value={hours} onChangeText={setHours} maxLength={2}
+              <NotebookTextInput accessibilityLabel="Meal hour" style={styles.input} value={hours} onChangeText={setHours} maxLength={2}
                 editable={!pending} keyboardType="number-pad" placeholder="e.g. 18" placeholderTextColor="#a5acc1" />
             </View>
             <View style={{ flex: 1 }}><Text style={styles.description}>Minute (0-59)</Text>
-              <TextInput accessibilityLabel="Meal minute" style={styles.input} value={minutesText} onChangeText={setMinutesText} maxLength={2}
+              <NotebookTextInput accessibilityLabel="Meal minute" style={styles.input} value={minutesText} onChangeText={setMinutesText} maxLength={2}
                 editable={!pending} keyboardType="number-pad" placeholder="e.g. 30" placeholderTextColor="#a5acc1" />
             </View>
           </View>}

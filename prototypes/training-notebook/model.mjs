@@ -57,6 +57,10 @@ export function setUnit(exercise, unit) {
   return { ...copy(exercise), unit, sets: exercise.sets.map(convert), previous: exercise.previous.map(convert) };
 }
 export const states = [
+  ['Warm-up helper candidate', 'warmup', 'Add warm-up sets', 'Bench press: 100 kg \u00d7 8. Edit the 20 \u00d7 4, 60 \u00d7 4, 80 \u00d7 2 example, remove a row, then add above the working sets.'],
+  ['Warm-up helper candidate', 'warmup-adapted', 'Warm-up / adapted setup', '120 kg \u00d7 8. Applies your last added Bench press setup from this browser tab; the fixed first weight stays unchanged and other rows scale.'],
+  ['Warm-up helper candidate', 'warmup-existing', 'Warm-up / already added', 'A 20 kg \u00d7 4 warm-up already exists. Only the remaining new sets are inserted; existing sets stay unchanged.'],
+  ['Warm-up helper candidate', 'warmup-missing', 'Warm-up / missing working weight', 'Enter a reference weight in the helper, then Suggest sets. This does not fill the working set.'],
   ['Approved screens', 'active', 'Active workout', 'The approved populated screen, with optional side-by-side reps editing.'],
   ['Approved screens', 'editing', 'Editing reps + keyboard', 'The approved scrolled editing state. The caret belongs to Set 2, Reps.'],
   ['Setup', 'empty', 'Empty workout', 'Choose a routine, add exercises, repeat a session or request a recommendation.'],

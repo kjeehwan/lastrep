@@ -1,8 +1,9 @@
+import { NotebookTextInput } from "../ui/notebook/NotebookTextInput";
 import { Circle, CircleDot } from "lucide-react-native";
 import Slider from "@react-native-community/slider";
 import { Redirect, useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useState } from "react";
-import { ActivityIndicator, BackHandler, Keyboard, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, BackHandler, Keyboard, Pressable, StyleSheet, Text, View } from "react-native";
 import OnboardingLayout from "../../components/OnboardingLayout";
 import { useNotebook, useNotebookStyles } from "../ui/notebook/Notebook";
 import { notebookFonts, type NotebookColors } from "../ui/notebook/tokens";
@@ -48,7 +49,7 @@ export function OnboardingScreen({ step }: { step: OnboardingStep }) {
       </View> : null}
       {step === "nickname" ? <View style={styles.group}>
         <Text nativeID="onboarding-nickname-label" style={styles.label}>Nickname (optional)</Text>
-        <TextInput accessibilityLabel="Nickname (optional)" accessibilityLabelledBy="onboarding-nickname-label" style={[styles.input, focused && { borderColor: colors.accent }]} placeholder="Your nickname" placeholderTextColor={colors.muted} selectionColor={colors.accent} value={state.draft.nickname} onChangeText={nickname => state.change({ nickname })} editable={!disabled} disableFullscreenUI autoComplete="nickname" textContentType="nickname" returnKeyType="done" onSubmitEditing={() => { void advance(); }} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)} />
+        <NotebookTextInput accessibilityLabel="Nickname (optional)" accessibilityLabelledBy="onboarding-nickname-label" style={[styles.input, focused && { borderColor: colors.accent }]} placeholder="Your nickname" placeholderTextColor={colors.muted} selectionColor={colors.accent} value={state.draft.nickname} onChangeText={nickname => state.change({ nickname })} editable={!disabled} disableFullscreenUI autoComplete="nickname" textContentType="nickname" returnKeyType="done" onSubmitEditing={() => { void advance(); }} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)} />
         <Text style={styles.supporting}>You can add or change your nickname later in Profile.</Text>
       </View> : null}
       {step === "health" ? <View style={styles.group}>

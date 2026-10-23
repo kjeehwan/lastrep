@@ -59,6 +59,7 @@ private data class WorkoutSetRowBinding(
 private data class ActiveWorkoutSetEditor(val position: Int, val field: String)
 
 class WorkoutSetListView(context: Context) : LinearLayout(context) {
+  private var previewMode = false
   private var activeSetIndex = -1
   private var editingSuspended = false
   private val recyclerView = RecyclerView(context)
@@ -127,7 +128,7 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
   fun setNotebookColors(colors: ReadableMap?) {
     if (colors == null) return
     fun color(key: String, fallback: Int) = if (colors.hasKey(key)) Color.parseColor(colors.getString(key)) else fallback
-    val next = listOf(color("ink", ink), color("muted", muted), color("surface", surface), color("border", border), color("primary", primary), color("onPrimary", onPrimary), color("accent", accent), color("accentSoft", accentSoft))
+    val next = listOf(color("ink", ink), color("muted", muted), color("input", color("surface", surface)), color("border", border), color("primary", primary), color("onPrimary", onPrimary), color("accent", accent), color("accentSoft", accentSoft))
     if (next == listOf(ink, muted, surface, border, primary, onPrimary, accent, accentSoft)) return
     ink = next[0]; muted = next[1]; surface = next[2]; border = next[3]; primary = next[4]; onPrimary = next[5]
     accent = next[6]; accentSoft = next[7]
@@ -139,6 +140,8 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
   var weightLabel: String = "Weight"
   var repsLabel: String = "Reps"
   var rpeLabel: String = "RPE"
+
+  fun setPreviewMode(value: Boolean) { if (previewMode != value) { previewMode = value; adapter.notifyDataSetChanged(); requestLayout() } }
 
   fun setActiveSetIndex(value: Int) {
     if (activeSetIndex == value) return
@@ -387,6 +390,8 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
       notifyDataSetChanged()
     }
 
+    override fun getItemViewType(position: Int): Int = if (previewMode) 1 else 0
+
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
       return WorkoutSetViewHolder(createRowView(parent.context))
     }
@@ -404,7 +409,7 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
           if (isSelected) canvas.drawRect(0f, 0f, dp(2f).toFloat(), height.toFloat(), Paint().apply { color = accent })
         }
       }.apply {
-        orientation = if (largeText) VERTICAL else HORIZONTAL
+        orientation = if (largeText && !previewMode) VERTICAL else HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
         descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
         layoutParams = RecyclerView.LayoutParams(
@@ -420,9 +425,9 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
         setTextColor(muted)
         textSize = 13f
         gravity = Gravity.CENTER
-        layoutParams = LayoutParams(dp(24f), dp(44f))
+        layoutParams = LayoutParams(dp(if (previewMode) 40f else 24f), dp(44f))
       }
-      val header = if (largeText) LinearLayout(context).apply { orientation = HORIZONTAL; gravity = Gravity.CENTER_VERTICAL } else root
+      val header = if (largeText && !previewMode) LinearLayout(context).apply { orientation = HORIZONTAL; gravity = Gravity.CENTER_VERTICAL } else root
       header.addView(setLabel)
 
       val checkHitbox = FrameLayout(context).apply {
@@ -458,7 +463,7 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
         isFocusable = true
         setLineSpacing(0f, 1.05f)
       }
-      header.addView(last, if (largeText) LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f) else LayoutParams(dp(96f), LayoutParams.WRAP_CONTENT).apply { marginStart = dp(4f) })
+      if (!previewMode) header.addView(last, if (largeText) LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f) else LayoutParams(dp(96f), LayoutParams.WRAP_CONTENT).apply { marginStart = dp(4f) })
       setLabel.typeface = notebookFace(); last.typeface = notebookFace()
 
       val weight = createInput(
@@ -473,7 +478,11 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
         InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
       )
 
-      if (largeText) {
+      if (previewMode) {
+        val inputHeight = dp(if (largeText) 64f else 48f)
+        root.addView(weight, LayoutParams(0, inputHeight, 1f).apply { marginStart = dp(4f) })
+        root.addView(reps, LayoutParams(0, inputHeight, 1f).apply { marginStart = dp(4f) })
+      } else if (largeText) {
         header.addView(checkHitbox)
         root.addView(header, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
         for ((label, input) in listOf(weightHint to weight, repsHint to reps, (if (rpeHint == "0-4") "RIR" else "RPE") to rpe)) {
@@ -534,14 +543,18 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
         binding.setLabel.setOnClickListener {
           if (boundIndex >= 0) onSetLabelPress(boundIndex)
         }
-        binding.last.text = item.last.ifBlank { "-" }
-        binding.last.isEnabled = item.last.isNotBlank() && item.last != "-"
-        binding.last.contentDescription = if (binding.last.isEnabled) "Set ${position + 1}, copy Last: ${item.last}" else "Set ${position + 1}, no prior record"
-        binding.weight.contentDescription = "Set ${position + 1}, $weightHint"
-        binding.reps.contentDescription = "Set ${position + 1}, $repsHint"
-        binding.rpe.contentDescription = "Set ${position + 1}, ${if (rpeHint == "0-4") "RIR" else "RPE"}"
+        val warmup = item.marker == "W"
+        val setDescription = if (warmup) "Warm-up set ${position + 1}" else "Set ${item.marker}"
+        binding.setLabel.contentDescription = "$setDescription options"
+        binding.last.text = if (warmup) "" else item.last.ifBlank { "-" }
+        binding.last.isEnabled = !warmup && item.last.isNotBlank() && item.last != "-"
+        binding.last.importantForAccessibility = if (warmup) View.IMPORTANT_FOR_ACCESSIBILITY_NO else View.IMPORTANT_FOR_ACCESSIBILITY_AUTO
+        binding.last.contentDescription = if (warmup) null else if (binding.last.isEnabled) "Set ${item.marker}, copy Last: ${item.last}" else "Set ${item.marker}, no prior record"
+        binding.weight.contentDescription = "$setDescription, $weightHint"
+        binding.reps.contentDescription = "$setDescription, $repsHint"
+        binding.rpe.contentDescription = "$setDescription, ${if (rpeHint == "0-4") "RIR" else "RPE"}"
         binding.checkHitbox.isFocusable = true
-        binding.checkHitbox.contentDescription = "Set ${position + 1} completion"
+        binding.checkHitbox.contentDescription = "$setDescription completion"
         binding.checkHitbox.accessibilityDelegate = object : View.AccessibilityDelegate() {
           override fun onInitializeAccessibilityNodeInfo(host: View, info: android.view.accessibility.AccessibilityNodeInfo) {
             super.onInitializeAccessibilityNodeInfo(host, info)

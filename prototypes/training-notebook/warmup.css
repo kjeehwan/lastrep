@@ -1,0 +1,27 @@
+/* Scoped to the warm-up candidate. Uses the existing notebook tokens. */
+.warmup-context{display:grid;gap:4px;border-bottom:1px solid var(--rule);padding-bottom:16px}
+.warmup-context strong{font-size:calc(14px * var(--scale));font-weight:400;color:var(--secondary)}
+.warmup-working{font-size:calc(24px * var(--scale));font-weight:600;font-variant-numeric:tabular-nums}
+.warmup-columns,.warmup-edit-row{display:grid;grid-template-columns:40px minmax(0,1fr) minmax(0,1fr);gap:10px;align-items:center;padding-left:4px;padding-right:4px}
+.warmup-columns{padding-bottom:6px;text-align:center}
+.warmup-edit-row{padding-top:6px;padding-bottom:6px;position:relative;background:var(--surface);transition:transform .16s ease;touch-action:pan-y}
+.warmup-edit-row.revealed{transform:translateX(-88px)}
+.warmup-swipe{position:relative;overflow:hidden}
+.device .warmup-delete{position:absolute;inset:0 0 0 auto;width:88px;background:var(--danger);color:var(--on-primary);font-size:calc(16px * var(--scale));font-weight:600}
+.warmup-number{text-align:center}
+.warmup-edit-row input{min-width:0;width:100%;text-align:center;font-variant-numeric:tabular-nums}
+.warmup-number{font-size:calc(14px * var(--scale));color:var(--secondary)}
+.warmup-entry{display:flex;justify-content:flex-start;padding-top:4px}
+.warmup-entry .btn.text{font-weight:600}
+.warmup-swipe-hint{font-size:calc(13px * var(--scale))}
+.warmup-memory{border-top:1px solid var(--rule);padding-top:12px}
+.warmup-error:empty{display:none}
+.warmup-existing{display:grid;gap:6px;padding:12px;background:var(--subtle)}
+.warmup-existing>div{display:flex;gap:12px;font-size:calc(14px * var(--scale))}
+.set-actions{flex-wrap:wrap}
+.large-text .warmup-columns{display:none}
+.large-text .warmup-edit-row{grid-template-columns:1fr 1fr;gap:8px;border-bottom:1px solid var(--rule);padding:12px 0}
+.large-text .warmup-number{grid-column:1}
+.large-text .warmup-edit-row input{grid-row:2}
+.large-text .warmup-working{overflow-wrap:anywhere}
+@media(prefers-reduced-motion:reduce){.warmup-edit-row{transition:none}}

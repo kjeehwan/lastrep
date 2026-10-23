@@ -1,9 +1,10 @@
+import { NotebookTextInput } from "../../ui/notebook/NotebookTextInput";
 import { useNotebook, useNotebookStyles, notebookSheet } from "../../ui/notebook/Notebook";
 import { notebookFonts, type NotebookColors } from "../../ui/notebook/tokens";
 import { AdaptiveModalCard } from "../../ui/AdaptiveModalCard";
 import { Ionicons } from "@expo/vector-icons";
 import React, { useState } from "react";
-import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { NotebookModal as Modal } from "../../ui/notebook/NotebookModal";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { convertAvailableWeightsUnit, normalizeAvailableWeights, type AvailableWeights } from "../availableWeights";
@@ -74,15 +75,15 @@ export function AvailableWeightsModal({ name, settings, defaultUnit, onClose, on
             {mode === "regular" ? (
               <>
                 <Text style={styles.label}>Starting weight ({unit})</Text>
-                <TextInput selectTextOnFocus disableFullscreenUI style={styles.input} value={minimum} onChangeText={setMinimum} keyboardType="decimal-pad" placeholder="e.g. 20" placeholderTextColor={colors.muted} accessibilityLabel={`Starting weight in ${unit}`} />
+                <NotebookTextInput selectTextOnFocus disableFullscreenUI style={styles.input} value={minimum} onChangeText={setMinimum} keyboardType="decimal-pad" placeholder="e.g. 20" placeholderTextColor={colors.muted} accessibilityLabel={`Starting weight in ${unit}`} />
                 <Text style={styles.label}>Increment ({unit})</Text>
-                <TextInput selectTextOnFocus disableFullscreenUI style={styles.input} value={increment} onChangeText={setIncrement} keyboardType="decimal-pad" placeholder="e.g. 2 or 2.5" placeholderTextColor={colors.muted} accessibilityLabel={`Weight increment in ${unit}`} />
+                <NotebookTextInput selectTextOnFocus disableFullscreenUI style={styles.input} value={increment} onChangeText={setIncrement} keyboardType="decimal-pad" placeholder="e.g. 2 or 2.5" placeholderTextColor={colors.muted} accessibilityLabel={`Weight increment in ${unit}`} />
                 <Text style={styles.hint}>For a barbell, use total weight including both sides. For dumbbells, use the weight of one dumbbell.</Text>
               </>
             ) : (
               <>
                 <Text style={styles.label}>Weights ({unit}), separated by commas</Text>
-                <TextInput disableFullscreenUI style={[styles.input, styles.list]} value={values} onChangeText={setValues} multiline textAlignVertical="top" placeholder="10, 12, 14, 17.5, 20" placeholderTextColor={colors.muted} accessibilityLabel={`Available weights in ${unit}`} />
+                <NotebookTextInput disableFullscreenUI style={[styles.input, styles.list]} value={values} onChangeText={setValues} multiline textAlignVertical="top" placeholder="10, 12, 14, 17.5, 20" placeholderTextColor={colors.muted} accessibilityLabel={`Available weights in ${unit}`} />
               </>
             )}
             {error ? <Text style={styles.error}>{error}</Text> : null}

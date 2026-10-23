@@ -1,3 +1,4 @@
+import { useNotebook } from "../ui/notebook/Notebook";
 import React, { forwardRef } from "react";
 import {
   NativeSyntheticEvent,
@@ -12,17 +13,20 @@ const NativeWorkoutGestureTextInput =
   requireNativeComponent<NativeProps>("WorkoutGestureTextInput");
 
 const WorkoutGestureTextInput = forwardRef<any, TextInputProps>(
-  ({ onChangeText, onChange, ...rest }, ref) => (
+  ({ onChangeText, onChange, ...rest }, ref) => {
+    const { colors } = useNotebook();
+    return (
     <NativeWorkoutGestureTextInput
       ref={ref}
       {...rest}
+      style={[rest.style, { backgroundColor: colors.input, color: colors.ink }]}
       disableFullscreenUI
       onChange={(event: NativeSyntheticEvent<TextInputChangeEventData>) => {
         onChange?.(event);
         onChangeText?.(event.nativeEvent?.text ?? "");
       }}
     />
-  )
+  ); }
 );
 
 WorkoutGestureTextInput.displayName = "WorkoutGestureTextInput";

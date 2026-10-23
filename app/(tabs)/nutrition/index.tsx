@@ -1,3 +1,4 @@
+import { NotebookTextInput } from "../../../src/ui/notebook/NotebookTextInput";
 import { NotebookHeader } from "@/src/ui/notebook/NotebookHeader";
 import { ChevronLeft, ChevronRight, ChevronUp, ChevronDown } from "lucide-react-native";
 import { IntakeBar, MacroComposition, DiaryCalendar } from "@/src/nutrition/components/NotebookNutrition";
@@ -13,7 +14,7 @@ import { Href, Redirect, useFocusEffect, useLocalSearchParams, useRouter } from 
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, onSnapshot } from "firebase/firestore";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { BackHandler, FlatList, LayoutChangeEvent, NativeScrollEvent, NativeSyntheticEvent, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, useWindowDimensions } from "react-native";
+import { BackHandler, FlatList, LayoutChangeEvent, NativeScrollEvent, NativeSyntheticEvent, ScrollView, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { auth, db } from "@/src/config/firebaseConfig";
 import type { NutritionMeal } from "@/src/contracts";
@@ -800,7 +801,7 @@ export default function NutritionIndex() {
         <KeyboardAwareModalFrame style={styles.modalBackdrop} onDismiss={() => setAddMealVisible(false)}>
           <AdaptiveModalCard contentSized style={styles.modalCard} contentContainerStyle={{ gap: 16 }}>
             <Text style={styles.modalTitle}>Add meal section</Text>
-            <TextInput disableFullscreenUI
+            <NotebookTextInput disableFullscreenUI
               value={newMealName}
               maxLength={24}
               onChangeText={setNewMealName}

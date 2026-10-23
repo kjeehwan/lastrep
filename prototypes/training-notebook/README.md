@@ -13,6 +13,36 @@ main screen design directions are approved. None replaces a Lastrep application 
 review sidebar. Home has 28 example states, including the saved-workout candidate
 below; its previous design baseline is approved.
 
+### Warm-up helper candidate × awaiting review
+
+Open **http://127.0.0.1:4317/index.html#warmup**. Bench press has three
+100 kg × 8 working sets. The helper previews **20 kg × 4, 60 kg × 4,
+80 kg × 2**, with plain numeric weight fields. Edit weights/reps, remove the
+optional row or add another row, then add the warm-ups above the working sets.
+Cancel, outside tap and Escape leave the workout and remembered setup unchanged.
+Reopen through **Add warm-up** between Note and the set-table headers.
+Swipe left on a preview row to reveal Delete (or focus the row and press Left Arrow).
+The Set/kg/Reps headings are centered, and all warm-ups use W. Working sets
+number independently from 1, with Last values matched only to working sets.
+Existing warm-ups appear separately and matching suggestions are not duplicated.
+
+Choose **Warm-up / adapted setup** in the review selector to try 120 kg × 8.
+The last added setup is remembered per example exercise and unit in this browser
+tab's sessionStorage: the first Bench press weight stays fixed, other rows use
+proportions of the first working weight, rounded down to the example 2.5-unit
+increment. The 20 kg first weight is a Bench press fixture, not a universal bar
+weight. Other resistance examples use editable proportional starting rows.
+**Warm-up / missing working weight** allows a reference weight inside the helper
+without filling or changing the working set. Choose Suggest sets after entering it.
+
+Reset example resets the workout fixture, not remembered warm-up setups. Review
+Dark paper, compact, landscape and 200% text using the existing controls.
+This browser design is approved. Native implementation and verification are
+recorded in [the warm-up helper notes](../../docs/workout-warmup-helper.md).
+The browser fixture is not native functionality or training advice. No
+account, API or real workout access. Model checks:
+`node --test prototypes/training-notebook/warmup.verify.mjs`.
+
 ### Saved workout details candidate
 
 Open **http://127.0.0.1:4317/home.html#workout-edit** for the proposed editor.

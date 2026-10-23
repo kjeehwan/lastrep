@@ -1,5 +1,6 @@
+import { NotebookTextInput } from "../../ui/notebook/NotebookTextInput";
 import React, { useState } from "react";
-import { Pressable, Text, TextInput, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { parseManualFood, type ManualFood } from "../manualFood";
 import { useNutritionColors } from "../notebookPalette";
 import { NotebookModal } from "../../ui/notebook/NotebookModal";
@@ -31,10 +32,10 @@ export function ManualFoodEditor({ onClose, onSave }: { onClose: () => void; onS
     <KeyboardAwareModalFrame style={styles.backdrop} onDismiss={close}>
       <AdaptiveModalCard contentSized style={styles.card} contentContainerStyle={{ gap: 20 }}>
         <Text style={{ ...text, fontFamily: notebookFonts.editorial, fontSize: 22 }}>Manual food entry</Text>
-        <View style={{ gap: 8 }}><Text style={text}>Food name</Text><TextInput accessibilityLabel="Manual food name" disableFullscreenUI editable={!pending} style={input} value={name} onChangeText={setName} maxLength={80} placeholder="e.g. Homemade rice bowl" placeholderTextColor={colors.muted} /></View>
+        <View style={{ gap: 8 }}><Text style={text}>Food name</Text><NotebookTextInput accessibilityLabel="Manual food name" disableFullscreenUI editable={!pending} style={input} value={name} onChangeText={setName} maxLength={80} placeholder="e.g. Homemade rice bowl" placeholderTextColor={colors.muted} /></View>
         <Text style={{ ...text, color: colors.muted }}>Enter nutrition for the whole amount you are adding. No weight is inferred.</Text>
         {["Calories (kcal)", "Protein (g)", "Carbs (g)", "Fat (g)"].map((label, index) => <View key={label} style={{ gap: 8 }}>
-          <Text style={text}>{label}</Text><TextInput accessibilityLabel={label} disableFullscreenUI selectTextOnFocus editable={!pending} keyboardType="decimal-pad" style={input} value={values[index]} onChangeText={(value) => setValues((current) => current.map((entry, i) => i === index ? value : entry))} placeholder={index === 0 ? "e.g. 420" : "e.g. 20"} placeholderTextColor={colors.muted} />
+          <Text style={text}>{label}</Text><NotebookTextInput accessibilityLabel={label} disableFullscreenUI selectTextOnFocus editable={!pending} keyboardType="decimal-pad" style={input} value={values[index]} onChangeText={(value) => setValues((current) => current.map((entry, i) => i === index ? value : entry))} placeholder={index === 0 ? "e.g. 420" : "e.g. 20"} placeholderTextColor={colors.muted} />
         </View>)}
         {error ? <Text accessibilityLiveRegion="polite" style={{ ...text, color: colors.danger }}>{error}</Text> : null}
         <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "flex-end", gap: 12 }}>
