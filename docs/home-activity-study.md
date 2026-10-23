@@ -229,3 +229,62 @@ boundary; the Console's post-upload Steps row has not yet been verified.
 
 Final source review also covers a cached timestamp ahead of the current device
 clock: it must trigger a fresh read rather than suppress refresh indefinitely.
+
+
+## v42 production review and daily-record correction
+
+The user uploaded/installed v42, supplied the newly detected READ_STEPS
+explanation and submitted Publishing overview changes for review. This confirms
+the Steps row appeared after the new artifact upload; Google review approval
+has not been confirmed. The public Notion policy update is complete.
+
+Production checks reported by the user:
+- Existing sleep/body sync works before Steps is allowed.
+- After Steps is allowed, Profile Daily activity is Ready and Home has a count.
+- Offline labeling works.
+- On the Android 13 Samsung phone too, missing reads open the native Lastrep
+  permission chooser directly. Once the requested reads are granted, the
+  permission action opens Health Connect settings. This is not Android-16-only;
+  actual destinations also depend on supported device/provider actions.
+
+Home can restore a saved account snapshot before this installation has local
+steps consent. The prior dev-app connection is the likely source; the exact
+origin of an older overwritten snapshot is not independently recoverable.
+Restoring account data does not issue a new Health Connect read. The corrected
+copy says Steps not connected and Saved account data to make this distinction
+clear while keeping the dated saved value.
+
+A source-total mismatch exposed a real query-boundary bug in v42. A read-only
+comparison on the connected Samsung Android 13 phone found a provider's running
+steps total stored over the full local day. Health Connect's whole-day aggregate
+matched its displayed record count. Querying only through the reported earlier
+read time reproduced Lastrep's smaller count exactly. Health Connect apportions
+interval counts when the aggregation window clips the source record; this was
+not established as a refresh delay or missing permissions.
+
+The correction queries from local midnight to the next local midnight, retaining
+Health Connect's aggregate/source-priority behavior. Read time remains the actual
+read time; it does not become the future end of the query. Calendar arithmetic
+preserves 23-/25-hour DST days. No raw source counts are summed and no health
+records or permissions were changed for the comparison.
+
+Verification gap: the earlier emulator fixture ended before the current time and
+the original phone review established availability, not equality to the source
+count. A real provider count/range comparison should have preceded the AAB.
+The new synthetic regression uses a provider record spanning the full day, so a
+midnight-to-now regression produces an incorrect scaled result. Tests also
+assert the next-midnight boundary across both DST transitions.
+
+The corrected dev service matched the same phone's full-day aggregate. Fresh
+TypeScript, lint, web export and full suite passed: 766 tests, 22 skipped
+(emulator-dependent suites). The user also confirmed that the dev count matches
+Health Connect and that Saved account data appears when Steps is disconnected.
+Commit, push and PR merge are authorized for fix/daily-steps-calendar-day.
+The installed v42 still contains the old cutoff; no replacement AAB is authorized.
+Private record/time/count evidence remains in ignored local artifacts only.
+
+References:
+- Android interval-rescaling compatibility test:
+  https://android.googlesource.com/platform/packages/modules/HealthFitness/+/8d79b9403cee11fdd9d2bea173adff0edb6bec13/tests/cts/src/android/healthconnect/cts/StepsRecordTest.java
+- Aggregate guidance:
+  https://developer.android.com/health-and-fitness/health-connect/aggregate-data
