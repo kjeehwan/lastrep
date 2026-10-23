@@ -1,6 +1,6 @@
 # Lastrep Privacy Policy
 
-**Effective Date:** October 12, 2026
+**Effective Date:** October 23, 2026
 
 Lastrep ("we", "our", or "us") operates the Lastrep mobile application.
 
@@ -13,7 +13,7 @@ When you use Lastrep, we may collect and store:
 - Fitness data you enter in Lastrep, including workouts, exercise history, nutrition entries, goals, body-composition entries, and recovery check-ins.
 - Optional daily context you choose to provide, such as pain or discomfort, the affected body area, severity, movement triggers, additional physical activity, and free-text notes.
 - Workout-planning and performance information, such as a selected routine, recent sets, repetitions, weight, volume, and perceived exertion.
-- Optional health data you choose to connect on Android: sleep sessions and duration, weight, body-fat percentage, and lean body mass when those records are available from your connected health service.
+- Optional health data you choose to connect on Android: daily step counts, sleep sessions and duration, weight, body-fat percentage, and lean body mass when those records are available from your connected health service.
 - Purchase history and subscription information through RevenueCat and Google Play, such as purchased products and subscription status.
 - App usage and interaction information through Firebase Analytics, such as sessions, screen views, and subscription-related button actions and events.
 - Device and app identifiers, such as app-instance identifiers and, where available and enabled, Android advertising identifiers collected by Firebase Analytics.
@@ -30,6 +30,7 @@ We use this information to:
 - Provide authentication and secure access to your account.
 - Display your optional profile photo on your Profile, Home, and related profile views, and restore cloud-backed photos across your signed-in installations.
 - Save and display your workout, nutrition, body-composition, sleep, and recovery history.
+- Display optional daily step counts in Home Daily movement, with their date and last-read time.
 - Generate in-app training and recovery insights, including Today's Plan, from relevant information in your account.
 - Adapt recommendations using factors such as your planned workout, recent performance, recovery check-in, nutrition summary, connected health summaries, and optional daily context.
 - Manage subscriptions and provide support.
@@ -43,7 +44,11 @@ We do not sell health data or use it for advertising or advertising-based profil
 
 On supported Android devices, Lastrep may request permission to read supported data through Health Connect and, where available, other connected health services such as Samsung Health. The exact data available depends on your device, permissions, and connected apps.
 
-When you connect health sync, Lastrep uses the imported records to show sleep, recovery, and body-composition trends. Relevant health summaries may also be used to generate training and recovery recommendations, including Today's Plan. Imported summaries are stored with your Lastrep account so they can appear across your signed-in sessions.
+When you connect health sync, Lastrep uses imported sleep and body-measurement records to show sleep, recovery, and body-composition trends. Relevant sleep and body-composition summaries may also support training and recovery recommendations, including Today's Plan.
+
+Steps require separate consent in Lastrep and read permission in Health Connect. While you use the app, Lastrep reads today's aggregated step count for your local calendar day and displays it in Home Daily movement. It does not track steps using phone sensors or request background health access. Steps are display-only: they are not used to estimate calories, adjust nutrition targets or generate AI recommendations.
+
+Imported summaries, including a dated steps snapshot and its last-read time, are saved locally and with your Lastrep account so they can appear across your signed-in sessions. Previously saved values can remain visible while offline or disconnected, with their original date and status.
 
 Health sync is optional. You can:
 
