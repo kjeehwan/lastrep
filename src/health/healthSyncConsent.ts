@@ -13,4 +13,9 @@ export const acceptHealthSyncConsent = async (uid: string): Promise<void> => {
 
 export const clearHealthSyncConsent = async (uid: string): Promise<void> => {
   await AsyncStorage.removeItem(getHealthSyncConsentKey(uid));
+  await AsyncStorage.removeItem(stepsKey(uid));
 };
+
+const stepsKey = (uid: string) => `healthStepsConsentAccepted:${uid}`;
+export const hasStepsSyncConsent = async (uid: string) => (await AsyncStorage.getItem(stepsKey(uid))) === "true";
+export const acceptStepsSyncConsent = async (uid: string) => { await AsyncStorage.setItem(stepsKey(uid), "true"); };

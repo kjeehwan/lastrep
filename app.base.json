@@ -16,6 +16,7 @@
       "package": "com.kjeehwan.lastrep",
       "permissions": [
         "android.permission.health.READ_SLEEP",
+        "android.permission.health.READ_STEPS",
         "android.permission.health.READ_WEIGHT",
         "android.permission.health.READ_BODY_FAT",
         "android.permission.health.READ_LEAN_BODY_MASS"

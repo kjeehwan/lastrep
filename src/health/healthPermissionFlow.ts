@@ -1,7 +1,8 @@
 import type { Permission } from "react-native-health-connect";
 
-const readPermissions: Permission[] = [
+export const healthReadPermissions: Permission[] = [
   { accessType: "read", recordType: "SleepSession" },
+  { accessType: "read", recordType: "Steps" },
   { accessType: "read", recordType: "Weight" },
   { accessType: "read", recordType: "BodyFat" },
   { accessType: "read", recordType: "LeanBodyMass" },
@@ -13,7 +14,7 @@ type PermissionClient = {
 };
 
 function missingPermissions(granted: unknown[]): Permission[] {
-  return readPermissions.filter((needed) => !granted.some((item) =>
+  return healthReadPermissions.filter((needed) => !granted.some((item) =>
     item != null && typeof item === "object" &&
     "accessType" in item && item.accessType === needed.accessType &&
     "recordType" in item && item.recordType === needed.recordType

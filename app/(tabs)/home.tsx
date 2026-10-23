@@ -1,3 +1,4 @@
+import { DailyMovement } from "../../src/health/DailyMovement";
 import { EditWorkoutDetailsSheet } from "../../src/home/EditWorkoutDetailsSheet";
 import { recordedDuration, workoutDurationLabel } from "../../src/workouts/workoutDetails";
 import { NotebookInfoButton } from "../../src/ui/notebook/NotebookInfoButton";
@@ -1288,7 +1289,11 @@ function Home() {
         <View style={styles.section}>
           <View style={styles.card}>
             <View style={styles.sectionHeaderRow}>
-              <Text style={styles.cardHeading}>Progress</Text>
+              <Text style={styles.homeSectionHeading}>Progress</Text>
+            </View>
+            <DailyMovement uid={uid} />
+            <View style={styles.sectionHeaderRow}>
+              <Text style={[styles.cardHeading, { fontFamily: notebookFonts.semibold, fontSize: 16 }]}>Body composition</Text>
               <TouchableOpacity accessibilityRole="button" accessibilityLabel="Add or edit body composition data" onPress={() => {
                 const entry = selectedMeasurementPoint ? bodyHistory.find((row) => row.recordedAt?.toMillis() === selectedMeasurementPoint.recordedAtMs && row.source === selectedMeasurementPoint.source) : undefined;
                 setEditingMeasurement(entry && selectedMeasurementPoint ? { entry, metric: selectedMeasurementPoint.key.split('-')[0] as BodyCompositionMetric } : undefined);
@@ -1311,7 +1316,7 @@ function Home() {
         <View style={styles.section}>
           <View style={[styles.card, styles.outlinedPanel]}>
             <View style={styles.sectionHeaderRow}>
-              <Text style={styles.cardHeading}>Readiness</Text>
+              <Text style={styles.homeSectionHeading}>Readiness</Text>
               <NotebookInfoButton label="About recovery readiness" onPress={() =>
                   showAppAlert(
                     "Recovery readiness",
@@ -1360,7 +1365,7 @@ function Home() {
         <View style={styles.section}>
           <View style={styles.card}>
             <View style={styles.sectionHeaderRow}>
-              <Text style={styles.cardHeading}>Weekly Trends</Text>
+              <Text style={styles.homeSectionHeading}>Weekly Trends</Text>
               <NotebookInfoButton label="About weekly trends" onPress={() => showAppAlert("Snapshot change", "The last 7 days are compared with the previous 7 days. Only recorded data is included.")} />
             </View>
             {[
@@ -2604,6 +2609,7 @@ const createStyles = (colors: NotebookColors) => { const base = notebookSheet({
   section: { marginTop: 0 }, card: { backgroundColor: "transparent", borderRadius: 0, borderWidth: 0, borderTopWidth: 1, borderTopColor: colors.rule, paddingHorizontal: 0, paddingVertical: 20, gap: 12 },
   outlinedPanel: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.rule, borderRadius: 8, paddingHorizontal: 16, paddingVertical: 16, marginVertical: 16 },
   contextActions: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.rule, borderRadius: 8, paddingHorizontal: 16, paddingVertical: 16, marginVertical: 20 },
+  homeSectionHeading: { color: colors.ink, fontFamily: notebookFonts.editorial, fontSize: 24, fontWeight: "400", flexShrink: 1 },
   cardHeading: { color: colors.ink, fontSize: 20, fontWeight: "600", flexShrink: 1 }, sectionTitle: { color: colors.ink, fontSize: 20, fontWeight: "600" },
   workoutSection: { borderLeftWidth: 3, borderLeftColor: colors.accent, paddingLeft: 16, paddingVertical: 4, gap: 8, marginBottom: 24 },
   workoutTitle: { color: colors.ink, fontFamily: notebookFonts.editorial, fontSize: 26, lineHeight: 32 },

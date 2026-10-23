@@ -1,3 +1,5 @@
+import { useDailySteps } from "../../../src/health/useDailySteps";
+import { hasStepsPermission } from "../../../src/health/dailySteps";
 import { NotebookProvider, useNotebook } from "../../../src/ui/notebook/Notebook";
 import { NotebookInfoButton } from "../../../src/ui/notebook/NotebookInfoButton";
 import { NotebookHeader } from "../../../src/ui/notebook/NotebookHeader";
@@ -37,11 +39,13 @@ import { useNow } from "../../../src/hooks/useNow";
 import { useOfflineStatus } from "../../../src/hooks/useOfflineStatus";
 import {
   acceptHealthSyncConsent,
+  hasStepsSyncConsent,
+  acceptStepsSyncConsent,
   clearHealthSyncConsent,
   hasHealthSyncConsent,
 } from "../../../src/health/healthSyncConsent";
 import { showAppAlert, showAppDialog } from "../../../src/ui/appDialog";
-import { manageHealthReadPermissions } from "../../../src/health/healthPermissionFlow";
+import { manageHealthReadPermissions, healthReadPermissions } from "../../../src/health/healthPermissionFlow";
 import { HEALTH_APP_CONNECTION_HELP, HEALTH_SYNC_HELP } from "../../../src/health/healthSyncHelp";
 import {
   autoSyncBodyCompositionFromHealthConnectIfEligible,
@@ -227,6 +231,10 @@ function ProfileContent() {
   >("unknown");
   const [bodyHealthPermissionGranted, setBodyHealthPermissionGranted] = useState(false);
   const [healthConnectBodyPermissionGranted, setHealthConnectBodyPermissionGranted] = useState(false);
+  const dailySteps = useDailySteps(uid);
+  const refreshSteps = dailySteps.refresh;
+  const [stepsPermissionGranted, setStepsPermissionGranted] = useState(false);
+  const [stepsConsentAccepted, setStepsConsentAccepted] = useState(false);
   const [healthConsentAccepted, setHealthConsentAccepted] = useState(false);
   const [healthConsentLoaded, setHealthConsentLoaded] = useState(false);
   const [healthConsentVisible, setHealthConsentVisible] = useState(false);
@@ -518,37 +526,32 @@ function ProfileContent() {
   }, []);
 
   const refreshHealthConnectStatus = useCallback(async () => {
+    const userId = auth.currentUser?.uid;
     setHealthLoading(true);
     try {
       const availability = await getHealthConnectAvailability();
-      let samsungBodyGranted = false;
-      try {
-        samsungBodyGranted = await hasSamsungHealthBodyCompositionPermission();
-      } catch {
-        // Direct Samsung access is optional; Health Connect remains available.
-      }
+      const [samsungBodyGranted, stepsAccepted, stepsGranted, sleepGranted, bodyGranted] = await Promise.all([
+        hasSamsungHealthBodyCompositionPermission().catch(() => false),
+        userId ? hasStepsSyncConsent(userId).catch(() => false) : Promise.resolve(false),
+        availability === "available" ? hasStepsPermission().catch(() => false) : Promise.resolve(false),
+        availability === "available" ? hasHealthSleepPermission() : Promise.resolve(false),
+        availability === "available" ? hasHealthBodyCompositionPermission() : Promise.resolve(false),
+      ]);
+      if (auth.currentUser?.uid !== userId) return;
+      setStepsConsentAccepted(stepsAccepted);
+      setStepsPermissionGranted(stepsGranted);
       setHealthAvailability(availability);
       setBodyHealthPermissionGranted(samsungBodyGranted);
-      if (availability === "unsupported") {
-        setHealthPermissionState("unsupported");
-        setHealthConnectBodyPermissionGranted(false);
-      } else if (availability !== "available") {
-        setHealthPermissionState("unavailable");
-        setHealthConnectBodyPermissionGranted(false);
-      } else {
-        const [sleepGranted, bodyGranted] = await Promise.all([
-          hasHealthSleepPermission(),
-          hasHealthBodyCompositionPermission(),
-        ]);
-        setHealthPermissionState(sleepGranted ? "granted" : "denied");
-        setHealthConnectBodyPermissionGranted(bodyGranted);
-      }
+      setHealthPermissionState(availability === "unsupported" ? "unsupported" : availability !== "available" ? "unavailable" : sleepGranted ? "granted" : "denied");
+      setHealthConnectBodyPermissionGranted(bodyGranted);
     } catch {
+      if (auth.currentUser?.uid !== userId) return;
+      setStepsPermissionGranted(false);
       setHealthPermissionState("unknown");
       setBodyHealthPermissionGranted(false);
       setHealthConnectBodyPermissionGranted(false);
     } finally {
-      setHealthLoading(false);
+      if (auth.currentUser?.uid === userId) setHealthLoading(false);
     }
   }, []);
 
@@ -581,6 +584,9 @@ function ProfileContent() {
       initialSnapshotRef.current = null;
       setInitialSnapshot(null);
       setHealthConsentLoaded(false);
+      setHealthConsentAccepted(false);
+      setStepsConsentAccepted(false);
+      setStepsPermissionGranted(false);
       setUid(user.uid);
       if (!networkReady || isOffline) {
         setProfileLoadFailed(true);
@@ -803,12 +809,7 @@ function ProfileContent() {
       } else {
         const healthConnect = await import("react-native-health-connect");
         await healthConnect.initialize();
-        await healthConnect.requestPermission([
-          { accessType: "read", recordType: "SleepSession" },
-          { accessType: "read", recordType: "Weight" },
-          { accessType: "read", recordType: "BodyFat" },
-          { accessType: "read", recordType: "LeanBodyMass" },
-        ]);
+        await healthConnect.requestPermission(healthReadPermissions);
         sleepGranted = await hasHealthSleepPermission();
         healthConnectBodyGranted = await hasHealthBodyCompositionPermission();
       }
@@ -822,12 +823,8 @@ function ProfileContent() {
 
       await refreshHealthConnectStatus();
 
-      if (sleepGranted && (samsungBodyGranted || healthConnectBodyGranted)) {
-        setHealthFeedback(
-          samsungBodyGranted
-            ? "Health Connect sleep permission and Samsung Health body composition permission granted."
-            : "Health Connect sleep and fallback body composition permissions granted."
-        );
+      if (sleepGranted || samsungBodyGranted || healthConnectBodyGranted || await hasStepsPermission()) {
+        setHealthFeedback("Access updated. You can sync the data you allowed.");
         return;
       }
 
@@ -838,33 +835,16 @@ function ProfileContent() {
         return;
       }
 
-      const permissionsOpened = await openHealthConnectAppPermissionsScreen();
-      if (permissionsOpened === null) return;
-      const opened = permissionsOpened ||
-        (await openHealthConnectDataManagementScreen());
-      setHealthFeedback(
-        opened
-          ? "Some permissions are still missing. Review sleep and body composition access in your connected health services."
-          : "Unable to open Health Connect settings on this device."
-      );
-    } catch (error) {
-      console.log("Failed to request Health Connect permissions", error);
-      const permissionsOpened = await openHealthConnectAppPermissionsScreen();
-      if (permissionsOpened === null) return;
-      const opened = permissionsOpened ||
-        (await openHealthConnectDataManagementScreen());
-      setHealthFeedback(
-        opened
-          ? "Couldn't request permissions in-app. Review sleep and body composition access in your connected health services."
-          : "Unable to open Health Connect settings on this device."
-      );
+      setHealthFeedback("Access is still off. Tap Health Connect permissions to review it when you are ready.");
+    } catch {
+      setHealthFeedback("Couldn't request access. Tap Health Connect permissions to try again.");
     } finally {
       setHealthLoading(false);
     }
   };
 
   const handleOpenHealthConsent = () => {
-    if (healthConsentAccepted) {
+    if (healthConsentAccepted && stepsConsentAccepted) {
       void handleConnectHealthPermission();
       return;
     }
@@ -876,12 +856,15 @@ function ProfileContent() {
     void (async () => {
       try {
         await acceptHealthSyncConsent(uid);
+        await acceptStepsSyncConsent(uid);
+        if (auth.currentUser?.uid !== uid) return;
+        setStepsConsentAccepted(true);
         setHealthConsentAccepted(true);
+        setHealthConsentVisible(false);
+        await handleConnectHealthPermission();
       } catch (error) {
         console.log("Failed to persist health sync consent", error);
-      } finally {
-        setHealthConsentVisible(false);
-        void handleConnectHealthPermission();
+        showAppAlert("Couldn't connect", "Your choice could not be saved. Please try again.");
       }
     })();
   };
@@ -902,26 +885,29 @@ function ProfileContent() {
         y: Math.max(0, healthSyncYRef.current - 12),
         animated: true,
       });
-      if (!healthConsentAccepted) {
+      if (!healthConsentAccepted || (params.openHealth?.startsWith("steps") && !stepsConsentAccepted)) {
         setHealthConsentVisible(true);
       }
     });
     return task.cancel;
-  }, [healthConsentAccepted, healthConsentLoaded, loading, params.openHealth]);
+  }, [healthConsentAccepted, stepsConsentAccepted, healthConsentLoaded, loading, params.openHealth]);
 
   const clearHealthConsentAccepted = useCallback(async () => {
     if (!uid) return;
     try {
       await clearHealthSyncConsent(uid);
       setHealthConsentAccepted(false);
+      setStepsConsentAccepted(false);
+      void refreshSteps();
       setHealthFeedback("Disconnected on this device. Previously saved records are kept.");
     } catch (error) {
       console.log("Failed to clear health sync consent", error);
       setHealthFeedback("Could not disconnect. Try again; the connection state is unchanged.");
     }
-  }, [uid]);
+  }, [uid, refreshSteps]);
 
   const handleManageHealthPermissions = useCallback(async () => {
+    if (!stepsConsentAccepted) { setHealthConsentVisible(true); return; }
     setHealthLoading(true);
     setHealthFeedback(null);
     try {
@@ -948,7 +934,7 @@ function ProfileContent() {
     } finally {
       setHealthLoading(false);
     }
-  }, [refreshHealthConnectStatus, reviewHealthAccessInSettings]);
+  }, [refreshHealthConnectStatus, reviewHealthAccessInSettings, stepsConsentAccepted]);
 
   const handleDisconnectHealth = useCallback(() => {
     showAppDialog({
@@ -1035,9 +1021,10 @@ function ProfileContent() {
     setHealthLoading(true);
     setHealthFeedback(null);
     try {
-      const [sleepGranted, healthConnectBodyGrantedNext] = await Promise.all([
+      const [sleepGranted, healthConnectBodyGrantedNext, stepsGranted] = await Promise.all([
         hasHealthSleepPermission(),
         hasHealthBodyCompositionPermission(),
+        hasStepsPermission(),
       ]);
       let samsungBodyGranted = false;
       try {
@@ -1046,23 +1033,25 @@ function ProfileContent() {
         // Direct Samsung access is optional; Health Connect remains available.
       }
 
-      if (!sleepGranted && !samsungBodyGranted && !healthConnectBodyGrantedNext) {
+      if (!sleepGranted && !samsungBodyGranted && !healthConnectBodyGrantedNext && !stepsGranted) {
         setHealthFeedback(
-          "Permissions are required before syncing sleep or body composition. Use Health Connect permissions to review access, then try again."
+          "Permissions are required before syncing health data. Use Health Connect permissions to review access, then try again."
         );
         await refreshHealthConnectStatus();
         return;
       }
 
-      const [sleepResult, bodyResult] = await Promise.all([
+      const [sleepResult, bodyResult, stepsResult] = await Promise.all([
         sleepGranted ? syncSleepFromHealthConnect(uid) : Promise.resolve({ status: "permission_denied" as const }),
         samsungBodyGranted
           ? syncBodyCompositionFromSamsungHealth(uid)
           : healthConnectBodyGrantedNext
             ? syncBodyCompositionFromHealthConnect(uid)
             : Promise.resolve({ status: "permission_denied" as const }),
+        refreshSteps(true),
       ]);
 
+      if (auth.currentUser?.uid !== uid) return;
       if (sleepResult.status === "success") {
         const sleepProfile = await getSleepProfile(uid);
         setLastSleepSyncLabel(
@@ -1104,15 +1093,20 @@ function ProfileContent() {
       } else if (bodyResult.status === "error") {
         messages.push(`Body composition sync failed: ${bodyResult.message}`);
       }
+      if (stepsResult.status === "ready") messages.push(stepsResult.snapshot?.steps == null ? "No step data found today." : "Steps updated.");
+      else if (stepsResult.status === "permission" || stepsResult.status === "disconnected") messages.push("Steps access is off.");
+      else if (stepsResult.status === "error") messages.push("Couldn't sync steps. Try again.");
       if (messages.length === 0) {
         messages.push("Nothing was synced.");
       }
       setHealthFeedback(messages.join(" "));
       await refreshHealthConnectStatus();
+    } catch {
+      if (auth.currentUser?.uid === uid) setHealthFeedback("Couldn't sync health data. Please try again.");
     } finally {
       setHealthLoading(false);
     }
-  }, [isOffline, refreshBodyComposition, refreshHealthConnectStatus, uid, weightUnit]);
+  }, [isOffline, refreshBodyComposition, refreshHealthConnectStatus, uid, weightUnit, refreshSteps]);
 
   const save = useCallback(async (): Promise<boolean> => {
     if (!uid || savingProfileRef.current) return false;
@@ -1493,20 +1487,13 @@ function ProfileContent() {
     }, [navigation, hasUnsavedChanges, save, initialSnapshot, restoreFromSnapshot])
   );
 
-  const isHealthConnected =
-    healthConsentAccepted &&
-    healthPermissionState === "granted" &&
-    (bodyHealthPermissionGranted || healthConnectBodyPermissionGranted);
   const hasAnyHealthPermission =
     healthPermissionState === "granted" ||
     bodyHealthPermissionGranted ||
-    healthConnectBodyPermissionGranted;
+    healthConnectBodyPermissionGranted ||
+    (stepsConsentAccepted && stepsPermissionGranted);
   const shouldShowConnectAction = !healthConsentAccepted || !hasAnyHealthPermission;
-  const healthConnectionStatus = isHealthConnected
-    ? "Connected"
-    : healthConsentAccepted && hasAnyHealthPermission
-      ? "Partially connected"
-      : "Not connected";
+  const healthConnectionStatus = healthConsentAccepted && hasAnyHealthPermission ? "Connected" : "Not connected";
   const displayedSleepStatus = healthConsentAccepted
     ? healthPermissionState === "granted"
       ? "Ready"
@@ -1580,7 +1567,9 @@ function ProfileContent() {
   const healthRows = [
     ["Status", healthConnectionStatus],
     ["Sleep", displayedSleepStatus], ["Body composition", displayedBodyStatus],
+    ["Daily activity", healthAvailability !== "available" ? "Unavailable" : !healthConsentAccepted || !stepsConsentAccepted ? "Not connected" : stepsPermissionGranted ? "Ready" : "Needs permission"],
     [sleepSyncRowLabel, displayedLastSleepSyncLabel], [bodySyncRowLabel, displayedLastBodySyncLabel],
+    ["Last activity sync", dailySteps.snapshot ? new Date(dailySteps.snapshot.asOfMs).toLocaleString() : "Not synced yet"],
   ];
   if (redirectTo) return <Redirect href={redirectTo} />;
   return <SafeAreaView style={{ flex: 1, backgroundColor: colors.canvas }} edges={["top", "left", "right"]}>
@@ -1695,8 +1684,8 @@ function ProfileContent() {
       {bodyCompositionHistory.length > 3 ? <ProfileAction label={bodyHistoryExpanded ? "Show less" : "Show more"} onPress={() => setBodyHistoryExpanded((value) => !value)} /> : null}
     </ProfileSheet> : null}
     {healthConsentVisible ? <ProfileSheet title="Connect health data" onClose={() => setHealthConsentVisible(false)} footer={<><ProfileAction label="Continue" primary onPress={handleAcceptHealthConsent} /><ProfileAction label="Not now" onPress={() => setHealthConsentVisible(false)} /></>}>
-      <ProfileText>On supported Android devices, Lastrep can read sleep, weight, body-fat and lean-body-mass records that you permit.</ProfileText>
-      <ProfileText>We use them for recovery, sleep and body-composition trends. Relevant summaries may also support AI-assisted training recommendations.</ProfileText>
+      <ProfileText>On supported Android devices, Lastrep can read the steps, sleep, weight, body-fat and lean-body-mass records that you permit.</ProfileText>
+      <ProfileText>Steps appear in Home Daily movement and do not change nutrition targets. Other health data supports recovery, sleep and body-composition trends. Relevant summaries may also support AI-assisted training recommendations.</ProfileText>
       <ProfileText>Imported summaries are stored in your Lastrep account. Before the first AI-assisted plan, Lastrep separately explains what is sent to OpenAI and asks you to continue.</ProfileText>
       <ProfileText>This is optional. You can disconnect in Profile or revoke access in your connected health service at any time.</ProfileText>
     </ProfileSheet> : null}

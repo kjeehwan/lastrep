@@ -23,7 +23,7 @@ it("keeps Sync now in Profile when permissions are missing", () => {
   expect(sync).not.toContain("openHealthConnectDataManagementScreen");
   expect(sync).not.toContain("requestPermission");
   expect(sync).toContain("Use Health Connect permissions to review access, then try again.");
-  const denied = sync.slice(sync.indexOf("if (!sleepGranted && !samsungBodyGranted && !healthConnectBodyGrantedNext)"), sync.indexOf("const [sleepResult, bodyResult]"));
+  const denied = sync.slice(sync.indexOf("if (!sleepGranted && !samsungBodyGranted && !healthConnectBodyGrantedNext && !stepsGranted)"), sync.indexOf("const [sleepResult, bodyResult, stepsResult]"));
   expect(denied).toContain("await refreshHealthConnectStatus();");
   expect(denied).toContain("return;");
 });

@@ -87,6 +87,10 @@ if (!buildGradle.includes('implementation("androidx.recyclerview:recyclerview:1.
   ok("RecyclerView dependency present");
 }
 
+const stepsManifest = read(path.join(projectRoot, "android", "app", "src", "main", "AndroidManifest.xml"));
+if (!stepsManifest?.includes('android.permission.health.READ_STEPS')) fail("Missing Health Connect steps read permission");
+else ok("Health Connect steps read permission present");
+
 try {
   const errors = require("./check-android-config").verifyAndroidConfig(projectRoot);
   for (const error of errors) fail(error);
