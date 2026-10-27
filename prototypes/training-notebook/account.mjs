@@ -1,4 +1,6 @@
 import './input-behavior.mjs';
+import { socialState, socialDialog, handleSocialAction, socialInput, resetSharingPreferences, installSharingEditorGestures } from './sharing-social.mjs';
+import { sharingState, sharingDialog, openSharingDestination } from './sharing.mjs';
 import { demoAvatar } from './notebook-avatar.mjs';
 import { accountFixture, profileStates, settingsStates, isDirty, phaseWeek, healthStatus, stepsAccessStatus, commitProfile, tdeeEstimate, applyTdee, restoreMessages } from './account-model.mjs';
 import { readNotebookPreferences, writeNotebookPreferences, clearNotebookPreferences } from './notebook-preferences.mjs';
@@ -6,6 +8,14 @@ import { notebookIcon as icon } from './notebook-icons.mjs';
 import { setReviewState } from './review-state-picker.mjs';
 
 const $ = query => document.querySelector(query), page = document.body.dataset.study, states = page === 'profile' ? profileStates : settingsStates;
+states.unshift(...(page === 'profile' ? [
+  ['sharing-profile', 'Username / optional', 'A username is optional for normal app use. Enable sharing in Settings when you want people to find you.'],
+  ['sharing-username', 'Username / sharing enabled', 'Edit the unique @username separately from the nickname.'],
+] : [
+  ['sharing', 'Sharing / current preference', 'One on/off switch and one direct username editor.'],
+  ['sharing-off', 'Sharing / off', 'Off by default. No people-search visibility or new incoming requests. External links still work.'],
+  ['sharing-enabled', 'Sharing / on', 'Username-based discovery, first-time sender requests and access to the inbox.'],
+]));
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const p = (text, cls = 'supporting') => `<p class="${cls}">${text}</p>`;
 const btn = (text, action, cls = 'text', attrs = '', disabled = false) => `<button class="btn ${cls}" data-action="${action}" ${attrs} ${disabled ? 'disabled' : ''}>${text}</button>`;
@@ -29,10 +39,15 @@ function choose(id, shared = false) {
   const preferences = shared ? readNotebookPreferences() : null;
   s = accountFixture(page, id, preferences?.profile); if (preferences?.health && ['overview', 'health', 'identity', 'sleep', 'training', 'diet', 'meals'].includes(id)) s.health = preferences.health;
   if (page === 'profile' && 'steps' in s.health) s.activityStudy = true;
+  s.social = socialState(id);
+  s.sharing = sharingState(id);
+  if (id === 'sharing-profile') s.modal = 'social-username';
+  if (id === 'sharing-username') s.modal = 'social-username';
   s.modalBefore = structuredClone(s.saved); s.stack = []; s.permissionDraft = { sleep: s.health.sleep, body: s.health.body, ...('steps' in s.health ? { steps: s.health.steps } : {}) };
   if (s.modal === 'body') bodyInputs();
   dark = id === 'dark'; large = id === 'large'; $('#dark').checked = dark; $('#large').checked = large;
   setReviewState($('#example'), states.map(([id, title]) => [id, title]), id); render(false);
+  if (id.startsWith('sharing') && page === 'settings') $('#sharing-settings')?.scrollIntoView({ block: 'start' });
   if (['health', 'disconnected', 'partial', 'revoked', 'unavailable', 'activity', 'activity-permission', 'activity-only', 'activity-connect'].includes(id)) $('#health-sync')?.scrollIntoView({ block: 'start' });
 }
 function avatar(d, large = false) {
@@ -43,6 +58,10 @@ function phaseText(kind) {
   return `${value.phase} · ${value.phase !== saved.phase ? 'Week 1 when saved' : week ? 'Week ' + week : 'Start not recorded'}`;
 }
 function profilePage() {
+  const username = s.social.prefs.username;
+  return profileBasePage().replace('</section>', row('Username', username ? `@${username}` : 'Not set', 'social-username') + '</section>');
+}
+function profileBasePage() {
   if (s.loading) return `<div role="status">${p('Loading saved profile…')}<div class="skeleton-block"></div><div class="skeleton-block"></div></div>`;
   const d = s.draft, estimate = tdeeEstimate(d);
   return `${s.offline ? notice('Offline. Showing saved preferences. Your edits will stay here until you can save online.') : ''}${isDirty(s) ? p('Unsaved changes', 'account-dirty') : ''}${s.error && !s.modal ? p(esc(s.error), 'account-error') : ''}${section('Identity', `<div class="account-identity">${avatar(d)}<div class="account-identity-copy"><strong class="account-name">${esc(d.name)}</strong>${p(esc(d.description))}${accessBadge()}</div></div>`, btn('Edit', 'open', 'text', 'data-modal="identity"'))}${section('Training', row('Training phase', phaseText('training'), 'training') + row('Diet phase', phaseText('diet'), 'diet') + row('Availability', `${d.availability} days / week`, 'availability'))}${section('Units', row('Exercise effort', d.units.effort, 'units') + row('Weight', d.units.weight, 'units') + row('Height', d.units.height, 'units') + row('Food energy', d.units.energy, 'units'))}${section('Body composition', bodyRow('weight', 'Weight', unitValue(d.body.weight, d.units.weight)) + bodyRow('bodyFat', 'Body fat', d.body.bodyFat ? d.body.bodyFat + '%' : 'Not recorded') + bodyRow('lean', 'Lean body mass', d.body.lean ? unitValue(d.body.lean, d.units.weight) : 'Not recorded', 'lean-help') + bodyRow('skeletal', 'Skeletal muscle', d.body.skeletal ? unitValue(d.body.skeletal, d.units.weight) : 'Not recorded', 'muscle-help') + p('Saved profile snapshot. Body history remains in the Home study.'), '', 'profile-body')}${section('TDEE calculator', estimate == null ? p('Enter age, height and weight to estimate maintenance.') : `<p class="account-estimate">${energy(estimate)} ${d.units.energy}<span class="supporting"> / day</span></p>${p('Estimated maintenance, not a measured calorie need.')}`, btn('Calculate', 'open', 'text', 'data-modal="tdee"'))}${section('Nutrition targets', ['Cut', 'Maintain', 'Bulk'].map(phase => row(phase, `${energy(Number(d.calories[phase]))} ${d.units.energy}`, 'nutrition')).join('') + row('Protein', d.protein ? `${d.protein} g / day` : 'Not set', 'nutrition'))}${section('Sleep target', row('Daily sleep', `${d.sleepTarget || '—'} hours`, 'sleep'))}${healthPanel()}`;
@@ -60,6 +79,11 @@ function healthPanel() {
   return section('Health sync', row('Status', healthStatus(h)) + row('Supported data', 'Sleep, body composition') + row('Sleep', !h.consent ? 'Not connected' : !h.available ? 'Unavailable' : h.sleep ? 'Ready' : 'Not allowed') + row('Body composition', !h.consent ? 'Not connected' : !h.available ? 'Unavailable' : h.body ? 'Ready (partial)' : 'Not allowed', 'body-access') + row(connected ? 'Last sleep sync' : 'Saved sleep data', (connected ? h.lastSleepSync : h.savedSleep) ?? 'Not synced yet') + row(connected ? 'Last body sync' : 'Saved body data', (connected ? h.lastBodySync : h.savedBody) ?? 'Not synced yet') + `<div class="account-actions">${primary}${h.available ? btn('Manage permissions', 'permissions') : ''}${h.consent ? btn('Disconnect', 'open', 'text', 'data-modal="disconnect"') : ''}</div>`, '', 'health-sync');
 }
 function settingsPage() {
+  const prefs = s.social.prefs;
+  const sharing = section('Sharing', `<button class="social-switch" role="switch" aria-checked="${prefs.enabled}" data-action="social-${prefs.enabled ? 'disable' : 'enable'}"><span>Sharing within Lastrep</span><span class="social-switch-track ${prefs.enabled ? 'on' : ''}"><span></span></span></button>` + p(prefs.enabled ? 'People can find you and send workout requests. New senders go to Requests.' : 'Your account is hidden from people search. New incoming shares are off.') + row('Username', prefs.username ? `@${prefs.username}` : 'Not set', 'social-username') + (!s.modal && s.social.error ? p(esc(s.social.error), 'share-error') : ''), '', 'sharing-settings');
+  return settingsBasePage().replace('</section>', '</section>' + sharing);
+}
+function settingsBasePage() {
   const d = s.saved;
   return `${s.offline ? notice('Offline. Store and account operations need a connection. Saved details remain visible.') : ''}${section('Account', `<div class="account-link-row">${icon('profile')}<span class="account-row-copy"><span class="account-nickname"><strong>${esc(d.name)}</strong>${accessBadge()}</span><small>demo@example.test</small></span></div>`)}${section('Support', linkRow('Report a problem', 'mail', 'support') + '<div class="account-link-row account-version-row">' + icon('info') + '<span>App version</span><span>1.0.1</span></div>')}${section('Legal', linkRow('Privacy policy', 'document', 'privacy'))}${section('Subscription', s.checking ? p('Checking subscription status…') : `${s.dev ? p('Billing is unavailable in Lastrep Dev. Use the Play-installed app to test subscriptions.') : s.access && !s.paid ? p('Premium access does not necessarily mean you have a paid Google Play subscription.') : p(s.paid ? 'Your Google Play subscription is active.' : 'View Premium options or restore an existing subscription.')}<div class="account-actions">${s.dev ? '' : btn(s.paid || s.access ? 'Manage subscription' : 'Upgrade to Premium', s.paid || s.access ? 'manage' : 'upgrade', s.paid || s.access ? '' : 'primary', '', s.offline)}${s.dev ? '' : btn(s.restoring ? 'Checking purchases…' : 'Restore purchases', 'restore', '', '', s.restoring || s.offline)}</div>${s.feedback ? `<div class="account-notice" role="status">${p(esc(s.feedback))}</div>` : ''}`)}${section('Session', btn('Sign out', 'open', '', 'data-modal="logout"', s.offline))}${section('Delete account', p('Permanently deletes your account and associated Lastrep data.') + `<div class="account-actions">${btn('Delete account', 'open', 'danger', 'data-modal="delete"', s.offline)}</div>`)}`;
 }
@@ -69,6 +93,8 @@ function dialog(title, body, footer = '') { return `<div class="overlay" data-ac
 const done = () => btn('Done', 'done', 'primary') + btn('Cancel', 'close');
 function bodyInputs() { s.bodyRaw = Object.fromEntries(['weight', 'bodyFat', 'lean', 'skeletal'].map(key => [key, s.draft.body[key] === '' ? '' : String(Number((Number(s.draft.body[key]) * (key !== 'bodyFat' && s.draft.units.weight === 'lbs' ? 2.2046226218 : 1)).toFixed(2)))])); }
 function modal() {
+  if (s.modal.startsWith('social-')) return socialDialog(s, { shell: dialog, escape: esc, paragraph: p });
+  if (s.modal.startsWith('share-')) return sharingDialog(s, { shell: dialog, button: btn, escape: esc, paragraph: p });
   const d = s.draft, h = s.health;
   switch (s.modal) {
     case 'identity': return dialog('Profile identity', `<div class="account-photo-preview">${avatar(d)}${btn(d.photo ? 'Change photo' : 'Add photo', 'open', '', 'data-modal="photo"')}</div>${field('Nickname', 'name', d.name, 'Your nickname', 'maxlength="40"') }<label class="field"><span>Description</span><textarea data-field="description" maxlength="240" placeholder="A short description">${esc(d.description)}</textarea></label>${p('Visible profile text, not private recovery notes.')}`, done());
@@ -114,7 +140,7 @@ function render(preserve = true) {
   if (focus) { const input = $(`[data-field="${focus.key}"]`); input?.focus({ preventScroll: true }); if (input && focus.start != null && input.type !== 'range') input.setSelectionRange(focus.start, focus.end); }
   else if (s.modal) $('.sheet-head .close')?.focus({ preventScroll: true });
 }
-function open(name) { if (s.modal) s.stack.push({ modal: s.modal, before: s.modalBefore }); s.modalBefore = structuredClone(s.draft); s.modal = name; s.error = ''; if (name === 'body') bodyInputs(); if (name === 'permissions') s.permissionDraft = { sleep: s.health.sleep, body: s.health.body, ...('steps' in s.health ? { steps: s.health.steps } : {}) }; render(); if ($('.sheet-body')) $('.sheet-body').scrollTop = 0; }
+function open(name) { if (name === 'social-username') s.social.username = s.social.prefs.username; if (s.modal) s.stack.push({ modal: s.modal, before: s.modalBefore }); s.modalBefore = structuredClone(s.draft); s.modal = name; s.error = ''; if (name === 'body') bodyInputs(); if (name === 'permissions') s.permissionDraft = { sleep: s.health.sleep, body: s.health.body, ...('steps' in s.health ? { steps: s.health.steps } : {}) }; render(); if ($('.sheet-body')) $('.sheet-body').scrollTop = 0; }
 function close(accept = false) { if (!accept && mutable.has(s.modal)) s.draft = structuredClone(s.modalBefore); if (s.modal === 'permissions') s.pendingConsent = false; const parent = s.stack.pop(); s.modal = parent?.modal ?? ''; s.modalBefore = parent?.before; s.error = ''; render(); }
 function notify(text) { clearTimeout(toastTimer); s.toast = text; render(); toastTimer = setTimeout(() => { s.toast = ''; render(); }, 4000); }
 function save(leave = false) {
@@ -127,6 +153,10 @@ function publishHealth() { writeNotebookPreferences({ health: s.health }); }
 $('#stage').addEventListener('click', event => {
   const el = event.target.closest('[data-action]'); if (!el || el.disabled) return; const d = el.dataset;
   if (d.action === 'navigate') { event.preventDefault(); navigate(d.href); return; }
+  if (['close', 'outside'].includes(d.action) && s.modal.startsWith('social-copy-')) { if (d.action === 'outside' && event.target !== el) return; handleSocialAction(s, 'social-copy-dismiss', d, name => { s.modal = name; }); render(); return; }
+  if (d.action === 'sharing-use') { openSharingDestination(s.sharing, 'share-apply'); return; }
+  if (['sharing-save-routine', 'sharing-view-routine'].includes(d.action)) { openSharingDestination({ ...s.sharing, routineSaved: true }, 'share-saved-routine'); return; }
+  if (handleSocialAction(s, d.action, d, name => { s.modal = name; s.stack = []; })) { render(); return; }
   switch (d.action) {
     case 'outside': if (event.target === el) close(); return;
     case 'open': open(d.modal); return;
@@ -154,19 +184,23 @@ $('#stage').addEventListener('click', event => {
     default: return;
   }
 });
+installSharingEditorGestures($('#stage'),()=>s,render);
 $('#stage').addEventListener('input', event => {
   const el = event.target;
+  if (socialInput(s, el, render)) return;
   if (el.dataset.field) { set(s.draft, el.dataset.field, el.value); if (el.dataset.field === 'availability') $('[data-availability]').textContent = el.value; }
   if (el.dataset.body) { s.bodyRaw[el.dataset.body] = el.value; const value = el.value.trim(); s.draft.body[el.dataset.body] = value === '' ? '' : String(Number(value) / (el.dataset.body !== 'bodyFat' && s.draft.units.weight === 'lbs' ? 2.2046226218 : 1)); }
   if (el.dataset.energy) s.draft.calories[el.dataset.energy] = el.value === '' ? '' : String(Number(el.value) / (s.draft.units.energy === 'kJ' ? 4.184 : 1));
   if (s.modal === 'tdee') { $('[data-estimate]').textContent = estimateText(); $('[data-action="apply-tdee"]').disabled = tdeeEstimate(s.draft) == null; }
 });
-document.addEventListener('keydown', event => { if (!s.modal) return; if (event.key === 'Escape') { close(); return; } if (event.key !== 'Tab') return; const nodes = [...document.querySelectorAll('.account-device .sheet button:not(:disabled),.account-device .sheet input,.account-device .sheet textarea,.account-device .sheet a')]; const index = nodes.indexOf(document.activeElement); if (event.shiftKey && index <= 0) { event.preventDefault(); nodes.at(-1)?.focus(); } else if (!event.shiftKey && index === nodes.length - 1) { event.preventDefault(); nodes[0]?.focus(); } });
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && s.modal.startsWith('social-copy-')) { handleSocialAction(s, 'social-copy-dismiss', {}, name => { s.modal = name; }); render(); return; }
+ if (!s.modal) return; if (event.key === 'Escape') { close(); return; } if (event.key !== 'Tab') return; const nodes = [...document.querySelectorAll('.account-device .sheet button:not(:disabled),.account-device .sheet input,.account-device .sheet textarea,.account-device .sheet a')]; const index = nodes.indexOf(document.activeElement); if (event.shiftKey && index <= 0) { event.preventDefault(); nodes.at(-1)?.focus(); } else if (!event.shiftKey && index === nodes.length - 1) { event.preventDefault(); nodes[0]?.focus(); } });
 $('#example').addEventListener('change', event => choose(event.target.value));
 $('#viewport').addEventListener('change', event => { size = event.target.value.split(',').map(Number); render(); });
 $('#dark').addEventListener('change', event => { dark = event.target.checked; render(); });
 $('#large').addEventListener('change', event => { large = event.target.checked; render(); });
-$('#reset').addEventListener('click', () => { clearNotebookPreferences(); choose(example); });
+$('#reset').addEventListener('click', () => { clearNotebookPreferences(); resetSharingPreferences(); choose(example); });
 const initial = location.hash.slice(1); choose(states.some(row => row[0] === initial) ? initial : 'overview', true);
 window.addEventListener('pageshow', event => {
   if (!event.persisted || page === 'profile' && isDirty(s)) return;

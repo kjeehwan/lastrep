@@ -1,4 +1,6 @@
 import { notebookIcon as notebookInfoIcon } from './notebook-icons.mjs';
+import { socialState, socialDialog, handleSocialAction, socialInput, sharingInboxButton, installSharingEditorGestures } from './sharing-social.mjs';
+import { sharingState, sharingDialog, openSharingDestination } from './sharing.mjs';
 import { workoutDraft, workoutDetails } from './home-workout-details.mjs';
 import './input-behavior.mjs';
 import { demoAvatar } from './notebook-avatar.mjs';
@@ -31,6 +33,7 @@ let s, example = 'returning', size = [390, 844], dark = false, large = false, to
 function choose(value, useShared = false) {
   setReviewState(document.querySelector('#example'), homeStates.map(([id, title]) => [id, title]), value);
   example = value; s = homeFixture(value); dark = value === 'dark'; large = value === 'large';
+  s.social = socialState(); s.sharing = sharingState();
   const shared = useShared ? readCheckIn() : null; if (!useShared) clearCheckIn(); if (shared) Object.assign(s, shared);
   $('#example').value = value; $('#dark').checked = dark; $('#large').checked = large; $('#unit').value = 'kg';
   if (useShared) applySharedPreferences();
@@ -170,6 +173,8 @@ function checkIn() {
 }
 
 function modal() {
+  if (s.modal.startsWith('social-')) return socialDialog(s, { shell: dialog, escape: esc, paragraph: p });
+  if (s.modal.startsWith('share-')) return sharingDialog(s, { shell: dialog, button: btn, escape: esc, paragraph: p });
   switch (s.modal) {
     case 'calendar': return calendar();
     case 'day': return dayDetails();
@@ -201,7 +206,7 @@ function render(preserve = true) {
   const active = document.activeElement, focused = active?.dataset?.measure ? { key: active.dataset.measure, start: active.selectionStart, end: active.selectionEnd } : null;
   $('#state-title').textContent = homeStates.find(row => row[0] === example)?.[1] ?? 'Home';
   $('#state-description').textContent = homeStates.find(row => row[0] === example)?.[2] ?? '';
-  $('#stage').innerHTML = `<div class="frame-wrap"><h3>Home / ${s.hasWorkouts ? esc(s.profileName ?? 'Daniel') : 'First session'}</h3><section class="device home-device ${dark ? 'dark' : ''} ${large ? 'large-text' : ''}" style="--width:${size[0]}px;--height:${size[1]}px" aria-label="Interactive Home prototype"><div class="system-bar" aria-hidden="true"><span>9:41</span><span>LTE&nbsp;&nbsp;92%</span></div><header class="home-header">${logo()}<div class="home-header-actions"><button class="icon-button" data-action="calendar" aria-label="Open calendar">${icon('calendar')}</button><button class="icon-button" data-action="open" data-modal="settings" aria-label="Open Settings">${icon('settings')}</button><button class="avatar" data-action="open" data-modal="profile" aria-label="Open profile">${s.profilePhoto ? demoAvatar() : esc((s.profileName ?? 'Daniel')[0])}</button></div></header><div class="viewport" tabindex="0" aria-label="Scrollable Home"><div class="page-content">${homePage()}</div></div>${tabs()}${s.modal ? modal() : ''}${s.toast ? `<div class="toast" role="status"><span>${esc(s.toast)}</span><button data-action="dismiss-toast" aria-label="Dismiss notification">×</button></div>` : ''}</section><p class="frame-caption">${size.join(' × ')} / ${dark ? 'Dark' : 'Paper'} / ${large ? '200%' : '100%'} text. Synthetic data only.</p></div>`;
+  $('#stage').innerHTML = `<div class="frame-wrap"><h3>Home / ${s.hasWorkouts ? esc(s.profileName ?? 'Daniel') : 'First session'}</h3><section class="device home-device ${dark ? 'dark' : ''} ${large ? 'large-text' : ''}" style="--width:${size[0]}px;--height:${size[1]}px" aria-label="Interactive Home prototype"><div class="system-bar" aria-hidden="true"><span>9:41</span><span>LTE&nbsp;&nbsp;92%</span></div><header class="home-header">${logo()}<div class="home-header-actions"><button class="icon-button" data-action="calendar" aria-label="Open calendar">${icon('calendar')}</button>${sharingInboxButton(s.social)}<button class="icon-button" data-action="open" data-modal="settings" aria-label="Open Settings">${icon('settings')}</button><button class="avatar" data-action="open" data-modal="profile" aria-label="Open profile">${s.profilePhoto ? demoAvatar() : esc((s.profileName ?? 'Daniel')[0])}</button></div></header><div class="viewport" tabindex="0" aria-label="Scrollable Home"><div class="page-content">${homePage()}</div></div>${tabs()}${s.modal ? modal() : ''}${s.toast ? `<div class="toast" role="status"><span>${esc(s.toast)}</span><button data-action="dismiss-toast" aria-label="Dismiss notification">×</button></div>` : ''}</section><p class="frame-caption">${size.join(' × ')} / ${dark ? 'Dark' : 'Paper'} / ${large ? '200%' : '100%'} text. Synthetic data only.</p></div>`;
   $('.home-device .viewport').scrollTop = preserve ? scroll : 0;
   const sheet = $('.home-device .sheet-body'); if (sheet) sheet.scrollTop = preserve ? sheetScroll : 0;
   const chart = $('.body-chart-scroll'), dot = chart?.querySelector('.point.selected');
@@ -217,8 +222,10 @@ function open(modalName) { s.error = ''; s.modal = modalName; if (modalName === 
 function close() { s.modal = s.modal === 'workout-date' ? 'workout-edit' : s.modal === 'workout-edit' ? 'day' : s.modal === 'day' ? 'calendar' : s.modal === 'delete' ? 'measurement' : ''; s.error = ''; render(false); }
 function beginMeasurement() { const selected = selectedObservation(s); s.editDate = selected?.date ?? null; s.mode = 'add'; s.form = {}; s.addDraft = {}; s.editDraft = valuesForDate(s.records, s.editDate, s.unit); s.definition = ''; open('measurement'); }
 
+installSharingEditorGestures($('#stage'),()=>s,render);
 $('#stage').addEventListener('input', event => {
   const el = event.target;
+  if (socialInput(s, el, render)) return;
   if (el.dataset.workoutField) {
     s.workoutDraft[el.dataset.workoutField] = el.value;
     const save = $('[data-action="workout-save"]'); if (save) save.disabled = !workoutDirty();
@@ -230,6 +237,10 @@ $('#stage').addEventListener('input', event => {
 $('#stage').addEventListener('click', event => {
   const el = event.target.closest('[data-action]'); if (!el) return;
   const d = el.dataset;
+  if (['close', 'outside'].includes(d.action) && s.modal.startsWith('social-copy-')) { if (d.action === 'outside' && event.target !== el) return; handleSocialAction(s, 'social-copy-dismiss', d, name => { s.modal = name; }); render(); return; }
+  if (d.action === 'sharing-use') { openSharingDestination(s.sharing, 'share-apply'); return; }
+  if (['sharing-save-routine', 'sharing-view-routine'].includes(d.action)) { openSharingDestination({ ...s.sharing, routineSaved: true }, 'share-saved-routine'); return; }
+  if (handleSocialAction(s, d.action, d, name => { s.modal = name; })) { render(); return; }
   switch (d.action) {
     case 'outside': if (event.target === el) close(); return;
     case 'open': if (d.modal === 'profile' || d.modal === 'settings') { location.href = `./${d.modal}.html`; return; } open(d.modal); return;
@@ -286,6 +297,8 @@ $('#stage').addEventListener('click', event => {
   }
 });
 document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && s.modal.startsWith('social-copy-')) { handleSocialAction(s, 'social-copy-dismiss', {}, name => { s.modal = name; }); render(); return; }
+
   if (event.key === 'Escape' && s.modal) { close(); return; }
   if (['Enter', ' '].includes(event.key) && event.target.matches('.point-hit')) { event.preventDefault(); s.selected = event.target.dataset.date; render(); return; }
   if (event.key !== 'Tab' || !s.modal) return;

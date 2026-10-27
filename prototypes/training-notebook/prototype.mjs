@@ -1,9 +1,15 @@
-import { workingSet, suggestWarmups, rememberWarmups, newWarmups, insertWarmups, warmupError, setDisplayRows } from './warmup.mjs';
+import { renderWarmupSheet, updateWarmupControls } from './workout-warmup-ui.mjs';
+import { installWarmupGestures } from './warmup-gestures.mjs';
+import { renderWorkoutExercise, renderExerciseMenu, replacementExercise } from './workout-exercise-ui.mjs';
+import { workingSet, suggestWarmups, rememberWarmups, newWarmups, insertWarmups, warmupError, setDisplayRows, prepareWarmupPreview } from './warmup.mjs';
+import { sharingStates, sharingState, sharingDialog, newSharedSession, takeSharingHandoff, planForSharing } from './sharing.mjs';
+import { socialExamples, socialState, socialDialog, handleSocialAction, socialInput, sharingInboxButton, installSharingEditorGestures } from './sharing-social.mjs';
 import './input-behavior.mjs';
 import { readNotebookPreferences } from './notebook-preferences.mjs';
 import { setReviewState } from './review-state-picker.mjs';
 import { readCheckIn, writeCheckIn, clearCheckIn, checkInFields } from './check-in.mjs';
 import { copy, fixture, catalog, exerciseFromCatalog, lastText, effortValue, guidanceChanges, moveExercise, summary, setUnit, states } from './model.mjs';
+states.unshift(...sharingStates, ...socialExamples);
 
 const $ = (q, root = document) => root.querySelector(q);
 const escape = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -28,7 +34,7 @@ const paragraph = (str, cls = 'supporting') => `<p class="${cls}">${str}</p>`;
 const check = done => `<span class="checkmark ${done ? 'checked' : ''}">${done ? icon('check') : ''}</span>`;
 let serial = 0, s;
 let chosen = 'active', size = [390, 844], theme = false, large = false, scale = 'RPE', compare = true;
-let toastTimer, warmupPointer, warmupSuppressUntil = 0;
+let toastTimer;
 
 const modalMap = {
   routines: 'routines', recommend: 'recommend', 'exercise-menu': 'exercise-menu', 'set-options': 'set-options',
@@ -56,6 +62,21 @@ function makeState(id) {
     state.exercises[0].sets = Array.from({ length: 3 }, () => ({ weight: id === 'warmup-adapted' ? '120' : id === 'warmup-missing' ? '' : '100', reps: '8', rpe: '', done: false, type: 'normal' }));
     if (id === 'warmup-existing') state.exercises[0].sets.unshift({ weight: '20', reps: '4', rpe: '', done: false, type: 'warmup' });
     state.modal = 'warmup'; state.warmup = prepareWarmup(state.exercises[0]);
+  }
+  state.sharing = sharingState(id);
+  state.social = socialState(id);
+  if (id.startsWith('social-')) state.modal = id;
+  if (id.startsWith('share-')) {
+    state.modal = id;
+    if (id === 'share-send') state.exercises = newSharedSession(state.sharing.plan);
+    else if (id !== 'share-draft') { state.exercises = []; state.title = ''; state.source = ''; }
+    if (id === 'share-draft') { state.title = 'Back + Biceps'; state.exercises = [exerciseFromCatalog('row'), exerciseFromCatalog('curl', 'Dumbbell curl')]; state.selectedId = 'row'; }
+  }
+  if (['share-apply', 'share-saved-routine'].includes(id)) {
+    state.sharing = takeSharingHandoff() || sharingState(id);
+    state.exercises = fixture(); state.title = 'Chest + Triceps'; state.source = 'Chest + Triceps';
+    state.modal = id === 'share-apply' ? 'share-draft' : 'share-routine';
+    if (id === 'share-saved-routine') state.sharing.routineSaved = true;
   }
   if (id === 'history-empty') state.selectedId = 'fly';
   return state;
@@ -87,22 +108,19 @@ function sessionHeader() {
 }
 function planLabel() { return ({ none: "Today's Plan", busy: 'Reviewing workout...', ok: 'Train as planned', changes: `${adjustmentCount()} exercises adjusted`, stale: 'Workout or context changed', applied: 'Changes applied', error: 'Review unavailable' })[s.plan] ?? "Today's Plan"; }
 
-function resistance(e) {
-  return `<div class="set-table" role="group" aria-label="${escape(e.name)} sets"><div class="set-grid table-header" aria-hidden="true"><span>Set</span><span>Last</span><span>${e.unit}</span><span>Reps</span><span>${scale}</span><span>Done</span></div>${e.sets.map((row, i) => {
-    const { previous: prev, marker } = setDisplayRows(e)[i];
-    return `<div class="set-grid set-row ${row.done ? 'completed' : ''}"><button class="set-marker" data-action="set-menu" ${attrs({ id: e.id, index: i })} aria-label="${escape(e.name)}, set ${i + 1}, ${row.type}, options">${marker}</button>${row.type === 'warmup' ? '<span class="last-value" aria-hidden="true"></span>' : `<button class="last-value" data-action="copy-last" ${attrs({ id: e.id, index: i })} ${prev ? '' : 'disabled'} aria-label="${escape(e.name)}, set ${i + 1}, copy previous ${escape(lastText(prev, scale))}, ${e.unit}, ${scale}">${escape(lastText(prev, scale))}</button>`}${['weight', 'reps', 'rpe'].map(k => `<label><span class="cell-label">${k === 'weight' ? e.unit : k === 'rpe' ? scale : 'Reps'}</span><input class="set-input" type="text" inputmode="${k === 'reps' ? 'numeric' : 'decimal'}" data-set="${e.id}" data-index="${i}" data-field="${k}" value="${escape(k === 'rpe' ? effortValue(row[k], scale) : row[k])}" aria-label="${escape(e.name)}, set ${i + 1}, ${k === 'weight' ? e.unit : k === 'rpe' ? scale : 'reps'}" autocomplete="off" spellcheck="false"></label>`).join('')}<button class="done" data-action="done" ${attrs({ id: e.id, index: i })} aria-label="${escape(e.name)}, set ${i + 1}, completed" aria-pressed="${row.done}">${check(row.done)}</button></div>`;
-  }).join('')}</div>`;
-}
-function bodyweight(e) {
-  return `<div class="section-stack"><div class="bodyweight-grid label muted"><span>Set</span><span>Last</span><span>Reps</span><span>${scale}</span><span>Done</span></div>${e.sets.map((row, i) => `<div class="bodyweight-grid bodyweight-row"><button class="set-marker" data-action="set-menu" ${attrs({ id: e.id, index: i })}>${setDisplayRows(e)[i].marker}</button><span class="last-value">${row.type === 'warmup' ? '' : 'No record'}</span><label><span class="cell-label">Reps</span><input class="set-input" data-set="${e.id}" data-index="${i}" data-field="reps" value="${escape(row.reps)}" inputmode="numeric" aria-label="${e.name}, set ${i + 1}, reps"></label><label><span class="cell-label">${scale}</span><input class="set-input" data-set="${e.id}" data-index="${i}" data-field="rpe" value="${effortValue(row.rpe, scale)}" inputmode="decimal" aria-label="${e.name}, set ${i + 1}, ${scale}"></label><button class="done" data-action="done" ${attrs({ id: e.id, index: i })} aria-label="Complete ${e.name} set ${i + 1}" aria-pressed="${row.done}">${check(row.done)}</button></div>`).join('')}</div>`;
-}
 function cardio(e) {
   return `<div class="section-stack"><div class="cardio-fields">${field('Time / min:sec', `cardio-time-${e.id}`, e.time, 'e.g. 20:00')}${field('Distance / km', `cardio-distance-${e.id}`, e.distance, 'e.g. 3.2')}<div class="cardio-completion"><span class="label muted">Done</span><button class="done" data-action="cardio-done" data-id="${e.id}" aria-label="${escape(e.name)}, session completed" aria-pressed="${e.sets[0].done}">${check(e.sets[0].done)}</button></div></div><p class="label">Zone</p>${chips(['1', '2', '3', '4', '5'], e.zone, 'cardio-toggle', { id: e.id, field: 'zone' }, 5)}<p class="label">Session type</p>${chips(['Steady', 'Intervals', 'Recovery'], e.session, 'cardio-toggle', { id: e.id, field: 'session' })}<p class="label">Effort level</p>${chips(['Easy', 'Moderate', 'Hard'], e.effort, 'cardio-toggle', { id: e.id, field: 'effort' })}</div>`;
 }
 function exercise(e, index) {
-  return `<section class="exercise" data-exercise="${e.id}" aria-label="${escape(e.name)}"><div class="exercise-heading"><span class="ordinal">${String(index + 1).padStart(2, '0')}</span><button class="name" data-action="history" data-id="${e.id}">${escape(e.name)}</button><button class="icon-button" data-action="exercise-menu" data-id="${e.id}" aria-label="${escape(e.name)}, options">${icon('more')}</button></div><div class="exercise-controls ${e.mode === 'cardio' ? 'cardio-controls' : ''}"><button data-action="demo" data-id="${e.id}">${icon('play')}Demo</button><button data-action="rest-detail" data-id="${e.id}">${icon('clock')}Rest ${time(e.rest)}</button>${e.mode !== 'cardio' ? `<button class="tempo-control" data-action="open" data-modal="tempo" data-id="${e.id}">${icon('speedometer')}<span>Tempo</span>${e.tempo ? `<span>${escape(e.tempo)}</span>` : ''}</button>` : ''}</div><div class="exercise-note">${field('Note', `note-${e.id}`, e.notes, 'e.g. Keep the last rep controlled')}</div>${e.mode === 'resistance' ? `<div class="warmup-entry">${button('+ Add warm-up', 'open', 'text', { id: e.id, modal: 'warmup' })}</div>` : ''}${e.mode === 'cardio' ? cardio(e) : e.mode === 'bodyweight' ? bodyweight(e) : resistance(e)}${e.mode !== 'cardio' ? `<div class="set-actions">${button('+ Add set', 'add-set', 'text', { id: e.id })}${button('Duplicate last set', 'duplicate-set', 'text', { id: e.id })}</div>` : ''}${s.undoSet?.id === e.id ? `<div class="inline-undo"><span>Set deleted</span>${button('Undo', 'undo-set')}</div>` : ''}</section>`;
+  const undo = s.undoSet?.id === e.id ? `<div class="inline-undo"><span>Set deleted</span>${button('Undo','undo-set')}</div>` : '';
+  return renderWorkoutExercise(e,index,{effortScale:scale,renderCardio:cardio,renderNote:ex=>field('Note',`note-${ex.id}`,ex.notes,'e.g. Keep the last rep controlled'),replacement:s.replaceTarget===e.id?{query:s.replaceQuery || '',group:s.replaceGroup || 'All'}:null,undo});
 }
-function empty() { return `<div class="empty-content"><span class="supporting">Thu, Oct 15</span><h1 class="editorial">Your next session</h1>${paragraph('Choose a routine or add your first exercise.')}<div style="height:12px"></div>${button('Choose routine', 'open', 'primary', { modal: 'routines' })}${button('Add exercise', 'search', '')}${button('Recommend workout', 'open', 'text', { modal: 'recommend' })}${button('Repeat past workout', 'repeat')}${button('Create routine', 'open', 'text', { modal: 'create-routine' })}</div>`; }
+
+function workoutSetup() {
+  return `<section class="workout-setup" aria-label="Workout setup and sharing"><div class="workout-setup-row">${button('My routines', 'open', 'text', { modal: 'routines' })}${button('Create routine', 'open', 'text', { modal: 'create-routine' })}</div><div class="workout-setup-row">${button('Repeat past workout', 'repeat')}${button('Recommend workout', 'open', 'text', { modal: 'recommend' })}</div>${s.exercises.length ? `<div class="workout-setup-row workout-sharing-action">${button('Share workout', 'sharing-start')}${button('Discard workout', 'open', 'danger', { modal: 'discard' })}</div>` : ''}</section>`;
+}
+function empty() { return `<div class="empty-content"><span class="supporting">Thu, Oct 15</span><h1 class="editorial">Your next session</h1>${paragraph('Choose a routine or add your first exercise.')}<div class="plan-row">${icon('note')}<span class="plan-summary">Today's Plan</span>${button('Review', 'review-plan')}</div></div>${workoutSetup()}${button('+ Add exercise', 'search', '')}`; }
+
 function searchPage() {
   const matches = catalog.filter(e => e[1].toLowerCase().includes(s.query.toLowerCase()));
   return `<div class="section-stack"><div class="search-wrap"><input data-query value="${escape(s.query)}" placeholder="Search exercises" aria-label="Search exercises">${s.query ? '<button class="search-clear" data-action="clear-search" aria-label="Clear exercise search">×</button>' : ''}</div>${s.selected.length ? `<div class="selected-chips">${s.selected.map(id => `<button class="selected-chip" data-action="toggle-exercise" data-id="${id}" aria-label="Unselect ${escape(catalog.find(e => e[0] === id)?.[1])}">${escape(catalog.find(e => e[0] === id)?.[1])} <span aria-hidden="true">×</span></button>`).join('')}</div>` : ''}${s.searchMode === 'loading' ? '<div class="busy-row"><span class="spinner" aria-hidden="true"></span><p class="supporting" role="status">Searching exercises...</p></div>' : s.searchMode === 'error' ? `<h3>Couldn't load exercises</h3>${paragraph('Try another search.')}${button('Try again', 'retry-search', '')}` : s.searchMode === 'empty' || !matches.length ? `<h3>No matching exercises</h3>${paragraph('Try another name or create a custom exercise.')}${button('Clear search', 'clear-search')}${button('Create custom exercise', 'custom', '')}` : `<div>${matches.map(([id, name, meta]) => `<div class="result-row"><button class="done" data-action="toggle-exercise" data-id="${id}" aria-label="Select ${name}" aria-pressed="${s.selected.includes(id)}">${check(s.selected.includes(id))}</button><button class="result-title" data-action="toggle-exercise" data-id="${id}"><strong>${name}</strong><small>${meta}</small></button></div>`).join('')}</div>${button('Create custom exercise', 'custom')}`}</div>`;
@@ -155,47 +173,23 @@ function prepareWarmup(e) {
   let remembered;
   try { remembered = JSON.parse(sessionStorage.getItem(warmupKey(e)) ?? 'null'); } catch { /* use the example ramp */ }
   if (!Array.isArray(remembered) || !remembered.length || remembered.some(row => !(row.reps > 0) || !(row.fixed > 0 || row.ratio > 0))) remembered = null;
-  const pattern = remembered ?? (e.id === 'bench' && e.unit === 'kg'
-    ? [{ fixed: 20, reps: 4 }, { ratio: .6, reps: 4 }, { ratio: .8, reps: 2 }]
-    : [{ ratio: .4, reps: 4 }, { ratio: .6, reps: 4 }, { ratio: .8, reps: 2 }]);
-  const weight = workingSet(e)?.weight ?? '';
-  const proposed = suggestWarmups(weight, pattern, s?.step ?? 2.5);
-  const rows = newWarmups(proposed, e.sets.filter(row => row.type === 'warmup'));
-  return { weight, rows, kept: proposed.filter(row => !rows.includes(row)), pattern, swiped: null, remembered: !!remembered, missing: !Number(weight) };
+  return prepareWarmupPreview(e,remembered,s?.step ?? 2.5);
 }
-function warmupDialog(e) {
-  const draft = s.warmup, existing = e.sets.filter(row => row.type === 'warmup');
-  const count = newWarmups(draft.rows, existing).length, error = warmupError(draft.rows, draft.weight);
-  return dialogShell('Add warm-up sets', `<div class="warmup-context"><span class="supporting">${escape(e.name)}</span><strong>First working set</strong><span class="warmup-working">${escape(workingSet(e)?.weight || '\u2014')} ${e.unit} &times; ${escape(workingSet(e)?.reps || '\u2014')} reps</span></div>
-    ${draft.missing ? `<label class="field"><span>Working weight / ${e.unit}</span><input inputmode="decimal" data-warmup-weight value="${escape(draft.weight)}" placeholder="e.g. 100"></label>${button('Suggest sets', 'warmup-suggest', '')}${paragraph('Used for this preview; your working set stays unchanged.')}` : ''}
-    ${existing.length ? `<div class="warmup-existing"><span class="label muted">Already in your workout</span>${existing.map(row => `<div><span>W</span><span>${escape(row.weight)} ${e.unit} &times; ${escape(row.reps)} reps${row.done ? ' · Done' : ''}</span></div>`).join('')}</div>` : ''}
-    ${paragraph(draft.remembered ? 'Your last setup, adapted to this working weight.' : 'Adjust the weights and reps to suit your warm-up.')}
-    <div class="warmup-rows"><div class="warmup-columns label muted" aria-hidden="true"><span>Set</span><span>${e.unit}</span><span>Reps</span></div>${draft.rows.map((row, index) => `<div class="warmup-swipe"><button class="warmup-delete" data-action="warmup-remove" data-index="${index}" aria-label="Delete warm-up ${index + 1}" ${draft.swiped === index ? '' : 'aria-hidden="true" tabindex="-1"'}>Delete</button><div class="warmup-edit-row ${draft.swiped === index ? 'revealed' : ''}" data-warmup-swipe="${index}" tabindex="0" aria-label="Warm-up ${index + 1}. Swipe left or press Left Arrow to reveal Delete."><span class="warmup-number">W</span>${['weight', 'reps'].map(key => `<input class="set-input" inputmode="${key === 'weight' ? 'decimal' : 'numeric'}" value="${escape(row[key])}" data-warmup-field="${key}" data-warmup-row="${index}" aria-label="Warm-up ${index + 1}, ${key === 'weight' ? e.unit : 'reps'}">`).join('')}</div></div>`).join('')}</div>
-    <p class="supporting warmup-swipe-hint">Swipe left on a set to delete.</p>${button('+ Add a set', 'warmup-add-row', 'text')}
-    <p class="form-error warmup-error" role="status">${draft.rows.length && error ? escape(error) : ''}</p>
-    <p class="supporting warmup-memory">This setup is remembered for ${escape(e.name)} when you add it. Working sets stay unchanged.</p>`,
-    button(count ? `Add ${count} warm-up set${count === 1 ? '' : 's'}` : existing.length ? 'Warm-up sets already added' : 'Add warm-up sets', 'warmup-apply', 'primary', {}, !!error || !count) + button('Cancel', 'close', ''));
-}
-function updateWarmupAction() {
-  const draft = s.warmup, error = warmupError(draft.rows, draft.weight);
-  const count = newWarmups(draft.rows, getExercise().sets.filter(row => row.type === 'warmup')).length;
-  const apply = $('.interactive [data-action="warmup-apply"]');
-  apply.disabled = !!error || !count;
-  apply.textContent = count ? `Add ${count} warm-up set${count === 1 ? '' : 's'}` : getExercise().sets.some(row => row.type === 'warmup') ? 'Warm-up sets already added' : 'Add warm-up sets';
-  $('.interactive .warmup-error').textContent = error;
-}
+function warmupDialog(e) { return renderWarmupSheet(e,s.warmup,{shell:dialogShell}); }
+
+function updateWarmupAction() { updateWarmupControls($('#stage'),getExercise(),s.warmup); }
 
 function modal() {
+  if (s.modal.startsWith('social-')) return socialDialog(s, { shell: dialogShell, escape, paragraph });
+  if (s.modal.startsWith('share-')) return sharingDialog(s, { shell: dialogShell, button, paragraph, escape });
   const e = getExercise(), sum = summary(s.exercises), actions = (primary, a, secondary = 'Back to workout', sa = 'close') => button(primary, a, 'primary') + (secondary ? button(secondary, sa, '') : '');
   switch (s.modal) {
     case 'routines': return dialogShell('Choose routine', `${field('Search routines', 'routineQuery', s.draft.routineQuery ?? '', 'Search by name')}<div class="section-stack">${[['Chest + Triceps', '4 exercises · 11 planned sets'], ['Posterior legs', '5 exercises · 15 planned sets'], ['Shoulders + Arms', '5 exercises · 14 planned sets']].filter(x => x[0].toLowerCase().includes((s.draft.routineQuery ?? '').toLowerCase())).map(([name, meta]) => `<div>${button(name, 'load-routine', '', { value: name })}${paragraph(meta)}</div>`).join('')}</div>${button('Deload this routine', 'deload')}${button('Repeat past workout', 'repeat')}${button('Create routine', 'open', 'text', { modal: 'create-routine' })}`);
     case 'recommend': return dialogShell('Recommend workout', `${paragraph('Choose a focus')}${chips(['Chest', 'Chest + Triceps', 'Back', 'Back + Biceps', 'Legs', 'Anterior legs', 'Posterior legs', 'Shoulders', 'Shoulders + Arms', 'Arms', 'Push', 'Pull'], s.focus, 'focus', {}, 2)}<h3>Session length</h3>${chips(['Quick', 'Standard', 'Extended'], s.length, 'length')}${paragraph('Volume adapts to recent training and recovery. This prototype loads a fixture, not a generated recommendation.')}`, button('Recommend workout', 'generate-workout', 'primary'));
     case 'create-routine': return dialogShell('Create routine', `${field('Routine name', 'routineName', s.draft.routineName ?? '', 'e.g. Upper body')}${paragraph('Use the exercise editor to build your routine. This is a local mock flow.')}`, actions('Start building', 'build-routine'));
     case 'replace-guard': return dialogShell('Replace this workout?', paragraph('Your current draft has exercises. Replace it with the selected routine, or add the routine to this session.'), button('Replace workout', 'confirm-routine', 'primary') + button('Append instead', 'append-routine', '') + button('Keep current workout', 'close', ''), true);
-    case 'exercise-menu': {
-      const i = s.exercises.indexOf(e);
-      return dialogShell(escape(e?.name ?? 'Exercise options'), `<div class="reorder-row">${icon('reorder')}${button('Up', 'move', '', { direction: -1 }, i === 0)}${button('Down', 'move', '', { direction: 1 }, i === s.exercises.length - 1)}</div>${button('Replace exercise', 'open', '', { modal: 'replace' })}${e?.mode === 'resistance' ? `${chips(['kg', 'lbs'], e.unit, 'unit')}${button('Available weights', 'open', '', { modal: 'weights' })}` : ''}<div class="divider"></div><button class="btn danger" data-action="delete-exercise">Delete exercise</button>`);
-    }
+    case 'exercise-menu': return dialogShell(escape(e?.name || 'Exercise options'),renderExerciseMenu(e,s.exercises.indexOf(e),s.exercises.length),button('Back to workout','close'));
+    case 'exercise-replace-confirm': return dialogShell('Replace exercise?',paragraph('This will reset the current sets for this exercise.'),button('Replace','exercise-replace-apply','primary')+button('Cancel','close'));
     case 'warmup': return warmupDialog(e);
     case 'replace': return dialogShell('Replace exercise', e?.custom ? paragraph('No automatic suggestions for a custom exercise. Add another exercise manually if needed.') : `${paragraph('Choose an alternative for this mock session.')}${button('Machine chest press', 'replace-exercise', '')}${button('Dumbbell bench press', 'replace-exercise', '')}`);
     case 'set-options': return dialogShell('Set options', `${paragraph(`${escape(e?.name)} · ${e?.sets[s.setIndex]?.type === 'warmup' ? 'Warm-up set' : `Set ${e ? setDisplayRows(e)[s.setIndex].marker : ''}`}`)}<h3>Set type</h3>${chips(['Normal', 'Warm-up', 'Failure', 'Drop'], ({ normal: 'Normal', warmup: 'Warm-up', failure: 'Failure', drop: 'Drop' })[e?.sets[s.setIndex]?.type], 'set-type', {}, 2)}${e?.mode === 'resistance' ? `<h3>Adjust baseline load</h3>${chips(['-10%', '-5%', '0%', '+5%', '+10%'], [], 'percentage', {}, 3)}` : ''}<div class="divider"></div><button class="btn danger" data-action="delete-set">Delete set</button>`);
@@ -221,7 +215,6 @@ function modal() {
     case 'routine-updated': return dialogShell('Routine updated', paragraph('Your workout was saved first. The source routine was then updated in this mock flow.'), button('Done', 'complete-flow', 'primary'), true);
     case 'deload-saved': return dialogShell('Workout saved', paragraph('Deload session saved. The original routine stays unchanged.'), button('Done', 'complete-flow', 'primary'), true);
     case 'discard': return dialogShell('Discard workout?', paragraph('Remove this unsaved workout draft? Previously saved records are not affected.'), button('Keep workout', 'close', 'primary') + '<button class="btn danger" data-action="confirm-discard">Discard workout</button>', true);
-    case 'session-options': return dialogShell('Session options', `${button('Save as routine', 'open', '', { modal: 'create-routine' })}${button('Choose another routine', 'open', '', { modal: 'routines' })}<button class="btn danger" data-action="open" data-modal="discard">Discard workout</button>`);
     default: return '';
   }
 }
@@ -230,8 +223,8 @@ function frame(reference = false) {
   const key = reference || s.keyboard;
   const search = !reference && s.page === 'search', custom = !reference && s.page === 'custom';
   const title = search ? 'Add exercise' : custom ? 'Custom exercise' : s.builder ? 'Routine builder' : 'Workout';
-  const main = search ? searchPage() : custom ? customPage() : s.exercises.length ? sessionHeader() + s.exercises.map(exercise).join('') + `<div class="section-stack">${button('+ Add exercise', 'search', '')}<div class="session-actions">${button('Save as routine', 'open', 'text', { modal: 'create-routine' })}${button('Session options', 'open', 'text', { modal: 'session-options' })}</div></div>` : empty();
-  return `<div class="frame-wrap"><h3>${reference ? 'Approved / Reps editing' : escape(states.find(v => v[1] === chosen)?.[2] ?? 'Workout')}</h3><section class="device ${theme ? 'dark' : ''} ${large ? 'large-text' : ''} ${reference ? 'reference' : 'interactive'}" style="--width:${size[0]}px;--height:${size[1]}px" ${reference ? 'inert' : ''} aria-label="${reference ? 'Approved static editing reference' : 'Interactive Workout prototype'}"><div class="system-bar" aria-hidden="true"><span>9:41</span><span>LTE&nbsp;&nbsp; 92%</span></div><header class="toolbar notebook-toolbar ${!search && !custom && s.exercises.length ? 'has-header-action' : ''}"><div><button class="icon-button" data-action="${search || custom ? 'back-search' : 'home'}" aria-label="${search || custom ? 'Close exercise picker' : 'Back to Home'}">${icon('left')}</button><h2 class="toolbar-title">${title}</h2>${!search && !custom && s.exercises.length ? button(s.builder ? 'Save routine' : 'Finish', 'open', 'primary toolbar-action', { modal: 'finish' }) : '<span aria-hidden="true"></span>'}</div></header><div class="viewport" tabindex="0" aria-label="Scrollable workout"><div class="page-content">${main}</div></div>${search ? `<footer class="search-footer"><span class="supporting">${s.selected.length} selected</span>${button(`Add (${s.selected.length})`, 'add-selected', 'primary', {}, !s.selected.length)}</footer>` : custom ? `<footer class="search-footer">${button('Cancel', 'back-search')}${button('Create exercise', 'save-custom', 'primary')}</footer>` : !key && s.rest ? restDock() : ''}${key ? keyboard(!reference && (search || custom || s.keyboardAlpha)) : tabs()}${!reference && s.modal ? modal() : ''}${!reference && s.toast ? `<div class="toast" role="status"><span>${escape(s.toast)}</span><button data-action="dismiss-toast" aria-label="Dismiss message">×</button></div>` : ''}</section><p class="frame-caption">${reference ? 'Approved editing reference. Interact with the screen on the left.' : `${size[0]} × ${size[1]} / ${theme ? 'Dark' : 'Paper'} / ${large ? '200%' : '100%'} text. Synthetic records only.`}</p></div>`;
+  const main = search ? searchPage() : custom ? customPage() : s.exercises.length ? sessionHeader() + workoutSetup() + s.exercises.map(exercise).join('') + `<div class="section-stack">${button('+ Add exercise', 'search', '')}${!s.builder ? button('Finish workout', 'open', 'primary', { modal: 'finish' }) : ''}</div>` : empty();
+  return `<div class="frame-wrap"><h3>${reference ? 'Approved / Reps editing' : escape(states.find(v => v[1] === chosen)?.[2] ?? 'Workout')}</h3><section class="device ${theme ? 'dark' : ''} ${large ? 'large-text' : ''} ${reference ? 'reference' : 'interactive'}" style="--width:${size[0]}px;--height:${size[1]}px" ${reference ? 'inert' : ''} aria-label="${reference ? 'Approved static editing reference' : 'Interactive Workout prototype'}"><div class="system-bar" aria-hidden="true"><span>9:41</span><span>LTE&nbsp;&nbsp; 92%</span></div><header class="toolbar notebook-toolbar ${!search && !custom && s.builder ? 'has-header-action' : ''}"><div><button class="icon-button" data-action="${search || custom ? 'back-search' : 'home'}" aria-label="${search || custom ? 'Close exercise picker' : 'Back to Home'}">${icon('left')}</button><h2 class="toolbar-title">${title}</h2>${!search && !custom ? s.builder ? button('Save routine', 'open', 'primary toolbar-action', { modal: 'finish' }) : sharingInboxButton(s.social) : '<span aria-hidden="true"></span>'}</div></header><div class="viewport" tabindex="0" aria-label="Scrollable workout"><div class="page-content">${main}</div></div>${search ? `<footer class="search-footer"><span class="supporting">${s.selected.length} selected</span>${button(`Add (${s.selected.length})`, 'add-selected', 'primary', {}, !s.selected.length)}</footer>` : custom ? `<footer class="search-footer">${button('Cancel', 'back-search')}${button('Create exercise', 'save-custom', 'primary')}</footer>` : !key && s.rest ? restDock() : ''}${key ? keyboard(!reference && (search || custom || s.keyboardAlpha)) : tabs()}${!reference && s.modal ? modal() : ''}${!reference && s.toast ? `<div class="toast" role="status"><span>${escape(s.toast)}</span><button data-action="dismiss-toast" aria-label="Dismiss message">×</button></div>` : ''}</section><p class="frame-caption">${reference ? 'Approved editing reference. Interact with the screen on the left.' : `${size[0]} × ${size[1]} / ${theme ? 'Dark' : 'Paper'} / ${large ? '200%' : '100%'} text. Synthetic records only.`}</p></div>`;
 }
 
 function focusSet(id, index, field, scroll = true) {
@@ -287,9 +280,12 @@ function chooseRoutine(append = false) {
   s.exercises = append ? [...s.exercises, ...next] : next; s.title = s.pendingRoutine || 'Chest + Triceps'; s.source = s.title; s.modal = ''; s.plan = 'none'; s.planBefore = null; s.planAfter = null; render(false);
 }
 
+installSharingEditorGestures($('#stage'),()=>s,render);
 $('#stage').addEventListener('input', event => {
   const el = event.target;
+  if (socialInput(s, el, render)) return;
   if (!el.closest('.interactive')) return;
+  if (el.hasAttribute('data-replace-query')) { const at=el.selectionStart; s.replaceQuery=el.value; render(); const next=$('.interactive [data-replace-query]'); next?.focus({preventScroll:true}); next?.setSelectionRange(at,at); return; }
   if (el.dataset.set) { el.setCustomValidity(''); el.removeAttribute('aria-invalid'); el.parentElement.querySelector('.field-error')?.remove(); el.removeAttribute('aria-describedby'); }
   if (el.dataset.set) { const e = getExercise(el.dataset.set), row = e.sets[Number(el.dataset.index)], k = el.dataset.field; row[k] = k === 'rpe' && scale === 'RIR' ? el.value === '' ? '' : String(10 - Number(el.value)) : el.value; mutateWorkout(); return; }
   if (el.dataset.warmupField) { s.warmup.rows[Number(el.dataset.warmupRow)][el.dataset.warmupField] = el.value; updateWarmupAction(); return; }
@@ -325,52 +321,38 @@ $('#stage').addEventListener('focusin', event => {
   requestAnimationFrame(() => { const q = lastInput?.set ? `input[data-set="${lastInput.set}"][data-index="${lastInput.index}"][data-field="${lastInput.field}"]` : lastInput?.draft ? `[data-draft="${lastInput.draft}"]` : '[data-query]'; $(q, $('.interactive'))?.scrollIntoView({ block: 'nearest' }); });
 });
 $('#stage').addEventListener('pointerdown', event => { if (event.target.closest('[data-action="key"]')) event.preventDefault(); });
-$('#stage').addEventListener('pointerdown', event => {
-  const row = event.target.closest('.interactive [data-warmup-swipe]');
-  if (!row || event.button !== 0) return;
-  warmupPointer = { row, index: Number(row.dataset.warmupSwipe), id: event.pointerId, x: event.clientX, y: event.clientY, dragging: false, offset: s.warmup.swiped === Number(row.dataset.warmupSwipe) ? -88 : 0 };
-});
-$('#stage').addEventListener('pointermove', event => {
-  const gesture = warmupPointer;
-  if (!gesture || gesture.id !== event.pointerId) return;
-  const dx = event.clientX - gesture.x, dy = event.clientY - gesture.y;
-  if (!gesture.dragging && Math.abs(dy) > 12 && Math.abs(dy) >= Math.abs(dx)) { warmupPointer = null; return; }
-  if (!gesture.dragging && Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy)) {
-    gesture.dragging = true; gesture.row.setPointerCapture(event.pointerId);
-  }
-  if (!gesture.dragging) return;
-  if (event.cancelable) event.preventDefault();
-  gesture.row.style.transition = 'none';
-  gesture.row.style.transform = `translateX(${Math.max(-88, Math.min(0, gesture.offset + dx))}px)`;
-});
-$('#stage').addEventListener('pointerup', event => {
-  const gesture = warmupPointer; warmupPointer = null;
-  if (!gesture || gesture.id !== event.pointerId || !gesture.dragging) return;
-  s.warmup.swiped = gesture.offset + event.clientX - gesture.x < -40 ? gesture.index : null;
-  warmupSuppressUntil = performance.now() + 200; render();
-});
-$('#stage').addEventListener('pointercancel', () => {
-  if (warmupPointer?.dragging) {
-    warmupPointer.row.style.removeProperty('transition');
-    warmupPointer.row.style.removeProperty('transform');
-  }
-  warmupPointer = null;
-});
-$('#stage').addEventListener('keydown', event => {
-  if (!event.target.matches('[data-warmup-swipe]') || !['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
-  event.preventDefault(); event.stopPropagation();
-  const index = Number(event.target.dataset.warmupSwipe);
-  s.warmup.swiped = event.key === 'ArrowLeft' ? index : null; render();
-  const target = event.key === 'ArrowLeft' ? `.interactive .warmup-delete[data-index="${index}"]` : `.interactive [data-warmup-swipe="${index}"]`;
-  $(target)?.focus({ preventScroll: true });
-});
+installWarmupGestures($('#stage'),{selector:'.interactive [data-warmup-swipe]',rowAttribute:'data-warmup-swipe',deleteSelector:'.interactive .warmup-delete',read:()=>s?.warmup,render});
 $('#stage').addEventListener('click', async event => {
-  if (performance.now() < warmupSuppressUntil) return;
   const b = event.target.closest('[data-action]'); if (!b || b.disabled || !b.closest('.interactive')) return;
   const d = b.dataset, action = d.action;
   if (action === 'outside' && event.target !== b) return;
+  if (['close', 'outside'].includes(action) && s.modal.startsWith('social-copy-')) { handleSocialAction(s, 'social-copy-dismiss', d, name => { s.modal = name; }); render(); return; }
   const e = getExercise(d.id || s.selectedId);
+  if (handleSocialAction(s, action, d, name => { s.modal = name; })) { render(); return; }
   switch (action) {
+    case 'sharing-start':
+      s.social.editCopy = null;
+      s.sharing = sharingState('share-send');
+      s.sharing.plan = planForSharing(s.exercises); s.sharing.title = s.title;
+      openModal('share-send'); return;
+    case 'sharing-weights': s.sharing.weights = !s.sharing.weights; render(); return;
+    case 'sharing-send': openModal('share-system'); return;
+    case 'sharing-sent': openModal('share-sent'); return;
+    case 'sharing-back-send': openModal('share-send'); return;
+    case 'sharing-recipient': openModal('share-receive'); return;
+    case 'sharing-save-routine': s.sharing.routineSaved = true; render(); return;
+    case 'sharing-view-routine': openModal('share-routine'); return;
+    case 'sharing-use':
+      if (s.sharing.used) { s.modal = ''; render(); return; }
+      if (s.exercises.length) { openModal('share-draft'); return; }
+      // Fall through only after the user explicitly starts a new workout.
+    case 'sharing-confirm-replace': case 'sharing-append': {
+      const added = newSharedSession(s.sharing.plan).map(ex => ({ ...ex, id: `${ex.id}-shared-${++serial}`, sets: ex.sets.map(row => ({ ...row, weight: s.sharing.weights ? row.weight : '' })) }));
+      s.exercises = action === 'sharing-append' ? [...s.exercises, ...added] : added;
+      if (action !== 'sharing-append') { s.title = s.sharing.title || 'Chest + Triceps'; s.source = ''; s.elapsed = 0; s.clockStart = null; s.rest = null; }
+      s.sharing.used = true; s.modal = ''; s.plan = 'none'; s.selectedId = s.exercises[0].id;
+      toast(action === 'sharing-append' ? 'Shared exercises added.' : 'New workout ready.'); return;
+    }
     case 'home': location.href = './home.html'; return;
     case 'open': {
       if (d.modal === 'finish') {
@@ -429,6 +411,17 @@ $('#stage').addEventListener('click', async event => {
     case 'percentage': { const row = getExercise().sets[s.setIndex]; if (row.weight) row.weight = String(Number((Number(row.weight) * (1 + Number(d.value.replace('%', '')) / 100)).toFixed(2))); s.modal = ''; mutateWorkout(); render(); return; }
     case 'move': s.exercises = moveExercise(s.exercises, s.selectedId, Number(d.direction)); mutateWorkout(); render(); return;
     case 'unit': s.exercises = s.exercises.map(ex => ex.id === s.selectedId ? setUnit(ex, d.value) : ex); mutateWorkout(); render(); return;
+    case 'exercise-weights': openModal('weights'); return;
+    case 'exercise-favorite': getExercise().favorite=!getExercise().favorite; render(); return;
+    case 'replace-inline': s.replaceTarget=s.selectedId; s.replaceQuery=''; s.replaceGroup='All'; s.modal=''; render(); return;
+    case 'exercise-replace-replace-group': s.replaceGroup=d.value; render(); return;
+    case 'exercise-replace-replace-clear': s.replaceQuery=''; render(); return;
+    case 'exercise-replace-replace-cancel': s.replaceTarget=null; render(); return;
+    case 'exercise-replace-replace-pick': s.pendingExerciseReplacement=d.id; openModal('exercise-replace-confirm'); return;
+    case 'exercise-replace-apply': {
+      const old=getExercise(),next=replacementExercise(s.pendingExerciseReplacement); next.id=old.id;
+      s.exercises=s.exercises.map(ex=>ex.id===old.id?next:ex);s.replaceTarget=null;s.modal='';mutateWorkout();render();return;
+    }
     case 'delete-exercise': s.exercises = s.exercises.filter(ex => ex.id !== s.selectedId); s.modal = ''; mutateWorkout(); render(); return;
     case 'replace-exercise': { const ex = getExercise(); ex.name = b.textContent.trim(); ex.previous = []; ex.sets = [{ weight: '', reps: '', rpe: '', done: false, type: 'normal' }]; s.modal = ''; mutateWorkout(); render(); return; }
     case 'demo': s.selectedId = d.id; openModal('demo'); return;
@@ -475,6 +468,8 @@ $('#stage').addEventListener('click', async event => {
 });
 
 document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && s.modal.startsWith('social-copy-')) { handleSocialAction(s, 'social-copy-dismiss', {}, name => { s.modal = name; }); render(); return; }
+
   if (event.key === 'Escape') { if (s.modal && s.modal !== 'saving') { if (s.modal === 'context' && s.contextBefore) Object.assign(s, s.contextBefore); s.contextBefore = null; s.modal = ''; render(false); } else if (s.keyboard) { s.keyboard = false; render(); } return; }
   if (['Enter', ' '].includes(event.key) && event.target.matches('circle.hit')) { event.preventDefault(); s.historyPoint = Number(event.target.dataset.value); render(); }
   if (event.key !== 'Tab' || !s.modal) return;
