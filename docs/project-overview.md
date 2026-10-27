@@ -139,6 +139,10 @@ resolve current progress; do not rewrite history by assuming everything passed.
    Ask only for material missing decisions, access or approval. Explain exact
    commands, where to run them, and prerequisites such as a connected phone.
 3. Run appropriate automated checks, then native checks for affected behavior.
+   Apply the shared design specification to new and edited UI. For a popup
+   family, compare all related sheets for field labels, outer edges, control
+   gaps and dismissal controls; exercise tab switching across empty, loading
+   and populated states before asking for visual acceptance.
    User visual review is separate from automated verification. LGTM applies to
    the reviewed scope, not every untested case.
 4. State precisely what passed, failed, was skipped and remains untested. A

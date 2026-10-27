@@ -1,6 +1,6 @@
 # Lastrep Privacy Policy
 
-**Effective Date:** October 23, 2026
+**Effective Date:** October 26, 2026
 
 Lastrep ("we", "our", or "us") operates the Lastrep mobile application.
 
@@ -10,6 +10,7 @@ When you use Lastrep, we may collect and store:
 
 - Account information, including your email address, through Firebase Authentication.
 - Profile information you choose to provide, such as a nickname, description, and profile photo. When you save a profile photo in a version supporting cloud photos, Lastrep uploads a resized image to private Firebase Cloud Storage and stores its reference with your account so it can appear across your signed-in devices.
+- In versions supporting workout sharing, an optional username, sharing preferences, sender requests and block choices, and workout plans you choose to share or receive. Sharing history includes the sender or recipients and the time of sharing.
 - Fitness data you enter in Lastrep, including workouts, exercise history, nutrition entries, goals, body-composition entries, and recovery check-ins.
 - Optional daily context you choose to provide, such as pain or discomfort, the affected body area, severity, movement triggers, additional physical activity, and free-text notes.
 - Workout-planning and performance information, such as a selected routine, recent sets, repetitions, weight, volume, and perceived exertion.
@@ -34,6 +35,7 @@ We use this information to:
 - Generate in-app training and recovery insights, including Today's Plan, from relevant information in your account.
 - Adapt recommendations using factors such as your planned workout, recent performance, recovery check-in, nutrition summary, connected health summaries, and optional daily context.
 - Manage subscriptions and provide support.
+- Deliver workout plans you choose to share, manage sharing requests, and prevent duplicate sends and abuse.
 - Understand app usage and subscription flows through analytics and improve the user experience.
 - Look up nutrition information for products using their barcodes.
 - Improve app reliability, diagnose errors, and protect the service.
@@ -104,6 +106,14 @@ We disclose information to these providers only as needed to provide, secure, an
 Lastrep retains account and app data while your account is active and as needed to provide the service. Date-scoped context may be retained with your account so that recommendations and history remain understandable. We remove associated Lastrep account data when you complete account deletion, subject to limited retention where required for security, fraud prevention, legal compliance, or operational backup processes.
 
 Disconnecting a health service stops future access by Lastrep but does not automatically delete information already imported and stored in your Lastrep account.
+
+In versions supporting workout sharing, sharing within Lastrep is off by default. Saving a username does not turn it on. When you enable it, other sharing-enabled users can find your nickname and username and send workout requests. Your account email and profile photo are not included in people search or shared workout plans. You can turn sharing off to stop discovery and new incoming shares, or block a sender. Previously received plans and imported copies remain available.
+
+Sharing requests and Inbox and Sent history expire after 30 days. Each new in-app delivery has its own 30-day window. Imported workouts and saved routines are independent copies and remain until the recipient deletes them or their account. Sharing identity, accepted-sender choices and block settings are retained separately so discovery and access controls continue to work. Expired sharing data becomes unavailable immediately; background database cleanup can finish later.
+
+A shared plan includes its exercise prescriptions and any weights, rest intervals, tempo, target effort, and recipient instructions you choose to include. Personal exercise notes, recorded effort ratings, completion marks, and health records are not automatically included. First-time in-app senders require acceptance before their plan can be opened. Sharing with multiple people creates separate deliveries; recipients do not see your other selected recipients.
+
+An external sharing link can be viewed by anyone who has it. Links expire after 30 days and can be revoked. Creating or refreshing a link starts a new 30-day window for that link. Creating a link saves the shared plan even if you later cancel the draft in your messaging or email app. Changing your original workout does not change an already shared snapshot. Deleting your Lastrep account removes your hosted sharing links and snapshots, but does not remove independent workout or routine copies that recipients have already imported, or messages they hold outside Lastrep.
 
 Requests to delete selected records are processed as soon as reasonably possible after verification, subject to the limited retention described above. Deleting imported data in Lastrep does not delete the original records in your connected health service. If sync remains enabled, those records may be imported again. Deleting your Lastrep account does not automatically cancel a Google Play subscription; manage or cancel it through Google Play.
 
