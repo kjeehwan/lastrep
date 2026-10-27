@@ -314,3 +314,37 @@ emulator-dependent cases skipped). Latest Expo Doctor passed all 20 checks with
 the documented tracked-native exception. A separate final Doctor check is required
 after merge before the authorized local production AAB starts. The current review
 setup remains available until the release batch is complete.
+## v43 Play review and UI follow-up (October 27)
+
+The user confirmed real in-app delivery, production HTTPS links opening the
+Play-installed app, applying a shared workout, matching Health Connect steps,
+and reopening successfully in v43.
+
+Follow-up UI changes on `fix/sharing-release-polish`:
+
+- Settings gives sharing a larger trailing switch with themed on/off tracks,
+  people and username icons, and the standard information button for its help.
+- Existing-workout choices use vertical full-width notebook actions: outlined
+  Keep, primary Add, and danger-outlined Replace. Import behavior is unchanged.
+- The shared-link route uses the notebook header, typography, themed status bar
+  and clear primary Open / secondary Home or Sign in actions, including an
+  unavailable-link state.
+
+Fresh TypeScript, lint, web export and 20 targeted checks passed; 8 automated
+emulator-dependent checks were skipped. Android 16 emulator checks used only
+local demo accounts and a synthetic plan: light/dark controls, help, preview
+close/reopen, landing page, applying the plan and the existing-workout choices.
+Keep preserved the test draft. Samsung Android 13 checks confirmed Settings
+icons/switch/help and the link landing page at the phone's current text size.
+The existing synthetic hosted review link was opened without importing it on
+the phone. The user approved the shared-link page and the final smooth switch
+behavior on the dev app.
+
+The user approved the link landing page. A switch bounce was then reproduced
+from its server-controlled value: the native thumb moved before the asynchronous
+save updated the value. Settings now holds an account-scoped pending switch
+position until the request settles. This is a visual preview; saved settings and
+backend access rules remain authoritative. Android 16 emulator checks with an
+intentional six-second local-only delay confirmed stable pending on/off positions,
+repeat-tap prevention, successful completion and rollback with feedback after a
+simulated failure. The emulator's delay routing and setting were restored afterward.

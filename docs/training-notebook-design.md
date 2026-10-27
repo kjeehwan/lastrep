@@ -313,6 +313,18 @@ not determine text alignment.
 
 - Primary button: min-height 48, horizontal padding 16, ink fill, on-primary label.
 - Secondary: same height, transparent/surface fill, control-border, ink label.
+- Settings switches sit beside their label in a dedicated trailing slot, with a
+  visible themed track in both states and a minimum 48 dp touch area. Keep the
+  thumb visually distinct from the track in Light and Dark. Put optional
+  explanations behind the standard inline information button.
+  A server-backed switch holds its requested position while saving, blocks
+  repeated changes during that request, and restores its saved state with an
+  error message if the save fails. Do not pull the thumb back while waiting.
+- Three long confirmation choices use full-width vertical actions, rather than
+  wrapping into uneven filled buttons. Give the main action ink fill, secondary
+  choices a control border, and a destructive secondary choice a danger outline
+  and label. Sharing link landing screens use the same notebook header, type,
+  action sizes and theme as the main app.
 - Text action: min-height 44, accent text; always a meaningful verb.
 - Icon button: use the role's visual size and target from section 3. Default
   standalone target is 48 x 48; named compact-header/help exceptions are 44 x 44.
