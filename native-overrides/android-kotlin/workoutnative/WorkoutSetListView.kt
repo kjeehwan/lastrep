@@ -556,7 +556,7 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
         binding.last.contentDescription = if (warmup) null else if (binding.last.isEnabled) "Set ${item.marker}, copy Last: ${item.last}" else "Set ${item.marker}, no prior record"
         binding.weight.contentDescription = "$setDescription, $weightHint"
         binding.reps.contentDescription = "$setDescription, $repsHint"
-        binding.rpe.contentDescription = "$setDescription, ${if (rpeHint == "0-4") "RIR" else "RPE"}"
+        binding.rpe.contentDescription = "$setDescription, ${if (rpeHint == "0-4") "RIR" else "RPE"}" + if (item.targetHint.isNotBlank()) ", target ${item.targetHint}" else ""
         binding.checkHitbox.isFocusable = true
         binding.checkHitbox.contentDescription = "$setDescription completion"
         binding.checkHitbox.accessibilityDelegate = object : View.AccessibilityDelegate() {

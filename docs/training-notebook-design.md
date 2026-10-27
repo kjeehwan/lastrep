@@ -585,6 +585,10 @@ claims or changed recommendations should be inferred from fixture prescriptions.
   Available weights stays in the three-dot exercise menu.
 - Cardio retains Demo, Rest and Note without a resistance-training tempo control.
 
+Imported target effort appears as a muted numeric placeholder, such as `8`,
+under the RPE/RIR column. Keep the word Target in accessible context rather than
+inside the narrow input. A suggested value remains separate from recorded effort.
+
 ### Resistance table geometry
 
 No extra inner card padding: table width equals screen content width.
