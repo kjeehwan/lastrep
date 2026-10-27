@@ -1,6 +1,7 @@
 # Workout sharing contract and release checks
 
-Last checked: October 27, 2026. Local implementation approved; deployment pending.
+Last checked: October 27, 2026. Merged in PR #61 and deployed. See the live
+verification record below for current coverage and remaining Play-build checks.
 The [approved study](workout-sharing-study.md) records the UI decisions.
 
 ## Identity, delivery and privacy
@@ -89,7 +90,7 @@ The existing `deleteMyAccount` function must be updated along with sharing.
 ## HTTPS link preparation
 
 Firebase Hosting serves only `hosting/workout-sharing`, not the Expo web export.
-The proposed default host is `lastrep-ebac5.web.app`; no custom domain or Vercel
+The production sharing host is `lastrep.web.app`; no purchased domain or Vercel
 connection is needed. New links use `/w/<opaque-token>` and display a read-only plan using
 the public bearer-token snapshot operation. The small same-origin
 `/api/workout-sharing` rewrite targets the callable in `asia-northeast3`.
@@ -110,7 +111,7 @@ be served as JSON over HTTPS with no redirect; see
 
 Until deployment is verified, native link generation uses its custom-scheme
 fallback. After authorized Hosting deployment, set
-`EXPO_PUBLIC_WORKOUT_SHARING_URL=https://lastrep-ebac5.web.app` in the intended
+`EXPO_PUBLIC_WORKOUT_SHARING_URL=https://lastrep.web.app` in the intended
 production build environment. This is a public URL, not a secret. Do not enable it
 in a build before the destination is live. Keep local QA pointed at demo Firebase;
 never switch a synthetic account to production by changing this URL alone.
@@ -209,3 +210,107 @@ against isolated local Firestore. The short HTTPS route now uses the same
 notebook dialog theme and tab-free spacing as the legacy shared-workout route.
 Real two-account sharing, public HTTPS previews and OS domain association remain
 post-deployment checks; native local tests do not establish those outcomes.
+
+
+## October 27 deployment and live verification
+
+PR #61 merged as `d644ba2`; PR and post-merge CI passed. Four focused commits
+separate the browser study, backend/HTTPS support, native integration and docs.
+The fresh ordinary suite passed 790 cases; all 40 emulator-dependent cases then
+passed separately (18 sharing transactions/retention/rules and 22 existing
+rules/sleep regressions). TypeScript, lint, backend build, native configuration,
+web export and whitespace checks passed. These results precede the live tests.
+
+Production project deployment is complete: all required indexes are ready and
+eight counter-free TTL policies are active. The sharing callable, nickname sync,
+expiry worker and account-deletion update are active. The expiry schedule is
+enabled every 15 minutes; read-only logs confirmed ten successful automatic
+executions. Inbox expiry remains transactional. No manual cleanup-job run was
+performed. Actual expiry deletion/counter cases also passed local emulator tests.
+
+Live tests used three newly created disposable accounts and synthetic plans.
+A separate QA Hosting site and a local dev APK used a dedicated test-domain
+association, without changing the production domain's package/signature claim.
+A temporary auth-storage namespace preserved the ordinary dev sessions. A
+standalone, locally built dev APK was used for cold-start checks because the
+Metro dev client stopped at its development-server chooser. No EAS build or AAB
+was started. All QA-only configuration and credentials stay outside tracked code.
+
+Verified against the deployed backend and native phone/emulator:
+
+- Default-off sharing, username uniqueness, saving identity without enabling,
+  enabled discovery and discovery removal after opting out.
+- Native multiple-recipient send, independent request deliveries, request badge,
+  acceptance, Inbox preview/read state and routine import/application. Recipient
+  records omit the other recipients; personal exercise notes are excluded.
+- Deliberate repeat delivery to an accepted recipient, no repeated pending request,
+  double-tap protection and concurrent same-ID retry producing one delivery.
+  Reusing a send ID for different content is rejected.
+- Decline cooldown, persistent block across opt-out/on and counter updates.
+- Set types, weights, repetitions, target effort, rest and tempo preserved;
+  repeated routine import reuses the existing routine. Editing a Sent copy leaves
+  the active workout and original snapshots unchanged. Include weights off
+  removes weights from the actual outgoing payload.
+- Both public production and QA HTTPS rewrites return the valid read-only plan.
+  Android verified the QA domain on both devices. Chrome rendered the preview;
+  its Open in Lastrep action opened the native preview.
+- A received emulator-only SMS opened the correct workout from a cold standalone
+  app start. A signed-out cold start allowed read-only preview; signing in resumed
+  that same workout without importing automatically.
+- A distinct incoming plan's Keep action preserved the current workout. Replace
+  applied it with one confirmation, and the new draft survived reopening.
+- Native Messages and Gmail drafts contain the correct title and HTTPS link; no
+  real message/email was sent. The synthetic Gmail drafts were discarded and
+  the synthetic Samsung Messages draft content was cleared.
+- With the dev package disabled, Chrome still displayed the plan and Open in
+  Lastrep reached Google Play's sign-in screen. The package was then re-enabled;
+  its saved data was retained. A signed-in store listing was not checked.
+- Native revocation rejects the old link in the app and production HTTPS, while
+  the recipient's imported routine remains. A separately created link, aged only
+  after verifying its disposable owner, is rejected as expired by the production
+  service and shows unavailable guidance in Chrome.
+
+After explicit user approval, all three disposable live accounts were deleted
+through the normal account-deletion callable. Deleting the sender removed hosted
+links and incoming sharing references and reset recipient counters, while the
+recipient's imported routine remained intact until that recipient account was
+also deleted. Normal dev APKs and the original local-demo sessions were restored;
+temporary auth configuration was removed from source.
+
+Final Play-installed checks remain: production certificate/domain verification,
+received-email link tapping, the signed-in store listing/install-and-return path,
+and a short real-sharing smoke test in the released package. QA domain verification
+is not verification of the Play-signed production APK. Publish the sharing changes
+from `doc/privacy.md` before public use, and enable the public HTTPS URL in the
+intended production build environment. A fresh Expo Doctor is required before
+any separately requested AAB build.
+
+
+## Short production address (October 27)
+
+The available Firebase site ID `lastrep` was claimed in the existing project.
+New production links use `https://lastrep.web.app/w/<opaque-token>`. The Hosting
+`sharing` target selects this site explicitly; the previous project-default
+host stays online. Production Android filters accept both hostnames, and the
+Play signing association is served directly from the new host. QA keeps its
+separate domain and the current review account/link; no review data is removed.
+
+EAS production configuration now includes the new public URL. Local production
+builds must set the same environment value explicitly. No AAB is started by this
+configuration change; the installed production app gains the updated filters
+only after its next build/update.
+
+
+## Approved follow-up release preparation (October 27)
+
+The user approved the clearer Google Play button, normal paragraph wrapping and
+numeric effort placeholders, and confirmed publication of the updated Notion
+privacy policy with an October 27 effective date. Phone verification preserved
+the review account and draft. Numeric RPE/RIR targets remain muted placeholders,
+with target context retained for accessibility; recorded effort stays separate.
+
+Fresh release checks passed TypeScript, lint and 790 ordinary tests (40
+emulator-dependent cases skipped). Latest Expo Doctor passed all 20 checks with
+the documented tracked-native exception. A separate final Doctor check is required
+after merge before the authorized local production AAB starts. The current review
+setup remains available until the release batch is complete.

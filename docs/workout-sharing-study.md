@@ -1,8 +1,10 @@
 # Workout sharing study
 
-Status (2026-10-27): browser design approved; native sharing, backend and 30-day
-retention implemented locally on `feature/workout-sharing-study`. Prepared for split commits and PR review. No deployment or AAB has been made for this feature. Fixtures are
-synthetic; real account data and health permissions were not used for sharing tests.
+Status (2026-10-27): browser and native design approved; implementation merged
+in PR #61 (`d644ba2`). Sharing functions, Firestore rules/indexes/TTL and Firebase
+Hosting are deployed. Live disposable-account and native link verification is
+recorded in the sharing contract. No production AAB has been built for sharing.
+Personal accounts, records and health permissions were not used for these tests.
 
 See [Sharing contract and deployment checks](workout-sharing-contract.md) for the
 payload, limits, retention, link setup and remaining release gates. Resume details
@@ -56,11 +58,12 @@ expire after 30 days, with explicit refresh starting a new window.
 
 Firebase Hosting's small companion page and production Android HTTPS association
 are prepared. The public certificate was verified against the Play-installed APK.
-The dev package does not claim production links. Hosting is not deployed; native
-external links remain custom-scheme links until the HTTPS base is enabled after
-deployment. Installed-app, signed-out continuation, explicit import and unavailable
-link paths exist; final verified-domain behavior requires deployment and an updated
-production app. Some messaging apps do not recognize the development custom
+The dev package does not claim production links. Hosting is live at
+`lastrep.web.app`. The production EAS profile sets that HTTPS sharing URL; direct
+local production builds must set the equivalent environment value. Development
+links use their own QA URL or the custom-scheme fallback. Installed-app, signed-out continuation, explicit import and unavailable
+link paths exist; final verified-domain behavior still requires an updated
+Play-installed production app. Some messaging apps do not recognize the development custom
 scheme; the direct Android handler works, but message-app tapping is not a
 reliable way to open a dev link. No message or email is sent automatically.
 
@@ -69,7 +72,8 @@ multiple-recipient delivery, duplicate-tap protection, Sent editing cancellation
 active-workout isolation, link import, repeat import, units/rest persistence,
 large text, keyboard visibility, dark mode and outside dismissal. Fresh automated
 results and remaining release gates are recorded in the contract. User phone
-acceptance was received October 27; local checks do not establish production behavior.
+acceptance was received October 27. The deployed-backend QA checks below are
+separate from final Play-installed package/signature verification.
 
 The following sections describe the approved browser behavior and retain their
 mockup-only qualifications.

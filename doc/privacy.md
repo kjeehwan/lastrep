@@ -1,6 +1,6 @@
 # Lastrep Privacy Policy
 
-**Effective Date:** October 26, 2026
+**Effective Date:** October 27, 2026
 
 Lastrep ("we", "our", or "us") operates the Lastrep mobile application.
 
