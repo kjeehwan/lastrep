@@ -6,7 +6,7 @@
     "node": "22"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "node scripts/prepare-sharing-contract.js && tsc",
     "serve": "npm run build && firebase emulators:start --only functions",
     "deploy": "firebase deploy --only functions"
   },

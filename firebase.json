@@ -7,9 +7,70 @@
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
   },
-  "storage": { "rules": "storage.rules" },
+  "storage": {
+    "rules": "storage.rules"
+  },
+  "hosting": {
+    "public": "hosting/workout-sharing",
+    "ignore": ["**/node_modules/**"],
+    "rewrites": [
+      {
+        "source": "/api/workout-sharing",
+        "function": {
+          "functionId": "workoutSharing",
+          "region": "asia-northeast3"
+        }
+      },
+      {
+        "source": "/shared-workout",
+        "destination": "/index.html"
+      },
+      {
+        "source": "/w/**",
+        "destination": "/index.html"
+      }
+    ],
+    "headers": [
+      {
+        "source": "**",
+        "headers": [
+          {
+            "key": "Referrer-Policy",
+            "value": "no-referrer"
+          },
+          {
+            "key": "X-Content-Type-Options",
+            "value": "nosniff"
+          },
+          {
+            "key": "X-Robots-Tag",
+            "value": "noindex, nofollow, noarchive"
+          },
+          {
+            "key": "Cache-Control",
+            "value": "no-store"
+          },
+          {
+            "key": "Content-Security-Policy",
+            "value": "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'"
+          }
+        ]
+      },
+      {
+        "source": "/.well-known/assetlinks.json",
+        "headers": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ]
+      }
+    ]
+  },
   "emulators": {
-    "storage": { "port": 9199 },
+    "storage": {
+      "port": 9199
+    },
     "firestore": {
       "port": 8080
     }

@@ -19,6 +19,14 @@ service cloud.firestore {
       allow update: if isOwnUser(uid) && entitlementFieldUnchanged();
       allow delete: if false;
 
+      match /sharing/{document} { allow read: if isOwnUser(uid); allow write: if false; }
+      match /sharingInbox/{document} { allow read: if isOwnUser(uid); allow write: if false; }
+      match /sharingSent/{document} { allow read: if isOwnUser(uid); allow write: if false; }
+      match /sharingLinks/{document} { allow read, write: if false; }
+      match /sharingReceipts/{document} { allow read, write: if false; }
+      match /sharingSenders/{document} { allow read, write: if false; }
+      match /sharingLimits/{document} { allow read, write: if false; }
+
       match /nutritionMeals/{mealId} {
         allow read, create, update, delete: if isOwnUser(uid);
       }
