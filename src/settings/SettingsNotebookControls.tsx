@@ -17,16 +17,17 @@ export function SettingsText({ children, live = false }: { children: ReactNode; 
   return <Text accessibilityLiveRegion={live ? "polite" : undefined} style={{ color: colors.muted, fontFamily: notebookFonts.body, fontSize: 16, lineHeight: 22 }}>{children}</Text>;
 }
 
-export function SettingsRow({ icon, label, children, value, onPress, disabled = false, strong = false }: { icon: ReactNode; label: string; children?: ReactNode; value?: string; onPress?: () => void; disabled?: boolean; strong?: boolean }) {
+export function SettingsRow({ icon, label, labelAccessory, control, children, value, onPress, disabled = false, strong = false }: { icon: ReactNode; label: string; labelAccessory?: ReactNode; control?: ReactNode; children?: ReactNode; value?: string; onPress?: () => void; disabled?: boolean; strong?: boolean }) {
   const { colors } = useNotebook();
   const large = useWindowDimensions().fontScale >= 1.5;
   const content = <>
     <View style={{ width: 24, minHeight: 24, alignItems: "center", justifyContent: "center" }}>{icon}</View>
-    <View style={{ flex: 1, gap: 8 }}><Text style={{ color: colors.ink, fontFamily: strong ? notebookFonts.semibold : notebookFonts.body, fontSize: 18 }}>{label}</Text>{children}{large && value ? <SettingsText>{value}</SettingsText> : null}</View>
+    <View style={{ flex: 1, gap: 8 }}><View style={{ flexDirection: "row", alignItems: "center" }}><Text style={{ flexShrink: 1, color: colors.ink, fontFamily: strong ? notebookFonts.semibold : notebookFonts.body, fontSize: 18 }}>{label}</Text>{labelAccessory}</View>{children}{large && value ? <SettingsText>{value}</SettingsText> : null}</View>
+    {control}
     {!large && value ? <Text style={{ flexShrink: 1, textAlign: "right", color: colors.muted, fontFamily: notebookFonts.body, fontSize: 16 }}>{value}</Text> : null}
     {onPress ? <ChevronRight size={18} strokeWidth={1.5} color={colors.muted} /> : null}
   </>;
-  const style = { flexDirection: "row" as const, alignItems: "flex-start" as const, gap: 12, minHeight: 48, paddingVertical: 12, opacity: disabled ? 0.5 : 1 };
+  const style = { flexDirection: "row" as const, alignItems: control ? "center" as const : "flex-start" as const, gap: 12, minHeight: 48, paddingVertical: 12, opacity: disabled ? 0.5 : 1 };
   return onPress ? <Pressable accessibilityRole="button" disabled={disabled} accessibilityState={{ disabled }} onPress={onPress} style={style}>{content}</Pressable> : <View style={style}>{content}</View>;
 }
 

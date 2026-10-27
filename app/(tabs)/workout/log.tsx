@@ -1045,7 +1045,7 @@ export default function WorkoutLog() {
             if (!append) { setSessionTitle(sharedPlan.title); setSessionDateText(toLocalDateKey(new Date())); resetElapsedTimer(); setRestTimerByExercise({}); setLastAppliedRoutineId(null); setRoutineBuilderMode(false); }
             setUiFeedback(append ? "Shared exercises added." : "Shared workout is ready to edit.");
           };
-          if (exercises.length) showAppDialog({ title: "A workout is already open", message: "Keep your workout, add the shared exercises, or replace the current draft. Replacing discards the current unsaved workout.", buttons: [{ text: "Keep current workout", role: "cancel" }, { text: "Add shared exercises", onPress: () => apply(true) }, { text: "Replace current workout", role: "destructive", onPress: () => apply(false) }] });
+          if (exercises.length) showAppDialog({ title: "A workout is already open", message: "Keep your workout, add the shared exercises, or replace the current draft. Replacing discards the current unsaved workout.", buttonLayout: "vertical", buttons: [{ text: "Keep current workout", role: "cancel", variant: "secondary" }, { text: "Add shared exercises", variant: "primary", onPress: () => apply(true) }, { text: "Replace current workout", role: "destructive", variant: "secondary", onPress: () => apply(false) }] });
           else apply(false);
         }
         const pendingExerciseNames = await popPendingExerciseSelection(activeUid);

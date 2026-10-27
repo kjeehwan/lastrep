@@ -16,9 +16,10 @@ export function NotebookAppDialog({ dialog, onClose }: { dialog: AppDialogOption
     {buttons.map((button, index) => {
       const cancel = button.role === "cancel";
       const destructive = button.role === "destructive";
-      const filled = !cancel && (!vertical || destructive);
-      return <TouchableOpacity key={index} accessibilityRole="button" onPress={() => { onClose(); button.onPress?.(); }} style={{ minHeight: 48, minWidth: 80, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 8, justifyContent: "center", alignItems: "center", ...(vertical ? { width: "100%", borderBottomWidth: filled ? 0 : 1, borderBottomColor: colors.rule } : { flexShrink: 1 }), backgroundColor: filled ? destructive ? colors.danger : colors.primary : "transparent" }}>
-        <Text style={{ fontFamily: notebookFonts.semibold, fontSize: 16, color: filled ? colors.onPrimary : colors.ink, textAlign: "center" }}>{button.text}</Text>
+      const filled = button.variant ? button.variant === "primary" : !cancel && (!vertical || destructive);
+      const outlined = button.variant === "secondary";
+      return <TouchableOpacity key={index} accessibilityRole="button" onPress={() => { onClose(); button.onPress?.(); }} style={{ minHeight: 48, minWidth: 80, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 6, justifyContent: "center", alignItems: "center", ...(vertical ? { width: "100%", ...(!filled && !outlined ? { borderBottomWidth: 1, borderBottomColor: colors.rule } : {}) } : { flexShrink: 1 }), ...(outlined ? { borderWidth: 1, borderColor: destructive ? colors.danger : colors.border } : {}), backgroundColor: filled ? destructive ? colors.danger : colors.primary : colors.surface }}>
+        <Text style={{ fontFamily: notebookFonts.semibold, fontSize: 16, color: filled ? colors.onPrimary : destructive ? colors.danger : colors.ink, textAlign: "center" }}>{button.text}</Text>
       </TouchableOpacity>;
     })}
   </View>;
