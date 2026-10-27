@@ -73,7 +73,10 @@ An actual AAB build remains a separate user-authorized step.
    Coordinate the counter after a local release so a later cloud build cannot
    reuse a version already uploaded to Play. A rejected cloud request can reserve
    a counter value without creating an AAB.
-3. Load/verify the production environment, including Firebase, Google sign-in and
+3. Set `$env:EXPO_PUBLIC_WORKOUT_SHARING_URL = 'https://lastrep.web.app'` for
+   production sharing links. EAS production builds receive this from `eas.json`;
+   direct Gradle builds need the explicit value.
+   Load/verify the production environment, including Firebase, Google sign-in and
    RevenueCat. Local `.env.local` can override other dotenv files. Do not assume
    a dev environment is suitable for production.
 4. Ensure the existing postinstall compatibility patches are applied. Do not run
