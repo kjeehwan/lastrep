@@ -1,3 +1,4 @@
+import { SharingProvider } from "../src/sharing/SharingProvider";
 import * as SplashScreen from 'expo-splash-screen';
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider, usePathname } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -68,6 +69,8 @@ function RootContent() {
     <Stack.Screen key="tabs" name="(tabs)" options={{ headerShown: false }} />,
     <Stack.Screen key="auth-sign-in" name="auth/sign-in" options={{ headerShown: false }} />,
     <Stack.Screen key="auth-sign-up" name="auth/sign-up" options={{ headerShown: false }} />,
+    <Stack.Screen key="shared-workout" name="shared-workout" options={{ headerShown: false }} />,
+    <Stack.Screen key="short-shared-workout" name="w/[token]" options={{ headerShown: false }} />,
     <Stack.Screen key="onboarding" name="onboarding" options={{ headerShown: false }} />,
     <Stack.Screen key="paywall" name="paywall" options={{ title: "Paywall" }} />,
     <Stack.Screen key="modal" name="modal" options={{ presentation: "modal", title: "Modal" }} />,
@@ -118,7 +121,7 @@ function RootContent() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-        <Stack>{stackScreens}</Stack>
+        <SharingProvider><Stack>{stackScreens}</Stack></SharingProvider>
         <OfflineBanner />
         <AppDialogHost />
         <StatusBar style={usesNotebookDesign(pathname) && colorScheme === 'light' ? 'dark' : 'light'} />

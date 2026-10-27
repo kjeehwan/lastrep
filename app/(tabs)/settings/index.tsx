@@ -1,3 +1,4 @@
+import { SharingSettingsSection } from "../../../src/sharing/SharingSettingsSection";
 import { UserRound, Mail, FileText } from "lucide-react-native";
 import { requireOptionalNativeModule } from "expo-modules-core";
 import { doc, onSnapshot } from "firebase/firestore";
@@ -276,6 +277,7 @@ function SettingsContent() {
         </View>
         {appearance.saving ? <SettingsText live>Saving appearance...</SettingsText> : appearance.feedback ? <SettingsText live>{appearance.feedback}</SettingsText> : null}
       </SettingsSection>
+      <SharingSettingsSection />
       <SettingsSection title="Support">
         <SettingsRow icon={<Mail size={20} strokeWidth={1.5} color={colors.ink} />} label="Report a problem" onPress={() => void contactSupport()} />
         <SettingsRow icon={<SettingsVersionIcon />} label="App version" value={installedVersion} />

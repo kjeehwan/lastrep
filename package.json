@@ -54,6 +54,7 @@
     "expo-auth-session": "~57.0.16",
     "expo-build-properties": "~57.0.22",
     "expo-camera": "~57.0.6",
+    "expo-clipboard": "~57.0.2",
     "expo-constants": "~57.0.22",
     "expo-dev-client": "~57.0.20",
     "expo-file-system": "~57.0.0",
@@ -107,7 +108,9 @@
   "expo": {
     "autolinking": {
       "android": {
-        "buildFromSource": ["expo-image-picker"]
+        "buildFromSource": [
+          "expo-image-picker"
+        ]
       }
     },
     "doctor": {

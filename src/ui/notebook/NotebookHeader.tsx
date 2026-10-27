@@ -4,7 +4,8 @@ import { ChevronLeft } from "lucide-react-native";
 import { useNotebook } from "./Notebook";
 import { notebookFonts } from "./tokens";
 
-export function NotebookHeader({ title, onBack, action, onAction, disabled = false, compact = false }: {
+export function NotebookHeader({ title, onBack, action, onAction, disabled = false, compact = false, right }: {
+  right?: React.ReactNode;
   title: string; onBack: () => void; action?: string; onAction?: () => void; disabled?: boolean; compact?: boolean;
 }) {
   const { colors } = useNotebook();
@@ -15,7 +16,7 @@ export function NotebookHeader({ title, onBack, action, onAction, disabled = fal
         <ChevronLeft size={22} strokeWidth={1.5} color={colors.ink} />
       </Pressable>
       <Text accessibilityRole="header" style={[styles.title, { color: colors.ink }]}>{title}</Text>
-      {action && !large ? <Pressable accessibilityRole="button" accessibilityState={{ disabled }} disabled={disabled} onPress={onAction} style={[styles.action, { backgroundColor: colors.primary, opacity: disabled ? 0.5 : 1 }]}><Text style={[styles.actionText, { color: colors.onPrimary }]}>{action}</Text></Pressable> : <View style={{ width: 44 }} />}
+      {right ?? (action && !large ? <Pressable accessibilityRole="button" accessibilityState={{ disabled }} disabled={disabled} onPress={onAction} style={[styles.action, { backgroundColor: colors.primary, opacity: disabled ? 0.5 : 1 }]}><Text style={[styles.actionText, { color: colors.onPrimary }]}>{action}</Text></Pressable> : <View style={{ width: 44 }} />)}
     </View>
     {action && large ? <Pressable accessibilityRole="button" disabled={disabled} onPress={onAction} style={[styles.action, { alignSelf: "flex-end", backgroundColor: colors.primary, opacity: disabled ? 0.5 : 1 }]}><Text style={[styles.actionText, { color: colors.onPrimary }]}>{action}</Text></Pressable> : null}
   </View>;

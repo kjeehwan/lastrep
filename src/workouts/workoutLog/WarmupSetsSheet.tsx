@@ -36,7 +36,8 @@ function WarmupPreviewRow({ row, index, unit, styles, onChange, onRemove, onRegi
   </ReanimatedSwipeable>;
 }
 
-export function WarmupSetsSheet({ uid, name, sets, unit, barbell, settings, onClose, onApply }: {
+export function WarmupSetsSheet({ uid, name, sets, unit, barbell, settings, loadRemembered = true, onClose, onApply }: {
+  loadRemembered?: boolean;
   uid: string; name: string; sets: WarmupSet[]; unit: WarmupUnit; barbell: boolean; settings?: AvailableWeights;
   onClose: () => void; onApply: (rows: WarmupRow[], pattern: WarmupPattern) => string | null;
 }) {
@@ -55,7 +56,7 @@ export function WarmupSetsSheet({ uid, name, sets, unit, barbell, settings, onCl
   const serial = useRef(0), swipeables = useRef(new Map<string, SwipeableMethods>()), opened = useRef<SwipeableMethods | null>(null);
   useEffect(() => {
     let current = true;
-    void AsyncStorage.getItem(warmupKey(uid, name)).then(raw => {
+    void (loadRemembered ? AsyncStorage.getItem(warmupKey(uid, name)) : Promise.resolve(null)).then(raw => {
       if (!current) return;
       const saved = readWarmupPattern(raw), next = saved ?? defaultWarmupPattern(barbell, unit);
       setPattern(next); setRemembered(!!saved);
@@ -117,7 +118,7 @@ rows.map((row, index) => <WarmupPreviewRow key={row.id} row={row} index={index} 
           {rows.length ? <Text style={styles.hint}>Swipe left on a set to delete.</Text> : null}
           <TouchableOpacity disabled={!loaded || rows.length + kept.length >= 12} accessibilityRole="button" onPress={() => { setRows(current => [...current, { id: `manual-${serial.current++}`, weight: "", reps: "", fixed: false }]); setError(""); }} style={styles.textButton}><Text style={styles.link}>+ Add a set</Text></TouchableOpacity>
           {error ? <Text accessibilityRole="alert" accessibilityLiveRegion="polite" style={styles.error}>{error}</Text> : null}
-          <Text style={styles.memory}>This setup is remembered for {name} when you add it. Working sets stay unchanged.</Text>
+          <Text style={styles.memory}>{loadRemembered ? `This setup is remembered for ${name} when you add it. Working sets stay unchanged.` : "Warm-up sets are added to this shared plan. Working sets stay unchanged."}</Text>
           <TouchableOpacity disabled={!loaded || !!errorForRows || !count} accessibilityState={{ disabled: !loaded || !!errorForRows || !count }} onPress={apply} accessibilityRole="button" style={[styles.primary, (!loaded || !!errorForRows || !count) && styles.disabled]}><Text style={styles.primaryText}>{count ? `Add ${count} warm-up set${count === 1 ? "" : "s"}` : existing.length ? "Warm-up sets already added" : "Add warm-up sets"}</Text></TouchableOpacity>
           <TouchableOpacity onPress={onClose} accessibilityRole="button" style={styles.textButton}><Text style={styles.link}>Cancel</Text></TouchableOpacity>
         </AdaptiveModalCard>

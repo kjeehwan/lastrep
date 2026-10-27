@@ -1,5 +1,5 @@
 export function usesNotebookDesign(pathname: string): boolean {
-  return ["/onboarding/experience", "/onboarding/availability", "/onboarding/nickname", "/onboarding/health"].includes(pathname) || pathname === "/auth/sign-in" || pathname === "/auth/sign-up" || pathname === "/home" || ["/workout", "/nutrition", "/sleep", "/profile", "/settings"].some((root) => pathname === root || pathname.startsWith(`${root}/`));
+  return pathname.startsWith("/w/") || ["/onboarding/experience", "/onboarding/availability", "/onboarding/nickname", "/onboarding/health"].includes(pathname) || pathname === "/shared-workout" || pathname === "/auth/sign-in" || pathname === "/auth/sign-up" || pathname === "/home" || ["/workout", "/nutrition", "/sleep", "/profile", "/settings"].some((root) => pathname === root || pathname.startsWith(`${root}/`));
 }
 
 export function notebookTabBarHeight(bottomInset: number, fontScale: number): number {
@@ -7,5 +7,5 @@ export function notebookTabBarHeight(bottomInset: number, fontScale: number): nu
 }
 
 export function notebookDialogTabHeight(pathname: string, bottomInset: number, fontScale: number): number | undefined {
-  return usesNotebookDesign(pathname) && !pathname.startsWith("/auth/") && !pathname.startsWith("/onboarding/") ? notebookTabBarHeight(bottomInset, fontScale) : undefined;
+  return usesNotebookDesign(pathname) && pathname !== "/shared-workout" && !pathname.startsWith("/w/") && !pathname.startsWith("/auth/") && !pathname.startsWith("/onboarding/") ? notebookTabBarHeight(bottomInset, fontScale) : undefined;
 }

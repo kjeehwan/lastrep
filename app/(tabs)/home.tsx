@@ -1,3 +1,4 @@
+import { SharingInboxButton } from "../../src/sharing/SharingProvider";
 import { DailyMovement } from "../../src/health/DailyMovement";
 import { EditWorkoutDetailsSheet } from "../../src/home/EditWorkoutDetailsSheet";
 import { recordedDuration, workoutDurationLabel } from "../../src/workouts/workoutDetails";
@@ -1179,6 +1180,7 @@ function Home() {
         <LastrepLogo variant="header" />
         <View style={styles.iconContainer}>
           <TouchableOpacity style={styles.headerUtility} accessibilityRole="button" accessibilityLabel="Open calendar" onPress={() => calendarRef.current?.open()}><NotebookUtilityIcon name="calendar" color={colors.ink} /></TouchableOpacity>
+          <SharingInboxButton />
           <TouchableOpacity style={styles.headerUtility} accessibilityRole="button" accessibilityLabel="Open settings" onPress={() => router.push("/settings" as Href)}><NotebookUtilityIcon name="settings" color={colors.ink} /></TouchableOpacity>
           <TouchableOpacity style={styles.headerUtility} accessibilityRole="button" accessibilityLabel={`View profile, ${profileDataLoaded ? userNickname ?? "Lifter" : "not loaded"}`} onPress={() => setShowProfileModal(true)}>
             {uid && profilePhotoUri ? <ProfilePhoto uid={uid} reference={profilePhotoUri} initial={(userNickname ?? "L").charAt(0).toUpperCase()} style={styles.headerAvatar} contentFit="cover" /> : <View style={[styles.headerAvatar, styles.headerAvatarPlaceholder]}><Text style={styles.headerAvatarInitial}>{(userNickname ?? "L").charAt(0).toUpperCase()}</Text></View>}

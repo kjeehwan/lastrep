@@ -1,7 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'; // Import AsyncStorage
 import { getApp, getApps, initializeApp } from 'firebase/app';
-import { getAuth, getReactNativePersistence, initializeAuth } from 'firebase/auth'; // Firebase Authentication
-import { getFirestore, initializeFirestore, setLogLevel as setFirestoreLogLevel } from 'firebase/firestore';
+import { connectAuthEmulator, getAuth, getReactNativePersistence, initializeAuth } from 'firebase/auth'; // Firebase Authentication
+import { connectFirestoreEmulator, getFirestore, initializeFirestore, setLogLevel as setFirestoreLogLevel } from 'firebase/firestore';
+import { connectFunctionsEmulator, getFunctions } from 'firebase/functions';
 import { Platform } from 'react-native';
 
 // Firebase configuration (populate these values from your .env file)
@@ -42,4 +43,14 @@ const db =
       })();
 
 // Export the Firebase services
+// An explicit demo project is required: local QA must never silently target real accounts.
+const emulatorHost = __DEV__ && firebaseConfig.projectId?.startsWith('demo-') ? process.env.EXPO_PUBLIC_LOCAL_FIREBASE_HOST : undefined;
+const emulatorState = globalThis as typeof globalThis & { __lastrepFirebaseEmulators?: boolean };
+if (emulatorHost && !emulatorState.__lastrepFirebaseEmulators) {
+  if (!['127.0.0.1', 'localhost', '10.0.2.2'].includes(emulatorHost)) throw Error('Use a local Firebase emulator host.');
+  connectAuthEmulator(auth, `http://${emulatorHost}:19100`, { disableWarnings: true });
+  connectFirestoreEmulator(db, emulatorHost, 18081);
+  connectFunctionsEmulator(getFunctions(app, 'asia-northeast3'), emulatorHost, 15001);
+  emulatorState.__lastrepFirebaseEmulators = true;
+}
 export { auth, db, firebaseConfig };

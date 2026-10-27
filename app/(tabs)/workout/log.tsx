@@ -1,422 +1,120 @@
-import { NotebookTextInput } from "../../../src/ui/notebook/NotebookTextInput";
-import { WarmupSetsSheet } from "../../../src/workouts/workoutLog/WarmupSetsSheet";
-import { insertWarmupSets, warmupKey, type WarmupRow, type WarmupPattern, type WarmupUnit } from "../../../src/workouts/workoutLog/warmupSets";
-import { Play, Clock3, Gauge, Check } from "lucide-react-native";
-import { NotebookHeader } from "../../../src/ui/notebook/NotebookHeader";
-import { notebookRowHeight } from "../../../src/ui/notebook/tokens";
-import { useNumberEntry } from "../../../src/ui/notebook/useNumberEntry";
-import { lastResistanceSet, setRowPresentation } from "../../../src/workouts/workoutLog/setPresentation";
-import { useNotebook, useNotebookStyles, notebookSheet } from "../../../src/ui/notebook/Notebook";
-import { notebookFonts, type NotebookColors } from "../../../src/ui/notebook/tokens";
-import { useEventCallbacks } from "../../../src/hooks/useEventCallbacks";
-import { useInputVisibility } from "../../../src/ui/useInputVisibility";
-import { KeyboardAwareModalFrame } from "../../../src/ui/KeyboardAwareModalFrame";
 import { Ionicons } from "@expo/vector-icons";
-import { useNow } from "../../../src/hooks/useNow";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { createAudioPlayer } from "expo-audio";
-import { useFocusEffect, useIsFocused, useLocalSearchParams, useRouter } from "expo-router";
-import { getAuth, onAuthStateChanged } from "firebase/auth";
-import {
-  addDoc,
-  collection,
-  deleteDoc,
-  doc,
-  getDoc,
-  getDocs,
-  limit,
-  onSnapshot,
-  orderBy,
-  query,
-  setDoc,
-  Timestamp,
-} from "firebase/firestore";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  AppState,
-  BackHandler,
-  Keyboard,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  TouchableWithoutFeedback,
-  View,
-  useWindowDimensions,
-} from "react-native";
 import Slider from "@react-native-community/slider";
-import { Image } from "expo-image";
-import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import { AdaptiveModalCard } from "../../../src/ui/AdaptiveModalCard";
-import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
+import { createAudioPlayer } from "expo-audio";
+import { useFocusEffect,useIsFocused,useLocalSearchParams,useRouter } from "expo-router";
+import { getAuth,onAuthStateChanged } from "firebase/auth";
+import {
+Timestamp,
+addDoc,
+collection,
+deleteDoc,
+doc,
+getDoc,
+getDocs,
+limit,
+onSnapshot,
+orderBy,
+query,
+setDoc,
+} from "firebase/firestore";
+import { useCallback,useEffect,useMemo,useRef,useState } from "react";
+import {
+AppState,
+BackHandler,
+Keyboard,
+KeyboardAvoidingView,
+Platform,
+ScrollView,
+StyleSheet,
+Text,
+TextInput,
+TouchableOpacity,
+TouchableWithoutFeedback,
+View,
+useWindowDimensions,
+} from "react-native";
+import { Gesture,GestureDetector } from "react-native-gesture-handler";
+import { SafeAreaView,useSafeAreaInsets } from "react-native-safe-area-context";
 import { db } from "../../../src/config/firebaseConfig";
-import WorkoutGestureTextInput from "../../../src/components/WorkoutGestureTextInput";
-import type { Decision, LastResultPayload } from "../../../src/types/decision";
+import { useEventCallbacks } from "../../../src/hooks/useEventCallbacks";
+import { useNow } from "../../../src/hooks/useNow";
 import { safeParseDecisionOutput } from "../../../src/services/decision/decisionValidation";
-import { AvailableWeightsModal } from "../../../src/workouts/workoutLog/AvailableWeightsModal";
-import { useAvailableWeights } from "../../../src/workouts/workoutLog/useAvailableWeights";
-import { weightPreferenceKey } from "../../../src/workouts/availableWeights";
-import { workoutGuidanceSignature, withAvailableWeights } from "../../../src/services/decision/workoutGuidance";
-import { applyTodayPlanToWorkoutDraft } from "../../../src/services/decision/todayPlanDraft";
-import { parseWorkoutDraftPlan, getDailyContextSummary } from "../../../src/services/decision/todayPlanContext";
+import { getDailyContextSummary,parseWorkoutDraftPlan } from "../../../src/services/decision/todayPlanContext";
 import { TodayPlanContextModal } from "../../../src/services/decision/TodayPlanContextModal";
-import { useWorkoutTodayPlan } from "../../../src/workouts/workoutLog/useWorkoutTodayPlan";
-import { WorkoutTodayPlan } from "../../../src/workouts/workoutLog/WorkoutTodayPlan";
-import { showAppAlert, showAppDialog } from "../../../src/ui/appDialog";
+import { applyTodayPlanToWorkoutDraft } from "../../../src/services/decision/todayPlanDraft";
+import { withAvailableWeights,workoutGuidanceSignature } from "../../../src/services/decision/workoutGuidance";
+import { popSharedWorkout } from "../../../src/sharing/sharingBridge";
+import { sharingPlanToExercises,workoutToSharingPlan } from "../../../src/sharing/sharingPlan";
+import { SharingInboxButton,useSharing } from "../../../src/sharing/SharingProvider";
+import type { Decision,LastResultPayload } from "../../../src/types/decision";
+import { AdaptiveModalCard } from "../../../src/ui/AdaptiveModalCard";
+import { showAppAlert,showAppDialog } from "../../../src/ui/appDialog";
+import { KeyboardAwareModalFrame } from "../../../src/ui/KeyboardAwareModalFrame";
+import { useNotebook,useNotebookStyles } from "../../../src/ui/notebook/Notebook";
+import { NotebookHeader } from "../../../src/ui/notebook/NotebookHeader";
+import { NotebookModal as Modal } from "../../../src/ui/notebook/NotebookModal";
+import { NotebookTextInput } from "../../../src/ui/notebook/NotebookTextInput";
+import { useNumberEntry } from "../../../src/ui/notebook/useNumberEntry";
+import { useInputVisibility } from "../../../src/ui/useInputVisibility";
 import { isExpectedOfflineError } from "../../../src/utils/networkErrors";
 import { scheduleAfterInteractions } from "../../../src/utils/scheduleAfterInteractions";
 import { scheduleAfterPaint } from "../../../src/utils/scheduleAfterPaint";
 import { popPendingExerciseSelection } from "../../../src/workouts/addExerciseBridge";
-import { getExerciseSubstitutions, indexExerciseSearch, replacementSearchOptions, resolveReplacementTarget } from "../../../src/workouts/exerciseSearch";
+import { weightPreferenceKey } from "../../../src/workouts/availableWeights";
+import { effortLabel,effortToRpe,formatEffort,isValidWorkoutEffort,resolveEffortScale,type EffortScale } from "../../../src/workouts/effortScale";
+import {
+EXERCISE_CATALOG,
+type ExerciseCatalogItem,
+type ExerciseGroupKey
+} from "../../../src/workouts/exerciseCatalog";
+import { buildExerciseProgressInsights } from "../../../src/workouts/exerciseProgressInsights";
+import {
+recommendExerciseProgression,
+type ExercisePerformanceSession,
+type ProgressionPhase,
+} from "../../../src/workouts/exerciseProgression";
+import { getExerciseSubstitutions,indexExerciseSearch,replacementSearchOptions,resolveReplacementTarget } from "../../../src/workouts/exerciseSearch";
 import { loadFreeExerciseDbCatalog } from "../../../src/workouts/freeExerciseDbCatalog";
 import { resolveFreeExerciseDbImagesForNames } from "../../../src/workouts/freeExerciseDbImages";
-import {
-  EXERCISE_CATALOG,
-  EXERCISE_GROUPS,
-  type ExerciseCatalogItem,
-  type ExerciseGroupKey,
-} from "../../../src/workouts/exerciseCatalog";
-import {
-  DEFAULT_WORKOUT_TEMPLATES,
-  getAverageRpe,
-  getDominantGroup,
-  pickTemplate,
-  resolveRecommendationTargets,
-  type WorkoutLike,
-} from "../../../src/workouts/recommendationHeuristics";
-import {
-  recommendExerciseProgression,
-  type ExercisePerformanceSession,
-  type ProgressionPhase,
-} from "../../../src/workouts/exerciseProgression";
-import { buildExerciseProgressInsights } from "../../../src/workouts/exerciseProgressInsights";
-import { selectRecommendedExercises } from "../../../src/workouts/recommendationExerciseSelection";
 import { getCalendarMatrix } from "../../../src/workouts/homeInsights";
+import { selectRecommendedExercises } from "../../../src/workouts/recommendationExerciseSelection";
+import {
+DEFAULT_WORKOUT_TEMPLATES,
+getAverageRpe,
+getDominantGroup,
+pickTemplate,
+resolveRecommendationTargets,
+type WorkoutLike,
+} from "../../../src/workouts/recommendationHeuristics";
+import { AvailableWeightsModal } from "../../../src/workouts/workoutLog/AvailableWeightsModal";
+import { resolveCardioZone,toggleCardioChoice } from "../../../src/workouts/workoutLog/cardioZone";
+import { ExerciseProgressSummary } from "../../../src/workouts/workoutLog/ExerciseProgressSummary";
+import { freshSetEffort } from "../../../src/workouts/workoutLog/freshSetEffort";
+import { parseRecommendationUsage,recommendationFeedback,recommendationQuestions,type FeedbackAnswers } from "../../../src/workouts/workoutLog/recommendationFeedback";
+import { setRowPresentation } from "../../../src/workouts/workoutLog/setPresentation";
+import { advanceRest,nextRestDeadlineDelay,pauseRest,startRest,type RestClock } from "../../../src/workouts/workoutLog/timerClock";
+import { RestTimerText } from "../../../src/workouts/workoutLog/TimerText";
+import { useAvailableWeights } from "../../../src/workouts/workoutLog/useAvailableWeights";
 import { useWorkoutDraftPersistence } from "../../../src/workouts/workoutLog/useWorkoutDraftPersistence";
 import { useWorkoutElapsedTimer } from "../../../src/workouts/workoutLog/useWorkoutElapsedTimer";
-import { parseRecommendationUsage, recommendationQuestions, recommendationFeedback, type FeedbackAnswers } from "../../../src/workouts/workoutLog/recommendationFeedback";
+import { useWorkoutTodayPlan } from "../../../src/workouts/workoutLog/useWorkoutTodayPlan";
+import { insertWarmupSets,warmupKey,type WarmupPattern,type WarmupRow,type WarmupUnit } from "../../../src/workouts/workoutLog/warmupSets";
+import { WarmupSetsSheet } from "../../../src/workouts/workoutLog/WarmupSetsSheet";
 import { serializeWorkoutDraft } from "../../../src/workouts/workoutLog/workoutDraft";
+import { WorkoutExerciseActions } from "../../../src/workouts/workoutLog/WorkoutExerciseActions";
+import { useWorkoutExerciseCards } from "../../../src/workouts/workoutLog/WorkoutExerciseCards";
+import { WorkoutExerciseDemo } from "../../../src/workouts/workoutLog/WorkoutExerciseDemo";
+import { createStyles } from "../../../src/workouts/workoutLog/workoutLogStyles";
 import { WorkoutModalShell } from "../../../src/workouts/workoutLog/WorkoutModalShell";
 import { WorkoutRecommendationSection } from "../../../src/workouts/workoutLog/WorkoutRecommendationSection";
-import { NotebookModal as Modal } from "../../../src/ui/notebook/NotebookModal";
 import { WorkoutSessionCard } from "../../../src/workouts/workoutLog/WorkoutSessionCard";
-import { WorkoutNativeSetRows } from "../../../src/workouts/workoutLog/WorkoutNativeSetRows";
-import { ExerciseProgressSummary } from "../../../src/workouts/workoutLog/ExerciseProgressSummary";
-import { effortInputValue, effortLabel, effortToRpe, formatEffort, isValidWorkoutEffort, resolveEffortScale, type EffortInput, type EffortScale } from "../../../src/workouts/effortScale";
-import { advanceRest, nextRestDeadlineDelay, pauseRest, startRest, type RestClock } from "../../../src/workouts/workoutLog/timerClock";
-import { RestTimerText } from "../../../src/workouts/workoutLog/TimerText";
-import { freshSetEffort } from "../../../src/workouts/workoutLog/freshSetEffort";
-import { applyCardioZone, resolveCardioZone, toggleCardioChoice } from "../../../src/workouts/workoutLog/cardioZone";
+import { WorkoutTodayPlan } from "../../../src/workouts/workoutLog/WorkoutTodayPlan";
 
-type Unit = "kg" | "lbs" | "km" | "mi";
-type SetType = "warmup" | "normal" | "failure" | "drop";
-type ExerciseMode = "resistance" | "cardio";
-type RecommendationFocusId =
-  | "auto"
-  | "chest"
-  | "chest-triceps"
-  | "back"
-  | "back-biceps"
-  | "legs"
-  | "anterior-legs"
-  | "posterior-legs"
-  | "shoulders"
-  | "shoulders-arms"
-  | "arms"
-  | "push"
-  | "pull";
-type RecommendationLengthId = "quick" | "standard" | "extended";
-type SetEntry = {
-  weightKg: number | null;
-  // Preserve partially typed decimals such as "20." until the user finishes the value.
-  weightText?: string;
-  reps: string;
-  rpe?: string;
-  effortInput?: EffortInput;
-  distanceKm?: number | null;
-  durationSec?: number | null;
-  zone?: string;
-  setType?: SetType;
-  done: boolean;
-  baselineWeightKg?: number | null;
-  baselineReps?: string;
-  baselineAdjusted?: boolean;
-};
-type Exercise = {
-  id: string;
-  name: string;
-  notes?: string;
-  tempo?: string;
-  cardioSessionType?: "steady" | "intervals" | "sprint" | "recovery";
-  cardioEffortLevel?: "easy" | "moderate" | "hard" | "max";
-  sets: SetEntry[];
-};
-type FollowedAnswer = "yes" | "partial" | "no";
-type HelpfulAnswer = "yes" | "neutral" | "no";
-type PastWorkout = {
-  id: string;
-  title: string;
-  date: Date;
-  durationMin?: number | null;
-  exercises: {
-    name: string;
-    notes?: string;
-    tempo?: string;
-    zone?: string;
-    mode?: ExerciseMode;
-    cardioSessionType?: "steady" | "intervals" | "sprint" | "recovery";
-    cardioEffortLevel?: "easy" | "moderate" | "hard" | "max";
-    sets: {
-      weightKg: number | null;
-      reps: string;
-      rpe?: string;
-      distanceKm?: number | null;
-      durationSec?: number | null;
-      zone?: string;
-      setType?: SetType;
-    }[];
-  }[];
-};
-
-const isSameDateKey = (left: string, right: string) => left.trim() === right.trim();
-
-type Routine = {
-  id: string;
-  name: string;
-  exercises: {
-    name: string;
-    notes?: string;
-    tempo?: string;
-    zone?: string;
-    mode?: ExerciseMode;
-    cardioSessionType?: "steady" | "intervals" | "sprint" | "recovery";
-    cardioEffortLevel?: "easy" | "moderate" | "hard" | "max";
-    sets: {
-      reps: string;
-      defaultWeightKg?: number | null;
-      defaultDistanceKm?: number | null;
-      defaultDurationSec?: number | null;
-      defaultZone?: string;
-      setType?: SetType;
-    }[];
-  }[];
-  createdAt: Date | null;
-  updatedAt: Date | null;
-};
-
-const DRAFT_KEY_PREFIX = "workout-log-draft-v1";
-const FAVORITES_KEY = "workout-favorite-exercises-v1";
-const FAVORITES_KEY_PREFIX = "workout-favorite-exercises-v1";
-const REST_PREFS_KEY = "workout-rest-preferences-v1";
-const REST_PREFS_KEY_PREFIX = "workout-rest-preferences-v1";
-const RECOMMENDATION_LENGTH_KEY_PREFIX = "workout-recommendation-length-v1";
-const TEMPO_FORMAT_HINT =
-  "Use eccentric-hold-concentric-hold (e.g. 3-0-X-0). Numbers are seconds, X is explosive.";
-const TEMPO_TOKENS = ["X", "0", "1", "2", "3"] as const;
-const DEFAULT_TEMPO = "3-0-X-0";
-const DEFAULT_TEMPO_INDICES = [4, 1, 0, 1];
-const WEEKDAY_LABELS = ["S", "M", "T", "W", "T", "F", "S"] as const;
-const MONTH_LABELS = [
-  "January",
-  "February",
-  "March",
-  "April",
-  "May",
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December",
-] as const;
-const SET_TYPE_LABELS: { value: SetType; title: string; marker: string; description: string }[] = [
-  { value: "warmup", title: "Warm-up", marker: "W", description: "Prep set with lighter load." },
-  { value: "normal", title: "Normal", marker: "N", description: "Standard working set." },
-  { value: "failure", title: "Failure", marker: "F", description: "Set pushed to failure." },
-  { value: "drop", title: "Drop", marker: "D", description: "Immediately reduce load and continue." },
-];
-const CARDIO_SESSION_TYPES = [
-  { value: "steady", label: "Steady" },
-  { value: "intervals", label: "Intervals" },
-  { value: "sprint", label: "Sprint" },
-  { value: "recovery", label: "Recovery" },
-] as const;
-const CARDIO_EFFORT_LEVELS = [
-  { value: "easy", label: "Easy" },
-  { value: "moderate", label: "Moderate" },
-  { value: "hard", label: "Hard" },
-  { value: "max", label: "Max" },
-] as const;
-const RECOMMENDATION_FOCUSES: {
-  id: RecommendationFocusId;
-  label: string;
-  template?: { name: string; primaryGroup: string; exercises: string[] };
-}[] = [
-  { id: "auto", label: "Auto" },
-  {
-    id: "chest",
-    label: "Chest",
-    template: { name: "Chest", primaryGroup: "chest", exercises: ["Bench Press", "Incline Dumbbell Press", "Cable Fly"] },
-  },
-  {
-    id: "chest-triceps",
-    label: "Chest + Triceps",
-    template: { name: "Chest + Triceps", primaryGroup: "chest", exercises: ["Bench Press", "Incline Dumbbell Press", "Tricep Pushdown"] },
-  },
-  {
-    id: "back",
-    label: "Back",
-    template: { name: "Back", primaryGroup: "back", exercises: ["Barbell Row", "Lat Pulldown", "Seated Cable Row"] },
-  },
-  {
-    id: "back-biceps",
-    label: "Back + Biceps",
-    template: { name: "Back + Biceps", primaryGroup: "back", exercises: ["Barbell Row", "Lat Pulldown", "Bicep Curl"] },
-  },
-  {
-    id: "legs",
-    label: "Legs",
-    template: { name: "Legs", primaryGroup: "legs", exercises: ["Squat", "Romanian Deadlift", "Leg Press"] },
-  },
-  {
-    id: "anterior-legs",
-    label: "Anterior Legs",
-    template: { name: "Anterior Legs", primaryGroup: "legs", exercises: ["Squat", "Leg Press", "Leg Extension"] },
-  },
-  {
-    id: "posterior-legs",
-    label: "Posterior Legs",
-    template: { name: "Posterior Legs", primaryGroup: "legs", exercises: ["Romanian Deadlift", "Leg Curl", "Hip Thrust"] },
-  },
-  {
-    id: "shoulders",
-    label: "Shoulders",
-    template: { name: "Shoulders", primaryGroup: "shoulders", exercises: ["Overhead Press", "Lateral Raise", "Rear Delt Fly"] },
-  },
-  {
-    id: "shoulders-arms",
-    label: "Shoulders + Arms",
-    template: { name: "Shoulders + Arms", primaryGroup: "shoulders", exercises: ["Overhead Press", "Lateral Raise", "Bicep Curl", "Tricep Pushdown"] },
-  },
-  {
-    id: "arms",
-    label: "Arms",
-    template: { name: "Arms", primaryGroup: "arms", exercises: ["Bicep Curl", "Tricep Pushdown", "Skullcrusher"] },
-  },
-  {
-    id: "push",
-    label: "Push",
-    template: { name: "Push", primaryGroup: "chest", exercises: ["Bench Press", "Overhead Press", "Tricep Pushdown"] },
-  },
-  {
-    id: "pull",
-    label: "Pull",
-    template: { name: "Pull", primaryGroup: "back", exercises: ["Barbell Row", "Lat Pulldown", "Bicep Curl"] },
-  },
-];
-const RECOMMENDATION_LENGTHS: {
-  id: RecommendationLengthId;
-  title: string;
-  detail: string;
-  exerciseCount: number;
-  targetHardSets: number;
-}[] = [
-  { id: "quick", title: "Quick", detail: "30-40 min | 8-10 hard sets", exerciseCount: 3, targetHardSets: 9 },
-  { id: "standard", title: "Standard", detail: "45-60 min | 12-16 hard sets", exerciseCount: 4, targetHardSets: 14 },
-  { id: "extended", title: "Extended", detail: "60-75 min | 16-20 hard sets", exerciseCount: 5, targetHardSets: 18 },
-];
-const isValidSetType = (value: string): value is SetType =>
-  value === "warmup" || value === "normal" || value === "failure" || value === "drop";
-const toSetType = (value: unknown): SetType =>
-  typeof value === "string" && isValidSetType(value) ? value : "normal";
-const toLocalDateKey = (date: Date) =>
-  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
-    date.getDate()
-  ).padStart(2, "0")}`;
-
-const isValidTempo = (value: string) => {
-  const trimmed = value.trim();
-  if (!trimmed) return true;
-  return /^(?:\d+|[xX])-(?:\d+|[xX])-(?:\d+|[xX])-(?:\d+|[xX])$/.test(trimmed);
-};
-
-const tempoTokenToIndex = (token: string) => {
-  const normalized = token.trim().toUpperCase();
-  const idx = TEMPO_TOKENS.findIndex((item) => item === normalized);
-  return idx >= 0 ? idx : null;
-};
-
-const parseTempoToIndices = (tempo?: string) => {
-  const candidate = (tempo || "").trim() || DEFAULT_TEMPO;
-  const parts = candidate.split("-");
-  if (parts.length !== 4) return [...DEFAULT_TEMPO_INDICES];
-  const mapped = parts.map((part) => tempoTokenToIndex(part));
-  if (mapped.some((value) => value == null)) return [...DEFAULT_TEMPO_INDICES];
-  return mapped as number[];
-};
-
-const formatTempoFromIndices = (indices: number[]) =>
-  indices
-    .slice(0, 4)
-    .map((index) => TEMPO_TOKENS[Math.max(0, Math.min(TEMPO_TOKENS.length - 1, index))])
-    .join("-");
-
-const formatWeightInput = (weightKg: number | null, targetUnit: Unit) => {
-  if (weightKg === null || Number.isNaN(weightKg)) return "";
-  const val = targetUnit === "kg" ? weightKg : weightKg * 2.20462;
-  return `${Math.round(val * 10) / 10}`;
-};
-
-const normalizeExerciseName = (value: string) => value.trim().toLowerCase();
-function indexPreviousExerciseSets(pastWorkouts: PastWorkout[]) {
-  const map = new Map<string, PastWorkout["exercises"][number]["sets"]>();
-  for (const workout of pastWorkouts) {
-    for (const exercise of workout.exercises) {
-      const key = normalizeExerciseName(exercise.name);
-      if (!key || map.has(key)) continue;
-      map.set(key, exercise.sets ?? []);
-    }
-  }
-  return map;
-}
-
-const getSetTypeMarker = (set: SetEntry, index: number, sets: SetEntry[]) => {
-  const type = toSetType(set.setType);
-  if (type === "warmup") return "W";
-  if (type === "failure") return "F";
-  if (type === "drop") return "D";
-  return String(sets.slice(0, index + 1).filter(row => row.setType !== "warmup").length);
-};
-
-const formatDistanceInput = (distanceKm: number | null, unit: Unit) => {
-  if (distanceKm == null || Number.isNaN(distanceKm)) return "";
-  const value = unit === "mi" ? distanceKm / 1.60934 : distanceKm;
-  return `${Math.round(value * 100) / 100}`;
-};
-
-const formatDurationHoursMinutes = (durationSec: number | null) => {
-  if (durationSec == null || Number.isNaN(durationSec)) return "";
-  const totalMinutes = Math.floor(durationSec / 60);
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
-};
-
-const formatDurationInput = (durationSec: number | null) => {
-  if (durationSec == null || Number.isNaN(durationSec)) return "";
-  const minutes = Math.floor(durationSec / 60);
-  const seconds = durationSec % 60;
-  return `${minutes}:${String(seconds).padStart(2, "0")}`;
-};
-
-const imageLookupKey = (exerciseName: string) => exerciseName.trim().toLowerCase();
+import { DEFAULT_TEMPO_INDICES,DRAFT_KEY_PREFIX,Exercise,ExerciseMode,FAVORITES_KEY,FAVORITES_KEY_PREFIX,FollowedAnswer,HelpfulAnswer,MONTH_LABELS,PastWorkout,RECOMMENDATION_FOCUSES,RECOMMENDATION_LENGTHS,RECOMMENDATION_LENGTH_KEY_PREFIX,REST_PREFS_KEY,REST_PREFS_KEY_PREFIX,RecommendationFocusId,RecommendationLengthId,Routine,SET_TYPE_LABELS,SetEntry,SetType,TEMPO_FORMAT_HINT,TEMPO_TOKENS,Unit,WEEKDAY_LABELS,formatDistanceInput,formatDurationHoursMinutes,formatDurationInput,formatTempoFromIndices,formatWeightInput,imageLookupKey,indexPreviousExerciseSets,isSameDateKey,isValidTempo,normalizeExerciseName,parseTempoToIndices,toLocalDateKey,toSetType } from "../../../src/workouts/workoutLog/workoutLogModel";
 
 export default function WorkoutLog() {
+  const sharing = useSharing();
   const { colors } = useNotebook();
   const styles = useNotebookStyles(createStyles);
   const router = useRouter();
@@ -566,6 +264,8 @@ export default function WorkoutLog() {
   } | null>(null);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const routerParams = useLocalSearchParams<{
+    sharedIntent?: string;
+    showSharedRoutines?: string;
     trainingPhase?: string;
     createRoutine?: string;
     todayPlanApplied?: string;
@@ -574,6 +274,7 @@ export default function WorkoutLog() {
   const auth = getAuth();
   const [activeUid, setActiveUid] = useState<string | null>(auth.currentUser?.uid ?? null);
   const draftHydratedRef = useRef(false);
+  const [draftReadyUid, setDraftReadyUid] = useState<string | null>(null);
   const scrollNativeGesture = useMemo(() => Gesture.Native(), []);
   const draftSavedAtRef = useRef<Date | null>(null);
   const startupLoadTaskRef = useRef<{ cancel: () => void } | null>(null);
@@ -900,8 +601,8 @@ export default function WorkoutLog() {
   );
   const getExerciseMode = useCallback(
     (exerciseName: string): ExerciseMode =>
-      findCatalogExercise(exerciseName)?.group === "cardio" ? "cardio" : "resistance",
-    [findCatalogExercise]
+      exercises.find(e => e.name === exerciseName)?.mode ?? (findCatalogExercise(exerciseName)?.group === "cardio" ? "cardio" : "resistance"),
+    [findCatalogExercise, exercises]
   );
   const getExerciseZone = useCallback((exercise: Exercise) => {
     return resolveCardioZone(exercise);
@@ -1012,6 +713,7 @@ export default function WorkoutLog() {
                   : undefined,
               sets: (ex?.sets || []).map((set: any) => ({
                 weightKg: typeof set?.weightKg === "number" ? set.weightKg : null,
+                    targetRpe: typeof set?.targetRpe === "number" ? set.targetRpe : null,
                 reps: String(set?.reps ?? ""),
                 rpe:
                   typeof set?.rpe === "number" || typeof set?.rpe === "string"
@@ -1049,6 +751,7 @@ export default function WorkoutLog() {
         const data: any = docSnap.data();
         next.push({
           id: docSnap.id,
+          sharedSnapshotId: typeof data?.sharedSnapshotId === "string" ? data.sharedSnapshotId : undefined,
           name: typeof data?.name === "string" && data.name.trim() ? data.name.trim() : "Routine",
           exercises: (data?.exercises || []).map((exercise: any) => ({
             name: typeof exercise?.name === "string" ? exercise.name : "Exercise",
@@ -1056,6 +759,8 @@ export default function WorkoutLog() {
             tempo: typeof exercise?.tempo === "string" ? exercise.tempo : "",
             zone: typeof exercise?.zone === "string" ? exercise.zone : "",
             mode: exercise?.mode === "cardio" ? "cardio" : "resistance",
+            unit: ["kg", "lbs", "km", "mi"].includes(exercise?.unit) ? exercise.unit : undefined,
+            restSec: typeof exercise?.restSec === "number" ? exercise.restSec : undefined,
             cardioSessionType:
               exercise?.cardioSessionType === "steady" ||
               exercise?.cardioSessionType === "intervals" ||
@@ -1073,6 +778,7 @@ export default function WorkoutLog() {
             sets: (exercise?.sets || []).map((set: any) => ({
               reps: String(set?.reps ?? ""),
               defaultWeightKg: typeof set?.defaultWeightKg === "number" ? set.defaultWeightKg : null,
+              targetRpe: typeof set?.targetRpe === "number" ? set.targetRpe : null,
               defaultDistanceKm: typeof set?.defaultDistanceKm === "number" ? set.defaultDistanceKm : null,
               defaultDurationSec: typeof set?.defaultDurationSec === "number" ? set.defaultDurationSec : null,
               defaultZone: typeof set?.defaultZone === "string" ? set.defaultZone : "",
@@ -1146,6 +852,8 @@ export default function WorkoutLog() {
             const hydratedExercises: Exercise[] = (parsed.exercises as any[]).map((exercise: any) => ({
               id: typeof exercise?.id === "string" ? exercise.id : `${Date.now()}-${Math.random().toString(16).slice(2)}`,
               name: typeof exercise?.name === "string" ? exercise.name : "Exercise",
+              mode: exercise?.mode === "cardio" ? "cardio" : exercise?.mode === "resistance" ? "resistance" : undefined,
+              plannedRestSec: typeof exercise?.plannedRestSec === "number" && exercise.plannedRestSec >= 0 && exercise.plannedRestSec <= 3600 ? exercise.plannedRestSec : undefined,
               notes: typeof exercise?.notes === "string" ? exercise.notes : "",
               tempo: typeof exercise?.tempo === "string" ? exercise.tempo : "",
               cardioSessionType:
@@ -1165,6 +873,7 @@ export default function WorkoutLog() {
               sets: Array.isArray(exercise?.sets)
                 ? exercise.sets.map((set: any) => ({
                     weightKg: typeof set?.weightKg === "number" ? set.weightKg : null,
+                    targetRpe: typeof set?.targetRpe === "number" ? set.targetRpe : null,
                     weightText: typeof set?.weightText === "string" ? set.weightText : undefined,
                     reps: String(set?.reps ?? ""),
                     rpe:
@@ -1190,10 +899,10 @@ export default function WorkoutLog() {
             const initialRestPrefs: Record<string, number> = {};
             const initialRestTimers: Record<string, RestClock> = {};
             hydratedExercises.forEach((exercise: Exercise) => {
-              initialRestPrefs[exercise.id] = 90;
-              initialRestTimers[exercise.id] = { remainingSec: 90, running: false };
+              initialRestPrefs[exercise.id] = exercise.plannedRestSec ?? 90;
+              initialRestTimers[exercise.id] = { remainingSec: exercise.plannedRestSec ?? 90, running: false };
               const saved = parsed.restTimerByExercise?.[exercise.id];
-              if (saved && typeof saved.remainingSec === "number" && Number.isFinite(saved.remainingSec) && saved.remainingSec >= 0 && saved.remainingSec <= 900) {
+              if (saved && typeof saved.remainingSec === "number" && Number.isFinite(saved.remainingSec) && saved.remainingSec >= 0 && saved.remainingSec <= 3600) {
                 const endsAtMs = typeof saved.endsAtMs === "number" && Number.isFinite(saved.endsAtMs) ? saved.endsAtMs : undefined;
                 initialRestTimers[exercise.id] = advanceRest({ remainingSec: saved.remainingSec, running: saved.running === true && endsAtMs != null, endsAtMs }, Date.now());
               }
@@ -1232,6 +941,7 @@ export default function WorkoutLog() {
         }
       } finally {
         draftHydratedRef.current = true;
+        setDraftReadyUid(auth.currentUser?.uid ?? null);
       }
     };
     let active = true;
@@ -1323,6 +1033,21 @@ export default function WorkoutLog() {
       });
       focusHydrationTaskRef.current?.cancel();
       focusHydrationTaskRef.current = scheduleAfterInteractions(async () => {
+        void routerParams.sharedIntent;
+        const sharedPlan = activeUid && draftReadyUid === activeUid ? popSharedWorkout(activeUid) : null;
+        if (active && sharedPlan) {
+          const apply = (append: boolean) => {
+            if (getAuth().currentUser?.uid !== activeUid) return;
+            const imported = sharingPlanToExercises(sharedPlan, String(Date.now()));
+            setExercises(old => append ? [...old, ...imported.exercises] : imported.exercises);
+            setExerciseUnits(old => append ? { ...old, ...imported.units } : imported.units);
+            setRestPreferenceByExercise(old => append ? { ...old, ...imported.rest } : imported.rest);
+            if (!append) { setSessionTitle(sharedPlan.title); setSessionDateText(toLocalDateKey(new Date())); resetElapsedTimer(); setRestTimerByExercise({}); setLastAppliedRoutineId(null); setRoutineBuilderMode(false); }
+            setUiFeedback(append ? "Shared exercises added." : "Shared workout is ready to edit.");
+          };
+          if (exercises.length) showAppDialog({ title: "A workout is already open", message: "Keep your workout, add the shared exercises, or replace the current draft. Replacing discards the current unsaved workout.", buttons: [{ text: "Keep current workout", role: "cancel" }, { text: "Add shared exercises", onPress: () => apply(true) }, { text: "Replace current workout", role: "destructive", onPress: () => apply(false) }] });
+          else apply(false);
+        }
         const pendingExerciseNames = await popPendingExerciseSelection(activeUid);
         if (!active || pendingExerciseNames.length === 0) return;
         pendingExerciseNames.forEach(pendingSelectionActions.addExercise);
@@ -1357,8 +1082,14 @@ export default function WorkoutLog() {
         focusRefreshTaskRef.current?.cancel();
         subscription.remove();
       };
-    }, [loadLatestDecision, loadFavoriteExercises, pendingSelectionActions, activeUid, handleGoBack, sessionDateText])
+    }, [loadLatestDecision, loadFavoriteExercises, pendingSelectionActions, activeUid, handleGoBack, sessionDateText, draftReadyUid, routerParams.sharedIntent, exercises.length, resetElapsedTimer])
   );
+
+  useEffect(() => {
+    if (!routerParams.showSharedRoutines) return;
+    const task = scheduleAfterInteractions(async () => { await loadRoutines(); setShowMyRoutinesModal(true); });
+    return () => task.cancel();
+  }, [routerParams.showSharedRoutines, loadRoutines]);
 
   useEffect(() => {
     if (!uiFeedback) return;
@@ -1453,12 +1184,12 @@ export default function WorkoutLog() {
     if (!exercises.length) return;
     const task = scheduleAfterInteractions(() => {
     const previousPreferences = appliedRestPreferencesRef.current;
-    appliedRestPreferencesRef.current = Object.fromEntries(exercises.map((exercise) => [exercise.id, restPreferenceByName[exercise.name.trim().toLowerCase()] ?? 90]));
+    appliedRestPreferencesRef.current = Object.fromEntries(exercises.map((exercise) => [exercise.id, exercise.plannedRestSec ?? restPreferenceByName[exercise.name.trim().toLowerCase()] ?? 90]));
     setRestPreferenceByExercise((prev) => {
       const next: Record<string, number> = {};
       exercises.forEach((exercise) => {
         const key = exercise.name.trim().toLowerCase();
-        next[exercise.id] = restPreferenceByName[key] ?? 90;
+        next[exercise.id] = exercise.plannedRestSec ?? restPreferenceByName[key] ?? 90;
       });
       return next;
     });
@@ -1466,7 +1197,7 @@ export default function WorkoutLog() {
       const next = { ...prev };
       exercises.forEach((exercise) => {
         const key = exercise.name.trim().toLowerCase();
-        const restSeconds = restPreferenceByName[key] ?? 90;
+        const restSeconds = exercise.plannedRestSec ?? restPreferenceByName[key] ?? 90;
         const current = next[exercise.id];
         if (!current) {
           next[exercise.id] = { remainingSec: restSeconds, running: false };
@@ -1967,6 +1698,7 @@ export default function WorkoutLog() {
   };
 
   const setRestPreference = (exerciseId: string, seconds: number) => {
+    setExercises(all => all.map(e => e.id === exerciseId && e.plannedRestSec != null ? { ...e, plannedRestSec: seconds } : e));
     setRestPreferenceByExercise((prev) => ({ ...prev, [exerciseId]: seconds }));
     const exerciseName = exercises.find((exercise) => exercise.id === exerciseId)?.name;
     if (exerciseName) {
@@ -2348,6 +2080,7 @@ export default function WorkoutLog() {
                 sets: cleanedSets.map((set) => ({
                   ...set,
                   rpe: mode === "cardio" ? "" : String(set.rpe || "").trim(),
+                  targetRpe: set.targetRpe ?? null,
                   zone: String(set.zone || "").trim(),
                   setType: toSetType(set.setType),
                 })),
@@ -2483,6 +2216,8 @@ export default function WorkoutLog() {
       tempo: getExerciseMode(exercise.name) === "cardio" ? "" : String(exercise.tempo || "").trim(),
       zone: getExerciseMode(exercise.name) === "cardio" ? String(getExerciseZone(exercise) || "").trim() : "",
       mode: getExerciseMode(exercise.name),
+      unit: exerciseUnits[exercise.id] ?? (getExerciseMode(exercise.name) === "cardio" ? "km" : "kg"),
+      restSec: restPreferenceByExercise[exercise.id] ?? 90,
       cardioSessionType:
         getExerciseMode(exercise.name) === "cardio" ? exercise.cardioSessionType ?? null : null,
       cardioEffortLevel:
@@ -2490,6 +2225,7 @@ export default function WorkoutLog() {
       sets: exercise.sets.map((set) => ({
         reps: String(set.reps || "").trim(),
         defaultWeightKg: typeof set.weightKg === "number" ? set.weightKg : null,
+        targetRpe: set.targetRpe ?? null,
         defaultDistanceKm: typeof set.distanceKm === "number" ? set.distanceKm : null,
         defaultDurationSec: typeof set.durationSec === "number" ? set.durationSec : null,
         defaultZone: String(set.zone || "").trim(),
@@ -2648,7 +2384,7 @@ export default function WorkoutLog() {
     const mapped: Exercise[] = routine.exercises.map((exercise) => {
       const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
       const latestSets = previousExerciseSetsByName.get(normalizeExerciseName(exercise.name)) ?? [];
-      const sets = latestSets.length
+      const sets = latestSets.length && !routine.sharedSnapshotId
         ? latestSets.map((set) => ({
             weightKg: exercise.mode === "cardio" ? null : set.weightKg ?? null,
             reps: exercise.mode === "cardio" ? "" : String(set.reps ?? ""),
@@ -2663,6 +2399,7 @@ export default function WorkoutLog() {
           }))
         : exercise.sets.map((set) => ({
             weightKg: typeof set.defaultWeightKg === "number" ? set.defaultWeightKg : null,
+            targetRpe: set.targetRpe ?? null,
             reps: set.reps,
             rpe: "",
             distanceKm: typeof set.defaultDistanceKm === "number" ? set.defaultDistanceKm : null,
@@ -2675,6 +2412,8 @@ export default function WorkoutLog() {
           }));
       return {
         id,
+        plannedRestSec: exercise.restSec,
+        mode: exercise.mode,
         name: exercise.name,
         notes: exercise.notes ?? "",
         tempo: (exercise.mode === "cardio" ? exercise.zone : exercise.tempo) ?? "",
@@ -2714,15 +2453,15 @@ export default function WorkoutLog() {
     setExercises((prev) => (mode === "append" ? [...prev, ...workoutExercises] : workoutExercises));
     setExerciseUnits((prev) => {
       const next = { ...prev };
-      workoutExercises.forEach((exercise) => {
-        next[exercise.id] = getExerciseMode(exercise.name) === "cardio" ? "km" : "kg";
+      workoutExercises.forEach((exercise, index) => {
+        next[exercise.id] = routine.exercises[index]?.unit ?? ((exercise.mode ?? getExerciseMode(exercise.name)) === "cardio" ? "km" : "kg");
       });
       return next;
     });
     setRestPreferenceByExercise((prev) => {
       const next = mode === "append" ? { ...prev } : {};
       workoutExercises.forEach((exercise) => {
-        next[exercise.id] = getSavedRestPreference(exercise.name);
+        next[exercise.id] = exercise.plannedRestSec ?? getSavedRestPreference(exercise.name);
       });
       return next;
     });
@@ -2736,7 +2475,7 @@ export default function WorkoutLog() {
     setRestTimerByExercise((prev) => {
       const next = mode === "append" ? { ...prev } : {};
       workoutExercises.forEach((exercise) => {
-        const restSeconds = getSavedRestPreference(exercise.name);
+        const restSeconds = exercise.plannedRestSec ?? getSavedRestPreference(exercise.name);
         next[exercise.id] = { remainingSec: restSeconds, running: false };
       });
       return next;
@@ -3117,447 +2856,9 @@ export default function WorkoutLog() {
     return null;
   };
 
-  const cardActions = useEventCallbacks({ openWarmup, revealNote: revealNote, openExerciseDemo, openExerciseHistory, openExerciseActions, setReplaceSearch, setReplaceGroup, replaceExercise, updateExerciseNotes, openTempoEditor, openRestTimerModal, updateSetWeight, updateSetReps, updateSetRpe, toggleSetDone, removeSetWithUndo, openSetMenu, copyLastSetToCurrent, openCardioTimeModal, openCardioDistanceModal, setExercises, updateCardioSessionType, updateCardioEffortLevel, addEmptySet, duplicateLastSet, undoRemoveSet });
+  const cardActions = useEventCallbacks({ openWarmup, revealNote: revealNote, openExerciseDemo, openExerciseHistory, openExerciseActions, setReplaceSearch, setReplaceGroup, closeReplacement: () => setReplaceTarget(null), replaceExercise, updateExerciseNotes, openTempoEditor, openRestTimerModal, updateSetWeight, updateSetReps, updateSetRpe, toggleSetDone, removeSetWithUndo, openSetMenu, copyLastSetToCurrent, openCardioTimeModal, openCardioDistanceModal, setExercises, updateCardioSessionType, updateCardioEffortLevel, addEmptySet, duplicateLastSet, undoRemoveSet });
   // Cache unchanged card JSX so navigation and background context updates don't rebuild every row.
-  const exerciseCards = useMemo(() => exercises.map((ex, exerciseIndex) => {
-          const unit = exerciseUnits[ex.id] || "kg";
-          const mode = getExerciseMode(ex.name);
-          const isCardio = mode === "cardio";
-          const largeText = fontScale >= 1.5;
-          const usesNativeSetRows = Platform.OS === "android" && !isCardio;
-          const weightLabel = isCardio
-            ? "Distance"
-            : unit === "kg"
-            ? "kg"
-            : unit === "lbs"
-            ? "lbs"
-            : "Weight";
-          const repsLabel = isCardio ? "Time" : "Reps";
-          const rpeLabel = isCardio ? "Zone" : effortLabel(effortScale);
-          const previousSets = previousExerciseSetsByName.get(normalizeExerciseName(ex.name)) ?? [];
-          const setDisplays = setRowPresentation(ex.sets, previousSets);
-          const exerciseCatalogItem = findCatalogExercise(ex.name);
-          const restTimer = restTimerByExercise[ex.id] ?? { remainingSec: 90, running: false };
-          return (
-            <View key={ex.id} style={styles.card}>
-              <View style={styles.exerciseHeader}>
-                <Text style={styles.exerciseOrdinal}>{String(exerciseIndex + 1).padStart(2, "0")}</Text>
-                <TouchableOpacity
-                  style={styles.exerciseNameButton}
-                  onPress={() => cardActions.openExerciseHistory(ex.name)}
-                  accessibilityLabel={`View ${ex.name} history`}
-                >
-                  <Text style={styles.exerciseName}>
-                    {ex.name}
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity accessibilityRole="button" accessibilityLabel={`${ex.name} actions`} style={styles.iconButton} onPress={() => cardActions.openExerciseActions(ex.id)}>
-                  <Ionicons name="ellipsis-horizontal" size={18} color={colors.muted} />
-                </TouchableOpacity>
-              </View>
-              {replaceTarget === ex.id ? (
-                <View style={[styles.pickerCard, { marginTop: 10 }]}>
-                  <NotebookTextInput disableFullscreenUI
-                    placeholder="Search to replace"
-                    placeholderTextColor={colors.muted}
-                    value={replaceSearch}
-                    onChangeText={cardActions.setReplaceSearch}
-                    style={[styles.input, { marginBottom: 8 }]}
-                  />
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.groupChips}
-                  >
-                    <TouchableOpacity
-                      style={[styles.groupChip, replaceGroup === "all" && styles.groupChipActive]}
-                      onPress={() => cardActions.setReplaceGroup("all")}
-                    >
-                      <Text
-                        style={[
-                          styles.groupChipText,
-                          replaceGroup === "all" && styles.groupChipTextActive,
-                        ]}
-                      >
-                        All
-                      </Text>
-                    </TouchableOpacity>
-                    {EXERCISE_GROUPS.map((g) => (
-                      <TouchableOpacity
-                        key={g.key}
-                        style={[
-                          styles.groupChip,
-                          replaceGroup === g.key && styles.groupChipActive,
-                        ]}
-                        onPress={() => cardActions.setReplaceGroup(g.key)}
-                      >
-                        <Text
-                          style={[
-                            styles.groupChipText,
-                            replaceGroup === g.key && styles.groupChipTextActive,
-                          ]}
-                        >
-                          {g.label}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                  <ScrollView
-                    style={{ maxHeight: 180 }}
-                    nestedScrollEnabled
-                    bounces={false}
-                    overScrollMode="never"
-                    keyboardShouldPersistTaps="handled"
-                    scrollEventThrottle={16}
-                  >
-                    {replacementOptions.slice(0, replacementLimit).map((item) => (
-                      <TouchableOpacity
-                        key={`${item.id}-${ex.id}`}
-                        style={styles.pickerRow}
-                        onPress={() => cardActions.replaceExercise(ex.id, item.name)}
-                      >
-                        <Ionicons name="swap-horizontal-outline" size={18} color={colors.accent} />
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.pickerText}>{item.name}</Text>
-                          <Text style={styles.muted}>
-                            {item.primaryMuscles.slice(0, 2).join(", ")} | {item.equipment.slice(0, 2).join(", ")}
-                          </Text>
-                        </View>
-                      </TouchableOpacity>
-                    ))}
-                    {replacementOptions.length > replacementLimit ? <TouchableOpacity
-                      accessibilityRole="button" style={styles.routineMenuRow}
-                      onPress={() => setReplacementPage({ key: replacementPageKey, limit: replacementLimit + 24 })}>
-                      <Text style={styles.linkText}>Show more exercises</Text>
-                    </TouchableOpacity> : null}
-                    {replacementOptions.length === 0 ? (
-                      <Text style={styles.replacementEmptyText}>
-                        {exerciseCatalogItem
-                          ? "No close alternatives found. Search for another exercise."
-                          : "No clear movement match. Search for the exercise you want instead."}
-                      </Text>
-                    ) : null}
-                  </ScrollView>
-                </View>
-              ) : null}
-              <View style={[styles.inlineTipRow, largeText && { flexDirection: "column" }]}>
-                <TouchableOpacity style={styles.restTimerInlineButton} onPress={() => cardActions.openExerciseDemo(ex.name)} accessibilityLabel={`Open ${ex.name} demo`}>
-                  <Play size={16} strokeWidth={1.5} color={colors.muted} /><Text style={styles.restTimerInlineText}>Demo</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.restTimerInlineButton} onPress={() => cardActions.openRestTimerModal(ex.id)}><Clock3 size={16} strokeWidth={1.5} color={colors.muted} /><RestTimerText style={styles.restTimerInlineText} clock={restTimer} prefix="Rest " /></TouchableOpacity>
-                {!isCardio ? <TouchableOpacity style={styles.restTimerInlineButton} onPress={() => cardActions.openTempoEditor(ex.id, ex.tempo)}><Gauge size={16} strokeWidth={1.5} color={colors.muted} /><Text style={styles.restTimerInlineText}>Tempo{ex.tempo?.trim() ? " " + ex.tempo : ""}</Text></TouchableOpacity> : null}
-              </View>
-              <View style={styles.exerciseMetaNotesSingle}>
-                <Text style={styles.noteLabel}>Note</Text>
-                <NotebookTextInput disableFullscreenUI placeholder="Keep the last rep controlled" placeholderTextColor={colors.muted} accessibilityLabel={`${ex.name} note`}
-                        onFocus={cardActions.revealNote} value={ex.notes ?? ""} onChangeText={(v) => cardActions.updateExerciseNotes(ex.id, v)} style={[styles.input, styles.metaInput]} />
-              </View>
-              {!isCardio ? <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Add warm-up sets for ${ex.name}`} onPress={() => cardActions.openWarmup(ex.id)} style={{ alignSelf: "flex-start", minHeight: 44, justifyContent: "center" }}><Text style={styles.linkText}>+ Add warm-up</Text></TouchableOpacity> : null}
-              <View
-                style={[
-                  styles.setHeaderRow,
-                  largeText && { display: "none" },
-                  isTabletLayout && styles.setHeaderRowTablet,
-                  usesNativeSetRows && styles.nativeSetHeaderRow,
-                ]}
-              >
-                {!isCardio ? <Text style={[styles.setHeaderText, styles.setHeaderSet]}>Set</Text> : null}
-                <Text style={[styles.setHeaderText, styles.setHeaderLast, usesNativeSetRows && styles.nativeSetHeaderLast]}>
-                  Last
-                </Text>
-                <View style={[styles.setHeaderInputsGroup, usesNativeSetRows && styles.nativeSetHeaderInputsGroup]}>
-                  <Text style={[styles.setHeaderText, styles.setColReps, usesNativeSetRows && styles.nativeSetHeaderInput]}>
-                    {isCardio ? "Time" : weightLabel}
-                  </Text>
-                  <Text style={[styles.setHeaderText, styles.setColWeight, usesNativeSetRows && styles.nativeSetHeaderInput]}>
-                    {isCardio ? String(unit).toLowerCase() : repsLabel}
-                  </Text>
-                  {!isCardio ? (
-                    <Text style={[styles.setHeaderText, styles.setColRpe, usesNativeSetRows && styles.nativeSetHeaderInput]}>
-                      {rpeLabel}
-                    </Text>
-                  ) : null}
-                </View>
-                <Text
-                  style={[
-                    styles.setHeaderText,
-                    styles.setHeaderCheck,
-                    isCardio && styles.cardioSetHeaderCheck,
-                    usesNativeSetRows && styles.nativeSetHeaderCheck,
-                  ]}
-                >
-                  Done
-                </Text>
-              </View>
-              {ex.sets.length === 0 ? (
-                <Text style={styles.muted}>No sets yet.</Text>
-              ) : Platform.OS === "android" && !isCardio ? (
-                <WorkoutNativeSetRows
-                  activeSetIndex={ex.sets.findIndex((_set, index) => editingSet === `${ex.id}:${index}`)}
-                  editingSuspended={!!warmupTarget || showCardioTimeModal || showCardioDistanceModal}
-                  onActivate={(index) => setEditingSet(`${ex.id}:${index}`)}
-                  listKey={`native-set-list-${ex.id}-${ex.sets
-                    .map((set, idx) => `${idx}:${getSetTypeMarker(set, idx, ex.sets)}`)
-                    .join("|")}-${String(unit).toLowerCase()}-${weightLabel}-${repsLabel}-${rpeLabel}`}
-                  style={{ height: Math.max(ex.sets.length, 1) * notebookRowHeight(fontScale) }}
-                  notebookColors={colors}
-                  fontFamily="NotebookSans"
-                  weightLabel={weightLabel}
-                  repsLabel={repsLabel}
-                  rpeLabel={effortScale === "rir" ? "0-4" : "6-10"}
-                  rows={ex.sets.map((set, idx) => ({
-                    marker: getSetTypeMarker(set, idx, ex.sets),
-                    last: set.setType === "warmup" ? "" : setDisplays[idx].previous ? lastResistanceSet(setDisplays[idx].previous!, unit, effortScale) : "-",
-                    weight: set.weightText ?? formatWeightInput(set.weightKg, unit),
-                    reps: set.reps,
-                    rpe: effortInputValue(set, effortScale),
-                    done: set.done,
-                  }))}
-                  onChange={(index, field, value) => {
-                    if (field === "weight") {
-                      cardActions.updateSetWeight(ex.id, index, unit, value);
-                      return;
-                    }
-                    if (field === "reps") {
-                      cardActions.updateSetReps(ex.id, index, value);
-                      return;
-                    }
-                    cardActions.updateSetRpe(ex.id, index, value);
-                  }}
-                  onToggleDone={(index) => cardActions.toggleSetDone(ex.id, index)}
-                  onDeleteSet={(index) => cardActions.removeSetWithUndo(ex.id, index)}
-                  onSetLabelPress={(index) => cardActions.openSetMenu(ex.id, index)}
-                  onLastPress={(index) => cardActions.copyLastSetToCurrent(ex.id, index)}
-                />
-              ) : (
-                ex.sets.map((s, idx) => (
-                  <ReanimatedSwipeable
-                    key={`${ex.id}-set-${idx}`}
-                    simultaneousWithExternalGesture={scrollNativeGesture}
-                    friction={1.2}
-                    rightThreshold={12}
-                    overshootRight={false}
-                    dragOffsetFromLeftEdge={24}
-                    dragOffsetFromRightEdge={24}
-                    renderRightActions={() => (
-                      <View style={styles.swipeDeleteContainer}>
-                        <TouchableOpacity
-                          style={styles.swipeDeleteButton}
-                          onPress={() => cardActions.removeSetWithUndo(ex.id, idx)}
-                        >
-                          <Ionicons name="trash-outline" size={16} color={colors.ink} />
-                          <Text style={styles.swipeDeleteText}>Delete</Text>
-                        </TouchableOpacity>
-                      </View>
-                    )}
-                  >
-                    <View style={[styles.setContainer, (editingSet === `${ex.id}:${idx}` || cardioTimeTarget?.exerciseId === ex.id && cardioTimeTarget.setIndex === idx || cardioDistanceTarget?.exerciseId === ex.id && cardioDistanceTarget.setIndex === idx) && styles.activeSet]}>
-                      <View style={[styles.setInlineRow, isTabletLayout && styles.setInlineRowTablet, largeText && { flexWrap: "wrap" }]}>
-                        {!isCardio ? (
-                          <TouchableOpacity
-                            onPress={() => cardActions.openSetMenu(ex.id, idx)}
-                            style={styles.setLabelButton}
-                            accessibilityLabel={`Adjust set ${idx + 1} intensity`}
-                          >
-                            <Text style={[styles.setLabel, isTabletLayout && styles.setLabelTablet]}>
-                              {getSetTypeMarker(s, idx, ex.sets)}
-                            </Text>
-                          </TouchableOpacity>
-                        ) : null}
-                        <TouchableOpacity
-                          style={styles.lastSetButton}
-                          onPress={() => cardActions.copyLastSetToCurrent(ex.id, idx)}
-                          disabled={!setDisplays[idx].previous}
-                          accessibilityLabel={`Copy previous values into set ${idx + 1}`}
-                        >
-                          <Text style={styles.lastSetText}>
-                          {s.setType === "warmup" ? "" : setDisplays[idx].previous ? formatLastSetSummary(setDisplays[idx].previous!) : "-"}
-                          </Text>
-                        </TouchableOpacity>
-                        <View style={[styles.setInputsGroup, isTabletLayout && styles.setInputsGroupTablet, largeText && { flexBasis: "100%", flexWrap: "wrap" }]}>
-                          {isCardio ? (
-                            <>
-                              <TouchableOpacity
-                                style={[styles.input, styles.setInput, styles.setInputCompact, styles.setColReps]}
-                                onPress={() => cardActions.openCardioTimeModal(ex.id, idx, s.durationSec)}
-                              >
-                                <Text style={styles.cardioTapValue}>
-                                  {formatDurationHoursMinutes(s.durationSec ?? null) || "hh:mm"}
-                                </Text>
-                              </TouchableOpacity>
-                              <TouchableOpacity
-                                style={[styles.input, styles.setInput, styles.setInputCompact, styles.setColWeight]}
-                                onPress={() => cardActions.openCardioDistanceModal(ex.id, idx, s.distanceKm ?? null, unit)}
-                              >
-                                <Text style={styles.cardioTapValue}>
-                                  {formatDistanceInput(s.distanceKm ?? null, unit) || String(unit)}
-                                </Text>
-                              </TouchableOpacity>
-                            </>
-                          ) : (
-                            <>
-                              <WorkoutGestureTextInput
-                                placeholder={weightLabel}
-                                placeholderTextColor={colors.muted}
-                                keyboardType="decimal-pad"
-                                value={s.weightText ?? formatWeightInput(s.weightKg, unit)}
-                                onChangeText={(v) => cardActions.updateSetWeight(ex.id, idx, unit, v)}
-                                onFocus={() => setEditingSet(`${ex.id}:${idx}`)}
-                                selectTextOnFocus
-                                style={[
-                                  styles.input,
-                                  styles.setInput,
-                                  styles.setInputCompact,
-                                  styles.setColWeight,
-                                  isTabletLayout && styles.setInputTablet,
-                                ]}
-                              />
-                              <WorkoutGestureTextInput
-                                placeholder={repsLabel}
-                                placeholderTextColor={colors.muted}
-                                keyboardType="numeric"
-                                value={s.reps}
-                                onChangeText={(v) => cardActions.updateSetReps(ex.id, idx, v)}
-                                onFocus={() => setEditingSet(`${ex.id}:${idx}`)}
-                                selectTextOnFocus={false}
-                                style={[
-                                  styles.input,
-                                  styles.setInput,
-                                  styles.setInputCompact,
-                                  styles.setColReps,
-                                  isTabletLayout && styles.setInputTablet,
-                                  styles.setInputReps,
-                                  isTabletLayout && styles.setInputRepsTablet,
-                                ]}
-                              />
-                              <WorkoutGestureTextInput
-                                placeholder={effortScale === "rir" ? "0-4" : "6-10"}
-                                placeholderTextColor={colors.muted}
-                                keyboardType="decimal-pad"
-                                value={effortInputValue(s, effortScale)}
-                                onChangeText={(v) => cardActions.updateSetRpe(ex.id, idx, v)}
-                                onFocus={() => setEditingSet(`${ex.id}:${idx}`)}
-                                selectTextOnFocus={false}
-                                style={[
-                                  styles.input,
-                                  styles.setInput,
-                                  styles.setInputCompact,
-                                  styles.setColRpe,
-                                  isTabletLayout && styles.setInputTablet,
-                                ]}
-                              />
-                            </>
-                          )}
-                        </View>
-                        <TouchableOpacity
-                          style={[styles.checkboxInline, styles.checkboxHitbox, largeText && { minWidth: 64, minHeight: 64 }]}
-                          accessibilityRole="checkbox"
-                          accessibilityState={{ checked: s.done }}
-                          accessibilityLabel={`${ex.name}, set ${idx + 1} completed`}
-                          onPress={() => { setEditingSet(`${ex.id}:${idx}`); cardActions.toggleSetDone(ex.id, idx); }}
-                          activeOpacity={0.8}
-                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                        >
-                          <View style={[styles.checkbox, s.done && styles.checkboxChecked, largeText && { width: 36, height: 36, borderWidth: 2, borderRadius: 6 }]}>
-                            {s.done ? <Check size={largeText ? 28 : 16} strokeWidth={2} color={colors.onPrimary} /> : null}
-                          </View>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  </ReanimatedSwipeable>
-                ))
-              )}
-              {isCardio ? (
-                <>
-                  <View style={styles.cardioMetaRow}>
-                    <Text style={styles.cardioMetaLabel}>Heart-rate zone</Text>
-                    <View style={styles.answerRow}>
-                      {["1", "2", "3", "4", "5"].map((zone) => (
-                        <TouchableOpacity key={`cardio-zone-${ex.id}-${zone}`} accessibilityRole="button" accessibilityLabel={`Zone ${zone}`} accessibilityState={{ selected: getExerciseZone(ex) === zone }} style={[styles.answerChip, getExerciseZone(ex) === zone && styles.answerChipActive]} onPress={() => cardActions.setExercises((previous) => previous.map((exercise) => exercise.id === ex.id ? applyCardioZone(exercise, getExerciseZone(exercise) === zone ? "" : zone) : exercise))}>
-                          <Text style={[styles.answerText, getExerciseZone(ex) === zone && styles.answerTextActive]}>{`Zone ${zone}`}</Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  </View>
-                  <View style={styles.cardioMetaRow}>
-                    <Text style={styles.cardioMetaLabel}>Session Type</Text>
-                    <View style={styles.answerRow}>
-                      {CARDIO_SESSION_TYPES.map((option) => (
-                        <TouchableOpacity
-                          key={`cardio-session-${ex.id}-${option.value}`}
-                          style={[
-                            styles.answerChip,
-                            ex.cardioSessionType === option.value && styles.answerChipActive,
-                          ]}
-                          onPress={() => cardActions.updateCardioSessionType(ex.id, option.value)}
-                        >
-                          <Text
-                            style={[
-                              styles.answerText,
-                              ex.cardioSessionType === option.value && styles.answerTextActive,
-                            ]}
-                          >
-                            {option.label}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  </View>
-                  <View style={styles.cardioMetaRow}>
-                    <Text style={styles.cardioMetaLabel}>Effort Level</Text>
-                    <View style={styles.answerRow}>
-                      {CARDIO_EFFORT_LEVELS.map((option) => (
-                        <TouchableOpacity
-                          key={`cardio-effort-${ex.id}-${option.value}`}
-                          style={[
-                            styles.answerChip,
-                            ex.cardioEffortLevel === option.value && styles.answerChipActive,
-                          ]}
-                          onPress={() => cardActions.updateCardioEffortLevel(ex.id, option.value)}
-                        >
-                          <Text
-                            style={[
-                              styles.answerText,
-                              ex.cardioEffortLevel === option.value && styles.answerTextActive,
-                            ]}
-                          >
-                            {option.label}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  </View>
-                </>
-              ) : null}
-              <View style={styles.setActionsRow}>
-                <TouchableOpacity
-                  style={[styles.textAction, styles.setActionButton]}
-                  onPress={() => cardActions.addEmptySet(ex.id)}
-                >
-                  <Text style={styles.linkText}>+ Add set</Text>
-                </TouchableOpacity>
-                {ex.sets.length > 0 ? (
-                  <TouchableOpacity
-                    style={[styles.textAction, styles.setActionButton, { alignItems: "flex-end" }]}
-                    onPress={() => cardActions.duplicateLastSet(ex.id)}
-                  >
-                    <Text style={styles.linkText}>Duplicate last set</Text>
-                  </TouchableOpacity>
-                ) : (
-                  <View style={styles.setActionButton} />
-                )}
-              </View>
-              {undoDeletedSet?.exerciseId === ex.id ? (
-                <View style={styles.inlineUndoBanner}>
-                  <Text style={styles.inlineUndoBannerText}>Set deleted</Text>
-                  <TouchableOpacity onPress={cardActions.undoRemoveSet} style={styles.inlineUndoBannerAction}>
-                    <Text style={styles.inlineUndoBannerActionText}>Undo</Text>
-                  </TouchableOpacity>
-                </View>
-              ) : null}
-            </View>
-          );
-        }), [exercises, exerciseUnits, getExerciseMode, effortScale, previousExerciseSetsByName, findCatalogExercise, restTimerByExercise, replaceTarget, replaceSearch, replaceGroup, replacementOptions, replacementLimit, replacementPageKey, isTabletLayout, formatLastSetSummary, scrollNativeGesture, getExerciseZone, undoDeletedSet, cardActions, styles, colors, fontScale, editingSet, warmupTarget, cardioTimeTarget, cardioDistanceTarget, showCardioTimeModal, showCardioDistanceModal]);
+  const exerciseCards = useWorkoutExerciseCards({ exercises, exerciseUnits, getExerciseMode, effortScale, previousExerciseSetsByName, findCatalogExercise, restTimerByExercise, replaceTarget, replaceSearch, replaceGroup, replacementOptions, replacementLimit, replacementPageKey, isTabletLayout, formatLastSetSummary, scrollNativeGesture, getExerciseZone, undoDeletedSet, cardActions, styles, colors, fontScale, editingSet, warmupTarget, cardioTimeTarget, cardioDistanceTarget, showCardioTimeModal, showCardioDistanceModal, setEditingSet, setReplacementPage });
 
   return (
     <SafeAreaView style={styles.screen} edges={["top", "left", "right"]}>
@@ -3567,7 +2868,7 @@ export default function WorkoutLog() {
         keyboardVerticalOffset={Platform.OS === "ios" ? insets.top : 0}
       >
         <View style={styles.scrollShell}>
-        <NotebookHeader compact={keyboardHeight > 0 && width > height} title={routineBuilderMode ? "Routine builder" : "Workout"} onBack={handleGoBack} action={exercises.length ? routineBuilderMode ? "Save" : "Finish" : undefined} onAction={routineBuilderMode ? openCreateRoutineModal : finishWorkout} disabled={saving} />
+        <NotebookHeader compact={keyboardHeight > 0 && width > height} title={routineBuilderMode ? "Routine builder" : "Workout"} onBack={handleGoBack} right={!routineBuilderMode ? <SharingInboxButton /> : undefined} action={exercises.length && routineBuilderMode ? "Save" : undefined} onAction={openCreateRoutineModal} disabled={saving} />
         <GestureDetector gesture={scrollNativeGesture}>
           <ScrollView
             ref={noteScrollRef}
@@ -3681,7 +2982,7 @@ export default function WorkoutLog() {
         </View>
         {routineBuilderMode || exercises.length ? <View style={styles.sessionActionFooter}>
           {routineBuilderMode ? <TouchableOpacity style={styles.textAction} onPress={() => setRoutineBuilderMode(false)}><Text style={styles.linkText}>Exit builder</Text></TouchableOpacity> : null}
-          {exercises.length ? <TouchableOpacity style={styles.textAction} onPress={discardWorkout}><Text style={[styles.linkText, { color: colors.danger }]}>Discard workout</Text></TouchableOpacity> : null}
+          {exercises.length ? <View style={styles.sessionActionRow}><TouchableOpacity style={styles.sessionAction} onPress={() => { try { sharing.open(workoutToSharingPlan(sessionTitle, exercises, exerciseUnits, getExerciseMode, restPreferenceByExercise, effortScale)); } catch (e) { setUiFeedback(e instanceof Error ? e.message : "Complete the planned sets before sharing."); } }}><Text style={styles.linkText}>Share workout</Text></TouchableOpacity><View style={styles.sessionActionDivider} /><TouchableOpacity style={[styles.sessionAction, styles.sessionActionRight]} onPress={discardWorkout}><Text style={[styles.linkText, { color: colors.danger }]}>Discard workout</Text></TouchableOpacity></View> : null}
         </View> : null}
       </View>
 
@@ -3694,6 +2995,7 @@ export default function WorkoutLog() {
         <Text style={styles.secondaryText}>Add exercise</Text>
       </TouchableOpacity>
 
+      {!routineBuilderMode && exercises.length ? <TouchableOpacity accessibilityRole="button" disabled={saving} style={[styles.primaryButton, { marginTop: 16 }]} onPress={finishWorkout}><Text style={styles.primaryText}>Finish</Text></TouchableOpacity> : null}
       {exercises.length ? <TouchableOpacity style={[styles.secondaryButton, { marginTop: 12 }]} onPress={openCreateRoutineModal}><Text style={styles.secondaryText}>Save as routine</Text></TouchableOpacity> : null}
       <WorkoutModalShell visible={showSetup} onRequestClose={() => setShowSetup(false)} backdropStyle={styles.modalBackdrop} cardStyle={styles.modalCard}>
         <Text style={styles.modalTitle}>Recommend workout</Text>
@@ -3780,43 +3082,7 @@ export default function WorkoutLog() {
       <Modal visible={showExerciseDemo} transparent animationType="fade" onRequestClose={closeExerciseDemo}>
         <View style={styles.modalBackdrop}>
           <AdaptiveModalCard style={styles.modalCard}>
-            <Text style={styles.modalTitle}>{activeDemoExercise?.name ?? "Exercise Demo"}</Text>
-            {activeDemoImageUris.length ? (
-              <View style={styles.demoImageRow}>
-                {activeDemoImageUris.slice(0, 2).map((image, index) => (
-                  <Image
-                    key={`remote-demo-${index}-${image}`}
-                    source={image}
-                    style={styles.demoImage}
-                    contentFit="cover"
-                  />
-                ))}
-              </View>
-            ) : activeDemoExercise?.demoImages?.length ? (
-              <View style={styles.demoImageRow}>
-                {activeDemoExercise.demoImages.slice(0, 2).map((image, index) => (
-                  <Image
-                    key={`${activeDemoExercise.id}-demo-${index}`}
-                    source={image}
-                    style={styles.demoImage}
-                    contentFit="cover"
-                  />
-                ))}
-              </View>
-            ) : (
-              <Text style={styles.modalText}>No images available yet.</Text>
-            )}
-            {(activeDemoExercise?.cues ?? []).slice(0, 3).map((cue) => (
-              <Text key={`${activeDemoExercise?.id}-${cue}`} style={styles.modalText}>
-                - {cue}
-              </Text>
-            ))}
-            <TouchableOpacity
-              style={[styles.secondaryButton, { marginTop: 12 }]}
-              onPress={closeExerciseDemo}
-            >
-              <Text style={styles.secondaryText}>Close</Text>
-            </TouchableOpacity>
+            <WorkoutExerciseDemo styles={styles} activeDemoExercise={activeDemoExercise} activeDemoImageUris={activeDemoImageUris} closeExerciseDemo={closeExerciseDemo} />
           </AdaptiveModalCard>
         </View>
       </Modal>
@@ -3826,128 +3092,7 @@ export default function WorkoutLog() {
           <View style={styles.modalBackdrop}>
             <TouchableWithoutFeedback onPress={() => {}}>
               <AdaptiveModalCard style={styles.modalCard}>
-                <Text style={styles.modalTitle}>
-                  {activeActionExercise ? activeActionExercise.name : "Exercise Options"}
-                </Text>
-
-                <View style={styles.exerciseOptionRow}>
-                  <Ionicons
-                    name={activeActionMode === "cardio" ? "map-outline" : "barbell-outline"}
-                    size={18}
-                    color={colors.muted}
-                  />
-                  <View style={styles.exerciseOptionUnits}>
-                    {(activeActionMode === "cardio" ? (["km", "mi"] as Unit[]) : (["kg", "lbs"] as Unit[])).map(
-                      (option) => (
-                      <TouchableOpacity
-                        key={`unit-${option}`}
-                        style={[
-                          styles.answerChip,
-                          styles.exerciseUnitChip,
-                          activeActionUnit === option && styles.answerChipActive,
-                        ]}
-                        onPress={() =>
-                          activeExerciseActionId ? toggleExerciseUnit(activeExerciseActionId, option) : undefined
-                        }
-                      >
-                        <Text
-                          style={[
-                            styles.answerText,
-                            activeActionUnit === option && styles.answerTextActive,
-                          ]}
-                        >
-                          {option}
-                        </Text>
-                      </TouchableOpacity>
-                      )
-                    )}
-                  </View>
-                </View>
-
-                {activeActionMode === "resistance" ? (
-                  <TouchableOpacity
-                    style={[styles.exerciseOptionRow, !availableWeightsPreferences.loaded && styles.disabled]}
-                    disabled={!availableWeightsPreferences.loaded}
-                    onPress={() => {
-                      if (!activeActionExercise) return;
-                      setAvailableWeightsTarget({ name: activeActionExercise.name, unit: activeActionUnit === "lbs" ? "lbs" : "kg" });
-                      closeExerciseActions();
-                    }}
-                  >
-                    <Ionicons name="options-outline" size={18} color={colors.muted} />
-                    <Text style={styles.exerciseOptionText}>{availableWeightsPreferences.loaded ? "Available weights" : availableWeightsPreferences.error ? "Weight settings unavailable" : "Loading weight settings..."}</Text>
-                  </TouchableOpacity>
-                ) : null}
-
-                <View style={styles.exerciseReorderRow}>
-                  <Ionicons name="swap-vertical-outline" size={18} color={colors.muted} />
-                  <Text style={styles.exerciseOptionText}>Reorder</Text>
-                  <View style={styles.exerciseMoveRow}>
-                    <TouchableOpacity
-                      style={[styles.exerciseMoveButton, activeActionIndex <= 0 && styles.disabled]}
-                      disabled={!activeExerciseActionId || activeActionIndex <= 0}
-                      onPress={() => activeExerciseActionId && moveExercise(activeExerciseActionId, -1)}
-                    >
-                      <Ionicons name="arrow-up-outline" size={15} color={colors.muted} />
-                      <Text style={styles.exerciseMoveText}>Up</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[
-                        styles.exerciseMoveButton,
-                        (activeActionIndex < 0 || activeActionIndex >= exercises.length - 1) && styles.disabled,
-                      ]}
-                      disabled={!activeExerciseActionId || activeActionIndex < 0 || activeActionIndex >= exercises.length - 1}
-                      onPress={() => activeExerciseActionId && moveExercise(activeExerciseActionId, 1)}
-                    >
-                      <Ionicons name="arrow-down-outline" size={15} color={colors.muted} />
-                      <Text style={styles.exerciseMoveText}>Down</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-
-                <TouchableOpacity
-                  style={styles.exerciseOptionRow}
-                  onPress={() => {
-                    if (!activeExerciseActionId) return;
-                    setReplaceTarget((prev) => (prev === activeExerciseActionId ? null : activeExerciseActionId));
-                    setReplaceSearch("");
-                    setReplaceGroup("all");
-                    closeExerciseActions();
-                  }}
-                >
-                  <Ionicons name="swap-horizontal-outline" size={18} color={colors.muted} />
-                  <Text style={styles.exerciseOptionText}>Replace exercise</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.exerciseOptionRow}
-                  onPress={() => {
-                    if (!activeActionExercise) return;
-                    toggleFavoriteExercise(activeActionExercise.name);
-                  }}
-                >
-                  <Ionicons
-                    name={activeActionIsFavorite ? "star" : "star-outline"}
-                    size={18}
-                    color={colors.accent}
-                  />
-                  <Text style={styles.exerciseOptionText}>
-                    {activeActionIsFavorite ? "Added to favorites" : "Add to favorites"}
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.exerciseOptionRow}
-                  onPress={() => {
-                    if (!activeExerciseActionId) return;
-                    const targetId = activeExerciseActionId;
-                    closeExerciseActions();
-                    deleteExercise(targetId);
-                  }}
-                >
-                  <Ionicons name="trash-outline" size={18} color={colors.danger} />
-                  <Text style={[styles.exerciseOptionText, { color: colors.danger }]}>Delete exercise</Text>
-                </TouchableOpacity>
+                <WorkoutExerciseActions styles={styles} colors={colors} activeActionExercise={activeActionExercise} activeActionMode={activeActionMode} activeActionUnit={activeActionUnit} activeExerciseActionId={activeExerciseActionId} activeActionIndex={activeActionIndex} exercises={exercises} availableWeightsPreferences={availableWeightsPreferences} setAvailableWeightsTarget={setAvailableWeightsTarget} closeExerciseActions={closeExerciseActions} moveExercise={moveExercise} setReplaceTarget={setReplaceTarget} setReplaceSearch={setReplaceSearch} setReplaceGroup={setReplaceGroup} toggleFavoriteExercise={toggleFavoriteExercise} activeActionIsFavorite={activeActionIsFavorite} deleteExercise={deleteExercise} toggleExerciseUnit={toggleExerciseUnit} />
               </AdaptiveModalCard>
             </TouchableWithoutFeedback>
           </View>
@@ -4858,643 +4003,3 @@ export default function WorkoutLog() {
     </SafeAreaView>
   );
 }
-
-const createStyles = (colors: NotebookColors) => { const base = notebookSheet({
-  screen: { flex: 1, backgroundColor: colors.canvas },
-  keyboardAvoiding: { flex: 1 },
-  container: { flex: 1, backgroundColor: colors.canvas },
-  scrollShell: { flex: 1 },
-  content: { width: "100%", maxWidth: 760, alignSelf: "center", padding: 20, paddingTop: 8, paddingBottom: 140 },
-  header: { width: "100%", maxWidth: 760, alignSelf: "center",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 8,
-  },
-  backButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-      backgroundColor: colors.subtle,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-  discardHeaderButton: {
-    borderColor: colors.danger,
-    borderWidth: StyleSheet.hairlineWidth * 2,
-    backgroundColor: colors.danger,
-  },
-  headerSpacer: { width: 22 },
-  title: { color: colors.ink, fontFamily: notebookFonts.editorial, fontSize: 22, fontWeight: "800" },
-  card: {
-    backgroundColor: colors.subtle,
-    borderRadius: 16,
-    padding: 16,
-    marginTop: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.rule,
-  },
-  sectionTitle: { color: colors.ink, fontSize: 16, fontWeight: "700", marginBottom: 10 },
-  input: {
-    backgroundColor: colors.subtle,
-    color: colors.ink,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    marginBottom: 10,
-  },
-  row: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "space-between",
-    backgroundColor: colors.canvas,
-    zIndex: 2,
-    columnGap: 10,
-    rowGap: 8,
-  },
-  sessionButtonRow: { flexDirection: "row", gap: 10, marginBottom: 10 },
-  sessionActionButton: { flex: 1, marginTop: 0 },
-  halfInput: { flexBasis: "48%", flexGrow: 1, minWidth: 120, marginBottom: 0 },
-  primaryButton: {
-    backgroundColor: colors.primary,
-    paddingVertical: 12,
-    borderRadius: 12,
-    alignItems: "center",
-    marginTop: 8,
-  },
-  primaryText: { color: colors.onPrimary, fontWeight: "700" },
-  secondaryButton: {
-    backgroundColor: colors.ink,
-    paddingVertical: 12,
-    borderRadius: 12,
-    alignItems: "center",
-  },
-  secondaryText: { color: colors.accent, fontWeight: "700" },
-  disabled: { opacity: 0.5 },
-  muted: { color: colors.muted },
-  exerciseBlock: { marginTop: 8 },
-  exerciseNameButton: { flex: 1, flexShrink: 1, marginLeft: 6 },
-  exerciseName: { color: colors.ink, fontWeight: "700", marginBottom: 0 },
-  exerciseDemoThumbButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 8,
-    overflow: "hidden",
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.rule,
-    backgroundColor: colors.subtle,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  exerciseDemoThumbImage: { width: "100%", height: "100%" },
-  exerciseDemoThumbFallback: {
-    width: "100%",
-    height: "100%",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  exerciseMetaNotesSingle: { marginTop: 12, marginBottom: 8 },
-  inlineTipRow: { flexDirection: "row", gap: 8, marginBottom: 8 },
-  inlineZoneInputWrap: {
-    marginBottom: 0,
-    flex: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.rule,
-    backgroundColor: colors.subtle,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  inlineZoneInput: {
-    flex: 1,
-    marginBottom: 0,
-    backgroundColor: "transparent",
-    paddingVertical: 2,
-    paddingHorizontal: 0,
-    borderRadius: 0,
-    textAlign: "left",
-    fontSize: 12,
-    color: colors.ink,
-  },
-  restTimerInlineButton: {
-    marginBottom: 0,
-    flex: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.rule,
-    backgroundColor: colors.subtle,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  restTimerInlineText: { color: colors.ink, fontSize: 12, fontWeight: "700" },
-  durationFieldRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    marginBottom: 6,
-  },
-  durationFieldInput: {
-    width: 88,
-    backgroundColor: colors.subtle,
-    color: colors.ink,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    textAlign: "center",
-    fontSize: 28,
-    fontWeight: "800",
-  },
-  durationFieldColon: { color: colors.ink, fontSize: 28, fontWeight: "800" },
-  durationFieldLabelRow: {
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 36,
-    marginBottom: 8,
-  },
-  durationFieldLabel: { color: colors.muted, fontSize: 12, fontWeight: "700" },
-  tempoSliderRow: { marginBottom: 10 },
-  tempoSliderLabel: { color: colors.ink, marginBottom: 4, fontWeight: "600" },
-  tempoSlider: { width: "100%", height: 28 },
-  tempoSliderValue: { color: colors.ink, fontWeight: "700", textAlign: "right" },
-  restCustomRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  restCustomInput: { flex: 1, marginBottom: 0, paddingVertical: 8 },
-  restCustomApply: { paddingVertical: 10, paddingHorizontal: 14 },
-  metaInput: { marginBottom: 0, paddingVertical: 8 },
-  sheetTitleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  calendarHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 8,
-  },
-  calendarWeekRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 6,
-  },
-  calendarWeekdayText: { color: colors.muted, width: 34, textAlign: "center", fontWeight: "700" },
-  calendarDayButton: {
-    width: 34,
-    height: 34,
-    borderRadius: 9,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  calendarDayOutside: { opacity: 0.45 },
-  calendarDaySelected: { backgroundColor: colors.primary },
-  calendarDayText: { color: colors.muted, fontWeight: "600" },
-  calendarDayTextOutside: { color: colors.muted },
-  calendarDayTextSelected: { color: colors.ink, fontWeight: "700" },
-  setHeaderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingVertical: 4,
-    marginBottom: 2,
-  },
-  setHeaderRowTablet: { gap: 10 },
-  // Mirrors the native notebook row: Set, 96px Last, three fields, then 44px Done.
-  nativeSetHeaderRow: { gap: 0, paddingHorizontal: 0 },
-  setHeaderText: { color: colors.muted, fontSize: 12, fontWeight: "700" },
-  setHeaderSet: { width: 24, textAlign: "center" },
-  setHeaderCheck: { width: 24, textAlign: "center" },
-  cardioSetHeaderCheck: { width: 34 },
-  nativeSetHeaderCheck: { width: 40, marginRight: 2 },
-  setHeaderLast: { width: 84 },
-  nativeSetHeaderLast: { marginLeft: 2 },
-  setHeaderInputsGroup: { flex: 1, flexDirection: "row", alignItems: "center", gap: 8 },
-  nativeSetHeaderInputsGroup: { gap: 0 },
-  nativeSetHeaderInput: { marginLeft: 6 },
-  setColWeight: { flex: 1, textAlign: "center" },
-  setColReps: { flex: 1, textAlign: "center" },
-  setColRpe: { flex: 0.8, textAlign: "center" },
-  setInlineRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 6 },
-  setInlineRowTablet: { gap: 10, width: "100%" },
-  setLabelButton: {
-    width: 24,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  setLabel: { color: colors.muted, fontWeight: "700", fontSize: 13, width: 24, textAlign: "center" },
-  setLabelTablet: { width: 28, fontSize: 15 },
-  lastSetButton: { width: 84 },
-  lastSetText: { width: 84, color: colors.muted, fontSize: 11, lineHeight: 14 },
-  cardioTapValue: { color: colors.ink, textAlign: "center", fontWeight: "700" },
-  cardioMetaRow: { marginTop: 8 },
-  cardioMetaLabel: { color: colors.muted, fontSize: 12, fontWeight: "700", marginBottom: 6 },
-  distanceUnitSuffix: { color: colors.muted, fontSize: 16, fontWeight: "700", marginLeft: 4 },
-  setInputsGroup: { flex: 1, flexDirection: "row", alignItems: "center", gap: 8 },
-  setInputsGroupTablet: { flex: 1 },
-  setInput: { marginBottom: 0, paddingVertical: 10, minHeight: 40 },
-  setInputCompact: { fontSize: 15, paddingHorizontal: 8, textAlign: "center" },
-  setInputTablet: { flex: undefined, width: undefined, minWidth: undefined },
-  setInputReps: { marginRight: 0 },
-  setInputRepsTablet: { marginRight: 0 },
-  checkboxInline: { paddingRight: 2 },
-  checkboxHitbox: {
-    minWidth: 34,
-    minHeight: 34,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  checkbox: {
-    width: 24,
-    height: 24,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: colors.muted,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "transparent",
-  },
-  checkboxChecked: {
-    backgroundColor: colors.primary,
-    borderColor: colors.accent,
-  },
-  cardioCheckboxMark: { color: colors.onPrimary, fontSize: 12, fontWeight: "700", lineHeight: 14 },
-  inlineUndoBanner: {
-    marginTop: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 12,
-    backgroundColor: colors.accentSoft,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-  },
-  inlineUndoBannerText: { color: colors.ink, fontSize: 13, fontWeight: "600", flex: 1 },
-  inlineUndoBannerAction: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: colors.accentSoft,
-  },
-  inlineUndoBannerActionText: { color: colors.ink, fontSize: 12, fontWeight: "800" },
-  replacementEmptyText: { color: colors.muted, fontSize: 13, lineHeight: 19, paddingVertical: 12 },
-  pickerCard: {
-    backgroundColor: colors.subtle,
-    borderRadius: 12,
-    padding: 8,
-    marginTop: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.rule,
-  },
-  pickerRow: {
-    paddingVertical: 10,
-    paddingHorizontal: 8,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  pickerRowMain: { flex: 1, flexDirection: "row", alignItems: "center", gap: 8 },
-  pickerText: { color: colors.ink, fontWeight: "600" },
-  exercisePickerLoading: {
-    paddingVertical: 10,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-  },
-  customRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 8 },
-  miniButton: {
-    backgroundColor: colors.primary,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-  },
-  miniButtonText: { color: colors.ink, fontWeight: "700" },
-  emptyCard: {
-    backgroundColor: colors.subtle,
-    borderRadius: 16,
-    padding: 16,
-    marginTop: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.rule,
-  },
-  routineActionRow: { flexDirection: "row", gap: 8, marginTop: 10 },
-  routineActionButton: { flex: 1 },
-  routineBuilderBanner: {
-    marginTop: 10,
-    borderRadius: 12,
-    padding: 10,
-    backgroundColor: colors.accentSoft,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    gap: 4,
-  },
-  feedbackBanner: {
-    marginTop: 10,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    backgroundColor: colors.subtle,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: 8,
-  },
-  feedbackBannerText: { color: colors.ink, fontSize: 12, fontWeight: "700", flex: 1 },
-  feedbackBannerAction: {
-    borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.rule,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  feedbackBannerActionText: { color: colors.ink, fontSize: 11, fontWeight: "700" },
-  recommendationCard: {
-    backgroundColor: colors.accentSoft,
-    borderRadius: 12,
-    padding: 12,
-    marginTop: 10,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    gap: 4,
-  },
-  recommendationLine: { color: colors.ink, fontSize: 12, lineHeight: 18 },
-  routineCard: {
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.rule,
-    backgroundColor: colors.subtle,
-    padding: 10,
-    marginBottom: 8,
-    gap: 8,
-  },
-  routineCardHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  routineUseButton: {
-    backgroundColor: colors.primary,
-    borderRadius: 10,
-    paddingVertical: 10,
-    alignItems: "center",
-  },
-  toggleRow: {
-    flexDirection: "row",
-    gap: 8,
-    flexWrap: "wrap",
-    justifyContent: "flex-end",
-    alignItems: "center",
-  },
-  toggleChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.rule,
-    backgroundColor: colors.subtle,
-  },
-  toggleChipActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.accent,
-  },
-  toggleText: { color: colors.ink, fontWeight: "700" },
-  toggleTextActive: { color: colors.onPrimary },
-  groupChips: { flexDirection: "row", gap: 8, paddingVertical: 4 },
-  groupChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.rule,
-    backgroundColor: colors.subtle,
-  },
-  groupChipActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.accent,
-  },
-  groupChipText: { color: colors.ink, fontWeight: "700" },
-  groupChipTextActive: { color: colors.onPrimary },
-  focusChipRow: { gap: 8, paddingTop: 10 },
-  exerciseHistoryList: { maxHeight: 460 },
-  exerciseHistoryRow: { gap: 4, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.rule },
-  exerciseHistorySetList: { gap: 3 },
-  exerciseHistoryDateRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  exerciseHistoryDate: { color: colors.muted, fontSize: 12, fontWeight: "700" },
-  exerciseHistoryPrBadge: {
-    color: colors.ink,
-    backgroundColor: colors.accentSoft,
-    borderRadius: 999,
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    fontSize: 9,
-    fontWeight: "900",
-  },
-  exerciseHistorySets: { color: colors.ink, fontSize: 13, lineHeight: 19 },
-  exerciseHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
-  },
-  setContainer: { marginBottom: 6 },
-  swipeDeleteContainer: {
-    justifyContent: "center",
-    alignItems: "flex-end",
-    marginBottom: 6,
-    width: 96,
-  },
-  swipeDeleteButton: {
-    backgroundColor: colors.danger,
-    borderRadius: 10,
-    width: 88,
-    height: 42,
-    paddingHorizontal: 10,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-  },
-  swipeDeleteText: { color: colors.ink, fontWeight: "700", fontSize: 12 },
-  iconButton: {
-    padding: 6,
-    borderRadius: 8,
-    backgroundColor: colors.subtle,
-  },
-  actionRow: { flexDirection: "row", gap: 8, marginTop: 6 },
-  setActionsRow: { flexDirection: "row", gap: 8, marginTop: 8 },
-  setActionButton: { flex: 1, marginTop: 0 },
-  sessionMeta: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 6,
-  },
-  phaseRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 6 },
-  phaseLink: { paddingHorizontal: 6, paddingVertical: 2 },
-  phaseLinkText: { color: colors.accent, fontWeight: "700" },
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: colors.overlay,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 24,
-  },
-  modalCard: {
-    backgroundColor: colors.canvas,
-    borderRadius: 16,
-    padding: 20,
-    width: "100%",
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.rule,
-  },
-  modalTitle: { color: colors.ink, fontFamily: notebookFonts.editorial, fontSize: 18, fontWeight: "800", marginBottom: 8 },
-  modalText: { color: colors.ink, marginBottom: 4 },
-  recommendationLengthList: { gap: 8, marginTop: 12 },
-  recommendationLengthOption: {
-    minHeight: 70,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.rule,
-    backgroundColor: colors.subtle,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  recommendationLengthOptionActive: {
-    borderColor: colors.accent,
-    backgroundColor: colors.accentSoft,
-  },
-  recommendationLengthTitle: { color: colors.ink, fontSize: 15, fontWeight: "800" },
-  recommendationLengthTitleActive: { color: colors.accent },
-  recommendationLengthDetail: { color: colors.muted, fontSize: 13, marginTop: 3 },
-  recommendationLengthDetailActive: { color: colors.ink },
-  exerciseOptionRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    minHeight: 46,
-    paddingVertical: 6,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.rule,
-  },
-  exerciseOptionUnits: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
-  exerciseReorderRow: {
-    minHeight: 54,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.rule,
-  },
-  exerciseMoveRow: { flexDirection: "row", gap: 6, marginLeft: "auto" },
-  exerciseMoveButton: {
-    minWidth: 66,
-    minHeight: 34,
-    borderRadius: 10,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.rule,
-    backgroundColor: colors.subtle,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-  },
-  exerciseMoveText: { color: colors.ink, fontSize: 13, fontWeight: "700" },
-  exerciseUnitChip: { paddingVertical: 6, paddingHorizontal: 10 },
-  exerciseOptionText: { color: colors.ink, fontWeight: "700", fontSize: 14 },
-  demoImageRow: { flexDirection: "row", gap: 8, marginBottom: 10 },
-  demoImage: { width: "48%", aspectRatio: 1, borderRadius: 10 },
-  modalErrorText: { color: colors.danger, marginBottom: 8, fontWeight: "600" },
-  modalActions: { flexDirection: "row", gap: 10, marginTop: 12 },
-  modalActionButton: { flex: 1 },
-  modalPrimaryButton: { marginTop: 0, paddingVertical: 12 },
-  dangerButton: {
-    backgroundColor: colors.danger,
-    paddingVertical: 12,
-    borderRadius: 12,
-    alignItems: "center",
-  },
-  answerRow: { flexDirection: "row", gap: 8, marginTop: 8, flexWrap: "wrap" },
-  answerChip: {
-    paddingVertical: 8,
-    paddingHorizontal: 9,
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.rule,
-    backgroundColor: colors.subtle,
-  },
-  answerChipActive: { backgroundColor: colors.primary, borderColor: colors.accent },
-  answerText: { color: colors.ink, fontWeight: "700", fontSize: 12 },
-  answerTextActive: { color: colors.onPrimary },
-  baselineBanner: {
-    backgroundColor: colors.accentSoft,
-    borderRadius: 12,
-    padding: 12,
-    marginTop: 10,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-  },
-  baselineText: { color: colors.ink, fontWeight: "700" },
-  baselineSub: { color: colors.muted, marginTop: 4 },
-  sheetBackdrop: {
-    flex: 1,
-    backgroundColor: colors.overlay,
-    justifyContent: "flex-end",
-  },
-  sheetCard: {
-    width: "100%",
-    backgroundColor: colors.canvas,
-    padding: 16,
-    borderRadius: 16,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.rule,
-  },
-}); return { ...base, ...notebookSheet({
-  card: { backgroundColor: colors.canvas, borderRadius: 0, paddingVertical: 24, paddingHorizontal: 0, marginTop: 0, borderWidth: 0, borderTopWidth: 1, borderColor: colors.rule },
-  sectionTitle: { color: colors.ink, fontSize: 20, fontWeight: "600", marginBottom: 16 },
-  input: { backgroundColor: colors.surface, color: colors.ink, borderWidth: 1, borderColor: colors.border, borderRadius: 4, paddingHorizontal: 12, paddingVertical: 10, minHeight: 48, fontSize: 16, marginBottom: 10 },
-  primaryButton: { backgroundColor: colors.primary, minHeight: 48, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 8, alignItems: "center", justifyContent: "center", marginTop: 8 },
-  secondaryButton: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, minHeight: 48, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 8, alignItems: "center", justifyContent: "center" },
-  primaryText: { color: colors.onPrimary, fontWeight: "600", fontSize: 16 }, secondaryText: { color: colors.ink, fontWeight: "600", fontSize: 16 },
-  modalBackdrop: { flex: 1, backgroundColor: colors.overlay, justifyContent: "flex-end", paddingHorizontal: 0 },
-  modalCard: { width: "100%", maxWidth: 560, backgroundColor: colors.surface, borderRadius: 16, padding: 20, gap: 12 },
-  modalActions: { flexDirection: "column", gap: 12, marginTop: 20 }, modalActionButton: { flex: 0, width: "100%" },
-  exerciseOrdinal: { color: colors.muted, fontSize: 13, minWidth: 24 },
-  exerciseName: { color: colors.ink, fontWeight: "600", fontSize: 20 },
-  exerciseNameButton: { flex: 1, flexShrink: 1, marginLeft: 0, minHeight: 48, justifyContent: "center" },
-  iconButton: { minWidth: 44, minHeight: 44, alignItems: "center", justifyContent: "center" },
-  inlineTipRow: { flexDirection: "row", gap: 12, marginVertical: 4 },
-  restTimerInlineButton: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", minHeight: 44, gap: 6 },
-  restTimerInlineText: { color: colors.muted, fontSize: 13 },
-  exerciseMetaNotesSingle: { marginTop: 4, marginBottom: 8 }, noteLabel: { color: colors.muted, fontSize: 13, marginBottom: 4 },
-  emptyHeading: { paddingVertical: 24, gap: 12 }, sessionTitle: { color: colors.ink, fontFamily: notebookFonts.editorial, fontSize: 26, fontWeight: "600" },
-  sourceRow: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 8 },
-  textAction: { minHeight: 48, justifyContent: "center", paddingVertical: 8 }, linkText: { color: colors.accent, fontSize: 16, fontWeight: "600" },
-  setHeaderCheck: { width: 44, textAlign: "center" }, cardioSetHeaderCheck: { width: 44 },
-  checkboxHitbox: { minWidth: 44, minHeight: 44, alignItems: "center", justifyContent: "center" },
-  nativeSetHeaderCheck: { width: 44 }, nativeSetHeaderLast: { width: 96, marginLeft: 4 },
-  nativeSetHeaderInput: { marginLeft: 4 }, setColRpe: { flex: 1, textAlign: "center" },
-  checkbox: { width: 20, height: 20, borderWidth: 1, borderRadius: 4, borderColor: colors.border, backgroundColor: colors.surface, justifyContent: "center", alignItems: "center" },
-  checkboxChecked: { backgroundColor: colors.primary, borderColor: colors.primary }, cardioCheckboxMark: { color: colors.onPrimary, fontSize: 12, fontWeight: "700" },
-  answerTextActive: { color: colors.onPrimary }, groupChipTextActive: { color: colors.onPrimary },
-  sessionControls: { paddingVertical: 4, borderBottomWidth: 1, borderBottomColor: colors.rule },
-  sessionActionRow: { flexDirection: "row", gap: 12, paddingVertical: 8 },
-  sessionActionGroupRule: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.rule },
-  sessionActionDivider: { width: StyleSheet.hairlineWidth, backgroundColor: colors.rule, marginVertical: 12 },
-  sessionActionFooter: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.rule, paddingVertical: 8 },
-  sessionAction: { flex: 1, minHeight: 48, justifyContent: "center", paddingVertical: 8 },
-  sessionActionRight: { alignItems: "flex-end" },
-  routineMenuRow: { minHeight: 52, paddingVertical: 12, borderTopWidth: 1, borderTopColor: colors.rule, justifyContent: "center" },
-  activeSet: { backgroundColor: colors.accentSoft, borderLeftWidth: 2, borderLeftColor: colors.accent },
-  setHelp: { gap: 8, paddingVertical: 12 },
-  restCustomRow: { ...base.restCustomRow, marginTop: 20 },
-  durationFieldInput: { ...base.durationFieldInput, width: 112, minWidth: 88, flexShrink: 1, fontSize: 24, paddingHorizontal: 8, minHeight: 52 },
-}) }; };

@@ -29,6 +29,9 @@ class WorkoutSetListManager : SimpleViewManager<WorkoutSetListView>() {
   @ReactProp(name = "fontFamily")
   fun setNotebookFont(view: WorkoutSetListView, value: String?) { view.setNotebookFont(value) }
 
+  @ReactProp(name = "planMode", defaultBoolean = false)
+  fun setPlanMode(view: WorkoutSetListView, value: Boolean) { view.setPlanMode(value) }
+
   @ReactProp(name = "previewMode", defaultBoolean = false)
   fun setPreviewMode(view: WorkoutSetListView, value: Boolean) { view.setPreviewMode(value) }
 
@@ -51,6 +54,7 @@ class WorkoutSetListManager : SimpleViewManager<WorkoutSetListView>() {
             weight = set.getStringOrEmpty("weight"),
             reps = set.getStringOrEmpty("reps"),
             rpe = set.getStringOrEmpty("rpe"),
+            targetHint = set.getStringOrEmpty("rpeHint"),
             done = if (set.hasKey("done") && !set.isNull("done")) set.getBoolean("done") else false
           )
         )

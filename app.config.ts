@@ -131,6 +131,12 @@ const config: ExpoConfig = {
     ...baseConfig.android,
     package: androidPackage,
     googleServicesFile: resolvedGoogleServicesFile,
+    intentFilters: isDevVariant ? [] : ["/shared-workout", "/w/"].map((path) => ({
+      action: "VIEW" as const,
+      autoVerify: true,
+      category: ["BROWSABLE", "DEFAULT"],
+      data: [{ scheme: "https", host: "lastrep-ebac5.web.app", ...(path === "/w/" ? { pathPrefix: path } : { path }) }],
+    })),
     adaptiveIcon: {
       ...(baseConfig.android?.adaptiveIcon ?? {}),
       foregroundImage: adaptiveForeground,

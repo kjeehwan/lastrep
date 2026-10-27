@@ -11,6 +11,7 @@ export type WorkoutSetUi = {
   weight: string;
   reps: string;
   rpe: string;
+  rpeHint?: string;
   done: boolean;
 };
 
@@ -28,6 +29,7 @@ type LastPressEvent = NativeSyntheticEvent<{ index: number }>;
 type NativeProps = {
   onContentSizeChange?: (event: NativeSyntheticEvent<{ height: number }>) => void;
   previewMode?: boolean;
+  planMode?: boolean;
   activeSetIndex?: number;
   editingSuspended?: boolean;
   onSetActivate?: (event: NativeSyntheticEvent<{ index: number }>) => void;
