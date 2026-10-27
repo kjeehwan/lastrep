@@ -1,6 +1,7 @@
 export type AppDialogButton = {
   text: string;
   role?: "default" | "cancel" | "destructive";
+  variant?: "primary" | "secondary";
   onPress?: () => void;
 };
 
