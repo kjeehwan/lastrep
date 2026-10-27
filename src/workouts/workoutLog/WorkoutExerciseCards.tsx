@@ -579,7 +579,7 @@ export function useWorkoutExerciseCards({
                   rpe: effortInputValue(set, effortScale),
                   rpeHint:
                     !planMode && set.targetRpe != null
-                      ? `Target ${rpeToEffort(set.targetRpe, effortScale)}`
+                      ? String(rpeToEffort(set.targetRpe, effortScale))
                       : undefined,
                   done: set.done,
                 }))}
@@ -789,11 +789,13 @@ export function useWorkoutExerciseCards({
                             <WorkoutGestureTextInput
                               placeholder={
                                 !planMode && s.targetRpe != null
-                                  ? `Target ${rpeToEffort(s.targetRpe, effortScale)}`
+                                  ? String(rpeToEffort(s.targetRpe, effortScale))
                                   : effortScale === "rir"
                                     ? "0-4"
                                     : "6-10"
                               }
+                              accessibilityLabel={`${ex.name}, set ${idx + 1}, ${effortScale === "rir" ? "RIR" : "RPE"}`}
+                              accessibilityHint={!planMode && s.targetRpe != null ? `Target ${rpeToEffort(s.targetRpe, effortScale)}` : undefined}
                               placeholderTextColor={colors.muted}
                               keyboardType="decimal-pad"
                               value={effortInputValue(s, effortScale)}

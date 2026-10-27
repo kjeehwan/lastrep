@@ -33,7 +33,8 @@
       },
       "env": {
         "APP_VARIANT": "prod",
-        "NODE_ENV": "production"
+        "NODE_ENV": "production",
+        "EXPO_PUBLIC_WORKOUT_SHARING_URL": "https://lastrep.web.app"
       }
     }
   },

@@ -138,6 +138,11 @@ describe("public sharing landing page", () => {
   it("serves the association JSON without authentication or redirect and confines links to production", () => {
     const config = JSON.parse(fs.readFileSync("firebase.json", "utf8")).hosting;
     expect(config.public).toBe("hosting/workout-sharing");
+    expect(config.target).toBe("sharing");
+    const targets = JSON.parse(fs.readFileSync(".firebaserc", "utf8")).targets;
+    expect(targets["lastrep-ebac5"].hosting.sharing).toEqual(["lastrep"]);
+    const release = JSON.parse(fs.readFileSync("eas.json", "utf8")).build.production;
+    expect(release.env.EXPO_PUBLIC_WORKOUT_SHARING_URL).toBe("https://lastrep.web.app");
     expect(config.rewrites).toEqual([
       {
         source: "/api/workout-sharing",
@@ -160,9 +165,10 @@ describe("public sharing landing page", () => {
       "utf8",
     );
     expect(manifest).toContain('android:autoVerify="true"');
-    expect(manifest).toContain(
-      'android:host="lastrep-ebac5.web.app" android:path="/shared-workout"',
-    );
+    for (const host of ["lastrep.web.app", "lastrep-ebac5.web.app"]) {
+      expect(manifest).toContain(`android:host="${host}" android:path="/shared-workout"`);
+      expect(manifest).toContain(`android:host="${host}" android:pathPrefix="/w/"`);
+    }
     expect(
       fs.readFileSync("android/app/src/main/AndroidManifest.xml", "utf8"),
     ).not.toContain("lastrep-ebac5.web.app");
