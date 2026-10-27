@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.kjeehwan.lastrep",
+      "sha256_cert_fingerprints": [
+        "09:0B:2C:9D:A1:5B:6D:9B:FA:5D:CA:01:9F:1E:1D:B2:5D:CA:D7:9D:FC:1B:16:26:11:DA:B0:B7:59:19:5C:5E"
+      ]
+    }
+  }
+]

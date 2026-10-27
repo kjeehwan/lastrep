@@ -141,7 +141,7 @@ it("shares the same accessible information control on Home and Profile", () => {
 });
 
 it("rounds detached Workout cards at the bottom as well as the top", () => {
-  for (const path of ["src/workouts/workoutLog/WorkoutTodayPlan.tsx", "src/workouts/workoutLog/AvailableWeightsModal.tsx", "app/(tabs)/workout/log.tsx"]) {
+  for (const path of ["src/workouts/workoutLog/WorkoutTodayPlan.tsx", "src/workouts/workoutLog/AvailableWeightsModal.tsx", "src/workouts/workoutLog/workoutLogStyles.ts"]) {
     const workout = readFileSync(path, "utf8");
     expect(workout).not.toContain("borderTopLeftRadius:");
     expect(workout).not.toContain("borderTopRightRadius:");

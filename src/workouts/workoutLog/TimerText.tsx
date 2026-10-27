@@ -4,7 +4,7 @@ import { useIsFocused } from "expo-router";
 import { useNow } from "../../hooks/useNow";
 import { advanceRest, elapsedAt, type RestClock } from "./timerClock";
 
-function clockLabel(seconds: number) {
+export function clockLabel(seconds: number) {
   const minutes = Math.floor(seconds / 60);
   const remainder = String(seconds % 60).padStart(2, "0");
   return `${minutes}:${remainder}`;

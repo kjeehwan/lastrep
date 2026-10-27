@@ -1,5 +1,13 @@
 // Approved outline vocabulary, copied from the reviewed Home study.
 const paths = {
+  inbox: '<path d="M5 4h14l3 11v5H2v-5L5 4Z"/><path d="M2 15h6l2 3h4l2-3h6"/>',
+  play: '<path d="m8 5 11 7-11 7Z"/>',
+  options: '<path d="M4 6h16M4 12h16M4 18h16"/><circle cx="8" cy="6" r="2"/><circle cx="16" cy="12" r="2"/><circle cx="10" cy="18" r="2"/>',
+  swap: '<path d="M3 7h18m-4-4 4 4-4 4M21 17H3m4-4-4 4 4 4"/>',
+  trash: '<path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/>',
+  map: '<path d="m3 5 6-2 6 2 6-2v16l-6 2-6-2-6 2V5ZM9 3v16M15 5v16"/>',
+  message: '<path d="M4 4h16v12H9l-5 4V4Z"/><path d="M8 8h8M8 12h5"/>',
+  copy: '<rect x="8" y="8" width="12" height="13" rx="1"/><path d="M16 8V3H3v13h5"/>',
   info: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="7.5" r="1.1" fill="currentColor" stroke="none"/><path d="M12 11.5v5"/>',
   mail: '<rect x="3" y="5" width="18" height="14" rx="1"/><path d="m3 6 9 7 9-7"/>',
   document: '<path d="M6 3h8l4 4v14H6V3Zm8 0v5h4M9 12h6M9 16h6"/>',
@@ -10,6 +18,7 @@ const paths = {
   barcode: '<path d="M3 5v14M6 5v14M10 5v14M12 5v14M16 5v14M20 5v14"/><path d="M3 3H1v4M21 3h2v4M3 21H1v-4M21 21h2v-4"/>',
   more: '<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',
   clock: '<circle cx="12" cy="12" r="9"/><path d="M12 6v7h5"/>',
+  speedometer: '<path d="M4 19a10 10 0 1 1 16 0Z"/><path d="m12 12 5-5M12 3v2M4.9 5.9l1.4 1.4M2 13h2M20 13h2"/><circle cx="12" cy="13" r="1.5"/>',
 
   calendar: '<rect x="4" y="5" width="16" height="16" rx="1"/><path d="M8 3v4M16 3v4M4 10h16M8 14h3M8 17h6"/>',
   settings: '<path d="M4 6h5M13 6h7M4 12h10M18 12h2M4 18h2M10 18h10"/><circle cx="11" cy="6" r="2"/><circle cx="16" cy="12" r="2"/><circle cx="8" cy="18" r="2"/>',

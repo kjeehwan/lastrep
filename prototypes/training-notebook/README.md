@@ -8,6 +8,46 @@ main screen design directions are approved. None replaces a Lastrep application 
 
 ## Open it
 
+### Workout sharing candidate (awaiting review)
+
+Open **http://127.0.0.1:4317/index.html#share-send**. Review the sender's plan,
+toggle Include weights and choose Send in Lastrep. Search by nickname or @username,
+select one or more recipients and review delivery. Names are alphabetical, with
+@username breaking ties; selections remain while searching. Share external link
+is secondary and previews labeled Messages, Email and Copy link icons.
+Review optional sharing at **settings.html#sharing-off**. Username opens its editor
+directly in both Settings and Profile. Save a username first, then use the single
+sharing toggle to turn sharing on/off; saving a username does not enable it.
+**profile.html#sharing-profile** opens the blank optional username example.
+**index.html#social-inbox**, **#social-requests** and **#social-search** show received
+workouts, first-time requests and people search. Accept, decline or block a request;
+accepted senders go directly to the inbox. The same workout may be received again
+at any time. Turning sharing off preserves existing items and external links.
+Use the review selector for Receive a workout, Receive the same workout again,
+Workout already open and Shared link unavailable. A saved routine never blocks
+using the same workout for a new session. Keep, append and replace are explicit
+choices when a workout is already open. Workout matches the current native action
+rows below Today's Plan, without a Session options button. Share workout is in
+that section. The header has an inbox icon and unread badge, and Finish workout
+follows the last exercise. Home has the same inbox between Calendar and Settings.
+Home and Workout open the same inbox over their current page; choosing
+Use for a new workout or Save to My routines can navigate to Workout.
+The popup is titled Workout sharing, with Inbox, Requests and Sent tabs. Review
+**index.html#social-sent** for sent workout names, recipients, times and Send again.
+Tap a Sent entry for the read-only workout snapshot. Send again is at the bottom
+of that preview; later source-workout edits do not change what was sent.
+Edit workout above Send again opens an isolated Workout-style plan editor. Change
+sets, exercises, target RPE/RIR, set types, rest, tempo, recipient instructions,
+units or the name, review the edited plan, then review recipients and send a new
+version. Cancel returns to the original Sent preview; the active workout stays intact.
+The editor now shares Workout's exercise-card renderer, three-dot menu, inline
+replacement picker and warm-up sheet/model/gestures. It is the plan-editing variant
+of those components: Last and Done are omitted, and effort is an explicit target.
+Sending again opens recipient review before another simulated delivery. Sent
+history excludes external composer drafts and does not add to the unread badge.
+These are temporary synthetic examples; no links, messages, account writes or
+real abuse controls are created. See [sharing study notes](../../docs/workout-sharing-study.md).
+
 **Home study:** after starting the server, open
 **http://127.0.0.1:4317/home.html**. The studies link to one another from the
 review sidebar. Home has 28 example states, including the saved-workout candidate

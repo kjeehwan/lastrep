@@ -42,6 +42,7 @@ data class WorkoutSetItem(
   val weight: String,
   val reps: String,
   val rpe: String,
+  val targetHint: String = "",
   val done: Boolean
 )
 
@@ -60,6 +61,7 @@ private data class ActiveWorkoutSetEditor(val position: Int, val field: String)
 
 class WorkoutSetListView(context: Context) : LinearLayout(context) {
   private var previewMode = false
+  private var planMode = false
   private var activeSetIndex = -1
   private var editingSuspended = false
   private val recyclerView = RecyclerView(context)
@@ -140,6 +142,8 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
   var weightLabel: String = "Weight"
   var repsLabel: String = "Reps"
   var rpeLabel: String = "RPE"
+
+  fun setPlanMode(value: Boolean) { if (planMode != value) { planMode = value; adapter.notifyDataSetChanged(); requestLayout() } }
 
   fun setPreviewMode(value: Boolean) { if (previewMode != value) { previewMode = value; adapter.notifyDataSetChanged(); requestLayout() } }
 
@@ -390,7 +394,7 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
       notifyDataSetChanged()
     }
 
-    override fun getItemViewType(position: Int): Int = if (previewMode) 1 else 0
+    override fun getItemViewType(position: Int): Int = if (planMode) 2 else if (previewMode) 1 else 0
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
       return WorkoutSetViewHolder(createRowView(parent.context))
@@ -463,7 +467,7 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
         isFocusable = true
         setLineSpacing(0f, 1.05f)
       }
-      if (!previewMode) header.addView(last, if (largeText) LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f) else LayoutParams(dp(96f), LayoutParams.WRAP_CONTENT).apply { marginStart = dp(4f) })
+      if (!previewMode && !planMode) header.addView(last, if (largeText) LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f) else LayoutParams(dp(96f), LayoutParams.WRAP_CONTENT).apply { marginStart = dp(4f) })
       setLabel.typeface = notebookFace(); last.typeface = notebookFace()
 
       val weight = createInput(
@@ -483,7 +487,7 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
         root.addView(weight, LayoutParams(0, inputHeight, 1f).apply { marginStart = dp(4f) })
         root.addView(reps, LayoutParams(0, inputHeight, 1f).apply { marginStart = dp(4f) })
       } else if (largeText) {
-        header.addView(checkHitbox)
+        if (!planMode) header.addView(checkHitbox)
         root.addView(header, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
         for ((label, input) in listOf(weightHint to weight, repsHint to reps, (if (rpeHint == "0-4") "RIR" else "RPE") to rpe)) {
           val line = LinearLayout(context).apply { orientation = HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(4f), 0, dp(4f)) }
@@ -493,10 +497,10 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
           root.addView(line, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
         }
       } else {
-        root.addView(weight, LayoutParams(0, dp(48f), 1f).apply { marginStart = dp(4f) })
-        root.addView(reps, LayoutParams(0, dp(48f), 1f).apply { marginStart = dp(4f) })
-        root.addView(rpe, LayoutParams(0, dp(48f), 1f).apply { marginStart = dp(4f) })
-        root.addView(checkHitbox)
+        root.addView(weight, LayoutParams(0, dp(48f), 1f).apply { marginStart = dp(if (planMode) 12f else 4f) })
+        root.addView(reps, LayoutParams(0, dp(48f), 1f).apply { marginStart = dp(if (planMode) 12f else 4f) })
+        root.addView(rpe, LayoutParams(0, dp(48f), 1f).apply { marginStart = dp(if (planMode) 12f else 4f) })
+        if (!planMode) root.addView(checkHitbox)
       }
 
       return WorkoutSetRowBinding(root, setLabel, checkHitbox, check, last, weight, reps, rpe)
@@ -592,7 +596,7 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
         }
         binding.weight.hint = weightHint
         binding.reps.hint = repsHint
-        binding.rpe.hint = rpeHint
+        binding.rpe.hint = item.targetHint.ifBlank { rpeHint }
 
         bindFocusTracking(binding.weight, "weight")
         bindFocusTracking(binding.reps, "reps")

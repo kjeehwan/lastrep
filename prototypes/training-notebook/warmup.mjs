@@ -45,3 +45,11 @@ export function warmupError(rows, weight) {
   if (rows.some(row => !row.reps.trim() || !Number.isInteger(Number(row.reps)) || Number(row.reps) <= 0)) return 'Enter a whole number of reps above zero.';
   return '';
 }
+export function prepareWarmupPreview(exercise, remembered = null, step = 2.5) {
+  const pattern = remembered || (exercise.name.toLowerCase() === 'bench press' && exercise.unit === 'kg'
+    ? [{fixed:20,reps:4},{ratio:.6,reps:4},{ratio:.8,reps:2}]
+    : [{ratio:.4,reps:4},{ratio:.6,reps:4},{ratio:.8,reps:2}]);
+  const weight=workingSet(exercise)?.weight || '', proposed=suggestWarmups(weight,pattern,step);
+  const rows=newWarmups(proposed,exercise.sets.filter(row=>row.type==='warmup'));
+  return {weight,rows,kept:proposed.filter(row=>!rows.includes(row)),pattern,swiped:null,remembered:!!remembered,missing:!Number(weight)};
+}

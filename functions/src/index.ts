@@ -2,6 +2,9 @@ import { getApps, initializeApp } from "firebase-admin/app";
 import { FieldValue, getFirestore, Timestamp } from "firebase-admin/firestore";
 import { getAuth } from "firebase-admin/auth";
 import { deleteProfilePhotosForAccount } from "./profilePhotos";
+import { deleteWorkoutSharingForAccount } from "./workoutSharing";
+export { workoutSharing, syncSharingNickname } from "./workoutSharing";
+export { expireWorkoutSharingInbox } from "./sharingRetention";
 export { stageProfilePhoto, commitProfilePhoto, getProfilePhoto, discardProfilePhotoUpload, cleanupAbandonedProfilePhotos } from "./profilePhotos";
 import * as functions from "firebase-functions/v1";
 import { defineSecret } from "firebase-functions/params";
@@ -1274,6 +1277,7 @@ export const deleteMyAccount = functions
 
     await userRef.set({ profilePhotoDeletionStartedAt: Timestamp.now() }, { merge: true });
     await deleteProfilePhotosForAccount(uid);
+    await deleteWorkoutSharingForAccount(uid);
     await db.recursiveDelete(userRef);
     await getAuth().deleteUser(uid);
 

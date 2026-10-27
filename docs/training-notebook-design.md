@@ -327,6 +327,20 @@ not determine text alignment.
 - Fields: surface fill, visible control-border, 6 radius, min-height 48, 12 inset.
   Focus uses a 2-dp accent border without changing outer geometry.
 - Labels are persistent; placeholders are examples, never the only field name.
+- Editable titles can use a borderless inline heading field with a nearby
+  pencil action instead of a separate visible label. Tapping the pencil
+  focuses the field and selects its existing title for replacement; tapping
+  the text itself places the cursor for a local edit. Retain an
+  accessible field name and an empty-state placeholder. Avoid a rounded,
+  full-box treatment that can be mistaken for an action button. Sharing's
+  exercise-note field omits the visible Instructions heading; its accessible
+  name still describes its purpose.
+- Request entries can place Accept / Decline / Block as a horizontal action
+  group at the right, centered vertically against the entry's full content.
+  Use recognizable icons with small labels to distinguish
+  decline from blocking, meaningful accessible names and at least 44 dp targets.
+  At larger text or narrow widths, move that same group below the entry so the
+  sender and workout remain readable.
 - Long names wrap; do not shrink every label to fit. Units use their own space.
 - Numeric fields retain existing decimal rules and intermediate input such as
   `20.`; do not rewrite text or move focus during each keystroke.
@@ -351,6 +365,14 @@ not determine text alignment.
 - A button must have breathing room above and below it. Get started uses 20
   above its action group; Workout's header uses 16 around Finish. Treat these as
   named examples of group separation, not a requirement for 20 above every button.
+- Within popup forms, use 12 dp between distinct control groups: search field,
+  filter chips, result list and custom entry; preset choices and a custom-value
+  field; explanatory copy and the first slider. Use 16 dp when an explanation
+  needs stronger separation from the controls. Inspect visible gaps in both
+  themes; a `gap` on a wrapper does not space children inside a scroll view.
+- Grouped exercise panels and the action buttons below them share the same
+  outer left and right edges. Put breathing room inside the panel, rather than
+  adding a different outer inset. Apply to sharing and other secondary editors.
 - Success icons and their headings sit on one horizontal row with a 12 gap.
   Center them vertically; allow the title to wrap without stranding the icon
   above a separate paragraph. Detailed confirmation copy stays below.
@@ -786,6 +808,17 @@ states honestly; do not invent a smooth trend from one record.
   necessary), with an internal scroll area rather than empty tall sheets.
 - Heading/Close is outside body scrolling where practical. Actions remain
   reachable. Android Back and outside tap dismiss non-destructive sheets.
+- Use an X icon aligned with the heading for a standalone dismiss action,
+  with an accessible name and at least a 44 dp target. Keep explicit Cancel
+  wording when it communicates discarding an unfinished change.
+- Tabs within one popup retain the same card position, dimensions and corner
+  shape across empty, loading and populated states. Reserve the body viewport
+  and scroll its content; do not shrink or expand the sheet on each tab switch.
+  Adapt that viewport to rotation, keyboard and larger text without hiding actions.
+  Do not briefly render the previous tab's rows while the next tab loads.
+- Keep the shared tab viewport compact: size it for a useful amount of content,
+  scroll longer lists, and match the bottom content padding to the top padding.
+  Stable geometry does not require a tall blank area below short lists.
 - Keep the Android clock and status icons legible while a popup is open. Use
   dark icons above light surfaces and light icons above dark surfaces, including
   the popup's own native window. Preserve the page's appearance on dismissal;
@@ -802,6 +835,11 @@ states honestly; do not invent a smooth trend from one record.
   must respect an in-flight save guard.
 - Loading/saving status gets a reserved layout slot or replaces button copy;
   do not move choices and Cancel when status text appears.
+- Secondary editors reuse the existing screen's components, control styles and
+  spacing. Omit actions that do not apply (for example a running rest countdown
+  while editing a shared plan), while retaining the same interval/tempo controls.
+  Review every new related popup when shared spacing is changed, including its
+  first control, last control, nested picker and empty/loading states.
 - Filtering a chart updates its existing viewport without blanking, remounting
   or delayed corrective scrolling. Date histories start at their newest records
   and retain chronological visual order. Prefer a windowed, right-anchored list

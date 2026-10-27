@@ -1,3 +1,4 @@
+import { useSharing } from "../../../src/sharing/SharingProvider";
 import { useDailySteps } from "../../../src/health/useDailySteps";
 import { hasStepsPermission } from "../../../src/health/dailySteps";
 import { NotebookProvider, useNotebook } from "../../../src/ui/notebook/Notebook";
@@ -202,6 +203,7 @@ function ProfileContent() {
   const [uid, setUid] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [goal, setGoal] = useState("");
+  const sharing = useSharing();
   const [nickname, setNickname] = useState("");
   const [profileDescription, setProfileDescription] = useState("");
   const [profilePhotoUri, setProfilePhotoUri] = useState("");
@@ -1583,6 +1585,7 @@ function ProfileContent() {
           <ProfilePhoto fallbackBackgroundColor={colors.subtle} fallbackTextColor={colors.ink} fallbackFontFamily={notebookFonts.semibold} uid={uid} reference={profilePhotoUri} initial={nickname.trim().charAt(0).toUpperCase() || "L"} style={{ width: 72, height: 72, borderRadius: 36, backgroundColor: colors.subtle }} contentFit="cover" />
           <View style={{ flex: 1, gap: 8 }}><Text style={{ fontFamily: notebookFonts.editorial, fontSize: 28, color: colors.ink }}>{nickname.trim() || "Your profile"}</Text><Text style={{ fontFamily: notebookFonts.semibold, fontSize: 13, color: colors.ink, alignSelf: "flex-start", borderWidth: 1, borderColor: colors.border, borderRadius: 4, paddingHorizontal: 8, paddingVertical: 4 }}>{entitlement.state === "loading" ? "Checking access" : entitlement.isSubscribed ? "Premium" : "Free"}</Text>{profileDescription ? <ProfileText muted>{profileDescription}</ProfileText> : null}</View>
         </View>
+        <ProfileRow label="Username" value={sharing.settings.username ? `@${sharing.settings.username}` : "Not set"} onPress={sharing.openUsername} />
       </ProfileSection>
       <ProfileSection title="Training">
         <ProfileRow wideValue label="Training phase" value={`${trainingPhase} / ${phaseLabel("training")}`} onPress={() => openEditor("training")} />

@@ -48,6 +48,9 @@ focus. Browser prototypes are design studies, not production account screens.
   timer auto-start and native meal-time wheels.
 - [Home daily movement](docs/home-activity-study.md): approved steps-only design,
   optional Health Connect access and native verification.
+- [Workout sharing](docs/workout-sharing-study.md): approved design and native status;
+  [sharing contract](docs/workout-sharing-contract.md) covers retention, limits and
+  deployment verification.
 - [Warm-up set helper](docs/workout-warmup-helper.md): approved preview, native
   insertion, remembered per-exercise setups and verification.
 - [Saved workout corrections](docs/saved-workout-details.md): date/duration editing,

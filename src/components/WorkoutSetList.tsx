@@ -6,6 +6,7 @@ import type { NativeSyntheticEvent } from "react-native";
 type Props = {
   onContentSizeChange?: (event: NativeSyntheticEvent<{ height: number }>) => void;
   previewMode?: boolean;
+  planMode?: boolean;
   activeSetIndex?: number;
   editingSuspended?: boolean;
   onSetActivate?: (event: NativeSyntheticEvent<{ index: number }>) => void;
