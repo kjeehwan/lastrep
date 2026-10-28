@@ -209,3 +209,33 @@ app tests passed; 22 emulator-dependent tests skipped. The connected dev app was
 reloaded through its dev menu and reached Home with the logo below the status
 bar. This settled-layout observation does not verify the reported sign-in
 transition. The subsequent user sign-out/sign-in retest passed: overlap is gone.
+
+## October 28, 2026: section consistency follow-up
+
+Chart work was merged separately in PR #65 (ee3b611). The Settings follow-up
+was reviewed and approved on the dev app.
+
+Subscription's Manage/Upgrade/Restore actions, Session's Sign out, and Delete
+account now reuse the same icon/label/chevron SettingsRow as Support and Legal.
+Manage subscription and Delete account explanations sit below their action
+labels in the shared text column. Deletion keeps its danger color. Existing
+handlers, disabled states, progress labels, confirmations and development billing
+restrictions are preserved. Appearance now shows the current preference in an
+icon row and opens a content-sized popup with vertical Light/Dark/System radio
+rows. Selection applies immediately; X, outside tap and Android Back dismiss it.
+The popup omits System explanation and transient saving text, retaining errors
+without introducing a temporary height change during a successful save.
+Subscription status and development Access use noninteractive rows; development
+grant/reset/debug actions use the same icon action rows. No grant or reset was
+executed during the layout review.
+
+Checked Galaxy Android 13 light mode and Android 16 dark mode. On the local
+emulator account, opened Sign out and Delete account confirmations and chose
+Stay signed in / Keep account; no account operation was completed. Store actions
+remain hidden in the dev build. Their shared renderer and call sites passed
+TypeScript/web export; real Play billing was not exercised for this layout task.
+The expanded layout was checked on both devices; emulator Light/Dark/System
+selection worked and its original Dark preference was restored. The real
+phone's Light preference and account data were preserved. TypeScript, lint, web
+export and 54 existing Settings/navigation/restore/theme tests passed. No native
+dependencies or AAB build were added.

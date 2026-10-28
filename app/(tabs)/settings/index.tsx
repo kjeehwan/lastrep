@@ -1,12 +1,15 @@
 import { SharingSettingsSection } from "../../../src/sharing/SharingSettingsSection";
-import { UserRound, Mail, FileText } from "lucide-react-native";
+import { UserRound, Mail, FileText, CreditCard, Crown, RotateCcw, LogOut, Trash2, Palette, Sun, Moon, Monitor, Check, X, CalendarDays, TimerReset, Bug, ShieldCheck } from "lucide-react-native";
 import { requireOptionalNativeModule } from "expo-modules-core";
 import { doc, onSnapshot } from "firebase/firestore";
 import { NotebookProvider, useNotebook } from "../../../src/ui/notebook/Notebook";
+import { NotebookModal } from "../../../src/ui/notebook/NotebookModal";
+import { AdaptiveModalCard } from "../../../src/ui/AdaptiveModalCard";
+import { PopupBackdrop } from "../../../src/ui/PopupBackdrop";
 import { NotebookHeader } from "../../../src/ui/notebook/NotebookHeader";
 import { useNotebookStatusBar } from "../../../src/ui/notebook/useNotebookStatusBar";
 import { notebookFonts } from "../../../src/ui/notebook/tokens";
-import { SettingsSection, SettingsRow, SettingsText, SettingsAction, SettingsVersionIcon } from "../../../src/settings/SettingsNotebookControls";
+import { SettingsSection, SettingsRow, SettingsText, SettingsVersionIcon } from "../../../src/settings/SettingsNotebookControls";
 import { formatInstalledVersion, settingsAccessLabel } from "../../../src/settings/settingsPresentation";
 import { useOfflineStatus } from "../../../src/hooks/useOfflineStatus";
 import { isExpectedOfflineError } from "../../../src/utils/networkErrors";
@@ -15,9 +18,8 @@ import type { NavigationProp } from "@react-navigation/native";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { getFunctions, httpsCallable } from "firebase/functions";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { BackHandler, Linking, Pressable, ScrollView, Text, View, useWindowDimensions } from "react-native";
+import { BackHandler, Linking, Pressable, ScrollView, Text, View } from "react-native";
 import { useAppTheme } from "../../../src/theme/AppThemeProvider";
-import type { ThemePreference } from "../../../src/theme/themePreference";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { getUidPrefix, logAnalyticsEvent } from "../../../src/analytics/analytics";
 import { MANAGE_SUBSCRIPTION_URL } from "../../../src/config/billingConfig";
@@ -41,7 +43,7 @@ function SettingsContent() {
   useNotebookStatusBar();
   const { colors } = useNotebook();
   const appearance = useAppTheme();
-  const largeText = useWindowDimensions().fontScale >= 1.5;
+  const [showAppearance, setShowAppearance] = useState(false);
   const { isOffline, ready: networkReady } = useOfflineStatus();
   const nativeMetadata = requireOptionalNativeModule<{ nativeApplicationVersion?: string; nativeBuildVersion?: string }>("ExpoApplication");
   const installedVersion = formatInstalledVersion(nativeMetadata?.nativeApplicationVersion, nativeMetadata?.nativeBuildVersion);
@@ -271,11 +273,8 @@ function SettingsContent() {
         </SettingsRow>
       </SettingsSection>
       <SettingsSection title="Appearance">
-        <SettingsText>System follows your device’s appearance.</SettingsText>
-        <View accessibilityRole="radiogroup" accessibilityLabel="Appearance" style={{ flexDirection: largeText ? "column" : "row", gap: 8 }}>
-          {([['light', 'Light'], ['dark', 'Dark'], ['system', 'System']] as [ThemePreference, string][]).map(([value, label]) => <Pressable key={value} accessibilityRole="radio" accessibilityLabel={label} accessibilityState={{ checked: appearance.preference === value, disabled: appearance.saving }} disabled={appearance.saving} onPress={() => void appearance.setPreference(value)} style={{ flex: largeText ? undefined : 1, minHeight: 48, alignItems: "center", justifyContent: "center", padding: 12, borderRadius: 6, borderWidth: 1, borderColor: appearance.preference === value ? colors.primary : colors.border, backgroundColor: appearance.preference === value ? colors.primary : colors.surface }}><Text style={{ fontFamily: notebookFonts.semibold, fontSize: 16, color: appearance.preference === value ? colors.onPrimary : colors.ink }}>{label}</Text></Pressable>)}
-        </View>
-        {appearance.saving ? <SettingsText live>Saving appearance...</SettingsText> : appearance.feedback ? <SettingsText live>{appearance.feedback}</SettingsText> : null}
+        <SettingsRow icon={<Palette size={20} strokeWidth={1.5} color={colors.ink} />} label="Appearance" value={appearance.preference[0].toUpperCase() + appearance.preference.slice(1)} disabled={appearance.saving || busy} onPress={() => setShowAppearance(true)} />
+        {!showAppearance && appearance.feedback ? <SettingsText live>{appearance.feedback}</SettingsText> : null}
       </SettingsSection>
       <SharingSettingsSection />
       <SettingsSection title="Support">
@@ -286,37 +285,59 @@ function SettingsContent() {
         <SettingsRow icon={<FileText size={20} strokeWidth={1.5} color={colors.ink} />} label="Privacy policy" onPress={() => void openPrivacyPolicy()} />
       </SettingsSection>
       <SettingsSection title="Subscription">
-        {entitlement.state === "loading" || !accountLoaded ? <SettingsText>Checking subscription status...</SettingsText> : devBillingBuild ? <>
-          <SettingsText>Billing is unavailable in Lastrep Dev. Use the Play-installed app to test subscriptions.</SettingsText>
+        {entitlement.state === "loading" || !accountLoaded ? <SettingsRow icon={<CreditCard size={20} strokeWidth={1.5} color={colors.ink} />} label="Subscription status"><SettingsText>Checking subscription status...</SettingsText></SettingsRow> : devBillingBuild ? <SettingsRow icon={<CreditCard size={20} strokeWidth={1.5} color={colors.ink} />} label="Billing unavailable">
+          <SettingsText>Use the Play-installed app to test subscriptions.</SettingsText>
           {entitlement.state === "active" ? <SettingsText>Premium access does not necessarily mean you have a paid Google Play subscription.</SettingsText> : null}
-        </> : <>
-          <SettingsText>{entitlement.state === "active" ? "Premium access does not necessarily mean you have a paid Google Play subscription. Manage subscriptions in Google Play." : "View Premium options or restore an existing subscription."}</SettingsText>
+        </SettingsRow> : <>
+          <SettingsRow icon={<Crown size={20} strokeWidth={1.5} color={colors.ink} />} label="Access" value={accessLabel}>
+            <SettingsText>{entitlement.state === "active" ? "Premium access does not necessarily mean you have a paid Google Play subscription. Manage subscriptions in Google Play." : "View Premium options or restore an existing subscription."}</SettingsText>
+          </SettingsRow>
           {entitlement.state === "active" ? <>
-            <SettingsAction label="Manage subscription" disabled={accountDisabled || restoring} onPress={() => void handleManageSubscription()} />
-            <SettingsText>Opens Google Play. To cancel, tap Lastrep in the subscription list.</SettingsText>
-          </> : <SettingsAction label="Upgrade to Premium" primary disabled={accountDisabled || restoring} onPress={() => router.push({ pathname: "/paywall", params: { sourceScreen: "settings", reasonCode: "manual_upgrade" } })} />}
+            <SettingsRow icon={<CreditCard size={20} strokeWidth={1.5} color={colors.ink} />} label="Manage subscription" disabled={accountDisabled || restoring} onPress={() => void handleManageSubscription()}>
+              <SettingsText>Opens Google Play. To cancel, tap Lastrep in the subscription list.</SettingsText>
+            </SettingsRow>
+          </> : <SettingsRow icon={<Crown size={20} strokeWidth={1.5} color={colors.ink} />} label="Upgrade to Premium" disabled={accountDisabled || restoring} onPress={() => router.push({ pathname: "/paywall", params: { sourceScreen: "settings", reasonCode: "manual_upgrade" } })} />}
           {manageFallbackText ? <SettingsText live>{manageFallbackText}</SettingsText> : null}
-          <SettingsAction label={restoring ? "Checking purchases..." : "Restore purchases"} disabled={accountDisabled || restoring} onPress={() => void handleRestorePurchases()} />
+          <SettingsRow icon={<RotateCcw size={20} strokeWidth={1.5} color={colors.ink} />} label={restoring ? "Checking purchases..." : "Restore purchases"} disabled={accountDisabled || restoring} onPress={() => void handleRestorePurchases()} />
         </>}
         {restoreFeedback ? <SettingsText live>{restoreFeedback}</SettingsText> : null}
       </SettingsSection>
       <SettingsSection title="Session">
-        <SettingsAction label={signingOut ? "Signing out..." : "Sign out"} disabled={accountDisabled || restoring} onPress={handleSignOut} />
+        <SettingsRow icon={<LogOut size={20} strokeWidth={1.5} color={colors.ink} />} label={signingOut ? "Signing out..." : "Sign out"} disabled={accountDisabled || restoring} onPress={handleSignOut} />
         {sessionFeedback ? <SettingsText live>{sessionFeedback}</SettingsText> : null}
       </SettingsSection>
       <SettingsSection title="Delete account">
-        <SettingsText>Permanently deletes your account and associated Lastrep data.</SettingsText>
-        <SettingsAction label={deletingAccount ? "Deleting account..." : "Delete account"} destructive disabled={accountDisabled || restoring} onPress={handleDeleteAccount} />
+        <SettingsRow icon={<Trash2 size={20} strokeWidth={1.5} color={colors.danger} />} label={deletingAccount ? "Deleting account..." : "Delete account"} destructive disabled={accountDisabled || restoring} onPress={handleDeleteAccount}>
+          <SettingsText>Permanently deletes your account and associated Lastrep data.</SettingsText>
+        </SettingsRow>
         {deleteFeedback ? <SettingsText live>{deleteFeedback}</SettingsText> : null}
       </SettingsSection>
       {__DEV__ ? <SettingsSection title="Development tools">
-        <SettingsText>Access: {accessLabel}</SettingsText>
-        <SettingsAction label="Set Premium" disabled={accountDisabled} onPress={() => void setDevEntitlement(true)} />
-        <SettingsAction label="Set Free" disabled={accountDisabled} onPress={() => void setDevEntitlement(false)} />
-        <SettingsAction label="Reset daily limit" disabled={accountDisabled} onPress={() => void resetDailyLimit()} />
-        <SettingsAction label="Reset cooldown" disabled={accountDisabled} onPress={() => void resetCooldown()} />
-        <SettingsAction label="RevenueCat debug" disabled={busy} onPress={() => router.push("/settings/revenuecat-dev" as Href)} />
+        <SettingsRow icon={<ShieldCheck size={20} strokeWidth={1.5} color={colors.ink} />} label="Access" value={accessLabel} />
+        <SettingsRow icon={<Crown size={20} strokeWidth={1.5} color={colors.ink} />} label="Set Premium" disabled={accountDisabled} onPress={() => void setDevEntitlement(true)} />
+        <SettingsRow icon={<UserRound size={20} strokeWidth={1.5} color={colors.ink} />} label="Set Free" disabled={accountDisabled} onPress={() => void setDevEntitlement(false)} />
+        <SettingsRow icon={<CalendarDays size={20} strokeWidth={1.5} color={colors.ink} />} label="Reset daily limit" disabled={accountDisabled} onPress={() => void resetDailyLimit()} />
+        <SettingsRow icon={<TimerReset size={20} strokeWidth={1.5} color={colors.ink} />} label="Reset cooldown" disabled={accountDisabled} onPress={() => void resetCooldown()} />
+        <SettingsRow icon={<Bug size={20} strokeWidth={1.5} color={colors.ink} />} label="RevenueCat debug" disabled={busy} onPress={() => router.push("/settings/revenuecat-dev" as Href)} />
       </SettingsSection> : null}
     </ScrollView>
+    <NotebookModal visible={showAppearance} transparent animationType="fade" onRequestClose={() => setShowAppearance(false)}>
+      <PopupBackdrop onClose={() => setShowAppearance(false)} style={{ flex: 1, justifyContent: "flex-end", alignItems: "center", backgroundColor: colors.overlay }}>
+        <AdaptiveModalCard contentSized style={{ width: "100%", maxWidth: 560, padding: 20, gap: 16, backgroundColor: colors.surface, borderRadius: 16 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+            <Text accessibilityRole="header" style={{ flex: 1, color: colors.ink, fontFamily: notebookFonts.editorial, fontSize: 24 }}>Appearance</Text>
+            <Pressable accessibilityRole="button" accessibilityLabel="Close appearance" onPress={() => setShowAppearance(false)} style={{ minWidth: 44, minHeight: 44, alignItems: "center", justifyContent: "center" }}><X size={20} strokeWidth={1.5} color={colors.muted} /></Pressable>
+          </View>
+          <View accessibilityRole="radiogroup" accessibilityLabel="Appearance">
+            {([['light', 'Light', Sun], ['dark', 'Dark', Moon], ['system', 'System', Monitor]] as const).map(([value, label, Icon]) => <Pressable key={value} accessibilityRole="radio" accessibilityLabel={label} accessibilityState={{ checked: appearance.preference === value, disabled: appearance.saving }} disabled={appearance.saving} onPress={() => void appearance.setPreference(value)} style={{ flexDirection: "row", alignItems: "center", gap: 12, minHeight: 48, paddingVertical: 12, opacity: appearance.saving ? 0.5 : 1 }}>
+              <View style={{ width: 24, alignItems: "center" }}><Icon size={20} strokeWidth={1.5} color={colors.ink} /></View>
+              <Text style={{ flex: 1, color: colors.ink, fontFamily: appearance.preference === value ? notebookFonts.semibold : notebookFonts.body, fontSize: 18 }}>{label}</Text>
+              <View style={{ width: 44, alignItems: "center" }}>{appearance.preference === value ? <Check size={20} strokeWidth={1.5} color={colors.accent} /> : null}</View>
+            </Pressable>)}
+          </View>
+          {appearance.feedback ? <SettingsText live>{appearance.feedback}</SettingsText> : null}
+        </AdaptiveModalCard>
+      </PopupBackdrop>
+    </NotebookModal>
   </SafeAreaView>;
 }
