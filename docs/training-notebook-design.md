@@ -2360,3 +2360,47 @@ data; the existence of a saved value does not imply this installation is connect
 Notebook sheets meet the top of the bottom tab bar without an extra gap. Reserve
 the tab bar or system bottom inset once in NotebookModal; nested sheet frames
 must not add another SafeAreaView bottom inset. Keep keyboard-aware protection.
+
+
+### Body-composition chart periods (October 28 approval)
+
+- Day shows the existing latest measurement for each recorded local day. Week,
+  Month and Year average those daily values within local calendar periods;
+  weeks run Monday through Sunday. Missing days are excluded, never zero-filled.
+  Keep metrics independent and saved records untouched. Label averages and the
+  number of recorded days; label the current unfinished period To date. Day
+  shows the selected value directly, without a redundant Recorded value label.
+- Initially fit up to 7 Day, 8 Week, 10 Month and 5 Year points. Fewer points sit
+  at the right. All older observations remain available with touch scrolling and
+  earlier/later page actions. At enlarged text, increase plot spacing and reflow
+  period controls into two rows; do not shrink text to preserve the point count.
+- Day and Week show MM/DD at the first recorded point and month boundaries,
+  then only the day number. Completed Week labels use Sunday. The current
+  partial week ends on today in the summary/window and uses MM/DD for its point
+  label (for example Oct 26-28 and 10/28), retaining To date. Month labels alternate calendar months from
+  the first recorded month in each year. Put the year on a separate line below
+  that first month. Year labels use the year.
+- Reserve room for complete edge labels and markers; do not show a clipped
+  neighboring marker at the viewport edge. Plot taps choose the nearest visible
+  point. The chart is one adjustable accessibility control with previous/next
+  point actions and the selected period/value, avoiding overlapping point targets.
+- An average is not an editable stored record. Day preserves Edit selected;
+  period-average views offer adding data without selecting an underlying record
+  for editing. Keep the original daily dates and sources available in Day.
+
+
+### Body chart values and control hierarchy
+
+- Keep metric choices (Weight, Body fat, Lean mass, Skeletal muscle) as underlined
+  tabs. Day/Week/Month/Year is a secondary row of compact text choices: 13 dp
+  caption text versus the metric row's 14 dp text, muted when inactive and accent
+  semibold when selected. Use no group background, border, fill or underline.
+  Tighten horizontal spacing; visible text size must not reduce the tap target.
+  Retain two-row reflow for enlarged text and at least 44 dp tap targets.
+- Label every visible observation with a compact number above its marker. Omit
+  repeated units; retain units and full precision in the selected summary.
+  Point labels use up to one decimal. Lift labels when nearby value bounds
+  overlap, retain room above the plot, and keep edge labels fully visible.
+  Use the same rules for daily values and period averages in both themes.
+- Use the concise provider name Samsung Health in chart summaries. Preserve
+  the original source/device metadata; this is a presentation label only.

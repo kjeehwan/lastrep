@@ -53,6 +53,7 @@ focus. Browser prototypes are design studies, not production account screens.
   deployment verification.
 - [Warm-up set helper](docs/workout-warmup-helper.md): approved preview, native
   insertion, remembered per-exercise setups and verification.
+- [Body-composition period charts](docs/body-composition-period-charts.md): Day/Week/Month/Year averages, scrolling and native checks.
 - [Workout layout follow-up](docs/workout-layout-follow-up.md): approved Group 2
   header, planned totals, compact tools and native checks.
 - [Current phase and sparse-chart fixes](docs/current-phase-and-chart-fixes.md):
