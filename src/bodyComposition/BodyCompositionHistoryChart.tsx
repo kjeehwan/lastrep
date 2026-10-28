@@ -10,6 +10,7 @@ import {
   type BodyCompositionMetric,
   type BodyCompositionHistoryPoint,
 } from "./bodyCompositionHistory";
+import { bodyChartLayout } from "./bodyChartLayout";
 import { measurementText } from "./measurementEditing";
 
 type WeightUnit = "kg" | "lbs";
@@ -33,10 +34,9 @@ const METRICS: { key: BodyCompositionMetric; label: string }[] = [
 const KG_TO_LBS = 2.20462;
 const WIDTH = 340;
 const HEIGHT = 164;
-const PAD_X = 18;
+const PAD_X = 44;
 const PAD_TOP = 18;
 const PAD_BOTTOM = 30;
-const POINT_SPACING = 64;
 
 const formatDate = (timestamp: number) =>
   new Date(timestamp).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
@@ -68,7 +68,7 @@ export const BodyCompositionHistoryChart = memo(function BodyCompositionHistoryC
   const { fontScale } = useWindowDimensions();
   const graphScale = fontsLoaded ? Math.min(2, Math.max(1, fontScale)) : 1;
   const chartHeight = HEIGHT * graphScale;
-  const pointSpacing = POINT_SPACING * graphScale;
+  const [viewportWidth, setViewportWidth] = useState(WIDTH);
   const [metric, setMetric] = useState<BodyCompositionMetric>(initialMetric);
   const points = useMemo(() => getBodyCompositionHistoryPoints(history, metric), [history, metric]);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
@@ -97,8 +97,9 @@ export const BodyCompositionHistoryChart = memo(function BodyCompositionHistoryC
     const max = rawMax + valuePadding;
     const valueRange = Math.max(1, max - min);
 
+    const layout = bodyChartLayout(points.length, viewportWidth, graphScale);
     const nextNodes = points.map((point, index) => {
-      const x = points.length === 1 ? WIDTH * graphScale / 2 : PAD_X * graphScale + index * pointSpacing;
+      const x = layout.positions[index];
       return {
         ...point,
         x,
@@ -109,9 +110,9 @@ export const BodyCompositionHistoryChart = memo(function BodyCompositionHistoryC
 
     return {
       nodes: nextNodes,
-      chartWidth: Math.max(WIDTH * graphScale, (nextNodes.at(-1)?.x ?? WIDTH / 2) + PAD_X * graphScale),
+      chartWidth: layout.width,
     };
-  }, [isPercent, points, graphScale, pointSpacing]);
+  }, [isPercent, points, graphScale, viewportWidth]);
 
   const polyline = nodes.map((node) => `${node.x},${node.y}`).join(" ");
   const legacyPresent = hasLegacyMuscleMassHistory(history);
@@ -148,20 +149,21 @@ export const BodyCompositionHistoryChart = memo(function BodyCompositionHistoryC
             key={metric}
             ref={chartScrollRef}
             horizontal
+            onLayout={(event) => setViewportWidth(event.nativeEvent.layout.width)}
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.chartScrollContent}
             onContentSizeChange={() => {
               const index = points.findIndex((point) => point.recordedAtMs === initialRecordedAtMs);
-              if (index >= 0) chartScrollRef.current?.scrollTo({ x: Math.max(0, index * pointSpacing - WIDTH / 2), animated: false });
+              if (index >= 0) chartScrollRef.current?.scrollTo({ x: Math.max(0, nodes[index].x - viewportWidth / 2), animated: false });
               else chartScrollRef.current?.scrollToEnd({ animated: false });
             }}
           >
             <View style={{ width: chartWidth }}>
               <Svg width={chartWidth} height={chartHeight}>
                 <Line
-                  x1={PAD_X}
+                  x1={PAD_X * graphScale}
                   y1={chartHeight - PAD_BOTTOM * graphScale}
-                  x2={chartWidth - PAD_X}
+                  x2={chartWidth - PAD_X * graphScale}
                   y2={chartHeight - PAD_BOTTOM * graphScale}
                   stroke={fontsLoaded ? colors.rule : "rgba(255,255,255,0.12)"}
                   strokeWidth={1}
