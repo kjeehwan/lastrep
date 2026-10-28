@@ -1,4 +1,5 @@
 import type { EffortInput } from "../effortScale";
+import type { ExerciseTargets } from "../exerciseTargets";
 export type Unit = "kg" | "lbs" | "km" | "mi";
 export type SetType = "warmup" | "normal" | "failure" | "drop";
 export type ExerciseMode = "resistance" | "cardio";
@@ -35,6 +36,7 @@ export type SetEntry = {
   baselineAdjusted?: boolean;
 };
 export type Exercise = {
+  targets?: ExerciseTargets | null;
   plannedRestSec?: number;
   mode?: ExerciseMode;
   id: string;
@@ -54,6 +56,7 @@ export type PastWorkout = {
   durationMin?: number | null;
   exercises: {
     name: string;
+    targets?: ExerciseTargets | null;
     notes?: string;
     tempo?: string;
     zone?: string;
@@ -84,6 +87,7 @@ export type Routine = {
   sharedSnapshotId?: string;
   exercises: {
     name: string;
+    targets?: ExerciseTargets | null;
     notes?: string;
     tempo?: string;
     zone?: string;

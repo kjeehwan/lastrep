@@ -36,6 +36,8 @@ import { resolveFreeExerciseDbImagesForNames } from "../workouts/freeExerciseDbI
 import { AvailableWeightsModal } from "../workouts/workoutLog/AvailableWeightsModal";
 import { insertWarmupSets } from "../workouts/workoutLog/warmupSets";
 import { WarmupSetsSheet } from "../workouts/workoutLog/WarmupSetsSheet";
+import { ExerciseTargetsSheet } from "../workouts/workoutLog/ExerciseTargetsSheet";
+import { normalizeExerciseTargets } from "../workouts/exerciseTargets";
 import { WorkoutExerciseActions } from "../workouts/workoutLog/WorkoutExerciseActions";
 import { useWorkoutExerciseCards } from "../workouts/workoutLog/WorkoutExerciseCards";
 import { WorkoutExerciseDemo } from "../workouts/workoutLog/WorkoutExerciseDemo";
@@ -102,6 +104,9 @@ export function SharingPlanEditor({
   } | null>(null);
   const [catalog, setCatalog] = useState(EXERCISE_CATALOG),
     [error, setError] = useState("");
+  const [targetsId, setTargetsId] = useState<string | null>(null);
+  const targetsExercise = exercises.find(exercise => exercise.id === targetsId);
+  const openExerciseTargets = (id: string) => { Keyboard.dismiss(); setEditingSet(null); setTargetsId(id); };
   const [activeId, setActiveId] = useState<string | null>(null),
     [warmupId, setWarmupId] = useState<string | null>(null),
     [weightsId, setWeightsId] = useState<string | null>(null);
@@ -228,6 +233,7 @@ export function SharingPlanEditor({
     },
     openExerciseHistory: () => {},
     openExerciseActions: setActiveId,
+    openExerciseTargets,
     setReplaceSearch,
     setReplaceGroup,
     closeReplacement: () => setReplaceTarget(null),
@@ -327,6 +333,7 @@ export function SharingPlanEditor({
   });
   const cards = useWorkoutExerciseCards({
     planMode: true,
+    targetsEditorOpen: !!targetsExercise,
     exercises,
     exerciseUnits,
     getExerciseMode: mode,
@@ -396,6 +403,7 @@ export function SharingPlanEditor({
           effortScale: plan.effortScale,
           exercises: exercises.map((e) => ({
             name: e.name,
+            ...(mode(e.name) !== "cardio" && normalizeExerciseTargets(e.targets) ? { targets: normalizeExerciseTargets(e.targets) } : {}),
             mode: mode(e.name),
             unit: exerciseUnits[e.id],
             restSec: rest[e.id] ?? 90,
@@ -478,6 +486,7 @@ export function SharingPlanEditor({
   );
   return (
     <>
+      {targetsExercise ? <ExerciseTargetsSheet key={`${targetsExercise.id}:${plan.effortScale}`} name={targetsExercise.name} targets={targetsExercise.targets} effortScale={plan.effortScale} onClose={() => setTargetsId(null)} onApply={targets => { setExercises(before => before.map(exercise => exercise.id === targetsExercise.id ? { ...exercise, targets } : exercise)); setTargetsId(null); }} /> : null}
       <Text style={[styles.modalTitle, { marginBottom: 12 }]}>Edit workout</Text>
       <GestureDetector gesture={scrollGesture}>
         <View style={{ gap: 8 }}>
@@ -550,6 +559,8 @@ export function SharingPlanEditor({
         cardStyle={styles.modalCard}
       >
         <WorkoutExerciseActions
+          openExerciseTargets={openExerciseTargets}
+          effortScale={plan.effortScale}
           styles={styles}
           colors={colors}
           activeActionExercise={active}

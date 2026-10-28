@@ -1,3 +1,4 @@
+import { normalizeExerciseTargets } from "../workouts/exerciseTargets";
 import {
   parseSharedWorkoutPlan,
   type SharedWorkoutPlan,
@@ -23,6 +24,7 @@ export function workoutToSharingPlan(
     effortScale,
     exercises: exercises.map((e) => ({
       name: e.name,
+      ...(mode(e.name) !== "cardio" && normalizeExerciseTargets(e.targets) ? { targets: normalizeExerciseTargets(e.targets) } : {}),
       mode: mode(e.name),
       unit: units[e.id] || (mode(e.name) === "cardio" ? "km" : "kg"),
       ...(mode(e.name) === "cardio" && e.cardioSessionType
@@ -65,6 +67,7 @@ export function sharingPlanToExercises(plan: SharedWorkoutPlan, key: string) {
     return {
       id,
       plannedRestSec: e.restSec,
+      targets: normalizeExerciseTargets(e.targets),
       mode: e.mode,
       cardioSessionType: e.cardioSessionType,
       cardioEffortLevel: e.cardioEffortLevel,

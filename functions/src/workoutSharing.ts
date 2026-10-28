@@ -710,6 +710,7 @@ async function importRoutine(uid: string, input: Record<string, unknown>) {
         name: e.name,
         mode: e.mode,
         notes: e.instructions,
+        targets: e.targets ?? null,
         tempo: e.tempo,
         restSec: e.restSec,
         unit: e.unit,

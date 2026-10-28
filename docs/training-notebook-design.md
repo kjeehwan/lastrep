@@ -2455,3 +2455,20 @@ must not add another SafeAreaView bottom inset. Keep keyboard-aware protection.
   Use the same rules for daily values and period averages in both themes.
 - Use the concise provider name Samsung Health in chart summaries. Preserve
   the original source/device metadata; this is a presentation label only.
+
+### Optional exercise targets
+
+- Put Targets in the resistance exercise menu. Only configured targets add a
+  muted, tappable summary above the set headers; unset targets add no visual row.
+- Use the existing notebook sheet and input surfaces. Show the exercise name
+  prominently, followed by Target reps and Target RPE/RIR.
+  Reveal compact, right-aligned numeric fields within the same sheet when a row
+  is tapped. Stack range fields for enlarged text rather than shrinking them.
+- Follow the user's effort preference. Rep ranges require both whole-number
+  endpoints (1–100); target RPE is 6–10 and target RIR is 0–4. Decimal effort is
+  allowed. Done appears only for a changed value; equivalent formatting does not
+  count as a change. Clear targets stages removal. X, outside tap and Back cancel.
+- Targets are prescriptions, never recorded performance. Keep actual reps and
+  effort untouched. Exercise defaults apply to normal working sets, exclude
+  warm-ups and special set types, and yield to an explicit per-set prescription.
+  Preserve these distinctions through routines, history and workout sharing.
