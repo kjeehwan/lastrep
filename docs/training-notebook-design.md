@@ -2079,8 +2079,15 @@ the OS appearance; System follows subsequent OS changes. Use the same resolved
 theme across all notebook screens, tabs, navigation, loading states and dialogs.
 Changing appearance updates the existing screen in place, preserving navigation,
 scroll and unsaved drafts. Avoid rerendering inactive tab contents during the
-change; they must display the current palette when revisited. At enlarged text, stack the three choices rather than
-shrinking labels or targets. Announce storage failures and retain the last saved
+change; they must display the current palette when revisited. Present Appearance
+as an icon row with the current preference and a chevron. Open a content-sized
+popup with vertical Light, Dark and System radio rows, icons and a checkmark for
+the selected choice, centered in the same right-hand column as the close icon.
+Apply selections immediately and keep the popup open for
+preview; close using X, outside tap or Android Back. Omit explanatory System copy
+and transient saving text; the theme and checkmark provide feedback without
+changing popup height. Retain save-error feedback. Allow enlarged labels to
+wrap rather than shrinking labels or targets. Announce storage failures and retain the last saved
 choice; a failed read must not block access to the app.
 Back always returns to Home. Account shows the nickname and a compact Premium or
 Free badge, not a redundant Edit action. Keep badges neutral paper/ink with a
@@ -2097,7 +2104,17 @@ The native implementation must use the installed version/build,
 not the browser fixture. Support uses lastrep.dev@gmail.com and includes the app
 version in the report draft. Omit redundant instructions about where to find the
 version from that draft. Privacy opens the published policy only after an explicit
-link click. Sign out and deletion require confirmation. Deletion explains that
+link click. Appearance, Subscription, Session, Delete account and Development tools use the same unboxed SettingsRow
+layout as Support and Legal: a 20-pixel icon in the shared 24-pixel slot,
+left-aligned label and trailing chevron. Put action descriptions beneath the
+label in the same text column. Keep deletion's icon, label and chevron in the
+danger color, with supporting text muted. Subscription status and development
+Access are noninteractive rows without chevrons; only actions have chevrons.
+Keep loading and development-billing explanations within the same aligned text
+column. Development grant, reset and debug actions retain their existing guards
+and handlers. Reserve boxed action buttons for confirmations rather than mixing
+row and button formats across Settings sections.
+Sign out and deletion require confirmation. Deletion explains that
 Google Play subscriptions must be cancelled separately. Browser simulations must
 never imply that a real account was signed out or deleted.
 
