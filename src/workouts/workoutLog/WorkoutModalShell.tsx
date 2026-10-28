@@ -1,7 +1,6 @@
 import React, { type ReactNode } from "react";
-import { Pressable, StyleSheet, type ViewStyle } from "react-native";
+import { Pressable, StyleSheet, View, type ViewStyle } from "react-native";
 import { NotebookModal as Modal } from "../../ui/notebook/NotebookModal";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { AdaptiveModalCard } from "../../ui/AdaptiveModalCard";
 import { KeyboardAwareModalFrame } from "../../ui/KeyboardAwareModalFrame";
 
@@ -27,10 +26,11 @@ export function WorkoutModalShell({
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onRequestClose} dismissOnBackdropPress={dismissOnBackdropPress}>
       <KeyboardAwareModalFrame>
-      <SafeAreaView style={backdropStyle}>
+      {/* NotebookModal already reserves system insets and the tab bar. */}
+      <View style={backdropStyle}>
         {dismissOnBackdropPress ? <Pressable style={StyleSheet.absoluteFill} accessibilityRole="button" accessibilityLabel="Dismiss popup" onPress={onRequestClose} /> : null}
         {card}
-      </SafeAreaView>
+      </View>
       </KeyboardAwareModalFrame>
     </Modal>
   );

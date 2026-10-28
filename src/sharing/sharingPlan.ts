@@ -32,7 +32,7 @@ export function workoutToSharingPlan(
         ? { cardioEffortLevel: e.cardioEffortLevel }
         : {}),
       restSec: rest[e.id] ?? 90,
-      tempo: e.tempo || "",
+      tempo: mode(e.name) === "cardio" ? "" : e.tempo || "",
       instructions: "",
       sets: e.sets.map((s) => ({
         weightKg: s.weightKg,
