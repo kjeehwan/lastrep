@@ -15,6 +15,7 @@ import { Pencil } from "lucide-react-native";
 import { useEventCallbacks } from "../hooks/useEventCallbacks";
 import { useNotebook, useNotebookStyles } from "../ui/notebook/Notebook";
 import { NotebookTextInput } from "../ui/notebook/NotebookTextInput";
+import { notebookFonts } from "../ui/notebook/tokens";
 import type { AvailableWeights } from "../workouts/availableWeights";
 import { effortToRpe } from "../workouts/effortScale";
 import {
@@ -500,7 +501,8 @@ export function SharingPlanEditor({
               }}
               maxLength={80}
               style={[styles.input, {
-                fontWeight: "400", fontSize: 22, borderWidth: 0,
+                fontFamily: notebookFonts.editorial, fontWeight: "600",
+                fontSize: 26, lineHeight: 32, paddingVertical: 0, minHeight: 44, borderWidth: 0,
                 borderRadius: 0, paddingHorizontal: 0, flexShrink: 1,
                 minWidth: 100, marginBottom: 0,
               }]}

@@ -2375,6 +2375,10 @@ data; the existence of a saved value does not imply this installation is connect
   This is an explicit exception to the ordinary shared-input surface rule:
   NotebookTextInput uses its canvas surface only for this heading; set values and
   ordinary form fields retain the shared input surface.
+  The sharing Edit workout title uses the same editorial font, 26/32 size and
+  line height, and 600 weight as the active Workout title rather than the body
+  input font. Popup help icons sit directly beside their header title within a
+  flexible title group; the close button stays at the trailing edge.
 - Place the tappable phase and compact set/volume summary on one supporting row,
   wrapping for enlarged text. Show e.g. Strength / 22 sets / 15,984 kg with middle
   dot separators. Omit Planned, volume and a separate cardio count visually;

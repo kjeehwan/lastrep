@@ -1,8 +1,20 @@
 # Workout sharing contract and release checks
 
-Last checked: October 27, 2026. Merged in PR #61 and deployed. See the live
-verification record below for current coverage and remaining Play-build checks.
-The [approved study](workout-sharing-study.md) records the UI decisions.
+Sharing was merged in PR #61 and deployed. See the live verification record
+below for coverage and remaining Play-build checks. The
+[approved study](workout-sharing-study.md) records the UI decisions.
+
+## October 28 visual follow-up
+
+Edit workout uses the active Workout title's editorial font, 26-dp size,
+32-dp line height and 600 weight. Workout sharing groups its header title and
+circled i together, keeping Close at the trailing edge. No sharing handlers,
+deliveries or active-workout data are changed by this layout adjustment.
+
+TypeScript, focused lint and nine sharing tests passed. Android 16 local demo
+checks confirmed the help placement and the serif title in a synthetic Sent
+workout's editor; no workout was sent or imported. Galaxy Android 13 also
+confirmed the help button sits beside the header title.
 
 ## Identity, delivery and privacy
 
