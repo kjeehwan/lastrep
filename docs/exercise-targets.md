@@ -23,7 +23,8 @@ introduced here.
 `targets` is an optional field on the existing shared-plan exercise contract.
 Plans without it retain their previous serialized shape. Client, Cloud Functions
 contract/parser and hosted preview must ship together before real sharing of
-targets is supported. An older client can ignore or drop the optional metadata.
+targets is supported. Older clients use a strict parser and reject target-bearing plans. Recipients
+need the updated app to open those plans; existing plans without targets still work.
 
 ## Verification
 

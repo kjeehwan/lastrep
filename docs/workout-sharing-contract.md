@@ -55,7 +55,8 @@ Exercise-level `targets` optionally contains nullable `minReps`, `maxReps` and
 1 to 100, with minimum no greater than maximum. Target RPE is 6–10. These defaults
 stay separate from per-set prescriptions and recorded effort. Plans without the
 new field preserve their previous serialized shape; clients predating targets
-can ignore or drop this optional metadata when editing a plan.
+reject plans containing this field and need an app update to open them. Existing
+plans without targets remain readable.
 
 Personal exercise notes, logged effort, completion marks, workout history, health
 data and account identifiers are not part of the shared plan. Include weights off
