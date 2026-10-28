@@ -1308,7 +1308,7 @@ function Home() {
               <Text style={styles.noticeSub}>Couldn&apos;t refresh progress. Please try again when connected.</Text>
             ) : null}
             {bodyHistoryLoaded ? (
-              <BodyCompositionHistoryChart key={`${uid}:${measurementChart.revision}`} initialMetric={measurementChart.metric} initialRecordedAtMs={measurementChart.recordedAtMs} onSelectionChange={setSelectedMeasurementPoint} history={bodyHistory} weightUnit={weightUnit} standalone />
+              <BodyCompositionHistoryChart key={`${uid}:${measurementChart.revision}`} initialMetric={measurementChart.metric} initialRecordedAtMs={measurementChart.recordedAtMs} onSelectionChange={setSelectedMeasurementPoint} nowMs={nowMs} history={bodyHistory} weightUnit={weightUnit} standalone />
             ) : !bodyHistoryError ? (
               <Text style={styles.noticeSub}>Loading measurements...</Text>
             ) : null}
