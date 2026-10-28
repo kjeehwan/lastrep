@@ -1,6 +1,6 @@
 # Lastrep Training Notebook Design Specification
 
-Version: 1.40 | Date: October 23, 2026
+Version: 1.41 | Date: October 28, 2026
 
 Status: Workout, Home, Nutrition, Sleep, Profile and Settings browser design
 directions approved through iterative review. Shared rules below incorporate that
@@ -2316,3 +2316,47 @@ through DST and preserve Health Connect source priority rather than summing raw
 records. The displayed Updated time is the read time. Without local consent or
 access, retain dated imported account values and explicitly label Saved account
 data; the existence of a saved value does not imply this installation is connected.
+
+## Workout header and compact tools (October 28 approval)
+
+- Keep equal 12 dp gaps between the date/timer row, title row and training-phase
+  row. The editable title is an editorial heading on the canvas, with no permanent
+  underline or field border. Its adjacent pencil follows the title text rather than the screen edge, and
+  focuses and selects the title. Size the title field to its text rather than
+  stretching it across the row. Long titles wrap while reserving the pencil's
+  44 dp tap target, so the icon remains visible beside the title block.
+  This is an explicit exception to the ordinary shared-input surface rule:
+  NotebookTextInput uses its canvas surface only for this heading; set values and
+  ordinary form fields retain the shared input surface.
+- Place the tappable phase and compact set/volume summary on one supporting row,
+  wrapping for enlarged text. Show e.g. Strength / 22 sets / 15,984 kg with middle
+  dot separators. Omit Planned, volume and a separate cardio count visually;
+  accessible text identifies planned sets and weighted volume. Include warm-ups,
+  ignore completion marks, exclude cardio from sets/volume and convert kg once.
+- Omit the redundant Routine source row. Preserve routine identity internally
+  for saving/updating routines, independently of title edits.
+- Below Today's Plan, use a three-column, two-row icon action grid with labels:
+  My routines, Create routine, Repeat workout, Recommend, Share and Discard.
+  Use no individual boxes or internal dividers. Keep Discard's danger treatment
+  restrained and its confirmation. At 150% text and above, use two columns and
+  allow labels to wrap. Empty drafts omit Share/Discard. Keep full accessible
+  action names. Finish stays after the exercise list.
+  Give the grid equal 16 dp padding above its first icons and below its last
+  labels, with 24 dp between action rows. Do not stack a bottom-only margin or
+  unused button height onto that padding; compare visible content to the rules
+  above and below the grid during native review.
+- Use Demo, the clock plus a zero-padded time, and the tempo icon plus its value
+  (Tempo when unset). Cardio uses a heart plus Zone/Zone N in the third position.
+  The free space before, between and after these controls is equal at normal text
+  sizes. Keep values on one line; allow reflow for enlarged text rather than
+  clipping or shrinking. Accessible control names retain Rest and Tempo.
+- Cardio Zone opens a notebook sheet with staged choices 1-5. Tapping the chosen
+  zone clears it; Done applies. X, outside tap and Android Back discard the pending
+  choice. Existing completed cardio rows keep their recorded zones.
+
+
+### Popup edge above bottom navigation
+
+Notebook sheets meet the top of the bottom tab bar without an extra gap. Reserve
+the tab bar or system bottom inset once in NotebookModal; nested sheet frames
+must not add another SafeAreaView bottom inset. Keep keyboard-aware protection.

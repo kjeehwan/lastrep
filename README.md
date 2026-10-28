@@ -53,6 +53,10 @@ focus. Browser prototypes are design studies, not production account screens.
   deployment verification.
 - [Warm-up set helper](docs/workout-warmup-helper.md): approved preview, native
   insertion, remembered per-exercise setups and verification.
+- [Workout layout follow-up](docs/workout-layout-follow-up.md): approved Group 2
+  header, planned totals, compact tools and native checks.
+- [Current phase and sparse-chart fixes](docs/current-phase-and-chart-fixes.md):
+  Group 1 behavior, recommendation review and native verification.
 - [Saved workout corrections](docs/saved-workout-details.md): date/duration editing,
   record-preservation guards and native verification.
 
