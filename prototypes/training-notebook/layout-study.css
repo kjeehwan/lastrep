@@ -1,0 +1,42 @@
+.layout-study .layout-heading{display:grid;gap:12px}
+.layout-study .editable-session-title{display:flex;align-items:center;gap:4px;min-width:0}
+.layout-study .editable-session-title input{font:600 calc(26px * var(--scale))/1.23 'Source Serif',serif;background:transparent;color:var(--ink);border:0;border-radius:0;min-width:0;width:100%;padding:0;box-shadow:none}
+.layout-study .editable-session-title input:focus-visible{outline:2px solid var(--accent);outline-offset:4px}
+.layout-study .editable-session-title .icon-button{color:var(--secondary)}
+.layout-study .phase-link{display:flex;align-items:center;gap:6px;min-height:28px;text-decoration:none;color:var(--secondary)}
+.layout-study .phase-link svg{width:16px;height:16px}
+.layout-study .session-totals{display:flex;align-items:baseline;flex-wrap:wrap;gap:6px 12px;font-size:calc(14px * var(--scale));color:var(--secondary)}
+.layout-study .session-totals .label{color:var(--ink)}
+.layout-study .plan-row{margin:0 0 16px}
+.layout-study .exercise-controls{display:grid;grid-template-columns:auto auto auto;justify-content:space-evenly;gap:0;padding:0}
+.layout-study .exercise-controls .btn.text{display:flex;flex-wrap:wrap;align-content:center;justify-content:center;gap:4px 6px;min-width:0;font-size:calc(14px * var(--scale));text-align:center}
+.layout-study .exercise-controls .btn.text svg{width:18px;height:18px;flex-shrink:0}
+.chart-range-tabs{display:grid;grid-template-columns:repeat(4,1fr);padding:4px;background:var(--subtle);border-radius:8px;margin-top:8px}
+.chart-range-tabs button{min-height:44px;font-size:calc(14px * var(--scale));border-radius:6px;color:var(--secondary)}
+.chart-range-tabs button[aria-pressed=true]{background:var(--surface);color:var(--ink);font-weight:600;box-shadow:0 0 0 1px var(--rule)}
+.chart-period{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:8px 0 16px;font-size:calc(16px * var(--scale));font-weight:600;text-align:center}
+.chart-period .icon-button{font-size:28px}.chart-period button:disabled{opacity:.35;cursor:default}
+.chart-period-empty{min-height:200px;display:flex;flex-direction:column;justify-content:center;gap:8px}
+.large-text .exercise-controls{gap:8px;padding:0}.large-text .chart-period{font-size:calc(14px * var(--scale))}
+
+.layout-study .study-tools>button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-width:0;min-height:48px;padding:8px 0;font-size:calc(14px * var(--scale))}
+.layout-study .study-tool-label{display:flex;align-items:center;gap:6px;white-space:nowrap}
+.layout-study .study-tool-label svg{width:18px;height:18px}
+.layout-study .study-tool-value{font-size:calc(13px * var(--scale));white-space:nowrap;color:var(--secondary)}
+
+.large-text.layout-study .study-tools{display:flex;flex-wrap:wrap;gap:8px 12px}
+.large-text.layout-study .study-tools>button{flex:1 0 120px}
+
+.chart-study-summary{display:grid;gap:4px;margin-bottom:12px}.chart-study-summary .label{color:var(--secondary)}
+.chart-study-summary .selected-measurement{align-items:baseline;flex-wrap:wrap}.chart-study-summary .supporting{font-size:calc(13px * var(--scale))}
+
+/* Minimal header and visible icon actions: review candidate, not native UI. */
+.minimal-layout .minimal-session-meta{display:flex;align-items:center;flex-wrap:wrap;gap:0 8px;color:var(--secondary);font-size:calc(14px * var(--scale));line-height:1.5}
+.minimal-layout .minimal-session-meta .phase-link{min-height:44px;flex-shrink:0}
+.minimal-layout .minimal-stats{font-variant-numeric:tabular-nums}
+.minimal-layout .workout-icon-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px 12px;margin:0 0 24px;padding:0;}
+.device.minimal-layout .workout-icon-grid .icon-action{display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:8px;border:0;background:transparent;border-radius:6px;padding:12px 4px;min-height:76px;min-width:0;color:var(--ink);font-size:calc(14px * var(--scale));font-weight:400;line-height:1.35}
+.minimal-layout .icon-action svg{width:24px;height:24px;flex-shrink:0;color:var(--secondary)}
+.minimal-layout .workout-icon-grid .icon-action:hover{background:var(--subtle)}
+.device.minimal-layout .workout-icon-grid .discard-action,.minimal-layout .discard-action svg{color:var(--danger)}
+.minimal-layout.large-text .workout-icon-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 12px}
