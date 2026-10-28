@@ -14,6 +14,14 @@ const recommend = (overrides: Partial<Parameters<typeof recommendExerciseProgres
   });
 
 describe("exercise progression", () => {
+  it("respects an explicit rep range without inventing a recorded effort", () => {
+    const targets = { minReps: 10, maxReps: 12, targetRpe: 8 };
+    const result = recommend({ targets });
+    expect(Number(result.reps)).toBeGreaterThanOrEqual(10);
+    expect(Number(result.reps)).toBeLessThanOrEqual(12);
+    expect(recommend({ targets, sessions: [] }).reps).toBe("10");
+    expect(result).not.toHaveProperty("rpe");
+  });
   it("respects the barbell grid when recommending progression", () => {
     const result = recommend({ sessions: [{ sets: [{ weightKg: 100, reps: "4", rpe: "7" }] }],
       availableWeights: { mode: "regular", unit: "kg", minimum: 20, increment: 2 } });

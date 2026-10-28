@@ -1,3 +1,4 @@
+import { exerciseTargetsText } from "../workouts/exerciseTargets";
 import { NotebookInfoButton } from "../ui/notebook/NotebookInfoButton";
 import { showAppAlert } from "../ui/appDialog";
 import * as Clipboard from "expo-clipboard";
@@ -1013,6 +1014,7 @@ export function SharingPlanPreview({ plan }: { plan: SharedWorkoutPlan }) {
             {!!e.instructions && (
               <Text style={styles.modalText}>{e.instructions}</Text>
             )}
+            {e.mode !== "cardio" && exerciseTargetsText(e.targets, plan.effortScale) ? <Text style={styles.muted}>Target: {exerciseTargetsText(e.targets, plan.effortScale)}</Text> : null}
             {e.sets.map((s, j) => (
               <Text key={j} style={styles.modalText}>
                 {s.setType === "warmup" ? "W" : ++working}

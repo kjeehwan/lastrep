@@ -106,6 +106,8 @@ import { useWorkoutTodayPlan } from "../../../src/workouts/workoutLog/useWorkout
 import { insertWarmupSets,warmupKey,type WarmupPattern,type WarmupRow,type WarmupUnit } from "../../../src/workouts/workoutLog/warmupSets";
 import { WarmupSetsSheet } from "../../../src/workouts/workoutLog/WarmupSetsSheet";
 import { readWorkoutDraftRoutineId, serializeWorkoutDraft } from "../../../src/workouts/workoutLog/workoutDraft";
+import { ExerciseTargetsSheet } from "../../../src/workouts/workoutLog/ExerciseTargetsSheet";
+import { normalizeExerciseTargets, routineSetTargets } from "../../../src/workouts/exerciseTargets";
 import { WorkoutExerciseActions } from "../../../src/workouts/workoutLog/WorkoutExerciseActions";
 import { useWorkoutExerciseCards } from "../../../src/workouts/workoutLog/WorkoutExerciseCards";
 import { WorkoutExerciseDemo } from "../../../src/workouts/workoutLog/WorkoutExerciseDemo";
@@ -152,6 +154,7 @@ export default function WorkoutLog() {
   const [activeDemoExercise, setActiveDemoExercise] = useState<ExerciseCatalogItem | null>(null);
   const [activeDemoImageUris, setActiveDemoImageUris] = useState<string[]>([]);
   const [exerciseImageMap, setExerciseImageMap] = useState<Record<string, string[]>>({});
+  const [exerciseTargetsEditor, setExerciseTargetsEditor] = useState<{ uid: string; id: string } | null>(null);
   const [showExerciseActionsModal, setShowExerciseActionsModal] = useState(false);
   const [activeExerciseActionId, setActiveExerciseActionId] = useState<string | null>(null);
   const [availableWeightsTarget, setAvailableWeightsTarget] = useState<{ name: string; unit: "kg" | "lbs" } | null>(null);
@@ -521,15 +524,17 @@ export default function WorkoutLog() {
     (name: string, id: string): Exercise => {
       const trimmed = name.trim();
       const mode = getExerciseModeByName(trimmed);
-      const previousSets =
+      const previousExercise =
         pastWorkouts
           .flatMap((workout) => workout.exercises)
-          .find((exercise) => normalizeExerciseName(exercise.name) === normalizeExerciseName(trimmed))?.sets ?? [];
+          .find((exercise) => normalizeExerciseName(exercise.name) === normalizeExerciseName(trimmed));
+      const previousSets = previousExercise?.sets ?? [];
       const sets = previousSets.length
         ? previousSets.map((set) => ({
             weightKg: mode === "cardio" ? null : set.weightKg ?? null,
             reps: mode === "cardio" ? "" : String(set.reps ?? ""),
             ...freshSetEffort(),
+            targetRpe: set.targetRpe ?? null,
             distanceKm: mode === "cardio" ? set.distanceKm ?? null : null,
             durationSec: mode === "cardio" ? set.durationSec ?? null : null,
             zone: mode === "cardio" ? String(set.zone ?? "") : "",
@@ -553,6 +558,7 @@ export default function WorkoutLog() {
       return {
         id,
         name: trimmed,
+        targets: mode === "cardio" ? null : normalizeExerciseTargets(previousExercise?.targets),
         notes: "",
         tempo: mode === "cardio" ? String(previousSets.find((set) => set.zone)?.zone || "") : undefined,
         cardioSessionType: undefined,
@@ -707,6 +713,7 @@ export default function WorkoutLog() {
                 : null,
             exercises: (data?.exercises || []).map((ex: any) => ({
               name: ex?.name || "Exercise",
+              targets: normalizeExerciseTargets(ex?.targets),
               notes: typeof ex?.notes === "string" ? ex.notes : "",
               tempo: typeof ex?.tempo === "string" ? ex.tempo : "",
               zone: typeof ex?.zone === "string" ? ex.zone : "",
@@ -769,6 +776,7 @@ export default function WorkoutLog() {
           name: typeof data?.name === "string" && data.name.trim() ? data.name.trim() : "Routine",
           exercises: (data?.exercises || []).map((exercise: any) => ({
             name: typeof exercise?.name === "string" ? exercise.name : "Exercise",
+              targets: normalizeExerciseTargets(exercise?.targets),
             notes: typeof exercise?.notes === "string" ? exercise.notes : "",
             tempo: typeof exercise?.tempo === "string" ? exercise.tempo : "",
             zone: typeof exercise?.zone === "string" ? exercise.zone : "",
@@ -869,6 +877,7 @@ export default function WorkoutLog() {
             const hydratedExercises: Exercise[] = (parsed.exercises as any[]).map((exercise: any) => ({
               id: typeof exercise?.id === "string" ? exercise.id : `${Date.now()}-${Math.random().toString(16).slice(2)}`,
               name: typeof exercise?.name === "string" ? exercise.name : "Exercise",
+              targets: normalizeExerciseTargets(exercise?.targets),
               mode: exercise?.mode === "cardio" ? "cardio" : exercise?.mode === "resistance" ? "resistance" : undefined,
               plannedRestSec: typeof exercise?.plannedRestSec === "number" && exercise.plannedRestSec >= 0 && exercise.plannedRestSec <= 3600 ? exercise.plannedRestSec : undefined,
               notes: typeof exercise?.notes === "string" ? exercise.notes : "",
@@ -1959,6 +1968,7 @@ export default function WorkoutLog() {
       const nextExercises: Exercise[] = workout.exercises.map((ex) => ({
         id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
         name: ex.name,
+        targets: normalizeExerciseTargets(ex.targets),
         notes: ex.notes ?? "",
         tempo: (ex.mode === "cardio" ? ex.zone : ex.tempo) ?? "",
         cardioSessionType: ex.cardioSessionType,
@@ -1966,7 +1976,8 @@ export default function WorkoutLog() {
         sets: ex.sets.map((s) => ({
           weightKg: s.weightKg ?? null,
           reps: s.reps,
-          rpe: s.rpe ?? "",
+          rpe: "",
+          targetRpe: s.targetRpe ?? null,
           distanceKm: s.distanceKm ?? null,
           durationSec: s.durationSec ?? null,
           zone: s.zone ?? "",
@@ -2142,6 +2153,7 @@ export default function WorkoutLog() {
         trainingPhase: sessionPhase,
         exercises: sanitizedExercises.map((ex) => ({
           name: ex.name,
+          targets: ex.mode === "cardio" ? null : normalizeExerciseTargets(ex.targets),
           mode: ex.mode,
           notes: String(ex.notes || "").trim(),
           tempo: ex.mode === "cardio" ? "" : String(ex.tempo || "").trim(),
@@ -2155,6 +2167,7 @@ export default function WorkoutLog() {
             durationSec: ex.mode === "cardio" ? s.durationSec ?? null : null,
             zone: ex.mode === "cardio" ? String(s.zone || "").trim() : null,
             setType: toSetType(s.setType),
+            targetRpe: s.targetRpe ?? null,
             rpe:
               ex.mode === "cardio" || String(s.rpe || "").trim() === ""
                 ? null
@@ -2233,6 +2246,7 @@ export default function WorkoutLog() {
   const buildRoutineExercisesFromEditor = (source: Exercise[] = exercises) =>
     source.map((exercise) => ({
       name: exercise.name,
+      targets: getExerciseMode(exercise.name) === "cardio" ? null : normalizeExerciseTargets(exercise.targets),
       notes: String(exercise.notes || "").trim(),
       tempo: getExerciseMode(exercise.name) === "cardio" ? "" : String(exercise.tempo || "").trim(),
       zone: getExerciseMode(exercise.name) === "cardio" ? String(getExerciseZone(exercise) || "").trim() : "",
@@ -2408,9 +2422,10 @@ export default function WorkoutLog() {
       const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
       const latestSets = previousExerciseSetsByName.get(normalizeExerciseName(exercise.name)) ?? [];
       const sets = latestSets.length && !routine.sharedSnapshotId
-        ? latestSets.map((set) => ({
+        ? routineSetTargets(latestSets, exercise.sets).map((set) => ({
             weightKg: exercise.mode === "cardio" ? null : set.weightKg ?? null,
             reps: exercise.mode === "cardio" ? "" : String(set.reps ?? ""),
+            targetRpe: set.targetRpe ?? null,
             rpe: "",
             distanceKm: exercise.mode === "cardio" ? set.distanceKm ?? null : null,
             durationSec: exercise.mode === "cardio" ? set.durationSec ?? null : null,
@@ -2436,6 +2451,7 @@ export default function WorkoutLog() {
       return {
         id,
         plannedRestSec: exercise.restSec,
+        targets: normalizeExerciseTargets(exercise.targets),
         mode: exercise.mode,
         name: exercise.name,
         notes: exercise.notes ?? "",
@@ -2682,7 +2698,9 @@ export default function WorkoutLog() {
           .map((workout) => workout.exercises.find((exercise) => normalizeExerciseName(exercise.name) === normalizedName))
           .filter((exercise): exercise is PastWorkout["exercises"][number] => Boolean(exercise))
           .map((exercise) => ({ sets: exercise.sets }));
+        const targets = normalizeExerciseTargets(pastWorkouts.flatMap(workout => workout.exercises).find(exercise => normalizeExerciseName(exercise.name) === normalizedName)?.targets);
         const progression = recommendExerciseProgression({
+          targets,
           exerciseName: name,
           sessions,
           phase: (trainingPhase === "Strength" || trainingPhase === "Power" ? trainingPhase : "Hypertrophy") as ProgressionPhase,
@@ -2695,6 +2713,7 @@ export default function WorkoutLog() {
         return {
           id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
           name,
+          targets,
           notes: "",
           tempo,
           sets: Array.from({ length: progression.sets }, () => ({
@@ -2884,9 +2903,11 @@ export default function WorkoutLog() {
     return null;
   };
 
-  const cardActions = useEventCallbacks({ openWarmup, revealNote: revealNote, openExerciseDemo, openExerciseHistory, openExerciseActions, setReplaceSearch, setReplaceGroup, closeReplacement: () => setReplaceTarget(null), replaceExercise, updateExerciseNotes, openTempoEditor, openRestTimerModal, updateSetWeight, updateSetReps, updateSetRpe, toggleSetDone, removeSetWithUndo, openSetMenu, copyLastSetToCurrent, openCardioTimeModal, openCardioDistanceModal, setExercises, updateCardioSessionType, updateCardioEffortLevel, addEmptySet, duplicateLastSet, undoRemoveSet });
+  const openExerciseTargets = (id: string) => { if (activeUid) { Keyboard.dismiss(); setEditingSet(null); setExerciseTargetsEditor({ uid: activeUid, id }); } };
+  const targetsExercise = exerciseTargetsEditor?.uid === activeUid ? exercises.find(exercise => exercise.id === exerciseTargetsEditor.id) : null;
+  const cardActions = useEventCallbacks({ openExerciseTargets, openWarmup, revealNote: revealNote, openExerciseDemo, openExerciseHistory, openExerciseActions, setReplaceSearch, setReplaceGroup, closeReplacement: () => setReplaceTarget(null), replaceExercise, updateExerciseNotes, openTempoEditor, openRestTimerModal, updateSetWeight, updateSetReps, updateSetRpe, toggleSetDone, removeSetWithUndo, openSetMenu, copyLastSetToCurrent, openCardioTimeModal, openCardioDistanceModal, setExercises, updateCardioSessionType, updateCardioEffortLevel, addEmptySet, duplicateLastSet, undoRemoveSet });
   // Cache unchanged card JSX so navigation and background context updates don't rebuild every row.
-  const exerciseCards = useWorkoutExerciseCards({ exercises, exerciseUnits, getExerciseMode, effortScale, previousExerciseSetsByName, findCatalogExercise, restTimerByExercise, replaceTarget, replaceSearch, replaceGroup, replacementOptions, replacementLimit, replacementPageKey, isTabletLayout, formatLastSetSummary, scrollNativeGesture, getExerciseZone, undoDeletedSet, cardActions, styles, colors, fontScale, editingSet, warmupTarget, cardioTimeTarget, cardioDistanceTarget, showCardioTimeModal, showCardioDistanceModal, setEditingSet, setReplacementPage });
+  const exerciseCards = useWorkoutExerciseCards({ targetsEditorOpen: !!targetsExercise, exercises, exerciseUnits, getExerciseMode, effortScale, previousExerciseSetsByName, findCatalogExercise, restTimerByExercise, replaceTarget, replaceSearch, replaceGroup, replacementOptions, replacementLimit, replacementPageKey, isTabletLayout, formatLastSetSummary, scrollNativeGesture, getExerciseZone, undoDeletedSet, cardActions, styles, colors, fontScale, editingSet, warmupTarget, cardioTimeTarget, cardioDistanceTarget, showCardioTimeModal, showCardioDistanceModal, setEditingSet, setReplacementPage });
 
   return (
     <SafeAreaView style={styles.screen} edges={["top", "left", "right"]}>
@@ -3115,7 +3136,7 @@ export default function WorkoutLog() {
           <View style={styles.modalBackdrop}>
             <TouchableWithoutFeedback onPress={() => {}}>
               <AdaptiveModalCard style={styles.modalCard}>
-                <WorkoutExerciseActions styles={styles} colors={colors} activeActionExercise={activeActionExercise} activeActionMode={activeActionMode} activeActionUnit={activeActionUnit} activeExerciseActionId={activeExerciseActionId} activeActionIndex={activeActionIndex} exercises={exercises} availableWeightsPreferences={availableWeightsPreferences} setAvailableWeightsTarget={setAvailableWeightsTarget} closeExerciseActions={closeExerciseActions} moveExercise={moveExercise} setReplaceTarget={setReplaceTarget} setReplaceSearch={setReplaceSearch} setReplaceGroup={setReplaceGroup} toggleFavoriteExercise={toggleFavoriteExercise} activeActionIsFavorite={activeActionIsFavorite} deleteExercise={deleteExercise} toggleExerciseUnit={toggleExerciseUnit} />
+                <WorkoutExerciseActions openExerciseTargets={openExerciseTargets} effortScale={effortScale} styles={styles} colors={colors} activeActionExercise={activeActionExercise} activeActionMode={activeActionMode} activeActionUnit={activeActionUnit} activeExerciseActionId={activeExerciseActionId} activeActionIndex={activeActionIndex} exercises={exercises} availableWeightsPreferences={availableWeightsPreferences} setAvailableWeightsTarget={setAvailableWeightsTarget} closeExerciseActions={closeExerciseActions} moveExercise={moveExercise} setReplaceTarget={setReplaceTarget} setReplaceSearch={setReplaceSearch} setReplaceGroup={setReplaceGroup} toggleFavoriteExercise={toggleFavoriteExercise} activeActionIsFavorite={activeActionIsFavorite} deleteExercise={deleteExercise} toggleExerciseUnit={toggleExerciseUnit} />
               </AdaptiveModalCard>
             </TouchableWithoutFeedback>
           </View>
@@ -3653,6 +3674,7 @@ export default function WorkoutLog() {
         </KeyboardAwareModalFrame>
       </Modal>
 
+      {targetsExercise && exerciseTargetsEditor ? <ExerciseTargetsSheet key={`${exerciseTargetsEditor.uid}:${targetsExercise.id}:${effortScale}`} name={targetsExercise.name} targets={targetsExercise.targets} effortScale={effortScale} onClose={() => setExerciseTargetsEditor(null)} onApply={targets => { if (auth.currentUser?.uid !== exerciseTargetsEditor.uid) return; setExercises(before => before.map(exercise => exercise.id === targetsExercise.id ? { ...exercise, targets } : exercise)); setExerciseTargetsEditor(null); }} /> : null}
       {warmupTarget && activeUid === warmupTarget.uid ? <WarmupSetsSheet key={`${warmupTarget.uid}:${warmupTarget.exercise.id}`} uid={warmupTarget.uid} name={warmupTarget.exercise.name} sets={warmupTarget.exercise.sets} unit={warmupTarget.unit} barbell={warmupTarget.barbell} settings={availableWeightsPreferences.values[weightPreferenceKey(warmupTarget.exercise.name)]} onClose={() => { Keyboard.dismiss(); setWarmupTarget(null); }} onApply={applyWarmups} /> : null}
 
       <Modal visible={showCardioTimeModal} transparent animationType="fade" onRequestClose={() => { setShowCardioTimeModal(false); setCardioTimeTarget(null); }}>

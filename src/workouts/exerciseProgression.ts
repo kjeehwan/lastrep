@@ -1,4 +1,5 @@
 import { availableWeightAtOrBelow, type AvailableWeights } from "./availableWeights";
+import { normalizeExerciseTargets, type ExerciseTargets } from "./exerciseTargets";
 
 export type ProgressionPhase = "Hypertrophy" | "Strength" | "Power";
 
@@ -14,6 +15,7 @@ export type ExercisePerformanceSession = {
 };
 
 export type ExerciseProgressionInput = {
+  targets?: ExerciseTargets | null;
   exerciseName: string;
   sessions: ExercisePerformanceSession[];
   phase: ProgressionPhase;
@@ -59,7 +61,10 @@ const median = (values: number[]) => {
 const roundToPlate = (weightKg: number) => Math.round(weightKg * 2) / 2;
 
 export const recommendExerciseProgression = (input: ExerciseProgressionInput): ExerciseProgression => {
-  const range = repRangeForPhase(input.phase);
+  const phaseRange = repRangeForPhase(input.phase), targets = normalizeExerciseTargets(input.targets);
+  const range = targets?.minReps != null && targets.maxReps != null
+    ? { min: targets.minReps, max: targets.maxReps, preferred: Math.max(targets.minReps, Math.min(targets.maxReps, phaseRange.preferred)) }
+    : phaseRange;
   const sessionSets = input.sessions.map((session) => toWorkingSets(session.sets)).filter((sets) => sets.length > 0);
   if (!sessionSets.length) {
     return {
@@ -140,8 +145,10 @@ export const recommendExerciseProgression = (input: ExerciseProgressionInput): E
     const available = availableWeightAtOrBelow(weightKg, input.availableWeights);
     if (weightKg > latestTopSet.weightKg && (available == null || available <= latestTopSet.weightKg)) {
       weightKg = latestTopSet.weightKg;
-      reps += 1;
-      reasons.push("The next available weight is too large a jump, so add a rep instead.");
+      if (!targets?.maxReps || reps < targets.maxReps) {
+        reps += 1;
+        reasons.push("The next available weight is too large a jump, so add a rep instead.");
+      } else reasons.push("The next weight is unavailable, so repeat within your rep range.");
     } else if (available != null && available >= latestTopSet.weightKg * 0.5) {
       weightKg = available;
     } else {

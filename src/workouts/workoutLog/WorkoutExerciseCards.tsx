@@ -13,7 +13,7 @@ import { Gesture } from "react-native-gesture-handler";
 import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import WorkoutGestureTextInput from "../../components/WorkoutGestureTextInput";
 import { NotebookTextInput } from "../../ui/notebook/NotebookTextInput";
-import { notebookRowHeight } from "../../ui/notebook/tokens";
+import { notebookRowHeight, notebookFonts } from "../../ui/notebook/tokens";
 import {
   effortInputValue,
   effortLabel,
@@ -24,6 +24,7 @@ import { EXERCISE_GROUPS, type ExerciseCatalogItem } from "../exerciseCatalog";
 import { clockLabel, RestTimerText } from "./TimerText";
 import { WorkoutNativeSetRows } from "./WorkoutNativeSetRows";
 import { applyCardioZone } from "./cardioZone";
+import { effectiveTargetRpe, exerciseTargetsText } from "../exerciseTargets";
 import { lastResistanceSet, setRowPresentation } from "./setPresentation";
 import type { RestClock } from "./timerClock";
 import type { WarmupUnit } from "./warmupSets";
@@ -43,6 +44,7 @@ import {
 } from "./workoutLogModel";
 import type { createStyles } from "./workoutLogStyles";
 export type WorkoutExerciseCardsProps = {
+  targetsEditorOpen?: boolean;
   planMode?: boolean;
   exercises: Exercise[];
   exerciseUnits: Record<string, Unit>;
@@ -85,6 +87,7 @@ export type WorkoutExerciseCardsProps = {
     set: SetEntry;
   } | null;
   cardActions: {
+    openExerciseTargets?: (id: string) => void;
     openWarmup: (id: string) => void;
     revealNote: () => void;
     openExerciseDemo: (exerciseName: string) => Promise<void>;
@@ -174,6 +177,7 @@ export type WorkoutExerciseCardsProps = {
   >;
 };
 export function useWorkoutExerciseCards({
+  targetsEditorOpen = false,
   planMode = false,
   exercises,
   exerciseUnits,
@@ -459,6 +463,7 @@ export function useWorkoutExerciseCards({
                 <Text style={styles.linkText}>+ Add warm-up</Text>
               </TouchableOpacity>
             ) : null}
+            {!isCardio && exerciseTargetsText(ex.targets, effortScale) ? <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Edit ${ex.name} targets`} onPress={() => cardActions.openExerciseTargets?.(ex.id)} style={{ minHeight: 36, justifyContent: "center", marginBottom: 8 }}><Text style={[styles.muted, { fontFamily: notebookFonts.body, fontSize: 14 }]}>Target: {exerciseTargetsText(ex.targets, effortScale)}</Text></TouchableOpacity> : null}
             <View
               style={[
                 styles.setHeaderRow,
@@ -544,6 +549,7 @@ export function useWorkoutExerciseCards({
                   (_set, index) => editingSet === `${ex.id}:${index}`,
                 )}
                 editingSuspended={
+                  targetsEditorOpen ||
                   !!warmupTarget ||
                   showCardioTimeModal ||
                   showCardioDistanceModal
@@ -583,8 +589,8 @@ export function useWorkoutExerciseCards({
                   reps: set.reps,
                   rpe: effortInputValue(set, effortScale),
                   rpeHint:
-                    !planMode && set.targetRpe != null
-                      ? String(rpeToEffort(set.targetRpe, effortScale))
+                    !planMode && effectiveTargetRpe(ex, set) != null
+                      ? String(rpeToEffort(effectiveTargetRpe(ex, set), effortScale))
                       : undefined,
                   done: set.done,
                 }))}
@@ -793,14 +799,14 @@ export function useWorkoutExerciseCards({
                             />
                             <WorkoutGestureTextInput
                               placeholder={
-                                !planMode && s.targetRpe != null
-                                  ? String(rpeToEffort(s.targetRpe, effortScale))
+                                !planMode && effectiveTargetRpe(ex, s) != null
+                                  ? String(rpeToEffort(effectiveTargetRpe(ex, s), effortScale))
                                   : effortScale === "rir"
                                     ? "0-4"
                                     : "6-10"
                               }
                               accessibilityLabel={`${ex.name}, set ${idx + 1}, ${effortScale === "rir" ? "RIR" : "RPE"}`}
-                              accessibilityHint={!planMode && s.targetRpe != null ? `Target ${rpeToEffort(s.targetRpe, effortScale)}` : undefined}
+                              accessibilityHint={!planMode && effectiveTargetRpe(ex, s) != null ? `Target ${rpeToEffort(effectiveTargetRpe(ex, s), effortScale)}` : undefined}
                               placeholderTextColor={colors.muted}
                               keyboardType="decimal-pad"
                               value={effortInputValue(s, effortScale)}
@@ -967,6 +973,7 @@ export function useWorkoutExerciseCards({
         );
       }),
     [
+      targetsEditorOpen,
       planMode,
       setEditingSet,
       setReplacementPage,

@@ -4,7 +4,11 @@ import { Text, TouchableOpacity, View } from "react-native";
 import type { NotebookColors } from "../../ui/notebook/tokens";
 import type { Exercise, ExerciseMode, Unit } from "./workoutLogModel";
 import type { createStyles } from "./workoutLogStyles";
+import { exerciseTargetsText } from "../exerciseTargets";
+import type { EffortScale } from "../effortScale";
 type Props = {
+  openExerciseTargets?: (id: string) => void;
+  effortScale?: EffortScale;
   styles: ReturnType<typeof createStyles>;
   colors: NotebookColors;
   activeActionExercise: Exercise | null;
@@ -29,6 +33,8 @@ type Props = {
   toggleExerciseUnit: (id: string, unit: Unit) => void;
 };
 export function WorkoutExerciseActions({
+  openExerciseTargets,
+  effortScale = "rpe",
   styles,
   colors,
   activeActionExercise,
@@ -93,6 +99,12 @@ export function WorkoutExerciseActions({
           ))}
         </View>
       </View>
+
+      {activeActionMode === "resistance" && activeActionExercise && openExerciseTargets ? <TouchableOpacity accessibilityRole="button" accessibilityLabel="Exercise targets" style={styles.exerciseOptionRow} onPress={() => { closeExerciseActions(); openExerciseTargets(activeActionExercise.id); }}>
+        <Ionicons name="locate-outline" size={18} color={colors.muted} />
+        <Text style={styles.exerciseOptionText}>Targets</Text>
+        <Text style={[styles.muted, { flex: 1, textAlign: "right" }]}>{exerciseTargetsText(activeActionExercise.targets, effortScale) || "Not set"}</Text>
+      </TouchableOpacity> : null}
 
       {activeActionMode === "resistance" ? (
         <TouchableOpacity
