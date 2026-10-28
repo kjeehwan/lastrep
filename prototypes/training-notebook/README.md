@@ -569,3 +569,33 @@ layout combinations and flow checks again; no exceptions or external requests.
 The password eye control sits inside the input's right edge with reserved text
 padding; email/password borders have equal width. All 220 study checks passed
 again, plus 40 auth geometry checks across themes, sizes and enlarged text.
+
+
+## Optional exercise targets study ? October 28, 2026
+
+Open `index.html#layout-minimal-targets` for the configured example or
+`index.html#layout-minimal-targets-empty` for the unset example. Targets lives in
+the existing exercise three-dot menu. Configured exercises show a muted, tappable
+summary above the set headers; unset exercises add no extra row or columns.
+
+The staged popup supports an optional rep range and optional target RPE/RIR,
+validation, equivalent effort conversion, Clear targets followed by Done, and
+X/outside/Escape cancellation. Explanations live behind the header i. Actual
+set reps, effort and completion are independent. This is a local design study;
+no native target fields, backend writes or progression behavior are implemented.
+
+Browser checks covered configured/unset, range-only/effort-only targets, invalid
+ranges, cancel and clear, help navigation, RPE/RIR equivalence and retention of
+recorded effort, plus compact dark and enlarged-text layouts. The existing
+Workout and Home studies still load through the same server on port 4317.
+
+Targets popup refinement: exercise name uses a 20-dp semibold heading. Two
+matching rows show Rep range (optional) and Target RPE/RIR (optional), with their
+values or Not set. Tapping a row reveals its compact inputs inside this sheet;
+switching rows retains the draft. Revealed inputs align to the trailing edge; Min/Max stay together as a group.
+The range uses 72-dp Min/Max fields. Target
+effort follows the existing Profile preference; its help explains this. Done
+appears only for a changed value, including pending removal, and hides again
+when values are restored. Clear targets stages removal until Done. Inputs
+expand with text size and stack at enlarged text. Browser checks also cover
+conditional actions, draft retention and cancellation while fields are expanded.

@@ -1,3 +1,4 @@
+import { targetDraft, readTargets, renderTargetsSheet, refreshTargetActions } from './exercise-targets.mjs';
 import { renderWarmupSheet, updateWarmupControls } from './workout-warmup-ui.mjs';
 import { installWarmupGestures } from './warmup-gestures.mjs';
 import { renderWorkoutExercise, renderExerciseMenu, replacementExercise } from './workout-exercise-ui.mjs';
@@ -9,7 +10,7 @@ import { readNotebookPreferences } from './notebook-preferences.mjs';
 import { setReviewState } from './review-state-picker.mjs';
 import { readCheckIn, writeCheckIn, clearCheckIn, checkInFields } from './check-in.mjs';
 import { copy, fixture, catalog, exerciseFromCatalog, lastText, effortValue, guidanceChanges, moveExercise, summary, setUnit, states } from './model.mjs';
-states.unshift(['Minimal layout', 'layout-minimal', 'Compact header / icon actions', 'Combined phase and totals, six visible actions, no routine row.'], ['Minimal layout', 'layout-minimal-cardio', 'Compact header / cardio', 'The same icon actions and compact header with cardio controls.'], ['Layout review', 'layout', 'Workout header / resistance', 'Editable title, balanced spacing and planned session totals.'], ['Layout review', 'layout-tempo', 'Workout header / tempo set', 'The tool row keeps its spacing when a tempo is set.'], ['Layout review', 'layout-cardio', 'Workout header / cardio', 'Zone takes the place of resistance tempo.'], ...sharingStates, ...socialExamples);
+states.unshift(['Exercise targets', 'layout-minimal-targets', 'Targets / configured', 'Exercise targets stay separate from the set log. Open the three-dot menu, then Targets.'], ['Exercise targets', 'layout-minimal-targets-empty', 'Targets / not set', 'No extra row appears until a rep range or target effort is configured.'], ['Minimal layout', 'layout-minimal', 'Compact header / icon actions', 'Combined phase and totals, six visible actions, no routine row.'], ['Minimal layout', 'layout-minimal-cardio', 'Compact header / cardio', 'The same icon actions and compact header with cardio controls.'], ['Layout review', 'layout', 'Workout header / resistance', 'Editable title, balanced spacing and planned session totals.'], ['Layout review', 'layout-tempo', 'Workout header / tempo set', 'The tool row keeps its spacing when a tempo is set.'], ['Layout review', 'layout-cardio', 'Workout header / cardio', 'Zone takes the place of resistance tempo.'], ...sharingStates, ...socialExamples);
 
 const $ = (q, root = document) => root.querySelector(q);
 const escape = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -71,6 +72,10 @@ function makeState(id) {
   }
   if (id === 'layout-tempo' || id === 'layout-minimal') state.exercises[0].tempo = '3-0-1-0';
   if (id === 'layout-cardio' || id === 'layout-minimal-cardio') { const e = exerciseFromCatalog('treadmill'); e.time = '20:00'; e.distance = '3.2'; e.zone = '2'; state.exercises = [e]; state.title = 'Cardio session'; state.source = ''; state.selectedId = e.id; }
+  if (id.startsWith('layout-minimal-targets')) {
+    state.exercises[0].sets.forEach((row, index) => { row.reps = '8'; row.rpe = index === 0 ? '8' : ''; });
+    if (!id.endsWith('-empty')) state.exercises[0].targets = { min: 8, max: 12, rpe: 8 };
+  }
   state.sharing = sharingState(id);
   state.social = socialState(id);
   if (id.startsWith('social-')) state.modal = id;
@@ -209,7 +214,9 @@ function modal() {
     case 'recommend': return dialogShell('Recommend workout', `${paragraph('Choose a focus')}${chips(['Chest', 'Chest + Triceps', 'Back', 'Back + Biceps', 'Legs', 'Anterior legs', 'Posterior legs', 'Shoulders', 'Shoulders + Arms', 'Arms', 'Push', 'Pull'], s.focus, 'focus', {}, 2)}<h3>Session length</h3>${chips(['Quick', 'Standard', 'Extended'], s.length, 'length')}${paragraph('Volume adapts to recent training and recovery. This prototype loads a fixture, not a generated recommendation.')}`, button('Recommend workout', 'generate-workout', 'primary'));
     case 'create-routine': return dialogShell('Create routine', `${field('Routine name', 'routineName', s.draft.routineName ?? '', 'e.g. Upper body')}${paragraph('Use the exercise editor to build your routine. This is a local mock flow.')}`, actions('Start building', 'build-routine'));
     case 'replace-guard': return dialogShell('Replace this workout?', paragraph('Your current draft has exercises. Replace it with the selected routine, or add the routine to this session.'), button('Replace workout', 'confirm-routine', 'primary') + button('Append instead', 'append-routine', '') + button('Keep current workout', 'close', ''), true);
-    case 'exercise-menu': return dialogShell(escape(e?.name || 'Exercise options'),renderExerciseMenu(e,s.exercises.indexOf(e),s.exercises.length),button('Back to workout','close'));
+    case 'exercise-targets': return renderTargetsSheet(e, s.targetDraft, { shell: dialogShell, button });
+    case 'exercise-targets-help': return dialogShell('Targets', paragraph("Set a rep range, target effort, or both for this exercise's normal working sets. Warm-up sets are excluded.") + paragraph('Log the reps and effort you actually perform in the set rows. They stay separate from your targets.') + paragraph('Target effort follows your RPE/RIR preference in Profile.'), button('Got it', 'targets-back', 'primary'));
+    case 'exercise-menu': return dialogShell(escape(e?.name || 'Exercise options'),renderExerciseMenu(e,s.exercises.indexOf(e),s.exercises.length,{effortScale:scale}),button('Back to workout','close'));
     case 'exercise-replace-confirm': return dialogShell('Replace exercise?',paragraph('This will reset the current sets for this exercise.'),button('Replace','exercise-replace-apply','primary')+button('Cancel','close'));
     case 'warmup': return warmupDialog(e);
     case 'replace': return dialogShell('Replace exercise', e?.custom ? paragraph('No automatic suggestions for a custom exercise. Add another exercise manually if needed.') : `${paragraph('Choose an alternative for this mock session.')}${button('Machine chest press', 'replace-exercise', '')}${button('Dumbbell bench press', 'replace-exercise', '')}`);
@@ -307,6 +314,7 @@ $('#stage').addEventListener('input', event => {
   const el = event.target;
   if (socialInput(s, el, render)) return;
   if (!el.closest('.interactive')) return;
+  if (el.dataset.targetField) { s.targetDraft[el.dataset.targetField] = el.value; s.targetDraft.error = ''; $('.interactive .exercise-target-editor .form-error')?.remove(); refreshTargetActions($('.interactive'), getExercise(), s.targetDraft); return; }
   if (el.hasAttribute('data-session-title')) { s.title = el.value; return; }
   if (el.hasAttribute('data-replace-query')) { const at=el.selectionStart; s.replaceQuery=el.value; render(); const next=$('.interactive [data-replace-query]'); next?.focus({preventScroll:true}); next?.setSelectionRange(at,at); return; }
   if (el.dataset.set) { el.setCustomValidity(''); el.removeAttribute('aria-invalid'); el.parentElement.querySelector('.field-error')?.remove(); el.removeAttribute('aria-describedby'); }
@@ -353,6 +361,12 @@ $('#stage').addEventListener('click', async event => {
   const e = getExercise(d.id || s.selectedId);
   if (handleSocialAction(s, action, d, name => { s.modal = name; })) { render(); return; }
   switch (action) {
+    case 'exercise-targets': s.selectedId = e.id; s.targetDraft = targetDraft(e, scale); s.modal = 'exercise-targets'; s.keyboard = false; render(); return;
+    case 'targets-edit': s.targetDraft.editing = s.targetDraft.editing === d.value ? null : d.value; render(); return;
+    case 'targets-help': s.modal = 'exercise-targets-help'; render(); return;
+    case 'targets-back': s.modal = 'exercise-targets'; render(); return;
+    case 'targets-clear': Object.assign(s.targetDraft, { min: '', max: '', effort: '', error: '', editing: null }); render(); return;
+    case 'targets-done': { const result = readTargets(s.targetDraft); if (result.error) { s.targetDraft.error = result.error; render(); return; } e.targets = result.value; scale = s.targetDraft.scale; $('#effort').value = scale; s.modal = ''; mutateWorkout(); render(); return; }
     case 'sharing-start':
       s.social.editCopy = null;
       s.sharing = sharingState('share-send');
@@ -384,7 +398,7 @@ $('#stage').addEventListener('click', async event => {
       }
       if (d.id) s.selectedId = d.id; openModal(d.modal); return;
     }
-    case 'close': case 'outside': if (s.modal === 'saving') return; if (s.modal === 'context' && s.contextBefore) Object.assign(s, s.contextBefore); s.contextBefore = null; s.modal = ''; render(); $('.interactive .toolbar .btn')?.focus({ preventScroll: true }); return;
+    case 'close': case 'outside': if (s.modal === 'exercise-targets-help') { s.modal = 'exercise-targets'; render(); return; } if (s.modal === 'saving') return; if (s.modal === 'context' && s.contextBefore) Object.assign(s, s.contextBefore); s.contextBefore = null; s.modal = ''; render(); $('.interactive .toolbar .btn')?.focus({ preventScroll: true }); return;
     case 'hide-keyboard': s.keyboard = false; render(); $('.interactive .viewport')?.focus({ preventScroll: true }); return;
     case 'dismiss-toast': s.toast = ''; render(); return;
     case 'tab': if (d.value === 'Home') location.href = './home.html'; else if (d.value === 'Nutrition') location.href = './nutrition.html'; else if (d.value === 'Sleep') location.href = './sleep.html'; else if (d.value === 'Profile') location.href = './profile.html'; else if (d.value !== 'Workout') toast('This destination is outside the current browser studies.'); return;
@@ -493,6 +507,7 @@ $('#stage').addEventListener('click', async event => {
 });
 
 document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && s.modal === 'exercise-targets-help') { s.modal = 'exercise-targets'; render(); return; }
   if (event.key === 'Escape' && s.modal.startsWith('social-copy-')) { handleSocialAction(s, 'social-copy-dismiss', {}, name => { s.modal = name; }); render(); return; }
 
   if (event.key === 'Escape') { if (s.modal && s.modal !== 'saving') { if (s.modal === 'context' && s.contextBefore) Object.assign(s, s.contextBefore); s.contextBefore = null; s.modal = ''; render(false); } else if (s.keyboard) { s.keyboard = false; render(); } return; }

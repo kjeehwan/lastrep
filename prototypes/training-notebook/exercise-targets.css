@@ -1,0 +1,28 @@
+.exercise .btn.exercise-target-summary{display:block;width:auto;min-height:36px;text-align:left;color:var(--secondary);font-size:calc(14px * var(--scale));font-weight:400;padding:4px 0;margin:0 0 8px;text-decoration:none}
+.target-menu-option{display:flex;gap:12px;text-align:left}
+.target-menu-summary{margin-left:auto;font-size:calc(13px * var(--scale));font-weight:400;color:var(--secondary);text-align:right;max-width:58%;overflow-wrap:anywhere}
+.exercise-target-editor{display:grid;gap:24px}
+.exercise-target-editor .target-exercise-name{margin:0;color:var(--ink);font-size:calc(20px * var(--scale));font-weight:600;line-height:1.3}
+.exercise-target-editor .target-rows{display:grid;gap:8px}
+.exercise-target-editor .target-toggle{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:48px;padding:0;width:100%;text-align:left;font-size:calc(16px * var(--scale));font-weight:400;color:var(--ink)}
+.exercise-target-editor .target-row-label{flex:1;min-width:0}
+.exercise-target-editor .target-row-value{display:flex;align-items:center;gap:8px;color:var(--secondary);font-size:calc(14px * var(--scale))}
+.exercise-target-editor .target-row-value svg{width:18px;height:18px;flex-shrink:0}
+.exercise-target-editor .target-range-fields{display:grid;grid-template-columns:calc(72px * var(--scale)) 12px calc(72px * var(--scale));gap:12px;align-items:end;max-width:100%}
+.exercise-target-editor .target-range-fields .field{margin:0;min-width:0}
+.exercise-target-editor .target-range-fields,.exercise-target-editor .target-effort-fields{margin:8px 0 12px}
+.exercise-target-editor .target-range-fields{width:max-content;margin-left:auto}
+.exercise-target-editor .target-effort-fields{display:flex;justify-content:flex-end}
+.exercise-target-editor .target-range-fields .field>span{color:var(--secondary);font-size:calc(14px * var(--scale))}
+.exercise-target-editor input{min-width:0}
+.exercise-target-editor .target-dash{padding-bottom:12px;text-align:center;color:var(--secondary)}
+.exercise-target-editor .target-effort-input{width:calc(72px * var(--scale));max-width:100%;flex-shrink:0}
+.targets-sheet .sheet-head h2>span{display:flex;align-items:center;gap:4px}
+.targets-sheet .sheet-head h2 .target-info{width:44px;min-width:44px;flex-shrink:0;color:var(--secondary)}
+.targets-sheet .sheet-body{padding-bottom:12px}
+.targets-sheet [hidden]{display:none!important}
+.targets-sheet .sheet-footer:not(:has(button:not([hidden]))){display:none}
+.large-text .exercise-target-editor .target-toggle{flex-wrap:wrap}
+.large-text .exercise-target-editor .target-range-fields{grid-template-columns:minmax(0,1fr);gap:12px}
+.large-text .exercise-target-editor .target-dash{display:none}
+.large-text .exercise-target-editor .target-range-fields .field{width:calc(72px * var(--scale));max-width:100%}
