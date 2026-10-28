@@ -71,6 +71,11 @@ export function renderSnapshot(doc, snapshot) {
   for (const exercise of snapshot.plan.exercises) {
     const article = add(preview, "article", "");
     add(article, "h2", exercise.name);
+    if (exercise.mode !== "cardio" && exercise.targets) {
+      const targets = exercise.targets;
+      const parts = [targets.minReps != null ? `${targets.minReps}\u2013${targets.maxReps} reps` : "", targets.targetRpe != null ? `${snapshot.plan.effortScale.toUpperCase()} ${number(snapshot.plan.effortScale === "rir" ? 10 - targets.targetRpe : targets.targetRpe)}` : ""].filter(Boolean);
+      if (parts.length) add(article, "p", `Target: ${parts.join(" \u00b7 ")}`, "details");
+    }
     for (const set of exercise.sets)
       add(
         article,

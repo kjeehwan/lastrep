@@ -50,6 +50,13 @@ cardio duration/distance/session type/effort. Weights are canonical kilograms an
 distances canonical kilometres; display units are preserved separately. Target
 effort is canonical RPE even when displayed as RIR. Unknown fields are rejected.
 
+Exercise-level `targets` optionally contains nullable `minReps`, `maxReps` and
+`targetRpe`. Both rep endpoints must be provided together as whole numbers from
+1 to 100, with minimum no greater than maximum. Target RPE is 6–10. These defaults
+stay separate from per-set prescriptions and recorded effort. Plans without the
+new field preserve their previous serialized shape; clients predating targets
+can ignore or drop this optional metadata when editing a plan.
+
 Personal exercise notes, logged effort, completion marks, workout history, health
 data and account identifiers are not part of the shared plan. Include weights off
 removes weights from the actual outgoing payload. Import creates fresh exercise

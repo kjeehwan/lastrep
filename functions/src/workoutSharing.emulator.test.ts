@@ -23,6 +23,7 @@ const sample = {
   exercises: [
     {
       name: "Bench Press",
+      targets: { minReps: 8, maxReps: 12, targetRpe: 8.5 },
       mode: "resistance",
       unit: "kg",
       restSec: 90,
@@ -161,6 +162,10 @@ describe.skipIf(!enabled)("workout sharing Firestore transactions", () => {
       b,
     )) as any;
     expect(imported.created).toBe(true);
+    const savedRoutine = (await getFirestore().doc(`users/${b}/routines/${imported.id}`).get()).data();
+    expect(savedRoutine?.exercises[0].targets).toEqual(sample.exercises[0].targets);
+    expect(savedRoutine?.exercises[0].sets[0]).toMatchObject({ targetRpe: 8 });
+    expect(savedRoutine?.exercises[0].sets[0]).not.toHaveProperty("rpe");
     expect(
       await call({ op: "importRoutine", deliveryId: delivery }, b),
     ).toMatchObject({ created: false });

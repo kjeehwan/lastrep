@@ -5,6 +5,7 @@ import {
   setPrescription,
   loadSnapshot,
   startPage,
+  renderSnapshot,
 } from "../../hosting/workout-sharing/sharing.mjs";
 
 const token = "a".repeat(64);
@@ -48,6 +49,13 @@ function documentFixture() {
   return { getElementById: (id) => nodes.get(id), createElement: node };
 }
 describe("public sharing landing page", () => {
+  it("shows exercise targets separately from set prescriptions using the chosen effort scale", () => {
+    const doc = documentFixture();
+    renderSnapshot(doc, { sender: { nickname: "Example" }, plan: { ...plan, exercises: [{ ...plan.exercises[0], targets: { minReps: 8, maxReps: 12, targetRpe: 8.5 } }] } });
+    const article = doc.getElementById("preview").children[0];
+    expect(article.children[1].textContent).toBe("Target: 8–12 reps · RIR 1.5");
+    expect(article.children[2].textContent).toContain("RIR 2");
+  });
   it("accepts one opaque token and rejects ambiguous or executable input", () => {
     expect(sharingToken(`?token=${token}`)).toBe(token);
     expect(sharingToken("", `/w/${shortToken}`)).toBe(shortToken);

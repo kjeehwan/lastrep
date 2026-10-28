@@ -1,6 +1,7 @@
 // Generated from src/sharing/sharingContract.ts. Run npm --prefix functions run build.
 /** Shared wire contract. Pure TypeScript: safe to import from the native client. */
 export type SharedSetType = "normal" | "warmup" | "failure" | "drop";
+export type ExerciseTargets = { minReps: number | null; maxReps: number | null; targetRpe: number | null };
 export type SharedWorkoutSet = {
   weightKg: number | null;
   reps: string;
@@ -10,6 +11,7 @@ export type SharedWorkoutSet = {
   distanceKm: number | null;
 };
 export type SharedWorkoutExercise = {
+  targets?: ExerciseTargets | null;
   name: string;
   mode: "resistance" | "cardio";
   unit: "kg" | "lbs" | "km" | "mi";
@@ -104,6 +106,16 @@ const number = (
     throw Error("Invalid workout value.");
   return v;
 };
+export function parseExerciseTargets(input: unknown): ExerciseTargets | null {
+  if (input == null) return null;
+  const value = object(input);
+  keys(value, ["minReps", "maxReps", "targetRpe"]);
+  const minReps = number(value.minReps, 1, 100, true);
+  const maxReps = number(value.maxReps, 1, 100, true);
+  const targetRpe = number(value.targetRpe, 6, 10, true);
+  if ((minReps == null) !== (maxReps == null) || (minReps != null && maxReps != null && (!Number.isInteger(minReps) || !Number.isInteger(maxReps) || minReps > maxReps))) throw Error("Enter a valid whole rep range.");
+  return minReps == null && targetRpe == null ? null : { minReps, maxReps, targetRpe };
+}
 export function parseSharedWorkoutPlan(input: unknown): SharedWorkoutPlan {
   const p = object(input);
   keys(p, ["version", "title", "effortScale", "exercises"]);
@@ -127,6 +139,7 @@ export function parseSharedWorkoutPlan(input: unknown): SharedWorkoutPlan {
       "sets",
       "cardioSessionType",
       "cardioEffortLevel",
+      "targets",
     ]);
     if (
       !["resistance", "cardio"].includes(String(e.mode)) ||
@@ -185,6 +198,7 @@ export function parseSharedWorkoutPlan(input: unknown): SharedWorkoutPlan {
     });
     return {
       name: text(e.name, 100, true),
+      ...(e.targets !== undefined ? { targets: e.mode === "cardio" ? null : parseExerciseTargets(e.targets) } : {}),
       mode: e.mode as SharedWorkoutExercise["mode"],
       unit: e.unit as SharedWorkoutExercise["unit"],
       restSec,
