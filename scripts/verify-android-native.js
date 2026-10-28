@@ -52,6 +52,8 @@ if (!mainApplication) {
   else ok("MainApplication.kt registers MealTimeWheelPackage");
   if (!mainApplication.includes("add(NotebookSystemBarsPackage())")) fail("MainApplication.kt missing add(NotebookSystemBarsPackage())");
   else ok("MainApplication.kt registers NotebookSystemBarsPackage");
+  if (!mainApplication.includes("add(RestAlertsPackage())")) fail("MainApplication.kt missing add(RestAlertsPackage())");
+  else ok("MainApplication.kt registers RestAlertsPackage");
 }
 
 const requiredNativeFiles = [
@@ -65,6 +67,7 @@ const requiredNativeFiles = [
   "timewheel/MealTimeWheelPackage.kt",
   "timewheel/MealTimeWheelView.kt",
   "systembars/NotebookSystemBarsPackage.kt",
+  "restalerts/RestAlertsPackage.kt",
 ];
 
 for (const rel of requiredNativeFiles) {
@@ -73,7 +76,7 @@ for (const rel of requiredNativeFiles) {
     fail(`Missing native file: ${full}`);
   } else {
     ok(`Native file present: ${rel}`);
-    if (rel.startsWith("timewheel/") || rel.startsWith("systembars/")) {
+    if (rel.startsWith("timewheel/") || rel.startsWith("systembars/") || rel.startsWith("restalerts/")) {
       const template = read(path.join(projectRoot, "native-overrides", "android-kotlin", rel));
       const expected = template?.replaceAll("__PACKAGE__", packageName).replace(/\r\n/g, "\n");
       if (read(full).replace(/\r\n/g, "\n") !== expected) fail(`Native override differs from its prebuild template: ${rel}`);
@@ -90,6 +93,14 @@ if (!buildGradle.includes('implementation("androidx.recyclerview:recyclerview:1.
 const stepsManifest = read(path.join(projectRoot, "android", "app", "src", "main", "AndroidManifest.xml"));
 if (!stepsManifest?.includes('android.permission.health.READ_STEPS')) fail("Missing Health Connect steps read permission");
 else ok("Health Connect steps read permission present");
+
+for (const permission of ["POST_NOTIFICATIONS", "SCHEDULE_EXACT_ALARM"]) {
+  if (!stepsManifest?.includes(`android.permission.${permission}`)) fail(`Missing rest alert permission: ${permission}`);
+}
+if (!/<receiver\b[^>]*android:name="\.restalerts\.RestAlertReceiver"[^>]*android:exported="false"/.test(stepsManifest ?? "")) fail("Rest alert receiver must be registered and non-exported");
+const restGong = path.join(projectRoot, "android", "app", "src", "main", "res", "raw", "rest_gong.wav");
+const originalGong = path.join(projectRoot, "assets", "sounds", "gong.wav");
+if (!fs.existsSync(restGong) || !fs.readFileSync(restGong).equals(fs.readFileSync(originalGong))) fail("Rest alert sound must match the bundled gong");
 
 try {
   const errors = require("./check-android-config").verifyAndroidConfig(projectRoot);

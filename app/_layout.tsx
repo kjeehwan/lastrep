@@ -3,6 +3,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider, usePathname } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { onAuthStateChanged } from 'firebase/auth';
+import { setRestAlertOwner } from '../src/workouts/workoutLog/restAlertsNative';
 import { useEffect } from 'react';
 import { LogBox, Platform } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -106,6 +107,7 @@ function RootContent() {
       if (canceled) return;
 
       unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+        void setRestAlertOwner(user?.uid ?? null).catch(() => undefined);
         syncRevenueCatIdentity(user?.uid ?? null).catch(() => {
           // Auth sync failures are already logged in billing wrapper.
         });
