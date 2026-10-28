@@ -113,9 +113,8 @@ it("keeps identity, phase explanations and all four unit groups in their reviewe
   for (const label of ["Exercise effort", "Weight", "Height", "Food energy"]) {
     expect(source).toContain(`<ProfileChoices equalCells label="${label}"`);
   }
-  for (const kind of ["training", "diet"]) {
-    expect(source).toContain(`<ProfileText muted>{phaseLabel("${kind}")}</ProfileText><ProfileText muted>A different phase starts`);
-  }
+  expect(source).toContain("<PhaseEditor");
+  expect(source).toContain("current={phaseData} staged");
 });
 
 it("reveals sync feedback after content layout without following unrelated later updates", () => {

@@ -4,6 +4,11 @@ import { profileSaveSections } from "./profileSaveSections";
 const saved = { nickname: "Example", profilePhotoUri: "lastrep-photo:old", sleepTargetHours: "8", weightUnit: "kg", cutCalories: "2200", maintainCalories: "2600", bulkCalories: "2900", proteinTargetGrams: "170", trainingPhase: "Strength", dietPhase: "Maintain" };
 const plan = (patch: Record<string, unknown>) => profileSaveSections(JSON.stringify({ ...saved, ...patch }), JSON.stringify(saved));
 
+it("includes phase name/week-only drafts in the Profile save", () => {
+  expect(plan({ trainingPhaseEdit: '{"name":"Winter","week":7}' }).profile).toBe(true);
+  expect(plan({ dietPhaseEdit: '{"mode":"new","phase":"Maintain","week":1}' }).profile).toBe(true);
+});
+
 it("skips all unrelated writes for photo replacement or removal", () => {
   expect(plan({ profilePhotoUri: "file:new" })).toEqual({ photoOnly: true, profile: false, sleep: false, nutrition: false });
   expect(plan({ profilePhotoUri: "" })).toEqual({ photoOnly: true, profile: false, sleep: false, nutrition: false });

@@ -1,6 +1,6 @@
 const fs = require("fs");
 const path = require("path");
-const { withDangerousMod } = require("@expo/config-plugins");
+const { withDangerousMod, withAndroidManifest } = require("@expo/config-plugins");
 
 function ensureDir(filePath) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
@@ -13,6 +13,18 @@ function injectOnce(source, marker, insertion) {
 }
 
 module.exports = function withWorkoutNativeOverrides(config) {
+  config = withAndroidManifest(config, (cfg) => {
+    const manifest = cfg.modResults.manifest;
+    const permissions = manifest["uses-permission"] ?? [];
+    for (const name of ["android.permission.POST_NOTIFICATIONS", "android.permission.SCHEDULE_EXACT_ALARM"]) {
+      if (!permissions.some((item) => item.$["android:name"] === name)) permissions.push({ $: { "android:name": name } });
+    }
+    manifest["uses-permission"] = permissions;
+    const app = manifest.application[0];
+    const name = ".restalerts.RestAlertReceiver";
+    app.receiver = [...(app.receiver ?? []).filter((item) => item.$["android:name"] !== name), { $: { "android:name": name, "android:exported": "false" } }];
+    return cfg;
+  });
   return withDangerousMod(config, [
     "android",
     async (cfg) => {
@@ -37,6 +49,7 @@ module.exports = function withWorkoutNativeOverrides(config) {
         "timewheel/MealTimeWheelManager.kt",
         "timewheel/MealTimeWheelPackage.kt",
         "systembars/NotebookSystemBarsPackage.kt",
+        "restalerts/RestAlertsPackage.kt",
       ];
 
       for (const rel of templates) {
@@ -70,6 +83,11 @@ module.exports = function withWorkoutNativeOverrides(config) {
       mainApp = injectOnce(mainApp, "add(WorkoutSetListPackage())", "        add(MealTimeWheelPackage())");
       mainApp = injectOnce(mainApp, "import com.facebook.react.defaults.DefaultReactNativeHost", `import ${packageName}.systembars.NotebookSystemBarsPackage`);
       mainApp = injectOnce(mainApp, "add(MealTimeWheelPackage())", "        add(NotebookSystemBarsPackage())");
+      mainApp = injectOnce(mainApp, "import com.facebook.react.defaults.DefaultReactNativeHost", `import ${packageName}.restalerts.RestAlertsPackage`);
+      mainApp = injectOnce(mainApp, "add(NotebookSystemBarsPackage())", "        add(RestAlertsPackage())");
+      const gongTarget = path.join(projectRoot, "android", "app", "src", "main", "res", "raw", "rest_gong.wav");
+      ensureDir(gongTarget);
+      fs.copyFileSync(path.join(projectRoot, "assets", "sounds", "gong.wav"), gongTarget);
       fs.writeFileSync(mainApplicationPath, mainApp, "utf8");
 
       const buildGradlePath = path.join(projectRoot, "android", "app", "build.gradle");

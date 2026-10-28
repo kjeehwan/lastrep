@@ -12,6 +12,7 @@ import com.facebook.react.ReactHost
 import com.facebook.react.common.ReleaseLevel
 import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint
 import com.facebook.react.defaults.DefaultReactNativeHost
+import com.kjeehwan.lastrep.restalerts.RestAlertsPackage
 import com.kjeehwan.lastrep.gesture.WorkoutGestureTextInputPackage
 import com.kjeehwan.lastrep.samsunghealth.SamsungHealthBodyCompositionPackage
 import com.kjeehwan.lastrep.workoutnative.WorkoutSetListPackage
@@ -28,6 +29,7 @@ class MainApplication : Application(), ReactApplication {
         add(WorkoutSetListPackage())
         add(MealTimeWheelPackage())
         add(NotebookSystemBarsPackage())
+        add(RestAlertsPackage())
         add(SamsungHealthBodyCompositionPackage())
       }
 

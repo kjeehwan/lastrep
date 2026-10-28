@@ -1,4 +1,4 @@
-const profileFields = ["goal", "nickname", "description", "trainingPhase", "dietPhase", "weightUnit", "heightUnit", "energyUnit", "effortScale", "availabilityDays", "tdeeAge", "tdeeHeightCm", "tdeeSex", "tdeeActivity"];
+const profileFields = ["goal", "nickname", "description", "trainingPhase", "dietPhase", "trainingPhaseEdit", "dietPhaseEdit", "weightUnit", "heightUnit", "energyUnit", "effortScale", "availabilityDays", "tdeeAge", "tdeeHeightCm", "tdeeSex", "tdeeActivity"];
 const nutritionFields = ["cutCalories", "maintainCalories", "bulkCalories", "proteinTargetGrams"];
 
 /** A photo-only save must not rewrite unrelated account preferences. */

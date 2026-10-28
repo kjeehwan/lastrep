@@ -426,9 +426,10 @@ export function SharingDialogs({
       ) : (
         <>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <View style={{ flex: 1, flexDirection: "row", alignItems: "center" }}>
             <Text
               accessibilityRole="header"
-              style={[styles.modalTitle, { flex: 1, marginBottom: 0 }]}
+              style={[styles.modalTitle, { flexShrink: 1, marginBottom: 0 }]}
             >
               {title}
             </Text>
@@ -443,6 +444,7 @@ export function SharingDialogs({
                 }
               />
             )}
+            </View>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Close workout sharing"

@@ -41,6 +41,8 @@ import { SafeAreaView,useSafeAreaInsets } from "react-native-safe-area-context";
 import { db } from "../../../src/config/firebaseConfig";
 import { useEventCallbacks } from "../../../src/hooks/useEventCallbacks";
 import { useNow } from "../../../src/hooks/useNow";
+import { useRestAlerts } from "../../../src/workouts/workoutLog/useRestAlerts";
+import { currentPhaseWeek, phaseName } from "../../../src/profile/phaseState";
 import { safeParseDecisionOutput } from "../../../src/services/decision/decisionValidation";
 import { getDailyContextSummary,parseWorkoutDraftPlan } from "../../../src/services/decision/todayPlanContext";
 import { TodayPlanContextModal } from "../../../src/services/decision/TodayPlanContextModal";
@@ -207,6 +209,7 @@ export default function WorkoutLog() {
   const [cardioDistanceWholeText, setCardioDistanceWholeText] = useState("0");
   const [cardioDistanceDecimalText, setCardioDistanceDecimalText] = useState("00");
   const [sessionPhase, setSessionPhase] = useState("Hypertrophy");
+  const [phaseData, setPhaseData] = useState<Record<string, any>>({});
   const [recentExercises, setRecentExercises] = useState<string[]>([]);
   const [pastWorkouts, setPastWorkouts] = useState<PastWorkout[]>([]);
   const previousExerciseSetsByName = useMemo(() => indexPreviousExerciseSets(pastWorkouts), [pastWorkouts]);
@@ -289,7 +292,7 @@ export default function WorkoutLog() {
   const lastCompletedSetByExerciseRef = useRef<Record<string, number>>({});
   const lastSetToggleAtRef = useRef<Record<string, number>>({});
   const gongPlayerRef = useRef<ReturnType<typeof createAudioPlayer> | null>(null);
-  const restTimerSnapshotRef = useRef<Record<string, { remainingSec: number; running: boolean }>>({});
+  const restTimerSnapshotRef = useRef<Record<string, { remainingSec: number; running: boolean; endsAtMs?: number }>>({});
   const appliedRestPreferencesRef = useRef<Record<string, number>>({});
   const getDraftKey = useCallback((uid: string) => `${DRAFT_KEY_PREFIX}:${uid}`, []);
   const workoutDraftPayload = useMemo(
@@ -379,6 +382,7 @@ export default function WorkoutLog() {
       if (!data) return;
       setEffortScale(resolveEffortScale(data.effortScale));
       setSessionPhase(data.trainingPhase === "Strength" || data.trainingPhase === "Power" ? data.trainingPhase : "Hypertrophy");
+      setPhaseData(data);
     }, (error) => {
       if (!isExpectedOfflineError(error)) console.log("Failed to load workout profile preferences", error);
     });
@@ -1247,6 +1251,8 @@ export default function WorkoutLog() {
     return () => { clearTimeout(deadline); subscription.remove(); };
   }, [restTimerByExercise]);
 
+  const restAlerts = useRestAlerts(activeUid, draftReadyUid === activeUid, restTimerByExercise, exercises, playGong);
+  const completeRestAlert = restAlerts.complete;
   useEffect(() => {
     const previous = restTimerSnapshotRef.current;
     Object.entries(restTimerByExercise).forEach(([exerciseId, timer]) => {
@@ -1258,11 +1264,11 @@ export default function WorkoutLog() {
         !timer.running &&
         timer.remainingSec === 0;
       if (completedNow) {
-        void playGong();
+        void completeRestAlert(exerciseId, prior.endsAtMs);
       }
     });
     restTimerSnapshotRef.current = restTimerByExercise;
-  }, [restTimerByExercise, playGong]);
+  }, [restTimerByExercise, completeRestAlert]);
 
   useEffect(() => {
     return () => {
@@ -1734,14 +1740,17 @@ export default function WorkoutLog() {
   };
 
   const startRestTimer = (exerciseId: string) => {
+    void restAlerts.request();
     const fallback = restPreferenceByExercise[exerciseId] ?? 90;
+    const clock = startRest(restTimerByExercise[exerciseId], fallback, Date.now());
+    restAlerts.start(exerciseId, exercises.find((exercise) => exercise.id === exerciseId)?.name ?? "Rest timer", clock.endsAtMs);
     setRestTimerByExercise((prev) => {
-      const current = prev[exerciseId];
-      return { ...prev, [exerciseId]: startRest(current, fallback, Date.now()) };
+      return { ...prev, [exerciseId]: clock };
     });
   };
 
   const pauseRestTimer = (exerciseId: string) => {
+    restAlerts.cancel(exerciseId);
     setRestTimerByExercise((prev) => {
       const current = prev[exerciseId];
       if (!current) return prev;
@@ -1750,6 +1759,7 @@ export default function WorkoutLog() {
   };
 
   const resetRestTimer = (exerciseId: string) => {
+    restAlerts.cancel(exerciseId);
     const target = restPreferenceByExercise[exerciseId] ?? 90;
     setRestTimerByExercise((prev) => ({
       ...prev,
@@ -1902,6 +1912,7 @@ export default function WorkoutLog() {
   const deleteExercise = (exerciseId: string) => {
     const target = exercises.find((ex) => ex.id === exerciseId);
     const doDelete = () => {
+      restAlerts.cancel(exerciseId);
       setExercises((prev) => prev.filter((ex) => ex.id !== exerciseId));
       setExerciseUnits((prev) => {
         const copy = { ...prev };
@@ -2019,6 +2030,7 @@ export default function WorkoutLog() {
   };
 
   const confirmDiscardWorkout = () => {
+    restAlerts.clear();
     setRecommendationUsage(parseRecommendationUsage());
     resetGuidance();
     setAppliedGuidance(null);
@@ -2155,6 +2167,7 @@ export default function WorkoutLog() {
         createdAt: Timestamp.now(),
       };
       await addDoc(collection(db, "users", user.uid, "workouts"), payload);
+      restAlerts.clear();
       setRecommendationUsage(parseRecommendationUsage());
       resetGuidance();
       setAppliedGuidance(null);
@@ -2242,6 +2255,7 @@ export default function WorkoutLog() {
     }));
 
   const startRoutineBuilderEmpty = () => {
+    restAlerts.clear();
     setRecommendationUsage(parseRecommendationUsage());
     resetGuidance();
     setAppliedGuidance(null);
@@ -2909,7 +2923,7 @@ export default function WorkoutLog() {
         startedAtMs={workoutTimerStartedAtMs}
         timerRunning={workoutTimerRunning}
         timerStarted={workoutTimerHasStarted}
-        trainingPhase={sessionPhase}
+        trainingPhase={`${phaseName(phaseData, "trainingPhase")}${currentPhaseWeek(phaseData, "trainingPhase", guidanceNowMs) == null ? "" : ` / Week ${currentPhaseWeek(phaseData, "trainingPhase", guidanceNowMs)}`}`}
         plannedSummary={plannedSummary}
         onTitleChange={setSessionTitle}
         onDatePress={openDatePicker}
@@ -3171,6 +3185,7 @@ export default function WorkoutLog() {
                 <Text style={styles.secondaryText}>Set</Text>
               </TouchableOpacity>
             </View>
+            {restAlerts.available && !restAlerts.ready ? <TouchableOpacity accessibilityRole="button" style={{ minHeight: 44, justifyContent: "center", marginTop: 12 }} onPress={() => void restAlerts.request(true)}><Text style={styles.linkText}>Enable background alerts</Text></TouchableOpacity> : null}
             <View style={styles.modalActions}>
               <TouchableOpacity
                 style={[styles.secondaryButton, styles.modalActionButton]}
