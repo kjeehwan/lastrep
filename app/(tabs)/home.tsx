@@ -23,7 +23,8 @@ import { profilePhotoReference } from "../../src/profile/profilePhotoReference";
 import { BodyCompositionHistoryChart } from "../../src/bodyComposition/BodyCompositionHistoryChart";
 import { AddMeasurementSheet } from "../../src/bodyComposition/AddMeasurementSheet";
 import type { BodyCompositionMetric, BodyCompositionHistoryPoint } from "../../src/bodyComposition/bodyCompositionHistory";
-import { phaseForDate, phaseWeek, saveUserPhases } from "../../src/profile/phaseState";
+import { phaseForDate, currentPhaseWeek, phaseName, saveUserPhases } from "../../src/profile/phaseState";
+import { PhaseEditor } from "../../src/profile/PhaseEditor";
 import { CalendarOverlay, type CalendarOverlayHandle } from "../../src/ui/CalendarOverlay";
 import { AdaptiveModalCard } from "../../src/ui/AdaptiveModalCard";
 import { normalizeBodyCompositionHistory } from "../../src/bodyComposition/normalizeBodyCompositionHistory";
@@ -244,6 +245,7 @@ function Home() {
   const [editingMeasurement, setEditingMeasurement] = useState<{ entry: BodyCompositionHistoryEntry; metric: BodyCompositionMetric } | undefined>();
   const [measurementChart, setMeasurementChart] = useState<{ metric: BodyCompositionMetric; revision: number; recordedAtMs?: number }>({ metric: "weight", revision: 0 });
   const [phaseSaving, setPhaseSaving] = useState(false);
+  const [phaseData, setPhaseData] = useState<Record<string, any>>({});
   const [phasePicker, setPhasePicker] = useState<"trainingPhase" | "dietPhase" | null>(null);
   const [returnToCalendar, setReturnToCalendar] = useState(false);
   const [phaseHistory, setPhaseHistory] = useState<{ training: unknown; diet: unknown }>({ training: [], diet: [] });
@@ -375,6 +377,7 @@ function Home() {
         if (isTrainingPhase(data?.trainingPhase)) {
           setTrainingPhase(data.trainingPhase);
         }
+        setPhaseData(data ?? {});
         if (isDietPhase(data?.dietPhase)) {
           setDietPhase(data.dietPhase);
         }
@@ -815,8 +818,8 @@ function Home() {
     [calendarMatrix, calendarMonth]
   );
   const weeklyMetrics = useMemo(() => computeWeeklyWorkoutMetrics(workouts), [workouts]);
-  const trainingPhaseWeek = phaseWeek(trainingPhaseStartedAt?.toMillis() ?? null, nowMs);
-  const dietPhaseWeek = phaseWeek(dietPhaseStartedAt?.toMillis() ?? null, nowMs);
+  const trainingPhaseWeek = currentPhaseWeek(phaseData, "trainingPhase", nowMs);
+  const dietPhaseWeek = currentPhaseWeek(phaseData, "dietPhase", nowMs);
 
   const selectedDayWorkouts = useMemo(
     () => workouts.filter((workout) => toDateKey(workout.date) === selectedDateKey),
@@ -1130,14 +1133,6 @@ function Home() {
   };
 
 
-  const changePhase = async (key: 'trainingPhase' | 'dietPhase', phase: string) => {
-    if (!uid || phaseSaving) return;
-    setPhaseSaving(true);
-    try { await saveUserPhases(uid, { [key]: phase }); setPhasePicker(null); }
-    catch { showAppAlert('Could not change phase', 'Check your connection and try again.'); }
-    finally { setPhaseSaving(false); }
-  };
-
   const closeDayDetails = () => {
     setWorkoutDetailsSaved(false);
     setShowDayModal(false);
@@ -1196,8 +1191,10 @@ function Home() {
             const week = training ? trainingPhaseWeek : dietPhaseWeek;
             return <TouchableOpacity key={key} accessibilityRole="button" accessibilityLabel={training ? 'Change training phase' : 'Change diet phase'} disabled={!bodyHistoryLoaded || phaseSaving} style={styles.homePhaseSelector} onPress={() => setPhasePicker(key)}>
               <Text style={styles.phaseSelectorLabel}>{training ? 'Training' : 'Diet'}</Text>
-              <View style={styles.phaseSelectorValueRow}><Text style={styles.phaseSelectorValue}>{training ? trainingPhase : dietPhase}</Text><Ionicons name="chevron-down" size={14} color={colors.muted} /></View>
-              {week != null ? <Text style={styles.phaseSelectorWeek}>Week {week}</Text> : null}
+              <View style={styles.phaseSelectorValueRow}>
+                <View style={styles.phaseSelectorChoice}><Text style={styles.phaseSelectorValue}>{phaseName(phaseData, key)}</Text><Ionicons name="chevron-down" size={14} color={colors.muted} /></View>
+                {week != null ? <Text style={styles.phaseSelectorWeek}>Week {week}</Text> : null}
+              </View>
             </TouchableOpacity>;
           })}
         </View>
@@ -1388,20 +1385,12 @@ function Home() {
         const metric: BodyCompositionMetric = input.weightKg != null ? "weight" : input.bodyFatPercent != null ? "bodyFat" : input.leanBodyMassKg != null ? "leanBodyMass" : "skeletalMuscleMass";
         setMeasurementChart((previous) => ({ metric: editedEntry ? editingMeasurement?.metric ?? metric : metric, revision: previous.revision + 1, recordedAtMs: editedEntry?.recordedAt?.toMillis() }));
       }} /> : null}
-      <Modal visible={phasePicker != null} transparent animationType="fade" onRequestClose={() => { if (!phaseSaving) setPhasePicker(null); }}>
-        <PopupBackdrop style={styles.modalBackdrop} onClose={() => { if (!phaseSaving) setPhasePicker(null); }}>
-          <AdaptiveModalCard contentSized style={styles.modalCard}>
-            <Text style={styles.modalTitle}>{phasePicker === 'trainingPhase' ? 'Training phase' : 'Diet phase'}</Text>
-            <Text style={styles.noticeSub}>Switching starts the new phase at Week 1.</Text>
-            {(phasePicker === 'trainingPhase' ? TRAINING_PHASES : DIET_PHASES).map((phase) => {
-              const selected = phase === (phasePicker === 'trainingPhase' ? trainingPhase : dietPhase);
-              return <TouchableOpacity key={phase} accessibilityRole="button" accessibilityState={{ selected }} disabled={phaseSaving} style={[styles.phasePickerOption, selected && styles.phaseChoiceActive]} onPress={() => { if (phasePicker) void changePhase(phasePicker, phase); }}><Text style={styles.phaseChoiceText}>{phase}</Text>{selected ? <Ionicons name="checkmark" size={20} color={colors.ink} /> : null}</TouchableOpacity>;
-            })}
-            <View style={styles.phaseStatus}><Text accessibilityLiveRegion="polite" style={styles.noticeSub}>{phaseSaving ? "Saving..." : " "}</Text></View>
-            <TouchableOpacity disabled={phaseSaving} style={[styles.secondaryButtonWide, { marginTop: 16 }]} onPress={() => setPhasePicker(null)}><Text style={styles.phaseChoiceText}>Cancel</Text></TouchableOpacity>
-          </AdaptiveModalCard>
-        </PopupBackdrop>
-      </Modal>
+      {phasePicker && uid ? <PhaseEditor key={`${uid}:${phasePicker}`} phaseKey={phasePicker} current={phaseData} onClose={() => setPhasePicker(null)} onApply={async (edit) => {
+        if (phaseSaving || auth.currentUser?.uid !== uid) return;
+        setPhaseSaving(true);
+        try { await saveUserPhases(uid, { [phasePicker]: edit }); setPhasePicker(null); }
+        finally { setPhaseSaving(false); }
+      }} /> : null}
 
       <CalendarOverlay ref={calendarRef}>
         <PopupBackdrop style={styles.modalBackdrop} onClose={() => calendarRef.current?.close()}>
@@ -2134,9 +2123,10 @@ const createStyles = (colors: NotebookColors) => { const base = notebookSheet({
   homePhaseRow: { flexDirection: 'row', gap: 10, marginBottom: 4 },
   homePhaseSelector: { flex: 1, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12, backgroundColor: colors.rule },
   phaseSelectorLabel: { color: colors.muted, fontSize: 12, marginBottom: 4 },
-  phaseSelectorValueRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 6 },
+  phaseSelectorValueRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  phaseSelectorChoice: { flexDirection: 'row', alignItems: 'center', flexShrink: 1, gap: 4 },
   phaseSelectorValue: { flexShrink: 1, color: colors.ink, fontSize: 14, fontWeight: '600' },
-  phaseSelectorWeek: { color: colors.muted, fontSize: 12, marginTop: 4 },
+  phaseSelectorWeek: { flexShrink: 0, color: colors.muted, fontSize: 12 },
   calendarPhaseLabels: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginVertical: 8 },
   addDataButton: { paddingHorizontal: 8, paddingVertical: 10 },
   addDataText: { color: colors.ink, fontSize: 14, fontWeight: '600' },

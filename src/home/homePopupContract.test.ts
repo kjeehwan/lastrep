@@ -9,7 +9,7 @@ it("keeps popup content outside the backdrop's press target", () => {
   expect(home).not.toContain("TouchableWithoutFeedback");
   expect(home).toContain('contentContainerStyle={{ alignItems: "center", gap: 14 }}');
   expect(home).toContain('alignSelf: "center" }, entitlement.state');
-  expect(home).toContain('phaseSaving ? "Saving..." : " "');
+  expect(home).toContain("<PhaseEditor");
 });
 
 it("opens trends locally without rerendering Home or fetching account data", () => {

@@ -41,6 +41,7 @@ import { SafeAreaView,useSafeAreaInsets } from "react-native-safe-area-context";
 import { db } from "../../../src/config/firebaseConfig";
 import { useEventCallbacks } from "../../../src/hooks/useEventCallbacks";
 import { useNow } from "../../../src/hooks/useNow";
+import { currentPhaseWeek, phaseName } from "../../../src/profile/phaseState";
 import { safeParseDecisionOutput } from "../../../src/services/decision/decisionValidation";
 import { getDailyContextSummary,parseWorkoutDraftPlan } from "../../../src/services/decision/todayPlanContext";
 import { TodayPlanContextModal } from "../../../src/services/decision/TodayPlanContextModal";
@@ -207,6 +208,7 @@ export default function WorkoutLog() {
   const [cardioDistanceWholeText, setCardioDistanceWholeText] = useState("0");
   const [cardioDistanceDecimalText, setCardioDistanceDecimalText] = useState("00");
   const [sessionPhase, setSessionPhase] = useState("Hypertrophy");
+  const [phaseData, setPhaseData] = useState<Record<string, any>>({});
   const [recentExercises, setRecentExercises] = useState<string[]>([]);
   const [pastWorkouts, setPastWorkouts] = useState<PastWorkout[]>([]);
   const previousExerciseSetsByName = useMemo(() => indexPreviousExerciseSets(pastWorkouts), [pastWorkouts]);
@@ -379,6 +381,7 @@ export default function WorkoutLog() {
       if (!data) return;
       setEffortScale(resolveEffortScale(data.effortScale));
       setSessionPhase(data.trainingPhase === "Strength" || data.trainingPhase === "Power" ? data.trainingPhase : "Hypertrophy");
+      setPhaseData(data);
     }, (error) => {
       if (!isExpectedOfflineError(error)) console.log("Failed to load workout profile preferences", error);
     });
@@ -2909,7 +2912,7 @@ export default function WorkoutLog() {
         startedAtMs={workoutTimerStartedAtMs}
         timerRunning={workoutTimerRunning}
         timerStarted={workoutTimerHasStarted}
-        trainingPhase={sessionPhase}
+        trainingPhase={`${phaseName(phaseData, "trainingPhase")}${currentPhaseWeek(phaseData, "trainingPhase", guidanceNowMs) == null ? "" : ` / Week ${currentPhaseWeek(phaseData, "trainingPhase", guidanceNowMs)}`}`}
         plannedSummary={plannedSummary}
         onTitleChange={setSessionTitle}
         onDatePress={openDatePicker}

@@ -35,7 +35,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { auth, db } from "../../../src/config/firebaseConfig";
-import { phaseWeek, saveUserPhases } from "../../../src/profile/phaseState";
+import { PhaseEditor } from "../../../src/profile/PhaseEditor";
+import { currentPhaseWeek, phaseName, saveUserPhases, type PhaseEdit } from "../../../src/profile/phaseState";
 import { useNow } from "../../../src/hooks/useNow";
 import { useOfflineStatus } from "../../../src/hooks/useOfflineStatus";
 import {
@@ -122,6 +123,8 @@ type ProfileSnapshot = {
   description: string;
   profilePhotoUri: string;
   trainingPhase: TrainingPhase;
+  trainingPhaseEdit: string;
+  dietPhaseEdit: string;
   dietPhase: DietPhase;
   cutCalories: string;
   maintainCalories: string;
@@ -213,11 +216,10 @@ function ProfileContent() {
   const [dietPhase, setDietPhase] = useState<DietPhase>("Maintain");
   const [initialTrainingPhase, setInitialTrainingPhase] = useState<TrainingPhase>("Hypertrophy");
   const [initialDietPhase, setInitialDietPhase] = useState<DietPhase>("Maintain");
-  const [currentTrainingPhaseStartedAt, setCurrentTrainingPhaseStartedAt] = useState<Timestamp | null>(
-    null
-  );
-  const [currentDietPhaseStartedAt, setCurrentDietPhaseStartedAt] = useState<Timestamp | null>(null);
   const phaseNowMs = useNow();
+  const [phaseData, setPhaseData] = useState<Record<string, any>>({});
+  const [trainingPhaseEdit, setTrainingPhaseEdit] = useState("");
+  const [dietPhaseEdit, setDietPhaseEdit] = useState("");
   const [cutCalories, setCutCalories] = useState("");
   const [maintainCalories, setMaintainCalories] = useState("");
   const [bulkCalories, setBulkCalories] = useState("");
@@ -334,6 +336,8 @@ function ProfileContent() {
         profilePhotoUri: profilePhotoUri.trim(),
         trainingPhase,
         dietPhase,
+        trainingPhaseEdit,
+        dietPhaseEdit,
         cutCalories: cutCalories.trim(),
         maintainCalories: maintainCalories.trim(),
         bulkCalories: bulkCalories.trim(),
@@ -361,6 +365,8 @@ function ProfileContent() {
       profilePhotoUri,
       trainingPhase,
       dietPhase,
+      trainingPhaseEdit,
+      dietPhaseEdit,
       cutCalories,
       maintainCalories,
       bulkCalories,
@@ -420,8 +426,7 @@ function ProfileContent() {
         baseline.dietPhase = data.dietPhase;
         changed = true;
       }
-      setCurrentTrainingPhaseStartedAt(data.trainingPhaseStartedAt instanceof Timestamp ? data.trainingPhaseStartedAt : null);
-      setCurrentDietPhaseStartedAt(data.dietPhaseStartedAt instanceof Timestamp ? data.dietPhaseStartedAt : null);
+      setPhaseData(data);
       if (changed) {
         const next = JSON.stringify(baseline);
         initialSnapshotRef.current = next;
@@ -502,6 +507,8 @@ function ProfileContent() {
       if (typeof parsed.profilePhotoUri === "string") setProfilePhotoUri(parsed.profilePhotoUri);
       if (isTrainingPhase(parsed.trainingPhase)) setTrainingPhase(parsed.trainingPhase);
       if (isDietPhase(parsed.dietPhase)) setDietPhase(parsed.dietPhase);
+      setTrainingPhaseEdit(parsed.trainingPhaseEdit ?? "");
+      setDietPhaseEdit(parsed.dietPhaseEdit ?? "");
       if (typeof parsed.cutCalories === "string") setCutCalories(parsed.cutCalories);
       if (typeof parsed.maintainCalories === "string") setMaintainCalories(parsed.maintainCalories);
       if (typeof parsed.bulkCalories === "string") setBulkCalories(parsed.bulkCalories);
@@ -607,6 +614,8 @@ function ProfileContent() {
         ]);
         if (cancelled || auth.currentUser?.uid !== user.uid) return;
         if (!data) throw new Error("Profile data could not be loaded.");
+        setPhaseData(data);
+        setTrainingPhaseEdit(""); setDietPhaseEdit("");
         setLastSleepSyncLabel(
           sleepProfile.lastSyncedAt
             ? sleepProfile.lastSyncedAt.toDate().toLocaleString()
@@ -630,12 +639,6 @@ function ProfileContent() {
           setDietPhase(data.dietPhase);
           setInitialDietPhase(data.dietPhase);
         }
-        setCurrentTrainingPhaseStartedAt(
-          data?.trainingPhaseStartedAt instanceof Timestamp ? data.trainingPhaseStartedAt : null
-        );
-        setCurrentDietPhaseStartedAt(
-          data?.dietPhaseStartedAt instanceof Timestamp ? data.dietPhaseStartedAt : null
-        );
         const calorieTargets = normalizeCalorieTargets(
           data?.nutritionProfile?.calorieTargetsByDietPhase
         );
@@ -1240,8 +1243,8 @@ function ProfileContent() {
             : null,
       };
       const phaseChanges = {
-        ...(trainingPhase !== initialTrainingPhase ? { trainingPhase } : {}),
-        ...(dietPhase !== initialDietPhase ? { dietPhase } : {}),
+        ...(trainingPhaseEdit ? { trainingPhase: JSON.parse(trainingPhaseEdit) as PhaseEdit } : trainingPhase !== initialTrainingPhase ? { trainingPhase } : {}),
+        ...(dietPhaseEdit ? { dietPhase: JSON.parse(dietPhaseEdit) as PhaseEdit } : dietPhase !== initialDietPhase ? { dietPhase } : {}),
       };
       const savedPhases = sectionsToSave.profile
         ? await saveUserPhases(uid, phaseChanges, profilePayload)
@@ -1294,15 +1297,11 @@ function ProfileContent() {
       setInitialTrainingPhase(trainingPhase);
       setInitialDietPhase(dietPhase);
       if (savedPhases) {
-        setCurrentTrainingPhaseStartedAt(
-          savedPhases.trainingPhaseStartedAt instanceof Timestamp ? savedPhases.trainingPhaseStartedAt : null
-        );
-        setCurrentDietPhaseStartedAt(
-          savedPhases.dietPhaseStartedAt instanceof Timestamp ? savedPhases.dietPhaseStartedAt : null
-        );
+        setPhaseData(savedPhases);
       }
       setSaveFeedback("Changes saved.");
-      setInitialSnapshot(snapshotWithPhoto(buildSnapshot(), savedPhotoReference));
+      setTrainingPhaseEdit(""); setDietPhaseEdit("");
+      setInitialSnapshot(JSON.stringify({ ...JSON.parse(snapshotWithPhoto(buildSnapshot(), savedPhotoReference)), trainingPhaseEdit: "", dietPhaseEdit: "" }));
       return true;
     } catch (error) {
       if (stagedPhotoPath && !photoCommitted) {
@@ -1332,6 +1331,8 @@ function ProfileContent() {
     initialSnapshot,
     trainingPhase,
     dietPhase,
+    trainingPhaseEdit,
+    dietPhaseEdit,
     weightUnit,
     effortScale,
     mealLabels,
@@ -1572,10 +1573,12 @@ function ProfileContent() {
     if (error) { setEditorError(error); return; }
     setEditor(null); setEditorError(null);
   };
-  const phaseLabel = (kind: "training" | "diet") => {
-    const changed = kind === "training" ? trainingPhase !== initialTrainingPhase : dietPhase !== initialDietPhase;
-    const start = kind === "training" ? currentTrainingPhaseStartedAt : currentDietPhaseStartedAt;
-    return changed ? "Week 1 on save" : start ? `Week ${phaseWeek(start.toMillis(), phaseNowMs)}` : "Start date not recorded";
+  const phaseDisplay = (kind: "training" | "diet") => {
+    const key = kind === "training" ? "trainingPhase" : "dietPhase";
+    const raw = kind === "training" ? trainingPhaseEdit : dietPhaseEdit;
+    const draft: PhaseEdit | null = raw ? JSON.parse(raw) : null;
+    const week = draft?.week ?? currentPhaseWeek(phaseData, key, phaseNowMs);
+    return `${draft ? draft.name || draft.phase : phaseName(phaseData, key)} / ${week == null ? "Week not recorded" : `Week ${week}`}${draft ? " on save" : ""}`;
   };
   const displayValue = (raw: string, unit: string) => raw.trim() ? `${raw} ${unit}` : "Not recorded";
   const titles: Record<ProfileEditor, string> = { identity: "Profile identity", training: "Training phase", diet: "Diet phase", availability: "Days available", units: "Units and effort", body: "Body composition", tdee: "TDEE calculator", nutrition: "Nutrition targets", sleep: "Sleep target" };
@@ -1603,8 +1606,8 @@ function ProfileContent() {
       </ProfileSection>
       <View onLayout={(event) => setTrainingSectionY(event.nativeEvent.layout.y)}>
       <ProfileSection title="Training">
-        <ProfileRow wideValue label="Training phase" value={`${trainingPhase} / ${phaseLabel("training")}`} onPress={() => openEditor("training")} />
-        <ProfileRow wideValue label="Diet phase" value={`${dietPhase} / ${phaseLabel("diet")}`} onPress={() => openEditor("diet")} />
+        <ProfileRow wideValue label="Training phase" value={phaseDisplay("training")} onPress={() => openEditor("training")} />
+        <ProfileRow wideValue label="Diet phase" value={phaseDisplay("diet")} onPress={() => openEditor("diet")} />
         <ProfileRow label="Availability" value={`${availabilityDays} days / week`} onPress={() => openEditor("availability")} />
       </ProfileSection>
       </View>
@@ -1652,15 +1655,21 @@ function ProfileContent() {
         </ProfileSection>
       </View>
     </ScrollView>}
-    {editor ? <ProfileSheet title={titles[editor.section]} onClose={cancelEditor} footer={<><ProfileAction label="Done" primary onPress={acceptEditor} /><ProfileAction label="Cancel" onPress={cancelEditor} /></>}>
+    {editor && (editor.section === "training" || editor.section === "diet") ? <PhaseEditor
+      key={`${uid}:${editor.section}`} phaseKey={editor.section === "training" ? "trainingPhase" : "dietPhase"}
+      current={phaseData} staged draft={(editor.section === "training" ? trainingPhaseEdit : dietPhaseEdit) ? JSON.parse(editor.section === "training" ? trainingPhaseEdit : dietPhaseEdit) : undefined}
+      onClose={() => setEditor(null)} onApply={(edit) => {
+        if (editor.section === "training") { setTrainingPhase(edit.phase as TrainingPhase); setTrainingPhaseEdit(JSON.stringify(edit)); }
+        else { setDietPhase(edit.phase as DietPhase); setDietPhaseEdit(JSON.stringify(edit)); }
+        setEditor(null);
+      }} /> : null}
+    {editor && editor.section !== "training" && editor.section !== "diet" ? <ProfileSheet title={titles[editor.section]} onClose={cancelEditor} footer={<><ProfileAction label="Done" primary onPress={acceptEditor} /><ProfileAction label="Cancel" onPress={cancelEditor} /></>}>
       <ProfileText muted>Changes are staged until you tap Save on Profile.</ProfileText>
       {editor.section === "identity" ? <>
         <View style={{ alignItems: "center", gap: 8 }}><ProfilePhoto fallbackBackgroundColor={colors.subtle} fallbackTextColor={colors.ink} fallbackFontFamily={notebookFonts.semibold} uid={uid} reference={profilePhotoUri} initial={nickname.trim().charAt(0).toUpperCase() || "L"} style={{ width: 96, height: 96, borderRadius: 48, backgroundColor: colors.subtle }} contentFit="cover" /><ProfileAction label={profilePhotoUri ? "Change photo" : "Add photo"} onPress={() => setPhotoActionMenuVisible(true)} /></View>
         <ProfileField label="Nickname" value={nickname} onChangeText={setNickname} placeholder="Your nickname" />
         <ProfileField label="Description" value={profileDescription} onChangeText={setProfileDescription} placeholder="A few words about you" multiline maxLength={160} />
       </> : null}
-      {editor.section === "training" ? <><ProfileChoices label="Training phase" values={TRAINING_PHASES} selected={trainingPhase} onChange={setTrainingPhase} /><ProfileText muted>{phaseLabel("training")}</ProfileText><ProfileText muted>A different phase starts when you save Profile.</ProfileText></> : null}
-      {editor.section === "diet" ? <><ProfileChoices label="Diet phase" values={DIET_PHASES} selected={dietPhase} onChange={setDietPhase} /><ProfileText muted>{phaseLabel("diet")}</ProfileText><ProfileText muted>A different phase starts when you save Profile.</ProfileText></> : null}
       {editor.section === "availability" ? <><ProfileText>{availabilityDays} days / week</ProfileText><Slider accessibilityLabel="Days available per week" accessibilityValue={{ min: 1, max: 7, now: availabilityDays }} value={availabilityDays} minimumValue={1} maximumValue={7} step={1} minimumTrackTintColor={colors.accent} maximumTrackTintColor={colors.rule} thumbTintColor={colors.ink} onValueChange={(value: number) => setAvailabilityDays(Math.round(value))} /></> : null}
       {editor.section === "units" ? <>
         <ProfileChoices equalCells label="Exercise effort" values={["RPE", "RIR"]} selected={effortScale.toUpperCase()} onChange={(value) => setEffortScale(value.toLowerCase() as EffortScale)} />

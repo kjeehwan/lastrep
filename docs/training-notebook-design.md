@@ -1392,6 +1392,10 @@ design fixtures, not production analytics verification.
   uses 20-dp horizontal insets, a 760 maximum width and a sticky bottom tab bar.
 - Phase selectors share a two-column ruled strip: 12 vertical padding, 16 gap
   from the central divider, 13 label/week, 16 semibold value. At 200%, stack them.
+  Within each selector, keep the phase value and Week indicator on the same row.
+  Place the caret immediately after the phase text with a 4-dp gap, and keep the
+  Week indicator at the trailing edge. Allow long phase labels to wrap without
+  clipping the week or reducing text size.
 - The workout section has a 3-dp accent rule on its left, 16 internal left space,
   26/32 serif title and full-width primary button. No nested promo tiles.
 - Section headings use 20/26 sans semibold. Surface panels have a quiet 1-dp
@@ -1417,8 +1421,32 @@ design fixtures, not production analytics verification.
   selected-day ink fill. Month controls have space below the dialog title.
   Tapping a date opens Workout Day or Rest Day. Closing it returns to Calendar.
   Phase names are shown in day details rather than adding colors to every cell.
-- Choosing another phase starts week 1 today; choosing the current phase does
-  not reset its start. Saved phases are shared with the Profile browser study.
+- The native phase editor separates Edit current phase from Start new phase.
+  Default to a compact phase summary: the display name with an adjacent pencil,
+  then muted type/week metadata and a Current week navigation row. Tapping the
+  name/pencil reveals its input; tapping Current week reveals an inline number
+  input. Show the primary Save changes (Home) or Done (Profile) action only after
+  current-phase values change. Put Start new phase below a divider as a secondary
+  row, not an action selector above the form. It
+  replaces the contents with a New training/diet phase form and compact type
+  choices. New phases always have their primary Start phase / Done action.
+  New-phase sheets use the same tappable name/pencil and compact rows: Phase
+  type reveals its three choices on demand, and Starting week reveals a short
+  number field. Use a 72-dp base width for both current/starting week inputs,
+  scaling it with system font size rather than stretching across the sheet.
+  Back to current phase restores the current form's unsaved fields.
+  Put the circled i beside the header title; keep explanatory copy in its help
+  popup rather than adding paragraphs beneath the inputs. X, outside tap and
+  Android Back dismiss without applying the open form.
+  Both training and diet support an optional custom display name (60 characters)
+  and a whole week from 1 to 999. Blank names show the underlying phase type.
+  Editing preserves the true start/history; a week correction has its own anchor
+  and continues advancing every seven days. Unknown legacy weeks may remain blank.
+  Starting a phase defaults to Week 1, allows another starting week, and creates
+  a new history entry even when the underlying phase type is unchanged.
+  Keep canonical types for recommendations and nutrition targets. Home saves
+  directly; Profile stages changes until its top-level Save. Show custom names
+  consistently on Home, Workout and Profile.
   Historical calendar phase labels are not rewritten by today's phase change.
 - Phase-picker rows are contiguous: no top margin or rounded inset that leaves
   a sliver between a selected fill and the preceding horizontal rule.
@@ -1966,11 +1994,13 @@ Reflow at 200% rather than reducing type or shrinking controls.
 3. Training: training phase, diet phase and days available per week. Do not add
    a second generic Goal selector: phases convey the current training/diet intent
    for this experienced-lifter audience without competing preference fields.
-   Changing a phase stages Week 1; its start/history changes only on Save.
-   Selecting the saved phase again must not restart its week count.
+   Use the shared native phase editor described above. Editing the current name
+   or week must not start another phase. Starting a new phase changes its
+   start/history only on Save. Cancel retains any previously staged phase draft.
    Keep the complete phase/week value visible: one line when it fits, wrapping
    on narrow screens and stacked at enlarged text without shrinking type.
-   In phase editors, the week and save/start explanation are separate paragraphs.
+   Keep phase-editor explanations behind the header's circled i; include the
+   reminder to save Profile there.
 4. Units: weight, height, food energy and one global RPE/RIR preference. Effort is
    stored canonically as RPE in the Workout fixture; display conversion is not
    a rewrite of exercise history. Body masses remain canonical kg.
