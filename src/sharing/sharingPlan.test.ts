@@ -36,6 +36,15 @@ describe("sharing adapters", () => {
     expect(original[0].sets[0].done).toBe(true);
     expect(imported.exercises[0].id).not.toBe("active");
   });
+  it("does not validate a cardio zone as resistance tempo", () => {
+    const exercise = { id: "run", name: "Running", tempo: "3", sets: [
+      { weightKg: null, reps: "", rpe: "", done: false, zone: "3", durationSec: 600 },
+    ] };
+    const plan = workoutToSharingPlan("Cardio", [exercise], {}, () => "cardio", {}, "rpe");
+    expect(plan.exercises[0].tempo).toBe("");
+    expect(plan.exercises[0].sets[0].durationSec).toBe(600);
+    expect(exercise.tempo).toBe("3");
+  });
   it("preserves mixed prescriptions and creates independent editable imports", () => {
     const plan = workoutToSharingPlan(
       "Mixed plan",

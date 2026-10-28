@@ -16,8 +16,9 @@ export function ElapsedTimerText({ seconds, startedAtMs }: { seconds: number; st
   return <>{clockLabel(elapsedAt({ elapsedSeconds: seconds, startedAtMs }, now)).padStart(5, "0")}</>;
 }
 
-export function RestTimerText({ clock, prefix, style }: { clock: RestClock; prefix: string; style?: StyleProp<TextStyle> }) {
+export function RestTimerText({ clock, prefix, style, padMinutes = false }: { clock: RestClock; prefix: string; style?: StyleProp<TextStyle>; padMinutes?: boolean }) {
   const focused = useIsFocused();
   const now = useNow(1000, focused && clock.running);
-  return <Text style={style}>{prefix}{clockLabel(Math.min(clock.remainingSec, advanceRest(clock, now).remainingSec))}</Text>;
+  const label = clockLabel(Math.min(clock.remainingSec, advanceRest(clock, now).remainingSec));
+  return <Text style={style}>{prefix}{padMinutes ? label.padStart(5, "0") : label}</Text>;
 }

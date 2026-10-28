@@ -8,6 +8,72 @@ main screen design directions are approved. None replaces a Lastrep application 
 
 ## Open it
 
+### Minimal Workout header and action grid (awaiting review)
+
+Open **http://127.0.0.1:4317/index.html#layout-minimal**. The header combines the
+editable phase with planned sets and weighted volume, without Planned, volume,
+cardio count or the Routine/Change row. Source association remains in mock state;
+editing the title does not discard it. Today's Plan stays separate.
+
+Six visible outline icons have labels below: My routines / Create routine / Repeat
+workout, then Recommend / Share / Discard. There are no button boxes or internal
+dividers; Discard retains a restrained destructive color and its confirmation.
+All six connect to existing simulated interactions. Finish stays after the last
+exercise, and Add exercise remains available in the workout. The icon grid uses
+three columns normally and two at enlarged text sizes.
+
+Review **#layout-minimal-cardio** for the cardio variant; it omits weighted totals
+when there are no resistance/bodyweight sets. Use Dark paper, compact viewport
+and 200% text controls. **#layout** retains the earlier header/action-row study
+for comparison. Native UI is unchanged by these new mockup states.
+
+### Workout header and body-chart candidates (October 28; awaiting review)
+
+- **http://127.0.0.1:4317/index.html#layout**: editable title on the page
+  surface, pencil selects the title, equal 12 px gaps around the title row,
+  current-phase fixture and planned totals. Review **#layout-tempo** and
+  **#layout-cardio** for stable Demo / Rest / Tempo-or-Zone spacing.
+- **http://127.0.0.1:4317/home.html#chart-month**: Week / Month / Year controls,
+  earlier/later history and tappable averages. Review **#chart-sparse**,
+  **#chart-one** and **#chart-empty** for sparse and empty states.
+- Use Dark paper and compact/large-text controls on either page.
+
+Day shows daily records; Week, Month and Year show an arithmetic average of the
+recorded daily values in each calendar period (Monday-first weeks). Missing days
+are excluded rather than counted as zero. The current partial period is labeled
+To date. Selecting a point shows its period and recorded-day count. The existing
+daily snapshot model supplies one observation per date; raw multiple same-day
+readings are not silently added to this mockup.
+
+The initial view fits up to 7 recorded days, 8 recorded weeks, 10 recorded months
+or 5 recorded years. All available history remains on one horizontally scrollable
+chart, initially positioned at the latest data. Earlier/later buttons scroll one
+viewport and update at the boundaries; they do not discard or replace history.
+Fewer observations keep the same spacing and align right. Missing periods have
+no invented points. Day and Week labels use a numeric month on the first point
+and month changes: 05/24 followed by 25; weeks use their ending date. Month labels
+show every other calendar month, with month and year on the first recorded month
+of each year (Jan with 2026 on a second line). Selecting any point retains the full date or period above
+the chart. Range and metric changes reset the view to the latest data.
+
+Samsung Health on the connected phone was inspected read-only on October 28:
+Days displayed daily points, Weeks multiple weekly points, and Months monthly
+points across a year. Its graphs also showed an Average summary. This informed
+the period semantics; Lastrep retains its own visual design and adds Year averages.
+No health values or phone screenshots are included in the committed study.
+
+Workout tools use a single row: Demo, a clock with 02:00, and a tempo icon with
+3-0-1-0 (or Tempo when unset). Cardio uses Zone 2 in the same position. Equal free
+space surrounds and separates the controls. Accessible names retain Rest and Tempo.
+At enlarged text sizes the controls may reflow rather than shrink or clip.
+
+Planned totals count resistance/bodyweight sets, including warm-ups. Weighted
+volume sums entered weight times reps, including warm-ups, converted into the
+selected display unit. Cardio is separate and does not create weighted volume.
+These totals describe the plan, not completed work. The title and all other
+changes are synthetic, in memory only. These candidates do not change native
+screens, phase lookup/navigation, recommendation prescriptions or account data.
+
 ### Workout sharing candidate (awaiting review)
 
 Open **http://127.0.0.1:4317/index.html#share-send**. Review the sender's plan,

@@ -1,3 +1,4 @@
+import { CardioZoneControl } from "./CardioZoneControl";
 import { Ionicons } from "@expo/vector-icons";
 import { Check, Clock3, Gauge, Play, X } from "lucide-react-native";
 import React, { useMemo } from "react";
@@ -386,12 +387,13 @@ export function useWorkoutExerciseCards({
             <View
               style={[
                 styles.inlineTipRow,
-                planMode && { marginTop: 12, marginBottom: 12, justifyContent: "space-between", gap: 12, flexWrap: "wrap" },
-                largeText && { flexDirection: "column" },
+                { justifyContent: "space-evenly", gap: 0, flexWrap: "wrap" },
+                planMode && { marginTop: 12, marginBottom: 12 },
+                largeText && { gap: 12 },
               ]}
             >
               <TouchableOpacity
-                style={[styles.restTimerInlineButton, planMode && { flex: 0, paddingHorizontal: 0 }]}
+                style={[styles.restTimerInlineButton, { flex: 0, paddingHorizontal: 0 }]}
                 onPress={() => cardActions.openExerciseDemo(ex.name)}
                 accessibilityLabel={`Open ${ex.name} demo`}
               >
@@ -399,33 +401,36 @@ export function useWorkoutExerciseCards({
                 <Text style={styles.restTimerInlineText}>Demo</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.restTimerInlineButton, planMode && { flex: 0, paddingHorizontal: 0 }]}
+                style={[styles.restTimerInlineButton, { flex: 0, paddingHorizontal: 0 }]}
                 onPress={() => cardActions.openRestTimerModal(ex.id)}
+                accessibilityRole="button" accessibilityLabel={`${ex.name}, rest timer`}
               >
                 <Clock3 size={16} strokeWidth={1.5} color={colors.muted} />
                 {planMode ? (
                   <Text style={styles.restTimerInlineText}>
-                    Rest {clockLabel(restTimer.remainingSec)}
+                    {clockLabel(restTimer.remainingSec).padStart(5, "0")}
                   </Text>
                 ) : (
                   <RestTimerText
                     style={styles.restTimerInlineText}
                     clock={restTimer}
-                    prefix="Rest "
+                    prefix=""
+                    padMinutes
                   />
                 )}
               </TouchableOpacity>
               {!isCardio ? (
                 <TouchableOpacity
-                  style={[styles.restTimerInlineButton, planMode && { flex: 0, paddingHorizontal: 0 }]}
+                  style={[styles.restTimerInlineButton, { flex: 0, paddingHorizontal: 0 }]}
                   onPress={() => cardActions.openTempoEditor(ex.id, ex.tempo)}
+                  accessibilityRole="button" accessibilityLabel={`${ex.name}, tempo ${ex.tempo?.trim() || "not set"}`}
                 >
                   <Gauge size={16} strokeWidth={1.5} color={colors.muted} />
                   <Text style={styles.restTimerInlineText}>
-                    Tempo{ex.tempo?.trim() ? " " + ex.tempo : ""}
+                    {ex.tempo?.trim() || "Tempo"}
                   </Text>
                 </TouchableOpacity>
-              ) : null}
+              ) : <CardioZoneControl zone={getExerciseZone(ex)} exerciseName={ex.name} colors={colors} styles={styles} onApply={zone => cardActions.setExercises(previous => previous.map(exercise => exercise.id === ex.id ? applyCardioZone(exercise, zone) : exercise))} />}
             </View>
             <View style={styles.exerciseMetaNotesSingle}>
               {!planMode && <Text style={styles.noteLabel}>Note</Text>}
@@ -861,48 +866,6 @@ export function useWorkoutExerciseCards({
             )}
             {isCardio ? (
               <>
-                <View style={styles.cardioMetaRow}>
-                  <Text style={styles.cardioMetaLabel}>Heart-rate zone</Text>
-                  <View style={styles.answerRow}>
-                    {["1", "2", "3", "4", "5"].map((zone) => (
-                      <TouchableOpacity
-                        key={`cardio-zone-${ex.id}-${zone}`}
-                        accessibilityRole="button"
-                        accessibilityLabel={`Zone ${zone}`}
-                        accessibilityState={{
-                          selected: getExerciseZone(ex) === zone,
-                        }}
-                        style={[
-                          styles.answerChip,
-                          getExerciseZone(ex) === zone &&
-                            styles.answerChipActive,
-                        ]}
-                        onPress={() =>
-                          cardActions.setExercises((previous) =>
-                            previous.map((exercise) =>
-                              exercise.id === ex.id
-                                ? applyCardioZone(
-                                    exercise,
-                                    getExerciseZone(exercise) === zone
-                                      ? ""
-                                      : zone,
-                                  )
-                                : exercise,
-                            ),
-                          )
-                        }
-                      >
-                        <Text
-                          style={[
-                            styles.answerText,
-                            getExerciseZone(ex) === zone &&
-                              styles.answerTextActive,
-                          ]}
-                        >{`Zone ${zone}`}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </View>
                 <View style={styles.cardioMetaRow}>
                   <Text style={styles.cardioMetaLabel}>Session Type</Text>
                   <View style={styles.answerRow}>

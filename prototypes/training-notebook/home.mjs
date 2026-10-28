@@ -1,3 +1,4 @@
+import { chartStudyStates, bodyChartStudy } from './body-chart-study.mjs';
 import { notebookIcon as notebookInfoIcon } from './notebook-icons.mjs';
 import { socialState, socialDialog, handleSocialAction, socialInput, sharingInboxButton, installSharingEditorGestures } from './sharing-social.mjs';
 import { sharingState, sharingDialog, openSharingDestination } from './sharing.mjs';
@@ -9,6 +10,7 @@ import { setReviewState } from './review-state-picker.mjs';
 import { readCheckIn, writeCheckIn, clearCheckIn, checkInFields } from './check-in.mjs';
 import { TODAY, trendObservationDate, metrics, homeStates, homeFixture, observations, selectedObservation, displayValue, valuesForDate, phaseWeeks, changePhase, phaseOnDate, readiness, saveMeasurement, calendarCells } from './home-model.mjs';
 
+homeStates.unshift(...chartStudyStates);
 const $ = q => document.querySelector(q);
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const paths = {
@@ -33,12 +35,20 @@ let s, example = 'returning', size = [390, 844], dark = false, large = false, to
 function choose(value, useShared = false) {
   setReviewState(document.querySelector('#example'), homeStates.map(([id, title]) => [id, title]), value);
   example = value; s = homeFixture(value); dark = value === 'dark'; large = value === 'large';
+  if (value.startsWith('chart-')) {
+    s.chartRange = ['chart-week','chart-month','chart-year'].includes(value) ? value.slice(6) : 'day'; s.chartOffset=0;
+    s.records.unshift({date:'2024-06-10',weight:84.4,source:'Manual entry'},{date:'2025-03-20',weight:83.6,source:'Manual entry'},{date:'2025-09-10',weight:82.9,source:'Manual entry'});
+    s.records.unshift(...['2021','2022','2023'].map((year,i)=>({date:year+'-04-15',weight:85+i,source:'Manual entry'})),...['01','02','03','04','06','08','09'].map((month,i)=>({date:'2026-'+month+'-10',weight:82-i*.15,source:'Manual entry'})));
+    if(value==='chart-sparse')s.records=s.records.filter(r=>['2026-10-12','2026-10-15'].includes(r.date));
+    if(value==='chart-one')s.records=s.records.filter(r=>r.date===TODAY);
+    if(value==='chart-empty')s.records=[];
+  }
   s.social = socialState(); s.sharing = sharingState();
   const shared = useShared ? readCheckIn() : null; if (!useShared) clearCheckIn(); if (shared) Object.assign(s, shared);
   $('#example').value = value; $('#dark').checked = dark; $('#large').checked = large; $('#unit').value = 'kg';
   if (useShared) applySharedPreferences();
   render(false);
-  if (s.activity) { const viewport = $('.home-device .viewport'); viewport.scrollTop = $('#home-progress').offsetTop - 100; }
+  if (s.activity || value.startsWith('chart-')) { const viewport = $('.home-device .viewport'); viewport.scrollTop = $('#home-progress').offsetTop - 100; }
 }
 function applySharedPreferences() { const prefs = readNotebookPreferences(); const p = prefs?.profile; if (p?.training) s.training = structuredClone(p.training); if (p?.diet) s.diet = structuredClone(p.diet); if (p?.phaseHistory) s.phaseHistory = structuredClone(p.phaseHistory); s.profileName = p?.name ?? 'Daniel'; s.profilePhoto = p?.photo ?? false; if (prefs?.health) { const h = prefs.health; s.connected = h.available && h.consent && (h.sleep || h.body); } }
 function logo() {
@@ -73,7 +83,7 @@ function dailyMovement() {
 }
 function progress() {
   const rows = observations(s.records, s.metric), selected = selectedObservation(s);
-  return `<section class="home-panel" id="home-progress">${heading('Progress', s.activity ? '' : btn('+ Add/edit', 'measurement'))}${dailyMovement()}${s.activity ? `<div class="movement-heading body-composition-heading"><h4>Body composition</h4>${btn('+ Add/edit', 'measurement')}</div>` : ''}<div class="metric-tabs" aria-label="Body measurement type">${metrics.map(([key, label]) => `<button class="metric-tab ${s.metric === key ? 'selected' : ''}" aria-pressed="${s.metric === key}" data-action="metric" data-key="${key}">${label}</button>`).join('')}</div>${selected ? `<div class="selected-measurement"><strong>${displayValue(selected[s.metric], s.metric, s.unit)}<small>${s.metric === 'bodyFat' ? '%' : s.unit}</small></strong><span class="supporting">${shortDate(selected.date)}${selected.date === rows.at(-1).date ? ' · Latest' : ''}</span></div>${bodyChart(rows, selected)}${p(selected.source + (rows.length > 1 ? ' · Recorded observations, equally spaced' : ' · One recorded observation'), 'chart-hint')}${!s.connected ? p('Saved account data · Sync not connected', 'chart-hint') : ''}` : `<div class="empty-records"><h4>No ${s.metric === 'weight' ? 'weight' : metrics.find(m => m[0] === s.metric)[1].toLowerCase()} measurements yet</h4>${p('Add a measurement when you have one. No daily entry needed.')}</div>`}</section>`;
+  return `<section class="home-panel" id="home-progress">${heading('Progress', s.activity ? '' : btn('+ Add/edit', 'measurement'))}${dailyMovement()}${s.activity ? `<div class="movement-heading body-composition-heading"><h4>Body composition</h4>${btn('+ Add/edit', 'measurement')}</div>` : ''}<div class="metric-tabs" aria-label="Body measurement type">${metrics.map(([key, label]) => `<button class="metric-tab ${s.metric === key ? 'selected' : ''}" aria-pressed="${s.metric === key}" data-action="metric" data-key="${key}">${label}</button>`).join('')}</div>${s.chartRange ? bodyChartStudy(s) : selected ? `<div class="selected-measurement"><strong>${displayValue(selected[s.metric], s.metric, s.unit)}<small>${s.metric === 'bodyFat' ? '%' : s.unit}</small></strong><span class="supporting">${shortDate(selected.date)}${selected.date === rows.at(-1).date ? ' · Latest' : ''}</span></div>${bodyChart(rows, selected)}${p(selected.source + (rows.length > 1 ? ' · Recorded observations, equally spaced' : ' · One recorded observation'), 'chart-hint')}${!s.connected ? p('Saved account data · Sync not connected', 'chart-hint') : ''}` : `<div class="empty-records"><h4>No ${s.metric === 'weight' ? 'weight' : metrics.find(m => m[0] === s.metric)[1].toLowerCase()} measurements yet</h4>${p('Add a measurement when you have one. No daily entry needed.')}</div>`}</section>`;
 }
 function recovery() {
   const score = readiness(s);
@@ -214,6 +224,7 @@ function render(preserve = true) {
     if (preserve && chartState && chartState.width === chart.scrollWidth && chartState.viewport === chart.clientWidth && chartState.selection === dot.getAttribute('cx')) chart.scrollLeft = chartState.left;
     else { const r = dot.getBoundingClientRect(), c = chart.getBoundingClientRect(); chart.scrollLeft += r.left + r.width / 2 - c.left - chart.clientWidth / 2; }
   }
+  if (s.chartRange && chart) { const update=()=>{ const previous=$('[data-action="chart-previous"]'),next=$('[data-action="chart-next"]'); if(previous)previous.disabled=chart.scrollLeft<1;if(next)next.disabled=chart.scrollLeft+chart.clientWidth>=chart.scrollWidth-1; }; chart.addEventListener('scroll',update,{passive:true});update(); }
   if (preserve && focused) { const input = $(`[data-measure="${focused.key}"]`); input?.focus({ preventScroll: true }); input?.setSelectionRange(focused.start, focused.end); }
   else if (s.modal) $('.sheet-head .close')?.focus({ preventScroll: true });
 }
@@ -256,7 +267,10 @@ $('#stage').addEventListener('click', event => {
     case 'dismiss-welcome': s.dismissedWelcome = true; render(); return;
     case 'dismiss-toast': s.toast = ''; render(); return;
     case 'retry': s.refreshFailed = false; notify('Mock refresh complete. Records are unchanged.'); return;
-    case 'metric': s.metric = d.key; s.selected = observations(s.records, s.metric).at(-1)?.date ?? null; render(); return;
+    case 'chart-range': s.chartRange = d.value; s.chartOffset=0; s.selected = null; render(); return;
+    case 'chart-previous': $('.chart-study-scroll')?.scrollBy({left:-$('.chart-study-scroll').clientWidth,behavior:'smooth'}); return;
+    case 'chart-next': $('.chart-study-scroll')?.scrollBy({left:$('.chart-study-scroll').clientWidth,behavior:'smooth'}); return;
+    case 'metric': s.chartOffset=0; s.metric = d.key; s.selected = observations(s.records, s.metric).at(-1)?.date ?? null; render(); return;
     case 'select-point': s.selected = d.date; render(); return;
     case 'measurement': beginMeasurement(); return;
     case 'measurement-mode':

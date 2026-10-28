@@ -133,3 +133,9 @@ describe("exercise progression", () => {
     expect(result.sets).toBe(3);
   });
 });
+
+it.each([ ["Strength", "4"], ["Hypertrophy", "8"], ["Power", "3"] ] as const)("uses the %s prescription with no history", (phase, reps) => {
+  const result = recommend({ phase, sessions: [] });
+  expect(result.reps).toBe(reps);
+  expect(result.weightKg).toBeNull();
+});
