@@ -194,7 +194,7 @@ function ProfileContent() {
   const navigation = useNavigation();
 
   const { fontScale } = useWindowDimensions();
-  const params = useLocalSearchParams<{ from?: string; openHealth?: string }>();
+  const params = useLocalSearchParams<{ from?: string; openHealth?: string; openTraining?: string }>();
   const returnTo = typeof params.from === "string" && params.from.startsWith("/") ? params.from : null;
   const { isOffline, ready: networkReady } = useOfflineStatus();
   const loadedProfileUidRef = useRef<string | null>(null);
@@ -265,6 +265,8 @@ function ProfileContent() {
     };
   }, [healthFeedback, revealHealthFeedback]);
   const healthSyncYRef = useRef(0);
+  const [trainingSectionY, setTrainingSectionY] = useState<number | null>(null);
+  const openedTrainingFromRouteRef = useRef<string | null>(null);
   const [saveFeedback, setSaveFeedback] = useState<string | null>(null);
   const [redirectTo, setRedirectTo] = useState<Href | null>(null);
   const [lastSleepSyncLabel, setLastSleepSyncLabel] = useState<string>("Not synced yet");
@@ -875,7 +877,7 @@ function ProfileContent() {
     if (
       loading ||
       !healthConsentLoaded ||
-      typeof params.openHealth !== "string" ||
+      !params.openHealth || !!params.openTraining ||
       openedHealthFromRouteRef.current === params.openHealth
     ) {
       return;
@@ -892,7 +894,19 @@ function ProfileContent() {
       }
     });
     return task.cancel;
-  }, [healthConsentAccepted, stepsConsentAccepted, healthConsentLoaded, loading, params.openHealth]);
+  }, [healthConsentAccepted, stepsConsentAccepted, healthConsentLoaded, loading, params.openHealth, params.openTraining]);
+
+  useEffect(() => {
+    if (loading || trainingSectionY == null || !params.openTraining || openedTrainingFromRouteRef.current === params.openTraining) return;
+    const task = scheduleAfterInteractions(() => {
+      openedTrainingFromRouteRef.current = params.openTraining ?? null;
+      pendingHealthFeedbackRef.current = false;
+      if (feedbackFrameRef.current !== null) cancelAnimationFrame(feedbackFrameRef.current);
+      profileScrollRef.current?.scrollTo({ y: Math.max(0, trainingSectionY - 12), animated: true });
+      router.setParams({ openTraining: undefined, openHealth: undefined });
+    });
+    return task.cancel;
+  }, [loading, params.openTraining, router, trainingSectionY]);
 
   const clearHealthConsentAccepted = useCallback(async () => {
     if (!uid) return;
@@ -1587,11 +1601,13 @@ function ProfileContent() {
         </View>
         <ProfileRow label="Username" value={sharing.settings.username ? `@${sharing.settings.username}` : "Not set"} onPress={sharing.openUsername} />
       </ProfileSection>
+      <View onLayout={(event) => setTrainingSectionY(event.nativeEvent.layout.y)}>
       <ProfileSection title="Training">
         <ProfileRow wideValue label="Training phase" value={`${trainingPhase} / ${phaseLabel("training")}`} onPress={() => openEditor("training")} />
         <ProfileRow wideValue label="Diet phase" value={`${dietPhase} / ${phaseLabel("diet")}`} onPress={() => openEditor("diet")} />
         <ProfileRow label="Availability" value={`${availabilityDays} days / week`} onPress={() => openEditor("availability")} />
       </ProfileSection>
+      </View>
       <ProfileSection title="Units">
         <ProfileRow label="Exercise effort" value={effortScale.toUpperCase()} onPress={() => openEditor("units")} />
         <ProfileRow label="Weight" value={weightUnit} onPress={() => openEditor("units")} />
