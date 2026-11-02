@@ -7,7 +7,7 @@ import './input-behavior.mjs';
 import { demoAvatar } from './notebook-avatar.mjs';
 import { readNotebookPreferences, writeNotebookPreferences } from './notebook-preferences.mjs';
 import { setReviewState } from './review-state-picker.mjs';
-import { readCheckIn, writeCheckIn, clearCheckIn, checkInFields } from './check-in.mjs';
+import { readCheckIn, writeCheckIn, clearCheckIn, checkInFields, createCheckInDraft, painValidation } from './check-in.mjs';
 import { TODAY, trendObservationDate, metrics, homeStates, homeFixture, observations, selectedObservation, displayValue, valuesForDate, phaseWeeks, changePhase, phaseOnDate, readiness, saveMeasurement, calendarCells } from './home-model.mjs';
 
 homeStates.unshift(...chartStudyStates);
@@ -178,8 +178,8 @@ function phaseDialog(kind) {
   return dialog(kind === 'training' ? 'Training phase' : 'Diet phase', `${p('Current: ' + s[kind].phase + (phaseWeeks(s[kind].since) ? ` · Week ${phaseWeeks(s[kind].since)}` : ''))}${p('Changing phase starts week 1 today. Home and Profile use the same selection.')}<div>${(kind === 'training' ? ['Hypertrophy', 'Strength', 'Power'] : ['Cut', 'Maintain', 'Bulk']).map(phase => `<button class="phase-option" data-action="phase" data-kind="${kind}" data-value="${phase}" aria-pressed="${s[kind].phase === phase}">${phase}${s[kind].phase === phase ? icon('check') : ''}</button>`).join('')}</div>`, btn('Cancel', 'close'));
 }
 function checkIn() {
-  const draft = s.checkInDraft ?? { ratings: s.ratings, pain: s.pain ?? 'None', activity: s.activity ?? '', note: s.note ?? '' };
-  return dialog('Recovery check-in', checkInFields(draft), btn('Save check-in', 'save-check-in', 'primary') + btn('Cancel', 'close'));
+  const draft = s.checkInDraft ??= createCheckInDraft(s);
+  return dialog('Recovery check-in', checkInFields(draft)+(s.error?p(s.error,'form-error'):''), btn('Save check-in', 'save-check-in', 'primary') + btn('Cancel', 'close'));
 }
 
 function modal() {
@@ -229,7 +229,7 @@ function render(preserve = true) {
   else if (s.modal) $('.sheet-head .close')?.focus({ preventScroll: true });
 }
 function notify(message) { s.toast = message; clearTimeout(toastTimer); render(); toastTimer = setTimeout(() => { s.toast = ''; render(); }, 4500); }
-function open(modalName) { s.error = ''; s.modal = modalName; if (modalName === 'check-in') s.checkInDraft = structuredClone({ ratings: s.ratings, pain: s.pain ?? 'None', activity: s.activity ?? '', note: s.note ?? '' }); render(false); }
+function open(modalName) { s.error = ''; s.modal = modalName; if (modalName === 'check-in') s.checkInDraft = createCheckInDraft(s); render(false); }
 function close() { s.modal = s.modal === 'workout-date' ? 'workout-edit' : s.modal === 'workout-edit' ? 'day' : s.modal === 'day' ? 'calendar' : s.modal === 'delete' ? 'measurement' : ''; s.error = ''; render(false); }
 function beginMeasurement() { const selected = selectedObservation(s); s.editDate = selected?.date ?? null; s.mode = 'add'; s.form = {}; s.addDraft = {}; s.editDraft = valuesForDate(s.records, s.editDate, s.unit); s.definition = ''; open('measurement'); }
 
@@ -242,7 +242,7 @@ $('#stage').addEventListener('input', event => {
     const save = $('[data-action="workout-save"]'); if (save) save.disabled = !workoutDirty();
   }
   if (el.dataset.measure) { s.form[el.dataset.measure] = el.value; s.error = ''; }
-  if (el.dataset.rating) { s.checkInDraft ??= structuredClone({ ratings: s.ratings, pain: s.pain ?? 'None', activity: s.activity ?? '', note: s.note ?? '' }); s.checkInDraft.ratings[el.dataset.rating] = Number(el.value); document.querySelector('#rating-' + el.dataset.rating).textContent = el.value + '/10'; el.setAttribute('aria-valuetext', el.value + ' out of 10'); }
+  if (el.dataset.rating) { s.checkInDraft ??= createCheckInDraft(s); s.checkInDraft.ratings[el.dataset.rating] = Number(el.value); document.querySelector('#rating-' + el.dataset.rating).textContent = el.value + '/10'; el.setAttribute('aria-valuetext', el.value + ' out of 10'); }
   if (el.dataset.draft && s.checkInDraft) s.checkInDraft[el.dataset.draft === 'dailyNote' ? 'note' : el.dataset.draft] = el.value;
 });
 $('#stage').addEventListener('click', event => {
@@ -299,8 +299,10 @@ $('#stage').addEventListener('click', event => {
     case 'calendar-today': s.calendarMonth = TODAY.slice(0, 7); s.calendarDate = TODAY; render(false); return;
     case 'month': { const date = new Date(`${s.calendarMonth}-01T12:00:00`); date.setMonth(date.getMonth() + Number(d.step)); s.calendarMonth = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`; render(false); return; }
     case 'day': s.workoutSaved = false; s.calendarDate = d.date; s.modal = 'day'; render(false); return;
-    case 'pain': s.checkInDraft ??= structuredClone({ ratings: s.ratings, pain: s.pain ?? 'None', activity: s.activity ?? '', note: s.note ?? '' }); s.checkInDraft.pain = d.value; render(); return;
+    case 'pain': s.checkInDraft ??= createCheckInDraft(s); s.checkInDraft.pain = d.value; render(); return;
+    case 'pain-detail': s.checkInDraft ??= createCheckInDraft(s);s.checkInDraft[d.key]=d.value;render();return;
     case 'save-check-in': {
+      const painError=painValidation(s.checkInDraft??s);if(painError){s.error=painError;render();return;}
       const ratings = s.checkInDraft?.ratings ?? s.ratings;
       if (Object.values(ratings).some(v => v !== '' && (!Number.isInteger(Number(v)) || Number(v) < 0 || Number(v) > 10))) { s.error = 'Use whole numbers from 0 to 10, or leave a rating blank.'; render(); return; }
       Object.assign(s, s.checkInDraft ?? { ratings }); writeCheckIn(s); s.modal = ''; notify('Recovery check-in saved in this mock session.'); return;

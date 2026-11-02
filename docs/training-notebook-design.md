@@ -1,6 +1,6 @@
 # Lastrep Training Notebook Design Specification
 
-Version: 1.41 | Date: October 28, 2026
+Version: 1.48 | Date: November 2, 2026
 
 Status: Workout, Home, Nutrition, Sleep, Profile and Settings browser design
 directions approved through iterative review. Shared rules below incorporate that
@@ -22,6 +22,11 @@ settings-notebook-migration.md for boundaries and actual
 verification coverage.
 The initial Figma pair records an earlier Workout revision; the local browser
 prototype and decisions below capture the subsequent approved refinements.
+The November 2 Workout program flow and unified Today's Plan direction are
+approved browser designs; their native implementation remains pending. The
+program-day completion rules are approved requirements, not claims of working
+browser or native behavior. See the current flow at the end of this specification
+and [the mockup review notes](unified-todays-plan-mockup.md).
 
 ## Shared input surfaces (October 23 follow-up)
 
@@ -164,6 +169,16 @@ for actual foreground/background pairs, including disabled and selected states.
 - Paper theme is the primary exploration, not an approved forced default. Mock up
   and review dark mode before changing existing theme behavior.
 - Primary actions are ink-filled, not orange-filled. Accent is a small emphasis.
+- Rust accent intentionally identifies a primary text choice, an interactive
+  link or a selected state; it is not a warning or destructive-action color.
+  On Workout entry, emphasize Resume workout when a draft exists, otherwise
+  Continue program when a program is active, otherwise Start workout. Other
+  entry rows stay neutral. This does not change the ink fill of solid primary
+  buttons. Do not automatically give every text button the accent color.
+- Secondary navigation and actions such as Back to programs and Restart program
+  use neutral ink. Delete program uses the danger token, not the rust accent;
+  its program-detail action is borderless. Keep its explicit confirmation.
+  Labels and confirmation distinguish destruction even where colors look similar.
 - Body text remains ink; do not render whole advice panels in warning colors.
 - No gradient page backgrounds, glass blur or large colored glow shadows.
 - Charts and macros may use additional semantic colors; see section 13.
@@ -293,9 +308,59 @@ For each panel/row, reserve a consistent 24-wide icon slot plus 12 gap before te
 Items without icons omit the slot intentionally; unrelated icon glyph widths must
 not determine text alignment.
 
+### Program continuity and routine creation
+
+Program management orders active programs before saved drafts and other
+programs. Resuming a previously started program previews its next saved day
+starting today; confirmation changes future dates while completed occurrences
+retain their original dates. Routine creation from program assignment reuses
+the Workout exercise editor and holds the user's current workout separately.
+Saving or canceling returns to program setup without overwriting that workout.
+Create routine is an outlined creation action, visually separate from the plain
+routine choices. The routine builder places Save routine below Add exercise,
+without duplicating that action in the header. Restart program requires an
+explicit confirmation, starts a new run from Day 1 today, and retains the prior
+run's history, routines and unfinished workout.
+
+### Bounded tap targets
+
+Use the screen's existing Back control to return to a preceding choice screen;
+do not add a second in-content button for the same navigation. Routine pickers
+use plain text rows with details and a caret, rather than outlined button boxes.
+Workout's Add exercise action follows the native secondary button: no leading
+plus, surface fill, 1 px border, 8 px radius, 48 px minimum height, 12 px vertical
+and 16 px horizontal padding, and 16 px semibold text.
+
+Label-and-caret controls use their content width, with at least a 44 px touch
+target. Do not stretch their clickable area across unrelated whitespace or
+read-only information such as a program's week indicator. Make an entire row
+clickable only when the whole row intentionally represents the same action.
+Toggle rows activate from the switch itself unless a wider target was explicitly
+approved. Keep keyboard focus and accessible labels on the actual controls.
+
+### Symmetric row spacing
+
+- List and action rows must have equal top and bottom padding by default: use
+  16 above and below a standard row's content, with controls vertically centered.
+  Apply the same geometry to selected, unselected, short and multiline rows.
+- Group adjacent rows in one list container with zero inter-row gap. A separator
+  belongs between rows; do not combine bottom-only row rules with extra parent
+  gaps that make the space below the separator larger than the space above it.
+- Section spacing belongs outside the list. Verify first, middle and last rows,
+  including after filtering or expansion, in both themes and enlarged text.
+- Unequal top/bottom spacing requires a specific functional or user-approved
+  exception documented with its reason. Do not introduce it merely to align a
+  single screenshot. Dense log tables retain their explicitly defined row metrics.
+
 ### Divider ownership
 
 - Dividers separate adjacent items or sections; they are not decorative underlines.
+- Match the visible space above and below each divider, measured from the
+  adjacent content blocks. Use the same spacing token on both sides (20 for
+  Workout entry choices). Equal declared padding alone is insufficient: check
+  computed styles and rendered geometry, including multiline content, minimum
+  row heights and inherited button resets. Exclude the divider's own thickness
+  when comparing distances.
 - In a list, draw row separators only between visible items. A single-item list
   has no row separator, and the last visible item has no trailing separator.
 - Apply this after filtering, collapsing or excluding items, not using the raw
@@ -325,7 +390,10 @@ not determine text alignment.
   choices a control border, and a destructive secondary choice a danger outline
   and label. Sharing link landing screens use the same notebook header, type,
   action sizes and theme as the main app.
-- Text action: min-height 44, accent text; always a meaningful verb.
+- Text action: min-height 44, with a clear action label or destination name.
+  Use accent for an intentionally emphasized text choice or link, ink for
+  secondary navigation/actions, and danger for destructive actions. Follow
+  the color roles above rather than applying accent to all unfilled buttons.
 - Icon button: use the role's visual size and target from section 3. Default
   standalone target is 48 x 48; named compact-header/help exceptions are 44 x 44.
 - Pressed state: immediate surface change, no scale bounce. Disabled: unavailable
@@ -2458,6 +2526,12 @@ must not add another SafeAreaView bottom inset. Keep keyboard-aware protection.
 
 ### Optional exercise targets
 
+Exercise text actions share one body-font treatment: Add warm-up,
+Add set and Duplicate last set use 16 dp semibold
+with the same line height and text scaling. Position does not change typography.
+The earlier standalone Progress action is superseded by the approved unified
+Today's Plan direction below; historical progression studies are references only.
+
 - Put Targets in the resistance exercise menu. Only configured targets add a
   muted, tappable summary above the set headers; unset targets add no visual row.
 - Use the existing notebook sheet and input surfaces. Show the exercise name
@@ -2472,3 +2546,105 @@ must not add another SafeAreaView bottom inset. Keep keyboard-aware protection.
   effort untouched. Exercise defaults apply to normal working sets, exclude
   warm-ups and special set types, and yield to an explicit per-set prescription.
   Preserve these distinctions through routines, history and workout sharing.
+
+### Workout programs and unified Today's Plan (November 2 approval)
+
+These are the current approved requirements for the next native implementation.
+They supersede conflicting historical program/progression mockups. Browser
+examples use synthetic, in-memory state and do not prove persistence, program-day
+completion, native behavior or account writes.
+
+**Workout entry and navigation**
+
+- New accounts have no pre-made program or routines. Offer Create program and
+  Start workout; do not require all routines to be created first.
+- With an active program, offer Continue program, Create program and Start
+  workout. Put Resume workout first when an unfinished draft exists. My programs
+  uses the same full-width row, label/detail typography, caret and divider
+  geometry as the other choices. Follow the primary-text-choice color precedence
+  in section 3; rust is intentional emphasis, not danger.
+- The Workout header Back control returns to these choices. Do not repeat a
+  Workout choices button inside the editor or add Outside your program text.
+  The Add exercise picker retains its own Back-to-editor behavior.
+- Program workouts show the program strip and day context. Separate workouts
+  use the same exercise editor and Today's Plan without a program strip. Choosing
+  another path must preserve the unfinished workout rather than overwrite it.
+
+**Program setup and management**
+
+- Create program starts a separate setup. Name the program and configure its
+  cycle days; each day can be assigned a routine, Rest or Unassigned while
+  drafting. Allow saving an incomplete setup for later. Require a name, at least
+  one routine and no unassigned days before starting.
+- Assign routines by stable ID, never their display name. Duplicate names remain
+  valid; show exercise summaries to distinguish them. Routine picker rows are
+  plain, without button outlines. Create routine is a separate outlined action
+  with a plus.
+- Creating a routine reuses the familiar Workout exercise editor: exercises,
+  sets, weights, optional targets, warm-ups, rest, tempo and exercise options.
+  Save routine belongs below Add exercise, not in the header. Save preserves
+  the planned prescription and assigns it to the selected day. Cancel preserves
+  the prior assignment. Both restore the user's original workout.
+- My programs lists the active program first, saved drafts next and other
+  programs last, alphabetically within each group. Program details show every
+  day's assigned routine and its exercise summary; Rest has no invented list.
+- Creating or saving another program does not replace the active program. Only
+  explicit Start program, Resume today or Restart today activates the new choice.
+  Keep previous programs available in My programs.
+- Continue program opens the active program. Resume program previews the next
+  unfinished, unskipped saved day starting today and the following dates in
+  routine order. Resume today confirms; Cancel changes neither program nor
+  workout. Time away is not turned into missed-workout records. Completed days
+  retain their original dates. A completed cycle resumes at Day 1 of a new cycle.
+- Restart program is separate from Resume. Confirm starting a new run at Day 1
+  today. Preserve the prior run under Previous runs, including completed history
+  and dates; preserve routines, recorded workouts and unfinished drafts. Restart
+  resets the program start date and program week, not training or diet phases.
+  Resume retains the original program start date. Program week and phase week
+  remain separate concepts.
+- Delete program is a borderless danger-text action in program details and asks
+  for confirmation. Deleting an active program stops its schedule; deleting any
+  program must not delete its routines, recorded workouts or unfinished workout.
+
+**Program-day completion (approved; implementation pending)**
+
+- Successfully finishing and saving a program-linked workout marks its assigned
+  program day complete. Opening, editing, canceling or failing to save it does
+  not complete the day. Keep the program/run/day association explicit.
+- Finishing a separate workout leaves program progress unchanged, even if its
+  routine or exercises happen to match the program.
+- A missed program day stays pending until the user explicitly skips or shifts
+  it. Do not silently mark it missed/complete, shift the calendar or advance the
+  program because time passed or a separate workout was saved. Confirmed Resume
+  today is an explicit schedule shift when returning to a saved program.
+
+**Today's Plan and recovery**
+
+- Use one Today's Plan review rather than a separate per-exercise Progress
+  action. Review the current workout, or preview an assigned routine before
+  loading it when no workout is open. Never silently replace an existing draft.
+- Use planned targets and comparable recent performance to inform prescriptions;
+  current recovery/context can constrain an increase. Positive readiness alone
+  does not justify an increase. Keep actual recorded reps and effort separate
+  from targets, and protect completed or effort-recorded sets.
+- Headings and explanations must match the actual result. Review affected
+  exercises requires a visible list of flagged exercises with their reasons.
+  Reporting any discomfort does not automatically mean every workout has an
+  affected exercise. If none is flagged, explain that result without asserting
+  the movements are pain-free or suitable. The prototype's name-based matching
+  is a design example, not a validated native movement assessment.
+- Review context is regular weight, consistent with the unchanged-exercises row.
+  Separate Recovery check-in, Recent performance and Training context. Compact
+  ratings and a clearly tappable Edit recovery check-in action with a caret
+  replace a wall of text. Exercise-specific reasons belong with each exercise.
+- Reuse Home's complete Recovery check-in form and the same saved daily answers.
+  Stage edits until Save; Cancel preserves saved answers. Do not create a second
+  independent check-in or treat old/missing answers as current. Browser same-tab
+  sharing is only a demonstration; native implementation must verify the shared
+  daily-data path.
+
+Acceptance must cover the first, middle and last dividers; empty and populated
+routine builders; draft restoration; save/cancel/failure; duplicate routine names;
+program switching, resume and restart dates; prior-run history; and program versus
+separate-workout completion. Check both themes, enlarged text, emulator behavior
+and phone behavior before claiming native acceptance.

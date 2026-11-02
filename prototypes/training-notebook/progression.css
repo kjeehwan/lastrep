@@ -1,0 +1,33 @@
+.device .exercise .exercise-plan-actions>.btn,
+.device .exercise .warmup-entry>.btn,
+.device .exercise .set-actions>.btn.text{font-family:'Source Sans',sans-serif;font-size:calc(16px * var(--scale));font-weight:600;line-height:1.375}
+.exercise-plan-actions{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 8px;padding:4px 0}
+.exercise .exercise-plan-actions>.btn{width:auto;min-width:0;min-height:44px;padding:8px 0;text-align:left;text-decoration:none}
+.exercise .exercise-plan-actions>.progression-entry{margin-left:auto;text-align:right}
+.progression-result{display:grid;gap:4px}
+.progression-result .progression-prescription{font-size:calc(20px * var(--scale));line-height:1.35;font-weight:600;font-variant-numeric:tabular-nums}
+.large-text .exercise-plan-actions{flex-wrap:wrap}
+.progression-details{display:grid;gap:20px}
+.progression-details h3{font-size:calc(20px * var(--scale));font-weight:600}
+.progression-details h4{font-size:calc(14px * var(--scale));color:var(--secondary);font-weight:400;margin-bottom:12px}
+.progression-history{display:grid;gap:12px}
+.progression-history-row{display:grid;grid-template-columns:20px 1fr auto;gap:12px;align-items:baseline;font-size:calc(14px * var(--scale))}
+.progression-history-row>span:last-child{color:var(--secondary)}
+.large-text .progression-history-row{grid-template-columns:24px 1fr}
+.large-text .progression-history-row>span:last-child{grid-column:2}
+.progress-options{display:grid;gap:8px}
+.progress-option{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;min-height:48px;padding:0;text-align:left;font-size:calc(16px * var(--scale));color:var(--ink)}
+.progress-option>span:first-child{flex:1;min-width:0}
+.progress-option>span:last-child{display:flex;align-items:center;gap:8px;max-width:55%;font-size:calc(14px * var(--scale));color:var(--secondary);text-align:right;overflow-wrap:anywhere}
+.progress-option svg{width:18px;height:18px;flex-shrink:0}
+.progress-option-input{display:flex;justify-content:flex-end;margin:8px 0 12px}
+.progress-option-input .field{width:calc(220px * var(--scale));max-width:100%;margin:0}
+.progress-option-input .field>span{font-size:calc(14px * var(--scale));color:var(--secondary)}
+.progress-options [hidden]{display:none}
+.large-text .progress-option{flex-wrap:wrap}
+.large-text .progress-option>span:last-child{max-width:100%}
+
+.available-choice-group{display:grid;gap:6px}
+.available-weight-fields{display:grid;gap:16px;padding-bottom:16px}
+.available-weight-fields .field{gap:6px;margin:0}
+.available-weight-fields .field .supporting{font-size:calc(13px * var(--scale));line-height:1.4}
