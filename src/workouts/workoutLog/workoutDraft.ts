@@ -1,5 +1,6 @@
 import type { RestClock } from "./timerClock";
 import type { RecommendationUsage } from "./recommendationFeedback";
+import type { ProgramLink } from "../programFlow";
 
 export type WorkoutDraftSnapshot<TExercises, TUnits> = {
   exercises: TExercises;
@@ -14,6 +15,12 @@ export type WorkoutDraftSnapshot<TExercises, TUnits> = {
   workoutTimerStartedAtMs?: number | null;
   restTimerByExercise?: Record<string, RestClock>;
   recommendationUsage?: RecommendationUsage;
+  programLink?: ProgramLink | null;
+  deloadBackup?: {id:string;before:TExercises;after:TExercises}|null;
+  workoutSlot?: string;
+  workoutSaveId?: string | null;
+  routineBuilderMode?: boolean;
+  programRoutineAssignment?: { programId: string; day: number; returnSlot: string; routineId: string } | null;
 };
 
 /** Keeps the on-device draft schema stable while persistence moves out of the screen. */

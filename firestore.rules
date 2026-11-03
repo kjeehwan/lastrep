@@ -66,6 +66,16 @@ service cloud.firestore {
       match /routines/{routineId} {
         allow read, create, update, delete: if isOwnUser(uid);
       }
+
+      match /workoutPrograms/{programId} {
+        allow read, create, update, delete: if isOwnUser(uid);
+        match /runs/{runId} {
+          allow read, create, update, delete: if isOwnUser(uid);
+          match /occurrences/{ordinal} {
+            allow read, create, update, delete: if isOwnUser(uid);
+          }
+        }
+      }
     }
   }
 }
