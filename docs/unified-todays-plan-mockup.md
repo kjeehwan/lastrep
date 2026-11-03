@@ -1,5 +1,14 @@
 # Unified Today's Plan — browser review
 
+November 2 native-review update: Continue program now opens the assigned workout
+directly; review Today's Plan there. The intermediate routine-preview/Load
+workout popup in the earlier prototype is superseded. Recovery check-ins support
+multiple pain areas and share one native modal host with the workout review.
+Follow-up: select areas in the main check-in and edit their details in a small
+overlay; Done stages an area and Save check-in commits it. Program setup uses
+Save/Start buttons, with Stop in active-program details, without a Use switch.
+Last is left-aligned with its text; numeric headings remain centred.
+
 October 29, 2026. Proposed design, not native behavior. Replaces the proposed
 standalone per-exercise Progress action; previous progression studies remain
 available as historical design examples.

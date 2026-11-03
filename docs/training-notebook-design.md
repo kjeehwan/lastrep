@@ -1,6 +1,6 @@
 # Lastrep Training Notebook Design Specification
 
-Version: 1.48 | Date: November 2, 2026
+Version: 1.55 | Date: November 3, 2026
 
 Status: Workout, Home, Nutrition, Sleep, Profile and Settings browser design
 directions approved through iterative review. Shared rules below incorporate that
@@ -23,9 +23,9 @@ verification coverage.
 The initial Figma pair records an earlier Workout revision; the local browser
 prototype and decisions below capture the subsequent approved refinements.
 The November 2 Workout program flow and unified Today's Plan direction are
-approved browser designs; their native implementation remains pending. The
-program-day completion rules are approved requirements, not claims of working
-browser or native behavior. See the current flow at the end of this specification
+approved browser designs. The native implementation and November 3 refinements
+passed the user's phone review; verification and release boundaries are recorded
+in workout-programs-native-review.md. The browser remains a design reference. See the current flow at the end of this specification
 and [the mockup review notes](unified-todays-plan-mockup.md).
 
 ## Shared input surfaces (October 23 follow-up)
@@ -2608,6 +2608,11 @@ completion, native behavior or account writes.
 
 **Program-day completion (approved; implementation pending)**
 
+- Program setup has Save program and Start program actions, without a redundant
+  Use program switch. Saving does not start a program. Active-program details
+  offer Stop program; stopping preserves the run, progress, routines and drafts
+  and allows explicit Resume later.
+
 - Successfully finishing and saving a program-linked workout marks its assigned
   program day complete. Opening, editing, canceling or failing to save it does
   not complete the day. Keep the program/run/day association explicit.
@@ -2621,8 +2626,10 @@ completion, native behavior or account writes.
 **Today's Plan and recovery**
 
 - Use one Today's Plan review rather than a separate per-exercise Progress
-  action. Review the current workout, or preview an assigned routine before
-  loading it when no workout is open. Never silently replace an existing draft.
+  action. Continue program opens its assigned workout directly, restoring its
+  existing draft when available. Review Today's Plan on that workout page;
+  do not insert a redundant exercise-preview/load popup. Never silently replace
+  an existing draft.
 - Use planned targets and comparable recent performance to inform prescriptions;
   current recovery/context can constrain an increase. Positive readiness alone
   does not justify an increase. Keep actual recorded reps and effort separate
@@ -2643,8 +2650,79 @@ completion, native behavior or account writes.
   sharing is only a demonstration; native implementation must verify the shared
   daily-data path.
 
+**Native control and transition checks (November 2 phone review)**
+
+- Switches must show an identifiable track and thumb in both states and both
+  themes. In particular, an off switch on a dark surface must not disappear
+  into that surface. Use contrasting off-track/outline and thumb colors; verify
+  off as well as on on the actual phone. Restrict activation to the switch.
+- Center button and chip text vertically and horizontally within its hit area.
+  Use `justifyContent: center` and `alignItems: center` on the control, and check
+  line-height/font padding rather than relying on padding alone. Check short,
+  long and wrapped labels, including recovery choices and Save/Cancel actions.
+- Related review and recovery forms share one native modal host. Loading saved
+  data must not remount/reanimate that host. Editing, cancelling or saving a
+  check-in changes content within it; avoid overlapping entering/exiting modals.
+- A recovery check-in can report multiple pain areas, each with its own side,
+  severity, trigger and note. Keep the main form compact with area chips; tapping
+  an area opens a small detail popup, and reported areas remain highlighted.
+  Done stages that area's details; Cancel, Back and outside tap discard only the
+  detail edit. Edit/remove reported areas through the same popup. A child popup
+  may overlay the still-mounted check-in; do not dismiss/reopen its parent.
+  Only Save check-in writes the staged areas and ratings. Preserve older single-
+  area records and consider every current report in the review.
+- The visible gap above and below the target summary must be balanced, including
+  the Note container's bottom spacing and the next action's touch-area padding.
+  Judge the rendered text gaps, not only matching numeric margin declarations.
+- Align Last to the same left edge as its previous-set text. Centre numeric
+  headings and Set/Done within the actual columns below them: kg/lbs, Reps,
+  RPE/RIR and cardio equivalents. Match native fixed
+  widths, margins and equal input-column proportions; inspect rendered bounds
+  rather than centering labels across the row as a whole.
+
 Acceptance must cover the first, middle and last dividers; empty and populated
 routine builders; draft restoration; save/cancel/failure; duplicate routine names;
 program switching, resume and restart dates; prior-run history; and program versus
 separate-workout completion. Check both themes, enlarged text, emulator behavior
 and phone behavior before claiming native acceptance.
+
+## Detail editors and program actions (November 3)
+
+- Paired Cancel/Done footer buttons have equal widths, minimum heights, padding
+  and corner radii. Verify their rendered geometry; unequal emphasis uses color,
+  not accidental size differences. Deviations require an explicit design reason.
+- Give a standalone optional-detail input equal space above and below.
+- Remove an individual recovery area with a compact, left-aligned trash icon and
+  Remove label. Preserve its touch target and staged-save/cancel behavior.
+- Active program details use six icons with labels below: Continue, Edit, Stop,
+  Restart, Share, Delete. Use the Workout action-grid spacing and responsive
+  columns. Continue uses the normal text color; only Delete is destructive red.
+- Share is a clearly explained future action until program sharing is implemented.
+  Previous runs stays a separate history row when available.
+
+- Avoid pairing rust emphasis and destructive red in the same action section when
+  their similarity could confuse meaning. Use normal ink for the non-destructive
+  action, keeping destructive red distinct.
+- Resuming an unfinished workout moves an earlier workout date to today while
+  retaining all sets, recorded effort and program occurrence identity. Do this
+  before refreshing its save timestamp, including resuming the current slot.
+
+- Recovery details use 16-point gaps between Optional detail, the Remove touch
+  target, the footer divider and the footer buttons. Keep equal space above and
+  below both Remove and the divider; do not combine inherited footer padding with
+  divider margins. Without Remove, keep the same symmetric divider spacing.
+
+- Restart opens the first pending day of the committed new run, rather than
+  leaving an unrelated workout under the new program strip. Preserve the prior
+  workout as its own draft. Rest days return to the workout choices.
+- Resume-workout rows include a secondary context line: Separate workout, or
+  program name and day. Identify previous-run drafts explicitly. Workout titles
+  alone must not distinguish program membership.
+- Recovery ratings required for Today’s Plan are labelled before submission.
+  Missing-input and save errors use the validation/danger color and an alert
+  accessibility role. Optional Home check-ins remain optional.
+
+- Resume-workout pickers wait for current and parked drafts to load together.
+  Never show a partial list or choose a single draft before loading completes.
+  A delayed load shows a loading message; a failed load offers retry and preserves
+  the existing drafts. Scope each picker request to the account; ignore superseded requests.
