@@ -1,3 +1,5 @@
+import { painEntries, primaryPain } from "./painContext";
+import { normalizeExerciseTargets } from "../../workouts/exerciseTargets";
 import type {
   ActivityDuration,
   ActivityEffort,
@@ -120,9 +122,11 @@ export const parseWorkoutDraftPlan = (raw: string | null, today = new Date()): P
                     ? set.setType
                     : "normal" as const,
                   done: Boolean(set?.done),
+                  rpe: set?.rpe != null && String(set.rpe).trim() !== "" && Number.isFinite(Number(set.rpe)) ? Number(set.rpe) : null,
                 }))
               : [];
-            return { name: item.name.trim(), mode, sets };
+            const targets = normalizeExerciseTargets(item.targets);
+            return { name: item.name.trim(), mode, ...(targets ? { targets } : {}), ...(typeof item.deloadAppliedId === "string" ? {deloadAppliedId:item.deloadAppliedId}:{}), sets };
           })
           .filter((item): item is NonNullable<typeof item> => item != null)
       : [];
@@ -144,10 +148,10 @@ export const normalizeDailyDecisionContext = (
 ): DailyDecisionContext | null => {
   const candidate = raw && typeof raw === "object" ? raw as Record<string, unknown> : null;
   const isToday = candidate?.dateKey === toLocalDateKey(today);
-  const painSource = isToday && candidate?.pain && typeof candidate.pain === "object"
-    ? candidate.pain as Record<string, unknown>
-    : null;
-  const pain = painSource &&
+  const sources = isToday ? (Array.isArray(candidate?.pains) ? candidate.pains : candidate?.pain ? [candidate.pain] : []) : [];
+  const pains = sources.slice(0,18).map(value => {
+    const painSource = value && typeof value === "object" ? value as Record<string,unknown> : null;
+    return painSource &&
     isOptionValue(PAIN_AREAS, painSource.area) &&
     isOptionValue(PAIN_SEVERITIES, painSource.severity) &&
     isOptionValue(PAIN_TRIGGERS, painSource.trigger)
@@ -163,6 +167,8 @@ export const normalizeDailyDecisionContext = (
         ),
       }
     : null;
+  }).filter((value): value is PainContext => value !== null);
+  const pain = primaryPain(pains);
   const activitySource = candidate?.additionalActivity && typeof candidate.additionalActivity === "object"
     ? candidate.additionalActivity as Record<string, unknown>
     : null;
@@ -190,6 +196,7 @@ export const normalizeDailyDecisionContext = (
   return {
     dateKey: toLocalDateKey(today),
     pain,
+    ...(Array.isArray(candidate?.pains) ? {pains} : {}),
     additionalActivity: contextActivity,
     note,
   };
@@ -231,11 +238,11 @@ export const activityOverlapsWorkout = (
 export const getDailyContextSummary = (context: DailyDecisionContext | null) => {
   if (!context) return "Nothing reported";
   const items: string[] = [];
-  if (context.pain) {
-    const area = PAIN_AREAS.find((item) => item.value === context.pain?.area)?.label ?? "Discomfort";
-    const side = context.pain.side === "not_applicable"
+  for (const pain of painEntries(context)) {
+    const area = PAIN_AREAS.find((item) => item.value === pain.area)?.label ?? "Discomfort";
+    const side = pain.side === "not_applicable"
       ? ""
-      : `${context.pain.side.charAt(0).toUpperCase()}${context.pain.side.slice(1)} `;
+      : `${pain.side.charAt(0).toUpperCase()}${pain.side.slice(1)} `;
     items.push(`${side}${area.toLowerCase()} discomfort`);
   }
   if (context.additionalActivity) {

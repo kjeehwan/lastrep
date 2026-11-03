@@ -5,7 +5,10 @@ export const applyDecisionGuardrails = (
   inputs: DecisionInputs
 ): DecisionOutput => {
   const plan = inputs.plannedWorkout;
-  const pain = inputs.dailyContext?.pain;
+  const context = inputs.dailyContext;
+  const pains = context?.pains ?? (context?.pain ? [context.pain] : []);
+  const pain = [...pains].sort((a,b) => Number(b.affectsPlannedWorkout)-Number(a.affectsPlannedWorkout) ||
+    ({mild:1,moderate:2,severe:3}[b.severity]-{mild:1,moderate:2,severe:3}[a.severity]))[0];
   const activity = inputs.dailyContext?.additionalActivity;
 
   if (plan?.source === "rest_day") {

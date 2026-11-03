@@ -7,6 +7,7 @@ import type { createStyles } from "./workoutLogStyles";
 import { exerciseTargetsText } from "../exerciseTargets";
 import type { EffortScale } from "../effortScale";
 type Props = {
+  openProgressionSettings?: (name: string, unit: "kg" | "lbs") => void;
   openExerciseTargets?: (id: string) => void;
   effortScale?: EffortScale;
   styles: ReturnType<typeof createStyles>;
@@ -33,6 +34,7 @@ type Props = {
   toggleExerciseUnit: (id: string, unit: Unit) => void;
 };
 export function WorkoutExerciseActions({
+  openProgressionSettings,
   openExerciseTargets,
   effortScale = "rpe",
   styles,
@@ -132,6 +134,9 @@ export function WorkoutExerciseActions({
           </Text>
         </TouchableOpacity>
       ) : null}
+      {activeActionMode === "resistance" && activeActionExercise && openProgressionSettings ? <TouchableOpacity style={styles.exerciseOptionRow} accessibilityRole="button" onPress={() => { closeExerciseActions(); openProgressionSettings(activeActionExercise.name, activeActionUnit === "lbs" ? "lbs" : "kg"); }}>
+        <Ionicons name="trending-up-outline" size={18} color={colors.muted} /><Text style={styles.exerciseOptionText}>Progression settings</Text>
+      </TouchableOpacity> : null}
 
       <View style={styles.exerciseReorderRow}>
         <Ionicons name="swap-vertical-outline" size={18} color={colors.muted} />

@@ -92,6 +92,16 @@ const decisionInputsSchema: z.ZodType<DecisionInputs> = z.object({
         })
         .strict()
         .nullable(),
+      pains: z.array(z
+        .object({
+          area: z.enum(["shoulder", "elbow", "wrist_hand", "upper_back", "lower_back", "hip", "knee", "ankle_foot", "other"]),
+          side: z.enum(["left", "right", "both", "not_applicable"]),
+          severity: z.enum(["mild", "moderate", "severe"]),
+          trigger: z.enum(["at_rest", "pressing", "pulling", "overhead", "squatting", "hinging", "running_impact", "other"]),
+          note: z.string().max(240).nullable(),
+          affectsPlannedWorkout: z.boolean(),
+        })
+        .strict()).max(18).optional(),
       additionalActivity: z
         .object({
           type: z.enum(["long_walk_hike", "running", "cycling", "sport", "physical_work", "travel", "other"]),

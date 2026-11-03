@@ -1,3 +1,6 @@
+import { unifiedStates, setupUnified, unifiedHeader, unifiedDialog, unifiedInput, handleUnified, invalidateUnified, syncUnifiedRecovery } from './unified-plan.mjs';
+import { beginProgressOptions, saveProgressOptions, beginProgressWeights, renderProgressWeights, saveProgressWeights, changeProgressWeightChoice, refreshProgressWeightHint } from './progression-settings.mjs';
+import { progressionStates, setupProgression, renderProgression, progressionDetails, applyProgression, undoProgression } from './progression.mjs';
 import { targetDraft, readTargets, renderTargetsSheet, refreshTargetActions } from './exercise-targets.mjs';
 import { renderWarmupSheet, updateWarmupControls } from './workout-warmup-ui.mjs';
 import { installWarmupGestures } from './warmup-gestures.mjs';
@@ -8,9 +11,9 @@ import { socialExamples, socialState, socialDialog, handleSocialAction, socialIn
 import './input-behavior.mjs';
 import { readNotebookPreferences } from './notebook-preferences.mjs';
 import { setReviewState } from './review-state-picker.mjs';
-import { readCheckIn, writeCheckIn, clearCheckIn, checkInFields } from './check-in.mjs';
+import { readCheckIn, writeCheckIn, clearCheckIn, checkInFields, createCheckInDraft, painValidation } from './check-in.mjs';
 import { copy, fixture, catalog, exerciseFromCatalog, lastText, effortValue, guidanceChanges, moveExercise, summary, setUnit, states } from './model.mjs';
-states.unshift(['Exercise targets', 'layout-minimal-targets', 'Targets / configured', 'Exercise targets stay separate from the set log. Open the three-dot menu, then Targets.'], ['Exercise targets', 'layout-minimal-targets-empty', 'Targets / not set', 'No extra row appears until a rep range or target effort is configured.'], ['Minimal layout', 'layout-minimal', 'Compact header / icon actions', 'Combined phase and totals, six visible actions, no routine row.'], ['Minimal layout', 'layout-minimal-cardio', 'Compact header / cardio', 'The same icon actions and compact header with cardio controls.'], ['Layout review', 'layout', 'Workout header / resistance', 'Editable title, balanced spacing and planned session totals.'], ['Layout review', 'layout-tempo', 'Workout header / tempo set', 'The tool row keeps its spacing when a tempo is set.'], ['Layout review', 'layout-cardio', 'Workout header / cardio', 'Zone takes the place of resistance tempo.'], ...sharingStates, ...socialExamples);
+states.unshift(...unifiedStates, ...progressionStates, ['Exercise targets', 'layout-minimal-targets', 'Targets / configured', 'Exercise targets stay separate from the set log. Open the three-dot menu, then Targets.'], ['Exercise targets', 'layout-minimal-targets-empty', 'Targets / not set', 'No extra row appears until a rep range or target effort is configured.'], ['Minimal layout', 'layout-minimal', 'Compact header / icon actions', 'Combined phase and totals, six visible actions, no routine row.'], ['Minimal layout', 'layout-minimal-cardio', 'Compact header / cardio', 'The same icon actions and compact header with cardio controls.'], ['Layout review', 'layout', 'Workout header / resistance', 'Editable title, balanced spacing and planned session totals.'], ['Layout review', 'layout-tempo', 'Workout header / tempo set', 'The tool row keeps its spacing when a tempo is set.'], ['Layout review', 'layout-cardio', 'Workout header / cardio', 'Zone takes the place of resistance tempo.'], ...sharingStates, ...socialExamples);
 
 const $ = (q, root = document) => root.querySelector(q);
 const escape = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -76,6 +79,8 @@ function makeState(id) {
     state.exercises[0].sets.forEach((row, index) => { row.reps = '8'; row.rpe = index === 0 ? '8' : ''; });
     if (!id.endsWith('-empty')) state.exercises[0].targets = { min: 8, max: 12, rpe: 8 };
   }
+  if (id.startsWith('layout-minimal-progression-')) setupProgression(state, id);
+  if (id.startsWith('layout-minimal-today-')) setupUnified(state,id);
   state.sharing = sharingState(id);
   state.social = socialState(id);
   if (id.startsWith('social-')) state.modal = id;
@@ -97,7 +102,7 @@ function makeState(id) {
 
 function loadExample(id, useShared = false) {
   setReviewState(document.querySelector('#example'), states.map(([group, id, title]) => [id, title, group]), id);
-  chosen = id; s = makeState(id); const shared = useShared ? readCheckIn() : null; if (!useShared) clearCheckIn(); if (shared) Object.assign(s, shared); if (s.modal === 'context') s.contextBefore = structuredClone({ ratings: s.ratings, pain: s.pain, activity: s.activity, note: s.note }); lastInput = null; scale = $('#effort').value;
+  chosen = id; s = makeState(id); const shared = useShared ? readCheckIn() : null; if (!useShared) clearCheckIn(); if (shared) { Object.assign(s, shared); syncUnifiedRecovery(s); } if (s.modal === 'context') s.contextBefore = createCheckInDraft(s); lastInput = null; scale = $('#effort').value;
   if (useShared) { const prefs = readNotebookPreferences()?.profile; if (prefs?.units?.effort) { scale = prefs.units.effort; $('#effort').value = scale; } if (prefs?.units?.weight) s.exercises = s.exercises.map(e => e.mode === 'cardio' ? e : setUnit(e, prefs.units.weight)); }
   size = id === 'compact' ? [360, 800] : id === 'landscape' ? [844, 390] : id === 'tablet' ? [800, 1280] : id === 'tablet-wide' ? [1280, 800] : [390, 844];
   theme = id === 'dark'; large = id === 'large'; compare = id === 'active';
@@ -117,6 +122,7 @@ function chips(items, selected, action, data = {}, columns = 3) {
 }
 
 function sessionHeader() {
+  if (s.unified) return unifiedHeader(s,{button});
   if (chosen.startsWith('layout')) {
     const rows = s.exercises.filter(e => e.mode !== 'cardio').flatMap(e => e.sets.map(row => ({...row, unit:e.unit})));
     const volume = rows.reduce((n,row) => n + (Number(row.weight)||0)*(Number(row.reps)||0)/(row.unit === 'lbs' ? 2.2046226218 : 1),0);
@@ -135,7 +141,7 @@ function cardio(e) {
 }
 function exercise(e, index) {
   const undo = s.undoSet?.id === e.id ? `<div class="inline-undo"><span>Set deleted</span>${button('Undo','undo-set')}</div>` : '';
-  return renderWorkoutExercise(e,index,{effortScale:scale,layoutStudy:chosen.startsWith('layout'),renderCardio:cardio,renderNote:ex=>field('Note',`note-${ex.id}`,ex.notes,'e.g. Keep the last rep controlled'),replacement:s.replaceTarget===e.id?{query:s.replaceQuery || '',group:s.replaceGroup || 'All'}:null,undo});
+  return renderWorkoutExercise(e,index,{guidance:s.unified ? '' : renderProgression(e,s.progression),effortScale:scale,layoutStudy:chosen.startsWith('layout'),renderCardio:cardio,renderNote:ex=>field('Note',`note-${ex.id}`,ex.notes,'e.g. Keep the last rep controlled'),replacement:s.replaceTarget===e.id?{query:s.replaceQuery || '',group:s.replaceGroup || 'All'}:null,undo});
 }
 
 function workoutSetup() {
@@ -145,7 +151,8 @@ function workoutSetup() {
   }
   return `<section class="workout-setup" aria-label="Workout setup and sharing"><div class="workout-setup-row">${button('My routines', 'open', 'text', { modal: 'routines' })}${button('Create routine', 'open', 'text', { modal: 'create-routine' })}</div><div class="workout-setup-row">${button('Repeat past workout', 'repeat')}${button('Recommend workout', 'open', 'text', { modal: 'recommend' })}</div>${s.exercises.length ? `<div class="workout-setup-row workout-sharing-action">${button('Share workout', 'sharing-start')}${button('Discard workout', 'open', 'danger', { modal: 'discard' })}</div>` : ''}</section>`;
 }
-function empty() { return `<div class="empty-content"><span class="supporting">Thu, Oct 15</span><h1 class="editorial">Your next session</h1>${paragraph('Choose a routine or add your first exercise.')}<div class="plan-row">${icon('note')}<span class="plan-summary">Today's Plan</span>${button('Review', 'review-plan')}</div></div>${workoutSetup()}${button('+ Add exercise', 'search', '')}`; }
+function routineBuilderActions() { return `<div class="section-stack routine-builder-actions">${button(s.unified?'Add exercise':'+ Add exercise','search',s.unified?'native-add-exercise':'')}${button('Save routine','open','primary',{modal:'finish'})}</div>`; }
+function empty() { if (s.unified) return unifiedHeader(s,{button},true) + (s.unified.routineEditor?'':workoutSetup()) + (s.builder?routineBuilderActions():button(s.unified?'Add exercise':'+ Add exercise','search',s.unified?'native-add-exercise':'')); return `<div class="empty-content"><span class="supporting">Thu, Oct 15</span><h1 class="editorial">Your next session</h1>${paragraph('Choose a routine or add your first exercise.')}<div class="plan-row">${icon('note')}<span class="plan-summary">Today's Plan</span>${button('Review', 'review-plan')}</div></div>${workoutSetup()}${s.builder?routineBuilderActions():button('+ Add exercise', 'search', '')}`; }
 
 function searchPage() {
   const matches = catalog.filter(e => e[1].toLowerCase().includes(s.query.toLowerCase()));
@@ -206,6 +213,7 @@ function warmupDialog(e) { return renderWarmupSheet(e,s.warmup,{shell:dialogShel
 function updateWarmupAction() { updateWarmupControls($('#stage'),getExercise(),s.warmup); }
 
 function modal() {
+  if (s.unified) { const content = unifiedDialog(s,scale,{shell:dialogShell,button}); if(content) return content; }
   if (s.modal.startsWith('social-')) return socialDialog(s, { shell: dialogShell, escape, paragraph });
   if (s.modal.startsWith('share-')) return sharingDialog(s, { shell: dialogShell, button, paragraph, escape });
   const e = getExercise(), sum = summary(s.exercises), actions = (primary, a, secondary = 'Back to workout', sa = 'close') => button(primary, a, 'primary') + (secondary ? button(secondary, sa, '') : '');
@@ -214,16 +222,17 @@ function modal() {
     case 'recommend': return dialogShell('Recommend workout', `${paragraph('Choose a focus')}${chips(['Chest', 'Chest + Triceps', 'Back', 'Back + Biceps', 'Legs', 'Anterior legs', 'Posterior legs', 'Shoulders', 'Shoulders + Arms', 'Arms', 'Push', 'Pull'], s.focus, 'focus', {}, 2)}<h3>Session length</h3>${chips(['Quick', 'Standard', 'Extended'], s.length, 'length')}${paragraph('Volume adapts to recent training and recovery. This prototype loads a fixture, not a generated recommendation.')}`, button('Recommend workout', 'generate-workout', 'primary'));
     case 'create-routine': return dialogShell('Create routine', `${field('Routine name', 'routineName', s.draft.routineName ?? '', 'e.g. Upper body')}${paragraph('Use the exercise editor to build your routine. This is a local mock flow.')}`, actions('Start building', 'build-routine'));
     case 'replace-guard': return dialogShell('Replace this workout?', paragraph('Your current draft has exercises. Replace it with the selected routine, or add the routine to this session.'), button('Replace workout', 'confirm-routine', 'primary') + button('Append instead', 'append-routine', '') + button('Keep current workout', 'close', ''), true);
+    case 'progression-details': return progressionDetails(e, s.progression, scale, {shell:dialogShell,button});
     case 'exercise-targets': return renderTargetsSheet(e, s.targetDraft, { shell: dialogShell, button });
     case 'exercise-targets-help': return dialogShell('Targets', paragraph("Set a rep range, target effort, or both for this exercise's normal working sets. Warm-up sets are excluded.") + paragraph('Log the reps and effort you actually perform in the set rows. They stay separate from your targets.') + paragraph('Target effort follows your RPE/RIR preference in Profile.'), button('Got it', 'targets-back', 'primary'));
-    case 'exercise-menu': return dialogShell(escape(e?.name || 'Exercise options'),renderExerciseMenu(e,s.exercises.indexOf(e),s.exercises.length,{effortScale:scale}),button('Back to workout','close'));
+    case 'exercise-menu': return dialogShell(escape(e?.name || 'Exercise options'),renderExerciseMenu(e,s.exercises.indexOf(e),s.exercises.length,{effortScale:scale}) + (s.unified && e.mode==='resistance' ? button('Progression settings','up-settings-open','workout-option') : ''),button('Back to workout','close'));
     case 'exercise-replace-confirm': return dialogShell('Replace exercise?',paragraph('This will reset the current sets for this exercise.'),button('Replace','exercise-replace-apply','primary')+button('Cancel','close'));
     case 'warmup': return warmupDialog(e);
     case 'replace': return dialogShell('Replace exercise', e?.custom ? paragraph('No automatic suggestions for a custom exercise. Add another exercise manually if needed.') : `${paragraph('Choose an alternative for this mock session.')}${button('Machine chest press', 'replace-exercise', '')}${button('Dumbbell bench press', 'replace-exercise', '')}`);
     case 'set-options': return dialogShell('Set options', `${paragraph(`${escape(e?.name)} · ${e?.sets[s.setIndex]?.type === 'warmup' ? 'Warm-up set' : `Set ${e ? setDisplayRows(e)[s.setIndex].marker : ''}`}`)}<h3>Set type</h3>${chips(['Normal', 'Warm-up', 'Failure', 'Drop'], ({ normal: 'Normal', warmup: 'Warm-up', failure: 'Failure', drop: 'Drop' })[e?.sets[s.setIndex]?.type], 'set-type', {}, 2)}${e?.mode === 'resistance' ? `<h3>Adjust baseline load</h3>${chips(['-10%', '-5%', '0%', '+5%', '+10%'], [], 'percentage', {}, 3)}` : ''}<div class="divider"></div><button class="btn danger" data-action="delete-set">Delete set</button>`);
     case 'rest-detail': return dialogShell('Rest timer', `<div class="stats"><div><strong data-clock="rest">${time(remaining() || e?.rest || 120)}</strong><span>${escape(e?.name ?? 'Bench press')}</span></div></div>${chips(['01:00', '01:30', '02:00', '03:00'], time(e?.rest ?? 120), 'rest-preset', {}, 2)}${field('Custom duration / seconds', 'restDuration', s.draft.restDuration ?? '', 'e.g. 90')}`, button(s.rest ? s.rest.deadline ? 'Pause' : 'Resume' : 'Start rest', s.rest ? 'pause-rest' : 'start-rest', 'primary') + button('Apply custom duration', 'custom-rest', '') + button('Skip rest', 'skip-rest', 'text'));
     case 'session-time': return dialogShell('Session timer', `<div class="stats"><div><strong data-clock="session">${time(s.elapsed)}</strong><span>Elapsed time</span></div></div>${field('Elapsed minutes', 'sessionMinutes', s.draft.sessionMinutes ?? '', 'e.g. 20')}`, actions(s.clockStart && s.clockStart !== 'paused' ? 'Pause timer' : 'Resume timer', 'pause-session') + button('Apply time', 'apply-time', 'text'));
-    case 'weights': return dialogShell('Available weights', `${paragraph(escape(e?.name ?? 'Bench press'))}${field('Weight increment / kg', 'increment', s.draft.increment ?? String(s.step), 'e.g. 2.5')}${paragraph('Use the increment available at your gym. The mock adjustments round down to this increment.')}${s.draft.error ? paragraph(escape(s.draft.error), 'form-error') : ''}`, actions('Save settings', 'save-weights') + button('Clear settings', 'clear-weights', 'text'));
+    case 'weights': if (s.progression && e.id === s.progression.id) return renderProgressWeights(e,s.progression,{shell:dialogShell,button}); return dialogShell('Available weights', `${paragraph(escape(e?.name ?? 'Bench press'))}${field('Weight increment / kg', 'increment', s.draft.increment ?? String(s.step), 'e.g. 2.5')}${paragraph('Use the increment available at your gym. The mock adjustments round down to this increment.')}${s.draft.error ? paragraph(escape(s.draft.error), 'form-error') : ''}`, actions('Save settings', 'save-weights') + button('Clear settings', 'clear-weights', 'text'));
     case 'layout-zone': return dialogShell('Heart-rate zone', `${paragraph('Choose the planned zone for this exercise.')}${chips(['1', '2', '3', '4', '5'], e?.zone, 'cardio-toggle', { id: e?.id, field: 'zone' }, 5)}`, button('Done', 'close', 'primary'));
     case 'tempo': return dialogShell('Tempo', `${paragraph('Eccentric / hold / concentric / hold')}${field('Tempo', 'tempo', s.draft.tempo ?? e?.tempo ?? '', 'e.g. 3-0-1-0')}`, actions('Apply tempo', 'apply-tempo'));
     case 'demo': return dialogShell(escape(e?.name ?? 'Exercise demo'), `<div class="placeholder-demo" role="img" aria-label="Demonstration media not included in this design prototype">${icon('photo')}</div>${paragraph(e?.custom ? 'No demonstration is available for this custom exercise.' : 'Demonstration media is not included in this local design study. The real app retains its existing exercise images.')}`, button('Back to workout', 'close', ''));
@@ -252,8 +261,8 @@ function frame(reference = false) {
   const key = reference || s.keyboard;
   const search = !reference && s.page === 'search', custom = !reference && s.page === 'custom';
   const title = search ? 'Add exercise' : custom ? 'Custom exercise' : s.builder ? 'Routine builder' : 'Workout';
-  const main = search ? searchPage() : custom ? customPage() : s.exercises.length ? sessionHeader() + workoutSetup() + s.exercises.map(exercise).join('') + `<div class="section-stack">${button('+ Add exercise', 'search', '')}${!s.builder ? button('Finish workout', 'open', 'primary', { modal: 'finish' }) : ''}</div>` : empty();
-  return `<div class="frame-wrap"><h3>${reference ? 'Approved / Reps editing' : escape(states.find(v => v[1] === chosen)?.[2] ?? 'Workout')}</h3><section class="device ${chosen.startsWith('layout') ? 'layout-study' : ''} ${chosen.startsWith('layout-minimal') ? 'minimal-layout' : ''} ${theme ? 'dark' : ''} ${large ? 'large-text' : ''} ${reference ? 'reference' : 'interactive'}" style="--width:${size[0]}px;--height:${size[1]}px" ${reference ? 'inert' : ''} aria-label="${reference ? 'Approved static editing reference' : 'Interactive Workout prototype'}"><div class="system-bar" aria-hidden="true"><span>9:41</span><span>LTE&nbsp;&nbsp; 92%</span></div><header class="toolbar notebook-toolbar ${!search && !custom && s.builder ? 'has-header-action' : ''}"><div><button class="icon-button" data-action="${search || custom ? 'back-search' : 'home'}" aria-label="${search || custom ? 'Close exercise picker' : 'Back to Home'}">${icon('left')}</button><h2 class="toolbar-title">${title}</h2>${!search && !custom ? s.builder ? button('Save routine', 'open', 'primary toolbar-action', { modal: 'finish' }) : sharingInboxButton(s.social) : '<span aria-hidden="true"></span>'}</div></header><div class="viewport" tabindex="0" aria-label="Scrollable workout"><div class="page-content">${main}</div></div>${search ? `<footer class="search-footer"><span class="supporting">${s.selected.length} selected</span>${button(`Add (${s.selected.length})`, 'add-selected', 'primary', {}, !s.selected.length)}</footer>` : custom ? `<footer class="search-footer">${button('Cancel', 'back-search')}${button('Create exercise', 'save-custom', 'primary')}</footer>` : !key && s.rest ? restDock() : ''}${key ? keyboard(!reference && (search || custom || s.keyboardAlpha)) : tabs()}${!reference && s.modal ? modal() : ''}${!reference && s.toast ? `<div class="toast" role="status"><span>${escape(s.toast)}</span><button data-action="dismiss-toast" aria-label="Dismiss message">×</button></div>` : ''}</section><p class="frame-caption">${reference ? 'Approved editing reference. Interact with the screen on the left.' : `${size[0]} × ${size[1]} / ${theme ? 'Dark' : 'Paper'} / ${large ? '200%' : '100%'} text. Synthetic records only.`}</p></div>`;
+  const main = s.unified?.entryScreen ? unifiedHeader(s,{button},true) : search ? searchPage() : custom ? customPage() : s.exercises.length ? sessionHeader() + (s.unified?.routineEditor?'':workoutSetup()) + s.exercises.map(exercise).join('') + (s.builder?routineBuilderActions():`<div class="section-stack">${button(s.unified?'Add exercise':'+ Add exercise', 'search', s.unified?'native-add-exercise':'')}${!s.builder ? button('Finish workout', 'open', 'primary', { modal: 'finish' }) : ''}</div>`) : empty();
+  return `<div class="frame-wrap"><h3>${reference ? 'Approved / Reps editing' : escape(states.find(v => v[1] === chosen)?.[2] ?? 'Workout')}</h3><section class="device ${chosen.startsWith('layout') ? 'layout-study' : ''} ${chosen.startsWith('layout-minimal') ? 'minimal-layout' : ''} ${theme ? 'dark' : ''} ${large ? 'large-text' : ''} ${reference ? 'reference' : 'interactive'}" style="--width:${size[0]}px;--height:${size[1]}px" ${reference ? 'inert' : ''} aria-label="${reference ? 'Approved static editing reference' : 'Interactive Workout prototype'}"><div class="system-bar" aria-hidden="true"><span>9:41</span><span>LTE&nbsp;&nbsp; 92%</span></div><header class="toolbar notebook-toolbar"><div><button class="icon-button" data-action="${search || custom ? 'back-search' : 'home'}" aria-label="${search || custom ? 'Close exercise picker' : s.unified?.routineEditor ? 'Back to program setup' : s.unified && !s.unified.entryScreen ? 'Back to workout choices' : 'Back to Home'}">${icon('left')}</button><h2 class="toolbar-title">${title}</h2>${!search && !custom ? s.builder ? '<span aria-hidden="true"></span>' : sharingInboxButton(s.social) : '<span aria-hidden="true"></span>'}</div></header><div class="viewport" tabindex="0" aria-label="Scrollable workout"><div class="page-content">${main}</div></div>${search ? `<footer class="search-footer"><span class="supporting">${s.selected.length} selected</span>${button(`Add (${s.selected.length})`, 'add-selected', 'primary', {}, !s.selected.length)}</footer>` : custom ? `<footer class="search-footer">${button('Cancel', 'back-search')}${button('Create exercise', 'save-custom', 'primary')}</footer>` : !key && s.rest ? restDock() : ''}${key ? keyboard(!reference && (search || custom || s.keyboardAlpha)) : tabs()}${!reference && s.modal ? modal() : ''}${!reference && s.toast ? `<div class="toast" role="status"><span>${escape(s.toast)}</span><button data-action="dismiss-toast" aria-label="Dismiss message">×</button></div>` : ''}</section><p class="frame-caption">${reference ? 'Approved editing reference. Interact with the screen on the left.' : `${size[0]} × ${size[1]} / ${theme ? 'Dark' : 'Paper'} / ${large ? '200%' : '100%'} text. Synthetic records only.`}</p></div>`;
 }
 
 function focusSet(id, index, field, scroll = true) {
@@ -285,10 +294,10 @@ function render(preserve = true) {
   else if (s.modal) $('.interactive .sheet-head .close')?.focus({ preventScroll: true });
 }
 
-function openModal(name) { if (name === 'warmup') s.warmup = prepareWarmup(getExercise()); if (name === 'context') s.contextBefore = structuredClone({ ratings: s.ratings, pain: s.pain, activity: s.activity, note: s.note }); if (name === 'history') s.historyPoint = historySessions(getExercise()).length - 1; if (name === 'tempo') s.draft.tempo = getExercise()?.tempo ?? ''; s.keyboard = false; s.modal = name; render(); const body = $('.interactive .sheet-body'); if (body) body.scrollTop = 0; }
+function openModal(name) { if (name === 'warmup') s.warmup = prepareWarmup(getExercise()); if (name === 'context') s.contextBefore = createCheckInDraft(s); if (name === 'history') s.historyPoint = historySessions(getExercise()).length - 1; if (name === 'tempo') s.draft.tempo = getExercise()?.tempo ?? ''; s.keyboard = false; s.modal = name; render(); const body = $('.interactive .sheet-body'); if (body) body.scrollTop = 0; }
 function performSave() { const current = s; s.modal = 'saving'; render(); setTimeout(() => { if (s !== current || s.modal !== 'saving') return; s.modal = s.deload ? 'deload-saved' : 'saved'; render(false); }, 650); }
 function generatePlan() { const current = s; s.disclosure = true; s.modal = 'plan-busy'; s.plan = 'busy'; render(false); setTimeout(() => { if (s !== current || s.modal !== 'plan-busy') return; s.plan = s.pain === 'None' || !adjustmentCount() ? 'ok' : 'changes'; s.modal = `plan-${s.plan}`; render(false); }, 650); }
-function mutateWorkout() { if (s.plan && !['none', 'applied'].includes(s.plan)) s.plan = 'stale'; }
+function mutateWorkout() { invalidateUnified(s); if (s.plan && !['none', 'applied'].includes(s.plan)) s.plan = 'stale'; }
 function validateInput(el) {
   const raw = el.value.trim(), value = Number(raw), field = el.dataset.field;
   let message = '';
@@ -314,10 +323,13 @@ $('#stage').addEventListener('input', event => {
   const el = event.target;
   if (socialInput(s, el, render)) return;
   if (!el.closest('.interactive')) return;
+  const unifiedInputResult=unifiedInput(s,el);if (unifiedInputResult) { if(unifiedInputResult!=='live')render(); return; }
   if (el.dataset.targetField) { s.targetDraft[el.dataset.targetField] = el.value; s.targetDraft.error = ''; $('.interactive .exercise-target-editor .form-error')?.remove(); refreshTargetActions($('.interactive'), getExercise(), s.targetDraft); return; }
-  if (el.hasAttribute('data-session-title')) { s.title = el.value; return; }
+  if (el.hasAttribute('data-session-title')) { s.title = el.value; invalidateUnified(s); return; }
   if (el.hasAttribute('data-replace-query')) { const at=el.selectionStart; s.replaceQuery=el.value; render(); const next=$('.interactive [data-replace-query]'); next?.focus({preventScroll:true}); next?.setSelectionRange(at,at); return; }
   if (el.dataset.set) { el.setCustomValidity(''); el.removeAttribute('aria-invalid'); el.parentElement.querySelector('.field-error')?.remove(); el.removeAttribute('aria-describedby'); }
+  if (el.dataset.progressOption) { s.progression.optionDraft[el.dataset.progressOption] = el.value; refreshProgressWeightHint($('.interactive'),getExercise(s.progression.id),s.progression); return; }
+  if (el.dataset.progressWeight) { s.progression.weightsDraft[el.dataset.progressWeight] = el.value; return; }
   if (el.dataset.set) { const e = getExercise(el.dataset.set), row = e.sets[Number(el.dataset.index)], k = el.dataset.field; row[k] = k === 'rpe' && scale === 'RIR' ? el.value === '' ? '' : String(10 - Number(el.value)) : el.value; mutateWorkout(); return; }
   if (el.dataset.warmupField) { s.warmup.rows[Number(el.dataset.warmupRow)][el.dataset.warmupField] = el.value; updateWarmupAction(); return; }
   if (el.hasAttribute('data-warmup-weight')) { s.warmup.weight = el.value; updateWarmupAction(); return; }
@@ -328,6 +340,7 @@ $('#stage').addEventListener('input', event => {
     if (name.startsWith('note-')) getExercise(name.slice(5)).notes = el.value;
     if (name.startsWith('cardio-time-')) getExercise(name.slice(12)).time = el.value;
     if (name.startsWith('cardio-distance-')) getExercise(name.slice(16)).distance = el.value;
+    if (name === 'painNote') s.painNote=el.value;
     if (name === 'activity') s.activity = el.value;
     if (name === 'dailyNote') s.note = el.value;
     if (name === 'routineQuery') render();
@@ -360,7 +373,16 @@ $('#stage').addEventListener('click', async event => {
   if (['close', 'outside'].includes(action) && s.modal.startsWith('social-copy-')) { handleSocialAction(s, 'social-copy-dismiss', d, name => { s.modal = name; }); render(); return; }
   const e = getExercise(d.id || s.selectedId);
   if (handleSocialAction(s, action, d, name => { s.modal = name; })) { render(); return; }
+  const unifiedActionResult=handleUnified(s,action,d,scale);if (unifiedActionResult) { if(unifiedActionResult!=='live')render(); return; }
   switch (action) {
+    case 'progression-option': if (s.progression.editOption === d.key) s.progression.editOption = ''; else beginProgressOptions(getExercise(s.progression.id),s.progression,d.key); render(); if (s.progression.editOption) requestAnimationFrame(() => $('.interactive .progress-option-input')?.scrollIntoView({block:'nearest'})); return;
+    case 'progression-save-options': { const saved = saveProgressOptions(getExercise(s.progression.id),s.progression); if (saved && s.unified) { getExercise(s.progression.id).progressOptions = structuredClone(s.progression.options); invalidateUnified(s); } render(); requestAnimationFrame(() => $(saved ? '.interactive .progression-result' : '.interactive [data-progress-option-error]')?.scrollIntoView({block:'nearest'})); return; }
+    case 'progression-cancel-options': s.progression.editOption = ''; s.progression.optionError = ''; render(); return;
+    case 'progression-weights': beginProgressWeights(getExercise(s.progression.id),s.progression,true); s.modal = 'weights'; render(); return;
+    case 'progression-weight-choice': changeProgressWeightChoice(s.progression,d.key,d.value); render(); return;
+    case 'progression-details': s.progression.editOption = ''; s.selectedId = s.progression.id; s.modal = 'progression-details'; s.keyboard = false; render(); return;
+    case 'progression-apply': if (applyProgression(getExercise(s.progression.id),s.progression)) mutateWorkout(); render(); return;
+    case 'progression-undo': if (undoProgression(getExercise(s.progression.id),s.progression)) mutateWorkout(); render(); return;
     case 'exercise-targets': s.selectedId = e.id; s.targetDraft = targetDraft(e, scale); s.modal = 'exercise-targets'; s.keyboard = false; render(); return;
     case 'targets-edit': s.targetDraft.editing = s.targetDraft.editing === d.value ? null : d.value; render(); return;
     case 'targets-help': s.modal = 'exercise-targets-help'; render(); return;
@@ -398,7 +420,7 @@ $('#stage').addEventListener('click', async event => {
       }
       if (d.id) s.selectedId = d.id; openModal(d.modal); return;
     }
-    case 'close': case 'outside': if (s.modal === 'exercise-targets-help') { s.modal = 'exercise-targets'; render(); return; } if (s.modal === 'saving') return; if (s.modal === 'context' && s.contextBefore) Object.assign(s, s.contextBefore); s.contextBefore = null; s.modal = ''; render(); $('.interactive .toolbar .btn')?.focus({ preventScroll: true }); return;
+    case 'close': case 'outside': if (s.modal === 'weights' && s.progression?.weightsReturn) { s.progression.weightsReturn = false; s.modal = s.unified ? 'up-settings' : 'progression-details'; render(); return; } if (s.modal === 'exercise-targets-help') { s.modal = 'exercise-targets'; render(); return; } if (s.modal === 'saving') return; if (s.modal === 'context' && s.contextBefore) Object.assign(s, s.contextBefore); s.contextBefore = null; s.modal = ''; render(); $('.interactive .toolbar .btn')?.focus({ preventScroll: true }); return;
     case 'hide-keyboard': s.keyboard = false; render(); $('.interactive .viewport')?.focus({ preventScroll: true }); return;
     case 'dismiss-toast': s.toast = ''; render(); return;
     case 'tab': if (d.value === 'Home') location.href = './home.html'; else if (d.value === 'Nutrition') location.href = './nutrition.html'; else if (d.value === 'Sleep') location.href = './sleep.html'; else if (d.value === 'Profile') location.href = './profile.html'; else if (d.value !== 'Workout') toast('This destination is outside the current browser studies.'); return;
@@ -450,7 +472,7 @@ $('#stage').addEventListener('click', async event => {
     case 'percentage': { const row = getExercise().sets[s.setIndex]; if (row.weight) row.weight = String(Number((Number(row.weight) * (1 + Number(d.value.replace('%', '')) / 100)).toFixed(2))); s.modal = ''; mutateWorkout(); render(); return; }
     case 'move': s.exercises = moveExercise(s.exercises, s.selectedId, Number(d.direction)); mutateWorkout(); render(); return;
     case 'unit': s.exercises = s.exercises.map(ex => ex.id === s.selectedId ? setUnit(ex, d.value) : ex); mutateWorkout(); render(); return;
-    case 'exercise-weights': openModal('weights'); return;
+    case 'exercise-weights': if (s.progression && e.id === s.progression.id) beginProgressWeights(e,s.progression,false); openModal('weights'); return;
     case 'exercise-favorite': getExercise().favorite=!getExercise().favorite; render(); return;
     case 'replace-inline': s.replaceTarget=s.selectedId; s.replaceQuery=''; s.replaceGroup='All'; s.modal=''; render(); return;
     case 'exercise-replace-replace-group': s.replaceGroup=d.value; render(); return;
@@ -475,15 +497,16 @@ $('#stage').addEventListener('click', async event => {
     case 'session-time': openModal('session-time'); return;
     case 'pause-session': if (s.clockStart && s.clockStart !== 'paused') { s.elapsed += Math.floor((Date.now() - s.clockStart) / 1000); s.clockStart = 'paused'; } else s.clockStart = Date.now(); render(); return;
     case 'apply-time': { const value = Number(s.draft.sessionMinutes); if (!Number.isFinite(value) || value < 0) { toast('Enter elapsed minutes of zero or more.'); return; } s.elapsed = Math.round(value * 60); if (s.clockStart && s.clockStart !== 'paused') s.clockStart = Date.now(); s.modal = ''; render(); return; }
-    case 'save-weights': { const value = Number(s.draft.increment ?? s.step); if (!Number.isFinite(value) || value <= 0) { s.draft.error = 'Enter an increment greater than zero.'; render(); return; } s.step = value; s.draft.error = ''; s.modal = ''; if (s.plan === 'changes') s.plan = 'stale'; render(); return; }
-    case 'clear-weights': s.step = 2.5; s.draft.increment = ''; s.modal = ''; render(); return;
+    case 'save-weights': { if (s.progression && e.id === s.progression.id) { if (saveProgressWeights(e,s.progression)) s.modal = s.progression.weightsReturn ? s.unified ? 'up-settings' : 'progression-details' : ''; render(); return; } const value = Number(s.draft.increment ?? s.step); if (!Number.isFinite(value) || value <= 0) { s.draft.error = 'Enter an increment greater than zero.'; render(); return; } s.step = value; s.draft.error = ''; s.modal = ''; if (s.plan === 'changes') s.plan = 'stale'; render(); return; }
+    case 'clear-weights': if (s.progression && e.id === s.progression.id) { e.availableWeights = null; s.modal = s.progression.weightsReturn ? s.unified ? 'up-settings' : 'progression-details' : ''; render(); return; } s.step = 2.5; s.draft.increment = ''; s.modal = ''; render(); return;
     case 'apply-tempo': getExercise().tempo = s.draft.tempo?.trim() || '';  s.modal = ''; toast('Tempo saved in this mock session.'); return;
     case 'cardio-toggle': e[d.field] = e[d.field] === d.value ? '' : d.value; render(); return;
     case 'review-plan': if (!s.disclosure) openModal('disclosure'); else if (s.plan === 'applied') openModal('plan-applied'); else generatePlan(); return;
     case 'accept-disclosure': case 'generate-plan': generatePlan(); return;
     case 'toggle-why': s.why = !s.why; render(); return;
     case 'pain': s.pain = d.value; render(); return;
-    case 'save-context': writeCheckIn(s); s.contextBefore = null; s.modal = ''; s.plan = s.plan === 'none' ? 'none' : 'stale'; render(); return;
+    case 'pain-detail': s[d.key]=d.value;render();return;
+    case 'save-context': if(painValidation(s)){s.toast=painValidation(s);render();return;}writeCheckIn(s); s.contextBefore = null; s.modal = ''; s.plan = s.plan === 'none' ? 'none' : 'stale'; render(); return;
     case 'apply-plan': s.planBefore = copy(s.exercises); s.exercises = guidanceChanges(s.exercises, s.step); s.planAfter = JSON.stringify(s.exercises); s.plan = 'applied'; s.modal = ''; render(); return;
     case 'undo-plan': if (s.planAfter === JSON.stringify(s.exercises)) { s.exercises = copy(s.planBefore); s.planAfter = null; s.plan = 'changes'; s.modal = ''; render(); } return;
     case 'followed': s.followed = d.value; render(); return;
@@ -507,6 +530,7 @@ $('#stage').addEventListener('click', async event => {
 });
 
 document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && s.modal === 'weights' && s.progression?.weightsReturn) { s.progression.weightsReturn = false; s.modal = s.unified ? 'up-settings' : 'progression-details'; render(); return; }
   if (event.key === 'Escape' && s.modal === 'exercise-targets-help') { s.modal = 'exercise-targets'; render(); return; }
   if (event.key === 'Escape' && s.modal.startsWith('social-copy-')) { handleSocialAction(s, 'social-copy-dismiss', {}, name => { s.modal = name; }); render(); return; }
 

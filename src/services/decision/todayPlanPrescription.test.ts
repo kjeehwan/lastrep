@@ -13,6 +13,11 @@ const adjustment: ExercisePlanAdjustment = {
 };
 
 describe("per-set plan preview", () => {
+  it("keeps mixed prescriptions distinct in the compact review row", () => {
+    expect(exerciseAdjustmentText(adjustment, "kg", exercise, "rpe", true)).toBe(
+      "1 × 18 × 60 kg + 2 × 18 × 50 kg → 1 × 18 × 54 kg + 2 × 18 × 45 kg"
+    );
+  });
   it("expresses effort limits in the selected scale with the correct direction", () => {
     const cap = { ...adjustment, loadPct: 0, plannedPrescription: undefined, recommendedPrescription: undefined };
     expect(exerciseAdjustmentText(cap, "kg")).toBe("Cap at RPE 8");

@@ -48,6 +48,7 @@ export type AdditionalActivityContext = {
 };
 
 export type DailyDecisionContext = {
+  pains?: PainContext[];
   dateKey: string;
   pain: PainContext | null;
   additionalActivity: AdditionalActivityContext | null;

@@ -1,3 +1,6 @@
+import { useWorkoutPrograms } from "../../src/workouts/useWorkoutPrograms";
+import { programCalendarEntry } from "../../src/workouts/programCalendar";
+import { readRecoveryCheckIn, recoveryComplete } from "../../src/services/decision/recoveryCheckIn";
 import { SharingInboxButton } from "../../src/sharing/SharingProvider";
 import { DailyMovement } from "../../src/health/DailyMovement";
 import { EditWorkoutDetailsSheet } from "../../src/home/EditWorkoutDetailsSheet";
@@ -40,6 +43,7 @@ import {
   deleteDoc,
   doc,
   getDocs,
+  getDoc,
   limit,
   onSnapshot,
   orderBy,
@@ -103,12 +107,7 @@ import {
   toDateKey,
   type WorkoutSummary,
 } from "../../src/workouts/homeInsights";
-import {
-  buildProgramCalendarEntryForDate,
-  buildWorkoutCountByDateMap,
-  normalizeProgram,
-  type WorkoutProgram,
-} from "../../src/workouts/program";
+
 
 const HOME_INPUTS_KEY_PREFIX = "home-inputs-v1";
 const HOME_READINESS_HISTORY_KEY_PREFIX = "home-readiness-history-v1";
@@ -261,7 +260,7 @@ function Home() {
   const [workoutsLoading, setWorkoutsLoading] = useState(false);
   const [workouts, setWorkouts] = useState<WorkoutSummary[]>([]);
   const [workoutHistoryStatus, setWorkoutHistoryStatus] = useState<{ uid: string; hasWorkouts: boolean } | null>(null);
-  const [workoutProgram, setWorkoutProgram] = useState<WorkoutProgram | null>(null);
+  const programs = useWorkoutPrograms(uid);
   const [insightsError, setInsightsError] = useState<string | null>(null);
   const [seedLoading, setSeedLoading] = useState(false);
   const [nutritionSnapshot, setNutritionSnapshot] = useState<NutritionSnapshot>({
@@ -363,6 +362,13 @@ function Home() {
         if (!data) return; // An empty offline cache is not a loaded generic account.
         setProfileDataLoaded(true);
         setRawDailyContext(data?.todayPlanContext ?? null);
+        const checkIn = readRecoveryCheckIn(data?.recoveryCheckIn);
+        if (checkIn) {
+          setHasRecoveryCheckIn(recoveryComplete(checkIn));
+          setSoreness(checkIn.ratings.soreness ?? 4);
+          setFatigue(checkIn.ratings.fatigue ?? 4);
+          setMotivation(checkIn.ratings.motivation ?? 6);
+        }
         setBodyHistory(normalizeBodyCompositionHistory(data?.[USER_BODY_COMPOSITION_FIELD]?.history));
         setBodyHistoryLoaded(true);
         setBodyHistoryError(false);
@@ -383,7 +389,7 @@ function Home() {
         }
         setWeightUnit(resolveWeightUnit(data));
         setEnergyUnit(resolveEnergyUnit(data));
-        setWorkoutProgram(normalizeProgram(data?.workoutProgram));
+
         setTrainingPhaseStartedAt(
           data?.trainingPhaseStartedAt instanceof Timestamp ? data.trainingPhaseStartedAt : null
         );
@@ -412,14 +418,14 @@ function Home() {
     let active = true;
     const task = scheduleAfterInteractions(async () => {
       try {
-        const raw = await AsyncStorage.getItem(`${HOME_INPUTS_KEY_PREFIX}:${uid}`);
+        const document = await getDoc(doc(db,"users",uid));
         if (!active) return;
-        const parsed = raw ? JSON.parse(raw) : {};
+        const checkIn = readRecoveryCheckIn(document.data()?.recoveryCheckIn);
         recoveryInputsHydratedRef.current = uid;
-        setHasRecoveryCheckIn(Boolean(raw));
-        setSoreness(typeof parsed.soreness === "number" ? parsed.soreness : 4);
-        setFatigue(typeof parsed.fatigue === "number" ? parsed.fatigue : 4);
-        setMotivation(typeof parsed.motivation === "number" ? parsed.motivation : 6);
+        setHasRecoveryCheckIn(recoveryComplete(checkIn));
+        setSoreness(checkIn?.ratings.soreness ?? 4);
+        setFatigue(checkIn?.ratings.fatigue ?? 4);
+        setMotivation(checkIn?.ratings.motivation ?? 6);
       } catch (error) {
         console.log("Failed to load recovery inputs", error);
       }
@@ -427,25 +433,6 @@ function Home() {
     return () => { active = false; task.cancel(); };
   }, [uid]));
 
-  useEffect(() => {
-    const save = async () => {
-      if (!uid || !hasRecoveryCheckIn || recoveryInputsHydratedRef.current !== uid) return;
-      const key = `${HOME_INPUTS_KEY_PREFIX}:${uid}`;
-      try {
-        await AsyncStorage.setItem(
-          key,
-          JSON.stringify({
-            soreness,
-            fatigue,
-            motivation,
-          })
-        );
-      } catch (e) {
-        console.log("Failed to save home inputs", e);
-      }
-    };
-    void save();
-  }, [uid, soreness, fatigue, motivation, hasRecoveryCheckIn]);
 
   useFocusEffect(useCallback(() => {
     let active = true;
@@ -470,7 +457,7 @@ function Home() {
         const inputsRaw = await AsyncStorage.getItem(`${HOME_INPUTS_KEY_PREFIX}:${uid}`);
         if (!active) return;
         const inputs = inputsRaw ? JSON.parse(inputsRaw) : null;
-        if (inputs && typeof inputs.soreness === "number" && typeof inputs.fatigue === "number" && typeof inputs.motivation === "number") {
+        if (inputs?.dateKey === toDateKey(new Date()) && typeof inputs.soreness === "number" && typeof inputs.fatigue === "number" && typeof inputs.motivation === "number") {
           parsedHistory[toDateKey(new Date())] = inputs;
         }
       } catch { /* Keep the recorded history if the current check-in cannot be read. */ }
@@ -825,21 +812,9 @@ function Home() {
     () => workouts.filter((workout) => toDateKey(workout.date) === selectedDateKey),
     [workouts, selectedDateKey]
   );
-  const workoutCountByDate = useMemo(
-    () => buildWorkoutCountByDateMap(workouts.map((workout) => workout.date)),
-    [workouts]
-  );
-  const selectedProgramEntry = useMemo(
-    () =>
-      workoutProgram
-        ? buildProgramCalendarEntryForDate(
-            new Date(`${selectedDateKey}T12:00:00`),
-            workoutProgram,
-            workoutCountByDate
-          )
-        : null,
-    [selectedDateKey, workoutCountByDate, workoutProgram]
-  );
+  const selectedProgramEntry = useMemo(() => programs.active && programs.run
+    ? programCalendarEntry(programs.active, programs.run, selectedDateKey) : null,
+    [programs.active, programs.run, selectedDateKey]);
 
   const recoveryReadiness = useMemo(() => {
     const sleepRatio =
@@ -1641,7 +1616,6 @@ function Home() {
 
       {showAdjustInputsModal ? <HomeRecoverySheet initial={{ soreness, fatigue, motivation }} contextSummary={getDailyContextSummary(dailyContext)} onContext={() => setContextVisible(true)} onClose={() => setShowAdjustInputsModal(false)} onSave={async (value) => {
         if (!uid) return;
-        await AsyncStorage.setItem(`${HOME_INPUTS_KEY_PREFIX}:${uid}`, JSON.stringify(value));
         setHasRecoveryCheckIn(true); setSoreness(value.soreness); setFatigue(value.fatigue); setMotivation(value.motivation); setShowAdjustInputsModal(false);
       }} /> : null}
       {contextVisible ? <TodayPlanContextModal key={`${uid}:${dailyContext?.dateKey ?? "new"}`} visible context={dailyContext} plan={contextPlan} saving={contextSaving} onClose={() => setContextVisible(false)} onSave={(context: DailyDecisionContext) => { if (!uid || contextSaving) return; setContextSaving(true); const updatedAt = Timestamp.now(); void updateDoc(doc(db, "users", uid), { todayPlanContext: { ...context, updatedAt }, activePainContext: context.pain ? { ...context.pain, updatedAt } : deleteField() }).then(() => setContextVisible(false)).catch(() => showAppAlert("Context not saved", "Please try again.")).finally(() => setContextSaving(false)); }} /> : null}

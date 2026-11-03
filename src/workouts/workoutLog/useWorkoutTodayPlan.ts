@@ -1,13 +1,15 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { deleteField, doc, Timestamp, updateDoc } from "firebase/firestore";
+import { deleteField, doc, onSnapshot, Timestamp, updateDoc } from "firebase/firestore";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { db } from "../../config/firebaseConfig";
 import { EXERCISE_CATALOG } from "../exerciseCatalog";
 import type { DailyDecisionContext, LastResultPayload, PlannedWorkoutSummary } from "../../types/decision";
-import { loadWorkoutPlanContext, RECOVERY_INPUTS_KEY, type RecoveryInputs } from "../../services/decision/loadWorkoutPlanContext";
+import { loadWorkoutPlanContext, type RecoveryInputs } from "../../services/decision/loadWorkoutPlanContext";
 import { buildDeterministicTodayPlan } from "../../services/decision/todayPlanEngine";
 import { hashDecisionInputs } from "../../services/decision/inputHash";
 import { showAppAlert } from "../../ui/appDialog";
+import { recoveryComplete } from "../../services/decision/recoveryCheckIn";
+import { planContextRevision } from "../../services/decision/planContextRevision";
+import { newDeloadPeriod } from "../deload";
 
 export function useWorkoutTodayPlan(uid: string | null, plannedWorkout: PlannedWorkoutSummary, onReviewed?: () => void) {
   const [plan, setPlan] = useState<LastResultPayload | null>(null);
@@ -20,12 +22,18 @@ export function useWorkoutTodayPlan(uid: string | null, plannedWorkout: PlannedW
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [recovery, setRecovery] = useState<RecoveryInputs>({ soreness: 4, fatigue: 4, motivation: 6 });
-  const [inputsChanged, setInputsChanged] = useState(false);
+  const [contextSnapshot,setContextSnapshot] = useState<{uid:string;revision:string}|null>(null);
+  const [reviewedRevision,setReviewedRevision] = useState<string|null>(null);
+  const inputsChanged = Boolean(plan && contextSnapshot?.uid===uid && reviewedRevision!==contextSnapshot.revision);
   const [contextVisible, setContextVisible] = useState(false);
   const [contextSaving, setContextSaving] = useState(false);
   const mountedRef = useRef(true);
   const requestRef = useRef(0);
   const uidRef = useRef(uid);
+  useEffect(()=>{
+    if(!uid)return;
+    return onSnapshot(doc(db,"users",uid),document=>setContextSnapshot({uid,revision:planContextRevision(document.data()??{})}));
+  },[uid]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -36,7 +44,7 @@ export function useWorkoutTodayPlan(uid: string | null, plannedWorkout: PlannedW
   const reset = useCallback(() => {
     requestRef.current += 1;
     setPlan(null); setVisible(false); setBusy(false); setError(null);
-    setInputsChanged(false); setContextVisible(false); setContextSaving(false);
+    setReviewedRevision(null); setContextVisible(false); setContextSaving(false);
   }, [setVisible]);
 
   const review = useCallback(async () => {
@@ -46,14 +54,17 @@ export function useWorkoutTodayPlan(uid: string | null, plannedWorkout: PlannedW
     setBusy(true);
     setError(null);
     try {
-      const snapshot = await loadWorkoutPlanContext(uid, plannedWorkout, inputsChanged ? recovery : undefined);
+      const snapshot = await loadWorkoutPlanContext(uid, plannedWorkout);
       if (request !== requestRef.current || uidRef.current !== uid) return;
+      if (!recoveryComplete(snapshot.recoveryCheckIn)) {
+        setPlan(null); setVisible(false); setContextVisible(true); return;
+      }
       const result = buildDeterministicTodayPlan(snapshot.inputs, snapshot.workouts, new Date(), EXERCISE_CATALOG, snapshot.sleepTargetHours);
       const payload = { createdAt: Timestamp.now(), inputs: snapshot.inputs, result };
       setPlan(payload);
       if (visibleRef.current) onReviewed?.();
       setRecovery(snapshot.recovery);
-      setInputsChanged(false);
+      setReviewedRevision(snapshot.contextRevision);
       void updateDoc(doc(db, "users", uid), {
         "usage.decisions.lastResult": payload,
         "usage.decisions.lastInputHash": hashDecisionInputs(snapshot.inputs),
@@ -65,14 +76,16 @@ export function useWorkoutTodayPlan(uid: string | null, plannedWorkout: PlannedW
     } finally {
       if (request === requestRef.current && uidRef.current === uid) setBusy(false);
     }
-  }, [uid, plannedWorkout, inputsChanged, recovery, onReviewed, setVisible]);
+  }, [uid, plannedWorkout, onReviewed, setVisible]);
 
   const changeRecovery = (key: keyof RecoveryInputs, value: number) => {
-    const next = { ...recovery, [key]: Math.round(value) };
-    setRecovery(next);
-    setInputsChanged(true);
-    if (uid) void AsyncStorage.setItem(`${RECOVERY_INPUTS_KEY}:${uid}`, JSON.stringify(next))
-      .catch((failure) => console.log("Failed to save recovery inputs", failure));
+    // Legacy callers also enter the shared staged form; there is no separate local check-in.
+    setContextVisible(true);
+  };
+  const changeDeload = async (enabled:boolean) => {
+    if(!uid||uidRef.current!==uid)throw Error("Your account changed.");
+    await updateDoc(doc(db,"users",uid),{workoutDeload:enabled?newDeloadPeriod(String(Timestamp.now().toMillis())):deleteField()});
+    if(enabled&&uidRef.current===uid)await review();
   };
 
   const saveContext = async (context: DailyDecisionContext) => {
@@ -96,5 +109,5 @@ export function useWorkoutTodayPlan(uid: string | null, plannedWorkout: PlannedW
   };
 
   return { reset, plan, setPlan, visible, setVisible, busy, error, recovery, inputsChanged, review, changeRecovery,
-    contextVisible, setContextVisible, contextSaving, saveContext };
+    contextVisible, setContextVisible, contextSaving, saveContext,changeDeload };
 }

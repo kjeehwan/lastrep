@@ -449,6 +449,7 @@ export function useWorkoutExerciseCards({
                 style={[styles.input, styles.metaInput]}
               />
             </View>
+            {!isCardio && exerciseTargetsText(ex.targets, effortScale) ? <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Edit ${ex.name} targets`} onPress={() => cardActions.openExerciseTargets?.(ex.id)} style={{ minHeight: 44, justifyContent: "center", marginTop: 4 }}><Text style={[styles.muted, { fontFamily: notebookFonts.body, fontSize: 14, lineHeight: 20, includeFontPadding: false }]}>Target: {exerciseTargetsText(ex.targets, effortScale)}</Text></TouchableOpacity> : null}
             {!isCardio ? (
               <TouchableOpacity
                 accessibilityRole="button"
@@ -463,7 +464,6 @@ export function useWorkoutExerciseCards({
                 <Text style={styles.linkText}>+ Add warm-up</Text>
               </TouchableOpacity>
             ) : null}
-            {!isCardio && exerciseTargetsText(ex.targets, effortScale) ? <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Edit ${ex.name} targets`} onPress={() => cardActions.openExerciseTargets?.(ex.id)} style={{ minHeight: 36, justifyContent: "center", marginBottom: 8 }}><Text style={[styles.muted, { fontFamily: notebookFonts.body, fontSize: 14 }]}>Target: {exerciseTargetsText(ex.targets, effortScale)}</Text></TouchableOpacity> : null}
             <View
               style={[
                 styles.setHeaderRow,

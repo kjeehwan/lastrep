@@ -89,6 +89,19 @@ describeIfFirestoreEmulator("firestore entitlement rules", () => {
   it("documents the emulator-only dev override policy", () => {
     expect(ENTITLEMENT_DEV_OVERRIDE_POLICY).toBe("emulator_only");
   });
+  it("isolates programs, runs and completion records by owner", async () => {
+    const alice = testEnv.authenticatedContext("alice").firestore();
+    const bob = testEnv.authenticatedContext("bob").firestore();
+    for (const path of ["workoutPrograms/p", "workoutPrograms/p/runs/r", "workoutPrograms/p/runs/r/occurrences/0"]) {
+      const own = doc(alice, `users/alice/${path}`);
+      await assertSucceeds(setDoc(own, { name: "Test", status: "completed" }));
+      await assertSucceeds(getDoc(own));
+      await assertFails(getDoc(doc(bob, `users/alice/${path}`)));
+      await assertFails(setDoc(doc(bob, `users/alice/${path}`), { name: "Changed" }));
+      await assertFails(deleteDoc(doc(bob, `users/alice/${path}`)));
+      await assertSucceeds(deleteDoc(own));
+    }
+  });
 
   it("prevents clients from forging cloud-photo metadata or upload lifecycle records", async () => {
     const db = testEnv.authenticatedContext("alice").firestore();

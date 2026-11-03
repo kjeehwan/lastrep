@@ -28,6 +28,7 @@ export const hashDecisionInputs = (inputs: DecisionInputs): string => {
     motivation: inputs.motivation,
     trainingPhase: inputs.trainingPhase,
     dietPhase: inputs.dietPhase,
+    trainingPhaseWeek:inputs.trainingPhaseWeek??null,dietPhaseWeek:inputs.dietPhaseWeek??null,deload:inputs.deload??null,
     nutrition: inputs.nutrition
       ? {
           caloriesConsumedToday: inputs.nutrition.caloriesConsumedToday,
@@ -48,11 +49,15 @@ export const hashDecisionInputs = (inputs: DecisionInputs): string => {
             name: exercise.name,
             mode: exercise.mode,
             availableWeights: exercise.availableWeights ?? null,
+            targets: exercise.targets ?? null,
+            progression: exercise.progression ?? null,
+            deloadAppliedId:exercise.deloadAppliedId??null,
             sets: exercise.sets.map((set) => ({
               weightKg: set.weightKg,
               reps: set.reps,
               setType: set.setType,
               done: set.done,
+              rpe: set.rpe ?? null,
             })),
           })) ?? null,
         }
@@ -75,6 +80,7 @@ export const hashDecisionInputs = (inputs: DecisionInputs): string => {
     dailyContext: inputs.dailyContext
       ? {
           dateKey: inputs.dailyContext.dateKey,
+          ...(inputs.dailyContext.pains ? {pains:inputs.dailyContext.pains} : {}),
           pain: inputs.dailyContext.pain
             ? {
                 area: inputs.dailyContext.pain.area,

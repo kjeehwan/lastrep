@@ -1,3 +1,6 @@
+import { painEntries, primaryPain } from "./painContext";
+import { performanceProgression } from "../../workouts/performanceProgression";
+import { deloadSuggestion } from "../../workouts/deload";
 import type {
   AdditionalActivityContext,
   DecisionInputs,
@@ -134,7 +137,7 @@ const plannedPrescriptionFor = (name: string, inputs: DecisionInputs): ExerciseP
   const needle = normalize(parsePlannedExerciseName(name));
   const exercise = inputs.plannedWorkout?.exercises?.find((item) => normalize(item.name) === needle);
   if (!exercise || exercise.mode === "cardio") return null;
-  const workingSets = exercise.sets.filter((set) => !set.done && set.setType !== "warmup");
+  const workingSets = exercise.sets.filter((set) => !set.done && set.setType === "normal" && set.rpe == null);
   if (!workingSets.length) return null;
   const representative = workingSets.find((set) => set.weightKg != null || set.reps != null) ?? workingSets[0];
   return {
@@ -211,8 +214,12 @@ const buildExerciseAdjustment = (
     }
     return attachPrescriptions(adjustment, plannedPrescription, availableWeights);
   };
-  const pain = inputs.dailyContext?.pain;
+  const pains = painEntries(inputs.dailyContext);
+  const pain = [...pains].sort((a,b) =>
+    (painDemand(b,catalogExercise,exerciseName)-painDemand(a,catalogExercise,exerciseName))*10 +
+    ({mild:1,moderate:2,severe:3}[b.severity]-{mild:1,moderate:2,severe:3}[a.severity]))[0];
   const painLevel = painDemand(pain, catalogExercise, exerciseName);
+  const deloadAlreadyApplied=Boolean(inputs.deload&&inputs.plannedWorkout?.exercises?.find(exercise=>normalize(exercise.name)===normalize(exerciseName))?.deloadAppliedId===inputs.deload.id);
   const activityLevel = activityDemand(inputs.dailyContext?.additionalActivity, catalogExercise, exerciseName);
   const recentOverlap = toleratesFrequentTraining ? 0 : recentMuscleDemand(catalogExercise, workouts, now, catalog);
   const recentMaxEffort = (performance?.lastAverageRpe ?? 0) >= 9;
@@ -232,6 +239,7 @@ const buildExerciseAdjustment = (
     });
   }
   if (painLevel >= 2) {
+    if(deloadAlreadyApplied)return finish({exerciseName,action:"avoid",loadPct:0,setDelta:0,repsDelta:0,targetRpe:null,reason:"This exercise is already adjusted for the deload. Review the reported discomfort before continuing; another automatic reduction cannot establish a suitable prescription."});
     if (isCardio) {
       return finish({
         exerciseName,
@@ -254,6 +262,7 @@ const buildExerciseAdjustment = (
       reason: `This movement overlaps with the reported ${formatPainArea(pain!.area)} discomfort.`,
     });
   }
+  if(deloadAlreadyApplied)return finish({exerciseName,action:"as_planned",loadPct:0,setDelta:0,repsDelta:0,targetRpe:7,reason:"This workout already has the deload prescription. Review effort during the session rather than repeatedly reducing the planned sets."});
   if (isCardio) {
     if (activityLevel >= 2 || score < 55 || inputs.fatigue >= 7) {
       return finish({
@@ -286,6 +295,11 @@ const buildExerciseAdjustment = (
       targetRpe: 7,
       reason: "Recent hard activity already stressed the muscles used by this exercise.",
     });
+  }
+  if(inputs.deload&&plannedPrescription){
+    const applied=inputs.plannedWorkout?.exercises?.find(exercise=>normalize(exercise.name)===normalize(exerciseName))?.deloadAppliedId===inputs.deload.id;
+    return finish({exerciseName,action:applied?"as_planned":"reduce",loadPct:applied?0:-10,setDelta:applied?0:Math.max(1,Math.ceil(plannedPrescription.sets*.6))-plannedPrescription.sets,repsDelta:0,targetRpe:7,
+      reason:applied?"This workout already has the deload prescription. Keep the planned sets.":`Deload through ${inputs.deload.endsDateKey}: reduce load and volume while preserving your normal routine.`});
   }
   if (recentMaxEffort) {
     const supportedWeight = plannedPrescription?.weightKg != null && plannedPrescription.reps != null && performance?.estimated1RmKg
@@ -356,26 +370,13 @@ const buildExerciseAdjustment = (
       reason: "Recovery is strong, but recent calorie intake is below target, so repeat the proven prescription instead of progressing it.",
     });
   }
-  if (
-    score >= 80 &&
-    performance &&
-    performance.sessions > 0 &&
-    (performance.lastAverageRpe == null || performance.lastAverageRpe <= 8) &&
-    performance.trend !== "declining"
-  ) {
-    const progressLoad = inputs.trainingPhase === "Hypertrophy" ? 0 : 2.5;
-    const progressReps = inputs.trainingPhase === "Hypertrophy" ? 1 : 0;
-    return finish({
-      exerciseName,
-      action: "progress",
-      loadPct: progressLoad,
-      setDelta: 0,
-      repsDelta: progressReps,
-      targetRpe: 8,
-      reason: inputs.trainingPhase === "Hypertrophy"
-        ? "Recovery is strong and recent performance supports adding one rep before adding load."
-        : `Recovery is strong and recent performance supports a small load increase for the ${inputs.trainingPhase.toLowerCase()} phase.`,
-    });
+  const plannedExercise = inputs.plannedWorkout?.exercises?.find(exercise => normalize(exercise.name) === normalize(exerciseName));
+  const progression = plannedExercise ? performanceProgression(plannedExercise, workouts, now) : null;
+  if (score >= 70 && !nutritionLimitsProgression && progression?.candidate && plannedPrescription?.weightKg && plannedPrescription.reps != null) {
+    const candidate = progression.candidate;
+    return finish({ exerciseName, action: "progress", loadPct: (candidate.weightKg / plannedPrescription.weightKg - 1) * 100,
+      setDelta: 0, repsDelta: candidate.reps - plannedPrescription.reps,
+      targetRpe: plannedExercise?.targets?.targetRpe ?? null, reason: candidate.reason });
   }
   return finish({
     exerciseName,
@@ -384,9 +385,7 @@ const buildExerciseAdjustment = (
     setDelta: 0,
     repsDelta: 0,
     targetRpe: null,
-    reason: performance?.sessions
-      ? "Repeat the proven prescription and use today's effort to guide the next progression."
-      : "No comparable history is available, so keep the planned prescription conservative.",
+    reason: progression?.reason || "Today's context does not support an increase. Keep the planned prescription.",
   });
 };
 
@@ -401,7 +400,7 @@ export const buildDeterministicTodayPlan = (
 ): DecisionOutput => {
   const score = recoveryScore(inputs);
   const plan = inputs.plannedWorkout ?? { source: "none", title: null, exerciseNames: [] };
-  const pain = inputs.dailyContext?.pain;
+  const pain = primaryPain(painEntries(inputs.dailyContext));
   const activity = inputs.dailyContext?.additionalActivity;
 
   if (plan.source === "none") {
@@ -501,6 +500,7 @@ export const buildDeterministicTodayPlan = (
     decision,
     headline,
     explanation,
+    ...(deloadSuggestion(inputs,workouts,now)?{deloadSuggestion:deloadSuggestion(inputs,workouts,now)!}:{}),
     ...(caution ? { caution } : {}),
     ...(decision === "PULL_BACK" ? { adjustments: { intensityPct: -10 as const } } : {}),
     exerciseAdjustments,

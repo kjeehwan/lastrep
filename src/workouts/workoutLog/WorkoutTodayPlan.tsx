@@ -2,7 +2,6 @@ import { useNotebook, useNotebookStyles, notebookSheet } from "../../ui/notebook
 import { notebookFonts, type NotebookColors } from "../../ui/notebook/tokens";
 import { Ionicons } from "@expo/vector-icons";
 import React, { useMemo, useState } from "react";
-import Slider from "@react-native-community/slider";
 import type { RecoveryInputs } from "../../services/decision/loadWorkoutPlanContext";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { NotebookModal as Modal } from "../../ui/notebook/NotebookModal";
@@ -12,6 +11,11 @@ import { exerciseAdjustmentText } from "../../services/decision/todayPlanPrescri
 import type { EffortScale } from "../effortScale";
 
 type Props = {
+  recoveryContent?:React.ReactNode;
+  hideBanner?:boolean;
+  onStartDeload?:()=>void;
+  onEndDeload?:()=>void;
+  hasDeloadBackup?:boolean;
   plan: LastResultPayload | null;
   busy: boolean;
   error: string | null;
@@ -27,7 +31,7 @@ type Props = {
   effortScale?: EffortScale;
   onOpen: () => void;
   onClose: () => void;
-  onApply: () => void;
+  onApply: (selected: string[]) => void;
   onUndo: () => void;
   onUpdate: () => void;
 };
@@ -38,6 +42,14 @@ export function WorkoutTodayPlan(props: Props) {
   const insets = useSafeAreaInsets();
   const [showWhy, setShowWhy] = useState(false);
   const [showInputs, setShowInputs] = useState(false);
+  const [expanded, setExpanded] = useState<string[]>([]);
+  const reviewKey=props.plan?.createdAt.toMillis()??null;
+  const defaults=props.plan?.result.exerciseAdjustments?.filter(item=>item.action!=="avoid"&&(item.loadPct||item.setDelta||item.repsDelta)).map(item=>item.exerciseName)??[];
+  const [selection,setSelection]=useState<{key:number|null;names:string[]}>({key:null,names:[]});
+  const selected=selection.key===reviewKey?selection.names:defaults;
+  const setSelected=(update:(previous:string[])=>string[])=>setSelection({key:reviewKey,names:update(selected)});
+
+  const [showUnchanged, setShowUnchanged] = useState(false);
   const changes = useMemo(() => props.plan?.result.exerciseAdjustments?.filter(
     (item) => item.action !== "as_planned" || item.loadPct !== 0 || item.setDelta !== 0 || item.repsDelta !== 0
   ) ?? [], [props.plan]);
@@ -59,7 +71,7 @@ export function WorkoutTodayPlan(props: Props) {
   const fresh = Boolean(props.plan && !props.stale && !props.busy && !props.error);
   return (
     <>
-      <View style={styles.banner}>
+      {!props.hideBanner ? <View style={styles.banner}>
         <Pressable style={styles.bannerMain} onPress={props.onOpen} disabled={props.busy} accessibilityRole="button" accessibilityLabel={`Today's Plan. ${summary}. Review`}>
           <Ionicons name="document-text-outline" size={20} color={colors.accent} />
           <View style={styles.bannerCopy}>
@@ -68,9 +80,9 @@ export function WorkoutTodayPlan(props: Props) {
           <Text style={styles.link}>{props.busy ? "Reviewing..." : props.applied ? "View" : "Review"}</Text>
         </Pressable>
         {props.canUndo ? <Pressable onPress={props.onUndo} style={styles.undo} accessibilityRole="button"><Text style={styles.undoText}>Undo changes</Text></Pressable> : null}
-      </View>
-      <Modal visible={props.visible} transparent animationType="slide" onRequestClose={props.onClose}>
-        <View style={styles.overlay}>
+      </View> : null}
+      <Modal visible={props.visible||Boolean(props.recoveryContent)} transparent animationType="slide" onRequestClose={props.onClose}>
+        {props.recoveryContent ? props.recoveryContent : <View style={styles.overlay}>
           <Pressable style={StyleSheet.absoluteFill} onPress={props.onClose} accessibilityLabel="Close today's plan" />
           <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) }]}>
             <View style={styles.heading}>
@@ -81,17 +93,23 @@ export function WorkoutTodayPlan(props: Props) {
               <Text style={styles.summary}>{summary}</Text>
               {props.error ? <Text style={styles.reason}>{props.error}</Text> : null}
               {fresh && props.plan?.inputs.plannedWorkout?.source === "none" ? <Text style={styles.reason}>{props.plan.result.headline}</Text> : null}
-              {fresh && groups.map(([reason, items]) => (
-                <View key={reason} style={styles.exerciseGroup}>
-                  {items.map((item, index) => (
-                    <View key={`${item.exerciseName}-${index}`} style={styles.exercise}>
-                      <Text style={styles.exerciseName}>{item.exerciseName}</Text>
-                      <Text style={[styles.prescription, item.action === "avoid" && styles.warning]}>{exerciseAdjustmentText(item, props.unitForExercise(item.exerciseName), props.plan?.inputs.plannedWorkout?.exercises?.find((exercise) => exercise.name.trim().toLowerCase() === item.exerciseName.trim().toLowerCase()), props.effortScale)}</Text>
-                    </View>
-                  ))}
+              {fresh && changes.map(item => <View key={item.exerciseName} style={[styles.exercise, { borderBottomWidth: 1, borderBottomColor: colors.rule, paddingVertical: 16 }]}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+                  {item.action !== "avoid" ? <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: selected.includes(item.exerciseName) }} accessibilityLabel={`Apply ${item.exerciseName}`} hitSlop={8} onPress={() => setSelected(previous => previous.includes(item.exerciseName) ? previous.filter(name => name !== item.exerciseName) : [...previous, item.exerciseName])}><Ionicons name={selected.includes(item.exerciseName) ? "checkbox" : "square-outline"} size={24} color={colors.ink} /></Pressable> : <Ionicons name="alert-circle-outline" size={24} color={colors.warning} />}
+                  <Pressable style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 12 }} accessibilityRole="button" accessibilityState={{ expanded: expanded.includes(item.exerciseName) }} onPress={() => setExpanded(previous => previous.includes(item.exerciseName) ? previous.filter(name => name !== item.exerciseName) : [...previous, item.exerciseName])}>
+                    <View style={{ flex: 1, gap: 8 }}><Text style={styles.exerciseName}>{item.exerciseName}</Text><Text style={[styles.prescription, item.action === "avoid" && styles.warning]}>{exerciseAdjustmentText(item, props.unitForExercise(item.exerciseName), props.plan?.inputs.plannedWorkout?.exercises?.find(exercise => exercise.name.trim().toLowerCase() === item.exerciseName.trim().toLowerCase()), props.effortScale, true)}</Text></View>
+                    <Ionicons name={expanded.includes(item.exerciseName) ? "chevron-down" : "chevron-forward"} size={18} color={colors.muted} />
+                  </Pressable>
                 </View>
-              ))}
+                {expanded.includes(item.exerciseName) ? <Text style={[styles.reason,{marginTop:12}]}>{item.reason}</Text> : null}
+              </View>)}
+              {fresh && (props.plan?.result.exerciseAdjustments?.length ?? 0) > changes.length ? <>
+                <Pressable accessibilityRole="button" accessibilityState={{ expanded: showUnchanged }} style={styles.expandRow} onPress={() => setShowUnchanged(value => !value)}><Text style={styles.reason}>{showUnchanged ? "Hide" : "Show"} {(props.plan?.result.exerciseAdjustments?.length ?? 0) - changes.length} unchanged {(props.plan?.result.exerciseAdjustments?.length ?? 0) - changes.length === 1 ? "exercise" : "exercises"}</Text><Ionicons name={showUnchanged ? "chevron-down" : "chevron-forward"} size={18} color={colors.muted} /></Pressable>
+                {showUnchanged ? props.plan?.result.exerciseAdjustments?.filter(item => !changes.includes(item)).map(item => <View key={item.exerciseName} style={styles.exercise}><Text style={styles.exerciseName}>{item.exerciseName}</Text><Text style={styles.reason}>{item.reason}</Text></View>) : null}
+              </> : null}
               {fresh && caution ? <Text style={styles.warning}>{caution}</Text> : null}
+              {fresh&&props.plan?.result.deloadSuggestion ? <View style={styles.group}><Text style={styles.reason}>{props.plan.result.deloadSuggestion}</Text><Pressable accessibilityRole="button" style={styles.expandRow} onPress={props.onStartDeload}><Text style={styles.link}>Plan a deload week</Text><Ionicons name="chevron-forward" size={18} color={colors.muted}/></Pressable></View>:null}
+              {fresh&&(props.plan?.inputs.deload||props.hasDeloadBackup)?<View style={styles.group}>{props.plan?.inputs.deload?<Text style={styles.reason}>Deload through {props.plan.inputs.deload.endsDateKey}</Text>:null}<Pressable accessibilityRole="button" style={styles.expandRow} onPress={props.onEndDeload}><Text style={styles.link}>Return to normal plan</Text><Ionicons name="chevron-forward" size={18} color={colors.muted}/></Pressable></View>:null}
               {fresh ? (
                 <Pressable onPress={() => setShowWhy((previous) => !previous)} style={styles.expandRow} accessibilityRole="button" accessibilityState={{ expanded: showWhy }}>
                   <Text style={styles.link}>{showWhy ? "Hide explanation" : "Why these suggestions?"}</Text>
@@ -105,23 +123,19 @@ export function WorkoutTodayPlan(props: Props) {
               {!props.busy && props.plan ? (
                 <>
                   <Pressable onPress={() => setShowInputs((previous) => !previous)} style={styles.expandRow} accessibilityRole="button" accessibilityState={{ expanded: showInputs }}>
-                    <Text style={styles.link}>{showInputs ? "Hide today's inputs" : "Edit today's inputs"}</Text>
+                    <Text style={styles.reason}>Review context</Text>
                     <Ionicons name={showInputs ? "chevron-up" : "chevron-down"} size={16} color={colors.muted} />
                   </Pressable>
                   {showInputs ? (
                     <View style={styles.group}>
-                      {(["soreness", "fatigue", "motivation"] as const).map((key) => (
-                        <View key={key}>
-                          <Text style={styles.reason}>{key[0].toUpperCase() + key.slice(1)}: {props.recovery[key]}/10</Text>
-                          <Slider value={props.recovery[key]} minimumValue={0} maximumValue={10} step={1}
-                            minimumTrackTintColor={colors.primary} maximumTrackTintColor={colors.rule} thumbTintColor={colors.muted}
-                            onValueChange={(value) => props.onRecoveryChange(key, value)} />
-                        </View>
-                      ))}
+                      <Text style={styles.reason}>Recovery check-in</Text>
+                      <Text style={styles.caption}>Soreness {props.plan?.inputs.soreness}/10 · Fatigue {props.plan?.inputs.fatigue}/10 · Motivation {props.plan?.inputs.motivation}/10</Text>
                       <Pressable onPress={props.onEditContext} style={styles.expandRow}>
-                        <View style={styles.bannerCopy}><Text style={styles.link}>Pain, activity or notes</Text><Text style={styles.caption}>{props.contextSummary}</Text></View>
+                        <View style={styles.bannerCopy}><Text style={styles.link}>Edit recovery check-in</Text><Text style={styles.caption}>{props.contextSummary}</Text></View>
                         <Ionicons name="chevron-forward" size={18} color={colors.muted} />
                       </Pressable>
+                      <Text style={styles.reason}>Recent performance</Text><Text style={styles.caption}>{props.plan?.inputs.recentTraining?.exercisePerformance.filter(item=>item.sessions>0).map(item=>`${item.exerciseName}: ${item.sessions} comparable sessions`).join(" · ")||"No comparable sessions recorded."}</Text>
+                      <Text style={styles.reason}>Training context</Text><Text style={styles.caption}>{props.plan?.inputs.trainingPhase}{props.plan?.inputs.trainingPhaseWeek?` · Week ${props.plan.inputs.trainingPhaseWeek}`:""} · {props.plan?.inputs.dietPhase}{props.plan?.inputs.dietPhaseWeek?` · Week ${props.plan.inputs.dietPhaseWeek}`:""}</Text>
                     </View>
                   ) : null}
                 </>
@@ -131,11 +145,11 @@ export function WorkoutTodayPlan(props: Props) {
               : props.stale || props.error || !props.plan ? (
                 <Pressable style={styles.button} onPress={props.onUpdate}><Text style={styles.buttonText}>{props.error ? "Try again" : "Update today's plan"}</Text></Pressable>
               ) : applicable.length && !props.applied ? (
-                <Pressable style={styles.button} onPress={props.onApply}><Text style={styles.buttonText}>Apply changes</Text></Pressable>
+                <Pressable style={[styles.button,!selected.length && {opacity:0.5}]} disabled={!selected.length} onPress={() => props.onApply(selected)}><Text style={styles.buttonText}>Apply changes</Text></Pressable>
               ) : <Pressable style={styles.button} onPress={props.onClose}><Text style={styles.buttonText}>Back to workout</Text></Pressable>}
 
           </View>
-        </View>
+        </View>}
       </Modal>
     </>
   );
@@ -164,6 +178,6 @@ const createStyles = (colors: NotebookColors) => notebookSheet({
   exerciseName: { color: colors.ink, fontSize: 15, fontWeight: "600" },
   prescription: { color: colors.ink, fontSize: 13, lineHeight: 20 },
   warning: { color: colors.accent, fontSize: 13, lineHeight: 20 },
-  button: { backgroundColor: colors.primary, borderRadius: 12, padding: 15, alignItems: "center" },
-  buttonText: { color: colors.onPrimary, fontWeight: "700", fontSize: 15 },
+  button: { backgroundColor: colors.primary, borderRadius: 12, minHeight:48, padding: 15, alignItems: "center", justifyContent:"center" },
+  buttonText: { color: colors.onPrimary, fontWeight: "700", fontSize: 15, textAlign: "center", textAlignVertical: "center", includeFontPadding: false },
 });

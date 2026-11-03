@@ -42,6 +42,12 @@ const bodyweightCatalog: ExerciseCatalogItem[] = [...catalog, {
 }];
 
 describe("deterministic today's plan", () => {
+  it("does not compound a deload reduction when overlapping activity is still reported",()=>{
+    const result=buildDeterministicTodayPlan(inputs({fatigue:8,soreness:8,deload:{id:"d",startedDateKey:"2026-11-02",endsDateKey:"2026-11-08"},
+      plannedWorkout:{source:"draft",title:"Chest",exerciseNames:["Bench Press"],exercises:[{name:"Bench Press",mode:"resistance",deloadAppliedId:"d",sets:[{weightKg:72,reps:6,setType:"normal",done:false},{weightKg:72,reps:6,setType:"normal",done:false}]}]},
+      dailyContext:{dateKey:"2026-11-02",pain:null,note:null,additionalActivity:{type:"physical_work",timing:"today",effort:"hard",duration:"over_2h",overlapsPlannedWorkout:true}}}),[],new Date("2026-11-02T12:00:00"),catalog);
+    expect(result.exerciseAdjustments?.[0]).toMatchObject({action:"as_planned",loadPct:0,setDelta:0,repsDelta:0});
+  });
   it("shows and applies the same available machine weight", () => {
     const result = buildDeterministicTodayPlan(inputs({ soreness: 9, fatigue: 9,
       plannedWorkout: { source: "draft", title: "Legs", exerciseNames: ["Leg Curl"],

@@ -1,5 +1,8 @@
 import type { Timestamp } from "firebase/firestore";
 import type { AvailableWeights } from "../workouts/availableWeights";
+import type { ExerciseTargets } from "../workouts/exerciseTargets";
+import type { ProgressionPreferences } from "../workouts/performanceProgression";
+import type { DeloadPeriod } from "../workouts/deload";
 
 export type Decision = "PUSH" | "MAINTAIN" | "PULL_BACK";
 export type TrainingPhase = "Hypertrophy" | "Strength" | "Power";
@@ -50,6 +53,9 @@ export type PlannedWorkoutSummary = {
 };
 
 export type PlannedExerciseSummary = {
+  deloadAppliedId?: string | null;
+  targets?: ExerciseTargets | null;
+  progression?: ProgressionPreferences;
   name: string;
   mode: "resistance" | "cardio";
   availableWeights?: AvailableWeights;
@@ -58,6 +64,7 @@ export type PlannedExerciseSummary = {
     reps: number | null;
     setType: "warmup" | "normal" | "failure" | "drop";
     done: boolean;
+    rpe?: number | null;
   }[];
 };
 
@@ -97,6 +104,7 @@ export type AdditionalActivityContext = {
 };
 
 export type DailyDecisionContext = {
+  pains?: PainContext[];
   dateKey: string;
   pain: PainContext | null;
   additionalActivity: AdditionalActivityContext | null;
@@ -114,6 +122,9 @@ export type DecisionNutritionSummary = {
 };
 
 export type DecisionInputs = {
+  trainingPhaseWeek?: number | null;
+  dietPhaseWeek?: number | null;
+  deload?: DeloadPeriod | null;
   sleepHours: number;
   sleepSource: DecisionSleepSource;
   sleepSampleAgeHours: number | null;
@@ -129,6 +140,7 @@ export type DecisionInputs = {
 };
 
 export type DecisionOutput = {
+  deloadSuggestion?: string;
   decision: Decision;
   headline?: string;
   todayAction?: string;

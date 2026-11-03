@@ -19,6 +19,7 @@ type DraftExercise = {
 
 const normalize = (value: string) => value.trim().toLowerCase().replace(/\s+/g, " ");
 const roundLoad = (value: number) => Math.max(0, Math.round(value * 2) / 2);
+const protectedSet = (set: DraftSet) => set.done || (set.setType != null && set.setType !== "normal") || (set.rpe != null && String(set.rpe).trim() !== "");
 
 export type ApplyTodayPlanResult = {
   raw: string;
@@ -47,7 +48,7 @@ export const applyTodayPlanToWorkoutDraft = (
     }
     const originalSets = Array.isArray(exercise.sets) ? exercise.sets : [];
     let sets = originalSets.map((set) => {
-      if (set.done || set.setType === "warmup") return set;
+      if (protectedSet(set)) return set;
       let changed = false;
       let next = { ...set };
       if (adjustment.loadPct !== 0 && typeof set.weightKg === "number" && Number.isFinite(set.weightKg)) {
@@ -73,13 +74,13 @@ export const applyTodayPlanToWorkoutDraft = (
       for (let index = sets.length - 1; index >= 0 && remaining > 0; index -= 1) {
         const set = sets[index];
         const workingSetCount = sets.filter((candidate) => candidate.setType !== "warmup").length;
-        if (!set.done && set.setType !== "warmup" && workingSetCount > 1) {
+        if (!protectedSet(set) && workingSetCount > 1) {
           sets = sets.filter((_, candidateIndex) => candidateIndex !== index);
           remaining -= 1;
         }
       }
     } else if (adjustment.setDelta > 0) {
-      const template = [...sets].reverse().find((set) => !set.done && set.setType !== "warmup");
+      const template = [...sets].reverse().find((set) => !protectedSet(set));
       if (template) {
         for (let count = 0; count < adjustment.setDelta; count += 1) {
           sets.push({ ...template, done: false });

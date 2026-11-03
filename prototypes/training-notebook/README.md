@@ -8,6 +8,71 @@ main screen design directions are approved. None replaces a Lastrep application 
 
 ## Open it
 
+From the repository root, run `python prototypes/training-notebook/serve.py`.
+This loopback-only server disables caching and versions local module imports so
+an already-open browser does not mix older files with a newly edited mockup.
+
+### Unified Today's Plan (October 29; awaiting review)
+
+October 31 workout entry examples:
+[active program](http://127.0.0.1:4317/index.html#layout-minimal-today-entry),
+[new user](http://127.0.0.1:4317/index.html#layout-minimal-today-newuser), and
+[unfinished workout](http://127.0.0.1:4317/index.html#layout-minimal-today-resume),
+and [resume a saved program](http://127.0.0.1:4317/index.html#layout-minimal-today-paused).
+Choose Continue program, Create program or Start workout. New program setup
+supports routine assignment/creation and Save for later before explicit Start
+program. The Workout header's Back button returns to the entry page from the
+editor. My programs on the entry page lists active/saved programs and drafts,
+sorted active first, then drafts, then other programs. Resume program previews
+continuing the saved day today, preserving completed dates; Resume today confirms.
+Routine creation from day assignment is a separate outlined action and reuses
+the Workout exercise editor, with Save routine below Add exercise. The original
+workout stays separate. Previously started programs offer confirmed Restart
+program from Day 1 today; Previous runs keeps their archived history available. Deletion is confirmed. Everything
+is synthetic and kept in memory; this does not change the native app.
+
+Open **http://127.0.0.1:4317/index.html#layout-minimal-today-planned**.
+Use **Unified Today's Plan** in Review a state for twelve scenarios: planned,
+empty, scheduled rest, program off, unchanged, recording, pain, missing inputs,
+load reset, deload, return, and a different workout already open.
+
+This is the current candidate. It incorporates progression into Today's Plan;
+the older standalone Progress examples below are retained for comparison.
+Workout retains the exercise log and icon actions and adds the optional seven-day
+program strip. Tap a day to preview it, or change its schedule explicitly. The
+review supports selectable changes, expandable reasons, protected recorded sets,
+Apply and guarded Undo. Progression preferences remain in exercise options.
+
+See [inspection and behavior notes](../../docs/unified-todays-plan-mockup.md).
+The study uses synthetic dates/history/inputs and in-memory changes only. It is
+not a native app update, account write, real recommendation engine or deployment.
+Functional browser checks and 240 size/theme/text combinations passed; they do
+not substitute for later native implementation and device review.
+
+October 30 refinements: the program strip shows its week, number-only days and
+checkmarks replacing completed numbers. Tap the program name to edit its title;
+tap a day and Change assigned routine to choose by stable routine ID. The picker
+includes two Chest + Triceps routines with different exercises. Change schedule
+also offers Resume tomorrow with a dated preview of the shift through the next
+cycle. Skip/Move/Swap still leave unrelated dates intact.
+
+Exercise prescriptions share one line at normal text sizes, rows have centered
+checkboxes and symmetric spacing, and tapping a row explains its recommendation.
+Inputs used lists the context separately. Missing inputs reuse detailed discomfort
+fields with Home: area, side, severity, trigger and note, plus the existing fatigue
+slider. Shared answers and canceled edits were checked. An additional 48 sheet
+layout combinations passed alongside the 240 main combinations.
+
+Latest October 30 revision: Review context is restored as the label. Its Edit
+recovery check-in action, and the missing-input entry, open the complete same
+Recovery check-in form as Home (all three ratings, detailed discomfort, additional
+activity and note), with staged Save/Cancel. The partial fatigue/pain-only form
+has been removed. Schedule actions are Skip / Move / Swap / Shift on one default
+row. Program/routine lists use symmetric padding without separator gaps, the Use
+program text does not toggle the switch, and exercise chevrons are vertically
+centered over the full entry. An additional 80 sheet layouts and these interactions
+were checked. Native app behavior is unchanged.
+
 ### Minimal Workout header and action grid (awaiting review)
 
 Open **http://127.0.0.1:4317/index.html#layout-minimal**. The header combines the
@@ -525,7 +590,7 @@ has no imported runtime dependencies and does not change the root package files.
 Open `http://127.0.0.1:4317/auth.html` for Sign in / Sign up (user approved) and
 `http://127.0.0.1:4317/onboarding.html` for the revised four-step setup proposal.
 Both are linked from the six existing studies. If the server is not running,
-start it from this directory with `python -m http.server 4317 --bind 127.0.0.1`.
+start it from this directory with `python serve.py`.
 
 Onboarding now covers Experience, Availability (1-7 day slider), optional Nickname
 and Optional health sync, with a final Go to Home action. The existing Home logo
@@ -599,3 +664,116 @@ appears only for a changed value, including pending removal, and hides again
 when values are restored. Clear targets stages removal until Done. Inputs
 expand with text size and stack at enlarged text. Browser checks also cover
 conditional actions, draft retention and cancellation while fields are expanded.
+
+Final labels match the native review: Target reps and Target RPE/RIR, without an
+optional suffix. The native targets feature is now implemented separately; see
+`docs/exercise-targets.md` in the repository for its verification and rollout.
+
+## Progression suggestions study — October 28, 2026
+
+Open `http://127.0.0.1:4317/index.html#layout-minimal-progression-reps`.
+The existing Review a state control has a Progression group: add reps, increase
+weight, repeat, previous mixed sets, currently planned mixed sets, missing effort
+and no completed history. The last four are examples of the no-suggestion category.
+
+A target summary follows Note, then a single row with Add warm-up on the left
+and Progress on the right, followed by the set table. There is no divider,
+inline suggestion preview or inline Apply action. Progress opens a sheet with
+the proposed prescription, previous-session evidence and Apply when appropriate.
+Apply changes only the upcoming normal working sets. Undo is available inside
+the sheet while those values remain unchanged. Historical Last values, warm-ups,
+recorded effort and completion stay untouched. Once working sets are being
+recorded, Apply is unavailable. Repeat and unsupported cases explain the result
+without a redundant action. All examples remain freely editable. RPE/RIR follows
+the existing review preference.
+
+Help explicitly identifies the previous completed session and its date as the
+performance evidence, and describes the proposed change for the current workout.
+Mixed prescriptions in either the previous session or the current plan prevent
+automatic suggestions in this version. Separate examples identify which applies.
+Missed reps against a uniform prescription do not by themselves make sets mixed.
+
+The examples use a 6–8 rep range, a two-rep step, target RPE 8 and a 2.5 kg total
+load increment. These are explicit fixture choices, not universal defaults.
+No native progression algorithm, account writes or AI calls are introduced.
+Rep step and weight increase are editable inside Progress; Update suggestion
+applies the preference edit before Apply changes any planned sets. The existing exercise, targets, header and sharing views are reused.
+
+Browser verification passed Apply/Undo, history preservation, recorded-effort and
+completion protection, RIR conversion, explanations and the existing targets study.
+Nine examples across five sizes, both themes and normal/200% text passed 180 layout
+combinations, including scrollable explanations in compact landscape/enlarged text.
+
+Exercise actions Add warm-up, Progress, Add set and Duplicate last set share
+one typography rule: Source Sans, 16 dp, semibold, with the same text scaling.
+
+## Progress options and equipment ? October 29, 2026
+
+Progress reuses the exercise's Available weights, accessed from either its
+three-dot menu or the Progress popup. It supports the existing regular grid
+(starting weight plus increment) and custom-list shapes, with equipment units
+independent of workout display units. Switching equipment units converts its
+values. Save/Clear affect suggestions only; closing without saving cancels.
+
+The preferred weight increase acts as a ceiling: select the heaviest available
+load above the previous load within that increase. For example, 80 kg plus a
+2.5 kg increase can select 82 kg from a custom list, but not 85 kg. If no heavier
+load fits, recommend repeating rather than silently exceeding the increase or
+adding reps beyond the range. Without equipment settings, use the chosen increase
+and identify Available weights as Not set. The available-weight-gap example
+makes the constraint visible and lets reviewers change both settings.
+
+Rep steps are an increasing list of whole rep goals. Rep progression follows
+that sequence within the target range, including its endpoints.
+Rep-sequence and maximum-weight-increase edits are staged behind compact rows; Update
+suggestion commits valid options without modifying sets, and Cancel edit discards
+the pending edit. Options remain in local example memory until Reset. Existing
+Apply/Undo and recording guards still apply. Preferences are local-only in this
+study; no native behavior, account data or deployed service was changed.
+
+Browser checks cover both equipment modes, a custom-list fit, no suitable heavier
+load, menu/popup source consistency, kg/lbs conversion, clear/fallback, staged
+option validation/cancel, and equipment cancellation. All 180 layout combinations
+and the existing action-row interaction checks pass with the new controls.
+
+### Custom rep sequence and clearer equipment controls ? October 29
+
+Rep steps is now an editable sequence, illustrated by 6, 8, 10, 12, 15, 18.
+The new Cable fly example uses 12?18, so 12 progresses to 15 and then 18.
+Only sequence values within the exercise target range are considered; range
+endpoints are included even if absent from the list. Values must be whole,
+positive, unique and increasing. Cancel edit leaves the previous sequence intact.
+
+Weight increase is labeled Max weight increase to reflect its ceiling behavior.
+The equipment explanation uses the previous working load and a concrete maximum
+rather than the phrase heaviest available weight within your chosen increase.
+Progress option inputs are wider while remaining right aligned. Equipment units
+and mode guidance are grouped with their applicable choices. Lowest weight
+replaces Starting weight: it means the lightest selectable load, including the
+bar for barbell exercises. Bar guidance is contextual to the bench example.
+Regular input labels/hints sit with their fields, with added bottom breathing room
+after the increment. Enlarged text retains wrapping and scrolling when needed.
+
+Sequence, range endpoint, validation/cancellation, label geometry, warm-up
+preservation and equipment-help checks pass alongside 180 layout combinations.
+These remain local mockups; the native Available weights screen is unchanged.
+
+
+### Preferred increase and maximum (October 29)
+
+The weight example now separates a preferred +5 kg increase from a +10 kg
+maximum: 80 kg advances to 85 kg, not automatically 90 kg. Both values belong
+to the example exercise. Clearing the preference uses the smallest available
+increase. A preference above the maximum is rejected; edits remain staged
+until Update suggestion, and sets remain untouched until Apply.
+
+Two additional review states illustrate no preference (`smallest`) and a
+synthetic comparable session supporting 90 kg (`supported`). That fixture
+represents 3 sets of 6 at RPE 8 on Oct 24; it does not implement production
+history matching or a physiological load prediction. Supported loads must
+still fit the available equipment and maximum. Without a preference or
+equipment settings, the mockup does not invent a smallest increment.
+
+Verified preferred/default/fallback behavior, maximum limits, invalid edits,
+Apply/Undo/cancel and history preservation, plus 220 viewport/theme/text
+combinations. The maximum explanation remains beneath its input.
