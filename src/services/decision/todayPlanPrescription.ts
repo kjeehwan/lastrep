@@ -4,7 +4,11 @@ import { rpeToEffort, type EffortScale } from "../../workouts/effortScale";
 
 type PreviewSet = { weightKg: number | null; reps: number | string | null; done: boolean; setType: string };
 
-const prescriptionText = (value: ExercisePrescription, unit: "kg" | "lbs") => {
+const prescriptionText = (value: ExercisePrescription, unit: "kg" | "lbs", compact = false) => {
+  if (compact) return [
+    `${value.sets} × ${value.reps ?? "—"}`,
+    ...(value.weightKg != null && value.weightKg > 0 ? [`${Number((value.weightKg * (unit === "lbs" ? 2.2046226218 : 1)).toFixed(1))} ${unit}`] : []),
+  ].join(" × ");
   const parts: string[] = [];
   if (value.weightKg != null && value.weightKg > 0) parts.push(`${Number((value.weightKg * (unit === "lbs" ? 2.2046226218 : 1)).toFixed(1))} ${unit}`);
   if (value.reps != null) parts.push(`${value.reps} reps`);
@@ -12,7 +16,7 @@ const prescriptionText = (value: ExercisePrescription, unit: "kg" | "lbs") => {
   return parts.join(" x ");
 };
 
-const groupedSetsText = (sets: PreviewSet[], unit: "kg" | "lbs") => {
+const groupedSetsText = (sets: PreviewSet[], unit: "kg" | "lbs", compact = false) => {
   const groups: ExercisePrescription[] = [];
   for (const set of sets.filter((item) => !item.done && item.setType !== "warmup")) {
     const reps = set.reps == null ? null : Number(set.reps);
@@ -20,21 +24,21 @@ const groupedSetsText = (sets: PreviewSet[], unit: "kg" | "lbs") => {
     if (last && last.weightKg === set.weightKg && last.reps === reps) last.sets += 1;
     else groups.push({ weightKg: set.weightKg, reps, sets: 1 });
   }
-  return groups.map((group) => prescriptionText(group, unit)).join(" + ");
+  return groups.map((group) => prescriptionText(group, unit, compact)).join(" + ");
 };
 
-export function exerciseAdjustmentText(item: ExercisePlanAdjustment, unit: "kg" | "lbs", exercise?: PlannedExerciseSummary, effortScale: EffortScale = "rpe") {
+export function exerciseAdjustmentText(item: ExercisePlanAdjustment, unit: "kg" | "lbs", exercise?: PlannedExerciseSummary, effortScale: EffortScale = "rpe", compact = false) {
   if (item.action === "avoid") return "Skip or replace";
   if (exercise?.mode === "resistance" && exercise.sets.some((set) => !set.done && set.setType !== "warmup")) {
     // Preview the exact Apply transformation, including varied loads and removed sets.
     const applied = applyTodayPlanToWorkoutDraft(JSON.stringify({ exercises: [exercise] }), [item], 0);
     const afterSets = (JSON.parse(applied.raw) as { exercises: { sets: PreviewSet[] }[] }).exercises[0].sets;
-    const before = groupedSetsText(exercise.sets, unit);
-    const after = groupedSetsText(afterSets, unit);
-    if (before !== after) return `Current: ${before}\nSuggested: ${after}`;
+    const before = groupedSetsText(exercise.sets, unit, compact);
+    const after = groupedSetsText(afterSets, unit, compact);
+    if (before !== after) return compact ? `${before} → ${after}` : `Current: ${before}\nSuggested: ${after}`;
   } else if (item.plannedPrescription && item.recommendedPrescription) {
-    const before = prescriptionText(item.plannedPrescription, unit);
-    const after = prescriptionText(item.recommendedPrescription, unit);
+    const before = prescriptionText(item.plannedPrescription, unit, compact);
+    const after = prescriptionText(item.recommendedPrescription, unit, compact);
     if (before !== after) return `${before} → ${after}`;
   }
   const parts: string[] = [];

@@ -1,4 +1,3 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { collection, doc, getDoc, getDocs, limit, orderBy, query } from "firebase/firestore";
 import { db } from "../../config/firebaseConfig";
 import { classifyCalorieTargetAdherence, getCalorieTargetForDietPhase, getMealsForDate, getNutritionProfile, getNutritionTrendReport } from "../../nutrition/meals";
@@ -7,6 +6,10 @@ import { resolveDecisionSleepInput } from "../../sleep/resolveDecisionSleepInput
 import type { DecisionInputs, PlannedWorkoutSummary } from "../../types/decision";
 import type { WorkoutSummary } from "../../workouts/homeInsights";
 import { buildRecentTrainingSummary, normalizeDailyDecisionContext, toLocalDateKey } from "./todayPlanContext";
+import { readRecoveryCheckIn } from "./recoveryCheckIn";
+import { planContextRevision } from "./planContextRevision";
+import { currentPhaseWeek } from "../../profile/phaseState";
+import { activeDeload } from "../../workouts/deload";
 
 export type RecoveryInputs = Pick<DecisionInputs, "soreness" | "fatigue" | "motivation">;
 export const RECOVERY_INPUTS_KEY = "home-inputs-v1";
@@ -16,17 +19,15 @@ const rating = (value: unknown, fallback: number) =>
 
 export async function loadWorkoutPlanContext(uid: string, plannedWorkout: PlannedWorkoutSummary, override?: RecoveryInputs) {
   const now = new Date();
-  const [userSnapshot, nutritionProfile, sleep, meals, recoveryRaw, history] = await Promise.all([
+  const [userSnapshot, nutritionProfile, sleep, meals, history] = await Promise.all([
     getDoc(doc(db, "users", uid)), getNutritionProfile(uid), getSleepProfile(uid), getMealsForDate(uid),
-    AsyncStorage.getItem(`${RECOVERY_INPUTS_KEY}:${uid}`),
     getDocs(query(collection(db, "users", uid, "workouts"), orderBy("date", "desc"), limit(120))),
   ]);
   if (!userSnapshot.exists()) throw new Error("User profile is unavailable");
   const user = userSnapshot.data();
-  let saved: Partial<RecoveryInputs> = {};
-  try { saved = recoveryRaw ? JSON.parse(recoveryRaw) : {}; } catch { /* Use defaults for an invalid local check-in. */ }
+  const checkIn = readRecoveryCheckIn(user?.recoveryCheckIn);
   const recovery: RecoveryInputs = override ?? {
-    soreness: rating(saved?.soreness, 4), fatigue: rating(saved?.fatigue, 4), motivation: rating(saved?.motivation, 6),
+    soreness: rating(checkIn?.ratings.soreness, 4), fatigue: rating(checkIn?.ratings.fatigue, 4), motivation: rating(checkIn?.ratings.motivation, 6),
   };
   const dietPhase = user?.dietPhase === "Cut" || user?.dietPhase === "Bulk" ? user.dietPhase : "Maintain";
   const trainingPhase = user?.trainingPhase === "Strength" || user?.trainingPhase === "Power" ? user.trainingPhase : "Hypertrophy";
@@ -61,6 +62,7 @@ export async function loadWorkoutPlanContext(uid: string, plannedWorkout: Planne
   const inputs: DecisionInputs = {
     sleepHours: resolvedSleep.sleepHours, sleepSource: resolvedSleep.sleepSource, sleepSampleAgeHours: resolvedSleep.sleepSampleAgeHours,
     ...recovery, dietPhase, trainingPhase, plannedWorkout,
+    trainingPhaseWeek:currentPhaseWeek(user,"trainingPhase",now.getTime()),dietPhaseWeek:currentPhaseWeek(user,"dietPhase",now.getTime()),deload:activeDeload(user.workoutDeload),
     dailyContext: normalizeDailyDecisionContext(user?.todayPlanContext, plannedWorkout, now),
     recentTraining: buildRecentTrainingSummary(workouts, plannedWorkout, now),
     nutrition: {
@@ -70,5 +72,5 @@ export async function loadWorkoutPlanContext(uid: string, plannedWorkout: Planne
       recentAdherence: classifyCalorieTargetAdherence(recentAverage, target), recentCompletedDaysTracked: completed.length,
     },
   };
-  return { inputs, workouts, sleepTargetHours, recovery };
+  return { inputs, workouts, sleepTargetHours, recovery, recoveryCheckIn: checkIn, contextRevision: planContextRevision(user) };
 }

@@ -2,6 +2,12 @@ import { describe, expect, it } from "vitest";
 import { applyTodayPlanToWorkoutDraft } from "./todayPlanDraft";
 
 describe("apply today's plan to workout draft", () => {
+  it("preserves actual effort and special sets even when they are not marked done",()=>{
+    const protectedSets=[{weightKg:80,reps:"8",rpe:"9",setType:"normal",done:false},{weightKg:60,reps:"8",setType:"drop",done:false},{weightKg:20,reps:"4",setType:"warmup",done:false}];
+    const result=applyTodayPlanToWorkoutDraft(JSON.stringify({exercises:[{name:"Bench",sets:[...protectedSets,{weightKg:80,reps:"8",setType:"normal",done:false}]}]}),[{exerciseName:"Bench",action:"reduce",loadPct:-10,setDelta:0,repsDelta:-2,targetRpe:7,reason:"Recovery"}]);
+    expect(JSON.parse(result.raw).exercises[0].sets.slice(0,3)).toEqual(protectedSets);
+    expect(JSON.parse(result.raw).exercises[0].sets[3]).toMatchObject({weightKg:72,reps:"6"});
+  });
   it("updates only unfinished working sets and removes at most the requested sets", () => {
     const result = applyTodayPlanToWorkoutDraft(JSON.stringify({
       exercises: [{

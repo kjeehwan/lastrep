@@ -22,12 +22,16 @@ const plannedWorkoutSchema = z
     exercises: z.array(z.object({
       name: z.string().min(1).max(100),
       mode: z.enum(["resistance", "cardio"]),
+      deloadAppliedId: z.string().nullable().optional(),
       availableWeights: availableWeightsSchema.optional(),
+      targets: z.object({minReps:z.number().int().min(1).max(100).nullable(),maxReps:z.number().int().min(1).max(100).nullable(),targetRpe:z.number().min(6).max(10).nullable()}).strict().nullable().optional(),
+      progression: z.object({repSteps:z.array(z.number().int().min(1).max(100)).min(1).max(100),preferredIncreaseKg:z.number().positive().max(100),maxIncreaseKg:z.number().positive().max(100)}).strict().optional(),
       sets: z.array(z.object({
         weightKg: z.number().min(0).nullable(),
         reps: z.number().min(0).nullable(),
         setType: z.enum(["warmup", "normal", "failure", "drop"]),
         done: z.boolean(),
+        rpe: z.number().min(0).max(10).nullable().optional(),
       }).strict()).max(20),
     }).strict()).max(12).optional(),
   })
@@ -71,6 +75,16 @@ const dailyContextSchema = z
       })
       .strict()
       .nullable(),
+    pains: z.array(z
+      .object({
+        area: z.enum(["shoulder", "elbow", "wrist_hand", "upper_back", "lower_back", "hip", "knee", "ankle_foot", "other"]),
+        side: z.enum(["left", "right", "both", "not_applicable"]),
+        severity: z.enum(["mild", "moderate", "severe"]),
+        trigger: z.enum(["at_rest", "pressing", "pulling", "overhead", "squatting", "hinging", "running_impact", "other"]),
+        note: z.string().max(240).nullable(),
+        affectsPlannedWorkout: z.boolean(),
+      })
+      .strict()).max(18).optional(),
     additionalActivity: z
       .object({
         type: z.enum(["long_walk_hike", "running", "cycling", "sport", "physical_work", "travel", "other"]),
@@ -86,6 +100,9 @@ const dailyContextSchema = z
   .strict();
 
 const decisionInputsSchema: z.ZodType<DecisionInputs> = z.object({
+  trainingPhaseWeek:z.number().int().positive().nullable().optional(),
+  dietPhaseWeek:z.number().int().positive().nullable().optional(),
+  deload:z.object({id:z.string(),startedDateKey:z.string(),endsDateKey:z.string()}).strict().nullable().optional(),
   sleepHours: z.number(),
   sleepSource: z.enum(["manual", "health"]),
   sleepSampleAgeHours: z.number().min(0).nullable(),
@@ -140,6 +157,7 @@ const completeExplanationSchema = z
 const decisionOutputSchema = z
   .object({
     decision: z.enum(["PUSH", "MAINTAIN", "PULL_BACK"]),
+    deloadSuggestion:z.string().max(500).optional(),
     headline: z.string().trim().min(1).max(180).optional(),
     todayAction: z.string().trim().min(1).max(180).optional(),
     explanation: z.array(completeExplanationSchema).min(2).max(4),

@@ -14,6 +14,9 @@ export const workoutGuidanceSignature = (plan?: PlannedWorkoutSummary | null) =>
   JSON.stringify(plan?.exercises?.map((exercise) => ({
     name: exercise.name.trim().toLowerCase().replace(/\s+/g, " "),
     availableWeights: exercise.availableWeights ?? null,
+    targets: exercise.targets ?? null,
+    progression: exercise.progression ?? null,
+    deloadAppliedId:exercise.deloadAppliedId??null,
     sets: exercise.sets.map((set) => ({
       weightKg: set.weightKg,
       reps: set.reps,

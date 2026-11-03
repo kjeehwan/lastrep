@@ -23,6 +23,11 @@ const inputs: DecisionInputs = {
 };
 
 describe("decision guardrails", () => {
+  it("considers a relevant second pain report even when the legacy primary report is unrelated",()=>{
+    const unrelated={area:"knee" as const,side:"left" as const,severity:"mild" as const,trigger:"squatting" as const,note:null,affectsPlannedWorkout:false};
+    const relevant={...unrelated,area:"shoulder" as const,severity:"severe" as const,trigger:"pressing" as const,affectsPlannedWorkout:true};
+    expect(applyDecisionGuardrails(output,{...inputs,dailyContext:{dateKey:"2026-11-02",pain:unrelated,pains:[unrelated,relevant],additionalActivity:null,note:null}})).toMatchObject({decision:"PULL_BACK",adjustments:{intensityPct:-20}});
+  });
   it("prevents PUSH when reported pain overlaps the workout", () => {
     const guarded = applyDecisionGuardrails(output, {
       ...inputs,

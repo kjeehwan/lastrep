@@ -27,10 +27,13 @@ export const heuristicDecision = (input: DecisionInputs): DecisionOutput => {
   let todayAction = "Follow the planned session without forcing additional weight, reps, or sets.";
   let caution: string | undefined;
 
-  const pain = input.dailyContext?.pain;
+  const context = input.dailyContext;
+  const pains = context?.pains ?? (context?.pain ? [context.pain] : []);
+  const pain = [...pains].sort((a,b) => Number(b.affectsPlannedWorkout)-Number(a.affectsPlannedWorkout) ||
+    ({mild:1,moderate:2,severe:3}[b.severity]-{mild:1,moderate:2,severe:3}[a.severity]))[0];
   const activity = input.dailyContext?.additionalActivity;
   const hasRelevantPain = Boolean(pain?.affectsPlannedWorkout);
-  const hasSeverePain = pain?.severity === "severe";
+  const hasSeverePain = pains.some(item=>item.severity === "severe");
   const hasHardOverlappingActivity = Boolean(
     activity?.overlapsPlannedWorkout &&
       activity.effort === "hard" &&
