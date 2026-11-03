@@ -20,13 +20,6 @@ describe("Workout native prebuild parity", () => {
     expect(native).toContain("if (binding.root.isSelected) accentSoft else Color.TRANSPARENT");
     expect(native).toContain("binding.check.isActivated = done");
   });
-  it("does not invent selections for new pain or activity context", () => {
-    const context = readFileSync("src/services/decision/TodayPlanContextModal.tsx", "utf8");
-    for (const field of ["pain?.area", "pain?.severity", "pain?.trigger", "additionalActivity?.type", "additionalActivity?.timing", "additionalActivity?.effort", "additionalActivity?.duration"]) {
-      expect(context).toContain(`context?.${field} ?? null`);
-    }
-    expect(context).toContain("setValidationError");
-  });
   it("leaves Android focus scrolling to the native input visibility handler", () => {
     const screen = readFileSync("app/(tabs)/workout/log.tsx", "utf8");
     expect(screen).toContain('scrollsChildToFocus={Platform.OS !== "android"}');

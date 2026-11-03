@@ -36,6 +36,7 @@ export type SetEntry = {
   baselineAdjusted?: boolean;
 };
 export type Exercise = {
+  deloadAppliedId?: string | null;
   targets?: ExerciseTargets | null;
   plannedRestSec?: number;
   mode?: ExerciseMode;

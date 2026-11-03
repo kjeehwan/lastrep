@@ -1,3 +1,13 @@
+import { restoreDeloadExercises } from "../../../src/workouts/deload";
+import { ProgressionSettingsSheet } from "../../../src/workouts/workoutLog/ProgressionSettingsSheet";
+import { useProgressionPreferences } from "../../../src/workouts/workoutLog/useProgressionPreferences";
+import { normalizeProgressionPreferences } from "../../../src/workouts/performanceProgression";
+import { WorkoutProgramPanel } from "../../../src/workouts/WorkoutProgramPanel";
+import { useWorkoutPrograms } from "../../../src/workouts/useWorkoutPrograms";
+import { normalizeProgramLink, type ProgramLink, type ProgramRecord } from "../../../src/workouts/programFlow";
+import { saveLinkedWorkout, saveProgram } from "../../../src/workouts/programStore";
+import { programRoutineDraft } from "../../../src/workouts/workoutLog/programRoutineDraft";
+import { readDraftSlots, switchDraftSlot, programDraftSlot, serializeDraftSlot, refreshResumedWorkoutDate, workoutDraftContext, loadWorkoutDraftCache, type DraftSlots } from "../../../src/workouts/workoutLog/workoutDraftSlots";
 import { WorkoutActionGrid } from "../../../src/workouts/workoutLog/WorkoutActionGrid";
 import { plannedWorkoutTotals } from "../../../src/workouts/workoutLog/plannedWorkoutTotals";
 import { Ionicons } from "@expo/vector-icons";
@@ -20,7 +30,7 @@ orderBy,
 query,
 setDoc,
 } from "firebase/firestore";
-import { useCallback,useEffect,useMemo,useRef,useState } from "react";
+import { useCallback,useEffect,useLayoutEffect,useMemo,useRef,useState } from "react";
 import {
 AppState,
 BackHandler,
@@ -45,7 +55,7 @@ import { useRestAlerts } from "../../../src/workouts/workoutLog/useRestAlerts";
 import { currentPhaseWeek, phaseName } from "../../../src/profile/phaseState";
 import { safeParseDecisionOutput } from "../../../src/services/decision/decisionValidation";
 import { getDailyContextSummary,parseWorkoutDraftPlan } from "../../../src/services/decision/todayPlanContext";
-import { TodayPlanContextModal } from "../../../src/services/decision/TodayPlanContextModal";
+import { RecoveryCheckInSheet } from "../../../src/services/decision/RecoveryCheckInSheet";
 import { applyTodayPlanToWorkoutDraft } from "../../../src/services/decision/todayPlanDraft";
 import { withAvailableWeights,workoutGuidanceSignature } from "../../../src/services/decision/workoutGuidance";
 import { popSharedWorkout } from "../../../src/sharing/sharingBridge";
@@ -276,12 +286,28 @@ export default function WorkoutLog() {
     sharedIntent?: string;
     showSharedRoutines?: string;
     trainingPhase?: string;
+    programAction?: string;
     createRoutine?: string;
     todayPlanApplied?: string;
     showTodayGuidance?: string;
   }>();
   const auth = getAuth();
   const [activeUid, setActiveUid] = useState<string | null>(auth.currentUser?.uid ?? null);
+  const [parkedDraftSnapshot,setParkedDraftSnapshot]=useState<{uid:string;slots:DraftSlots}|null>(null);
+  const [showSavedDrafts,setShowSavedDrafts]=useState(false);
+  const [savedDraftPicker,setSavedDraftPicker]=useState<{uid:string;slots:DraftSlots|null;error:string|null}|null>(null);
+  const savedDraftPickerRequest=useRef(0);
+  const [programManagerRequest,setProgramManagerRequest] = useState<{programId?:string;action?:"library"|"create";token:number}|null>(null);
+  const [workoutView, setWorkoutView] = useState<"choices" | "editor">("choices");
+  const [programLink, setProgramLink] = useState<ProgramLink | null>(null);
+  const [workoutSlot, setWorkoutSlot] = useState("single");
+  const [deloadBackup,setDeloadBackup]=useState<{id:string;before:Exercise[];after:Exercise[]}|null>(null);
+  const [workoutSaveId, setWorkoutSaveId] = useState<string | null>(null);
+  const workoutSaveIdRef = useRef<string | null>(null);
+  const [programRoutineAssignment, setProgramRoutineAssignment] = useState<{ programId: string; day: number; returnSlot: string; routineId: string } | null>(null);
+  const [draftReload, setDraftReload] = useState(0);
+  const programs = useWorkoutPrograms(activeUid);
+  const savedDrafts={...(parkedDraftSnapshot?.uid===activeUid?parkedDraftSnapshot.slots:{}),...(exercises.length||routineBuilderMode?{[workoutSlot]:{sessionTitle,workoutSlot,routineBuilderMode,programLink}}:{})};
   const draftHydratedRef = useRef(false);
   const [draftReadyUid, setDraftReadyUid] = useState<string | null>(null);
   const scrollNativeGesture = useMemo(() => Gesture.Native(), []);
@@ -311,17 +337,20 @@ export default function WorkoutLog() {
       restTimerByExercise,
       recommendationUsage,
       lastAppliedRoutineId,
-      lastAppliedRoutineName,
+      lastAppliedRoutineName, programLink, workoutSlot, workoutSaveId, routineBuilderMode, programRoutineAssignment, deloadBackup,
     }),
-    [exercises, exerciseUnits, sessionTitle, sessionDateText, elapsedSeconds, workoutTimerRunning, workoutTimerStartedAtMs, workoutTimerHasStarted, restTimerByExercise, recommendationUsage, lastAppliedRoutineId, lastAppliedRoutineName]
+    [exercises, exerciseUnits, sessionTitle, sessionDateText, elapsedSeconds, workoutTimerRunning, workoutTimerStartedAtMs, workoutTimerHasStarted, restTimerByExercise, recommendationUsage, lastAppliedRoutineId, lastAppliedRoutineName, programLink, workoutSlot, workoutSaveId, routineBuilderMode, programRoutineAssignment, deloadBackup]
   );
   const availableWeightsPreferences = useAvailableWeights(activeUid);
+  const progressionPreferences = useProgressionPreferences(activeUid);
+  const [progressionTarget, setProgressionTarget] = useState<{name:string;unit:"kg"|"lbs"}|null>(null);
   // Guidance depends on prescriptions, not per-second timer display updates.
-  const guidanceWorkout = useMemo(() => withAvailableWeights(parseWorkoutDraftPlan(JSON.stringify({
+  const baseGuidanceWorkout = useMemo(() => withAvailableWeights(parseWorkoutDraftPlan(JSON.stringify({
     exercises, sessionTitle, sessionDateText, draftSavedAt: guidanceNowMs,
   }), new Date(guidanceNowMs)), availableWeightsPreferences.values) ?? {
     source: "none" as const, title: null, exerciseNames: [],
   }, [exercises, sessionTitle, sessionDateText, guidanceNowMs, availableWeightsPreferences.values]);
+  const guidanceWorkout = useMemo(() => ({ ...baseGuidanceWorkout, exercises: baseGuidanceWorkout.exercises?.map(exercise => ({ ...exercise, ...(progressionPreferences.values[weightPreferenceKey(exercise.name)] ? {progression:progressionPreferences.values[weightPreferenceKey(exercise.name)]}:{}) })) }), [baseGuidanceWorkout, progressionPreferences.values]);
   const markPlanReviewed = useCallback(() => {
     setRecommendationUsage(previous => previous.todayPlanReviewed ? previous : { ...previous, todayPlanReviewed: true });
   }, []);
@@ -344,9 +373,13 @@ export default function WorkoutLog() {
     onSaved: markWorkoutDraftSaved,
     serialize: serializeWorkoutDraft,
   });
+  const routineBackRef=useRef<(()=>void)|null>(null);
   const handleGoBack = useCallback(() => {
-    router.replace("/home");
-  }, [router]);
+    if(routineBuilderMode&&programRoutineAssignment&&workoutView==="editor"){routineBackRef.current?.();return;}
+    if (workoutView === "editor") setWorkoutView("choices");
+    else router.replace("/home");
+  }, [router, workoutView, setWorkoutView,routineBuilderMode,programRoutineAssignment]);
+
 
   const playGong = useCallback(async () => {
     try {
@@ -365,6 +398,8 @@ export default function WorkoutLog() {
       draftHydratedRef.current = false;
       restTimerSnapshotRef.current = {};
       setActiveUid(user?.uid ?? null);
+      setWorkoutView("choices"); setProgramLink(null); setDeloadBackup(null); setRoutineBuilderMode(false); setWorkoutSlot("single");
+      setWorkoutSaveId(null); workoutSaveIdRef.current = null; setProgramRoutineAssignment(null);
       setEffortScale("rpe");
       setSessionPhase("Hypertrophy");
       setLastAppliedRoutineId(null); setLastAppliedRoutineName(null);
@@ -767,6 +802,7 @@ export default function WorkoutLog() {
       if (!user) return;
       const routinesRef = collection(db, "users", user.uid, "routines");
       const snap = await getDocs(query(routinesRef, orderBy("updatedAt", "desc"), limit(50)));
+      if (auth.currentUser?.uid !== user.uid) return;
       const next: Routine[] = [];
       snap.forEach((docSnap) => {
         const data: any = docSnap.data();
@@ -843,12 +879,18 @@ export default function WorkoutLog() {
 
   useEffect(() => {
     draftHydratedRef.current = false;
+    let active = true;
+    const requestedUid = auth.currentUser?.uid;
     const loadDraft = async () => {
+      let loadedSuccessfully = false;
       try {
         const user = auth.currentUser;
         if (!user) return;
-        const raw = await AsyncStorage.getItem(getDraftKey(user.uid));
+        const {raw,slots} = await loadWorkoutDraftCache(AsyncStorage,getDraftKey(user.uid),`workout-draft-slots-v1:${user.uid}`);
+        if (!active || auth.currentUser?.uid !== user.uid) return;
+        setParkedDraftSnapshot({uid:user.uid,slots});
         if (!raw) {
+          loadedSuccessfully = true;
           // No draft for this account: clear any in-memory state from previous account/session.
           setExercises([]);
           setLastAppliedRoutineId(null); setLastAppliedRoutineName(null);
@@ -864,6 +906,13 @@ export default function WorkoutLog() {
         }
         if (raw) {
           const parsed = JSON.parse(raw);
+          setProgramLink(normalizeProgramLink(parsed.programLink));
+          setDeloadBackup(parsed.deloadBackup&&typeof parsed.deloadBackup.id==="string"&&Array.isArray(parsed.deloadBackup.before)&&Array.isArray(parsed.deloadBackup.after)?parsed.deloadBackup:null);
+          setWorkoutSlot(normalizeProgramLink(parsed.programLink)?programDraftSlot(parsed.programLink.runId,parsed.programLink.ordinal):typeof parsed.workoutSlot === "string"?parsed.workoutSlot:"single");
+          setWorkoutSaveId(typeof parsed.workoutSaveId === "string" ? parsed.workoutSaveId : null);
+          workoutSaveIdRef.current = typeof parsed.workoutSaveId === "string" ? parsed.workoutSaveId : null;
+          setRoutineBuilderMode(parsed.routineBuilderMode === true);
+          setProgramRoutineAssignment(parsed.programRoutineAssignment ?? null);
           setLastAppliedRoutineId(readWorkoutDraftRoutineId(parsed.lastAppliedRoutineId));
           setLastAppliedRoutineName(typeof parsed.lastAppliedRoutineName === "string" ? parsed.lastAppliedRoutineName : null);
           setRecommendationUsage(parseRecommendationUsage(parsed.recommendationUsage));
@@ -877,6 +926,7 @@ export default function WorkoutLog() {
             const hydratedExercises: Exercise[] = (parsed.exercises as any[]).map((exercise: any) => ({
               id: typeof exercise?.id === "string" ? exercise.id : `${Date.now()}-${Math.random().toString(16).slice(2)}`,
               name: typeof exercise?.name === "string" ? exercise.name : "Exercise",
+              deloadAppliedId: typeof exercise?.deloadAppliedId === "string" ? exercise.deloadAppliedId : null,
               targets: normalizeExerciseTargets(exercise?.targets),
               mode: exercise?.mode === "cardio" ? "cardio" : exercise?.mode === "resistance" ? "resistance" : undefined,
               plannedRestSec: typeof exercise?.plannedRestSec === "number" && exercise.plannedRestSec >= 0 && exercise.plannedRestSec <= 3600 ? exercise.plannedRestSec : undefined,
@@ -938,7 +988,7 @@ export default function WorkoutLog() {
             setRestTimerByExercise(initialRestTimers);
           }
           if (parsed.exerciseUnits) setExerciseUnits(parsed.exerciseUnits);
-          if (parsed.sessionTitle) setSessionTitle(parsed.sessionTitle);
+          setSessionTitle(typeof parsed.sessionTitle === "string" ? parsed.sessionTitle : "");
           if (typeof parsed.sessionDateText === "string" && parseSessionDate(parsed.sessionDateText)) {
             const shouldRefreshDraftDate =
               !savedAtDate ||
@@ -955,23 +1005,20 @@ export default function WorkoutLog() {
               (parsed.workoutTimerHasStarted == null && parsed.exercises?.some((ex: Exercise) => ex.sets?.some(set => set.done)))
           );
         }
+        loadedSuccessfully = true;
       } catch (e) {
-        console.log("Failed to load draft, clearing cache", e);
+        if (!active || auth.currentUser?.uid !== requestedUid) return;
+        console.log("Failed to load draft; preserving cache", e);
         setLastAppliedRoutineId(null); setLastAppliedRoutineName(null);
-        try {
-          const user = auth.currentUser;
-          if (user) {
-            await AsyncStorage.removeItem(getDraftKey(user.uid));
-          }
-        } catch {
-          // no-op
-        }
+        setUiFeedback("Couldn't read your saved workout draft. It has been preserved.");
+        return;
       } finally {
-        draftHydratedRef.current = true;
-        setDraftReadyUid(auth.currentUser?.uid ?? null);
+        if (active && auth.currentUser?.uid === requestedUid) {
+          draftHydratedRef.current = loadedSuccessfully;
+          setDraftReadyUid(requestedUid ?? null);
+        }
       }
     };
-    let active = true;
     startupLoadTaskRef.current?.cancel();
     startupLoadTaskRef.current = scheduleAfterInteractions(async () => {
       await loadDraft();
@@ -993,6 +1040,7 @@ export default function WorkoutLog() {
     resetElapsedTimer,
     restoreElapsedTimer,
     routerParams.todayPlanApplied,
+    draftReload,
   ]);
 
   useEffect(() => {
@@ -1062,7 +1110,7 @@ export default function WorkoutLog() {
             setExercises(old => append ? [...old, ...imported.exercises] : imported.exercises);
             setExerciseUnits(old => append ? { ...old, ...imported.units } : imported.units);
             setRestPreferenceByExercise(old => append ? { ...old, ...imported.rest } : imported.rest);
-            if (!append) { setSessionTitle(sharedPlan.title); setSessionDateText(toLocalDateKey(new Date())); resetElapsedTimer(); setRestTimerByExercise({}); setLastAppliedRoutineId(null); setLastAppliedRoutineName(null); setRoutineBuilderMode(false); }
+            if (!append) { setProgramLink(null); setWorkoutSlot("single"); setWorkoutSaveId(null); workoutSaveIdRef.current = null; setWorkoutView("editor"); setSessionTitle(sharedPlan.title); setSessionDateText(toLocalDateKey(new Date())); resetElapsedTimer(); setRestTimerByExercise({}); setLastAppliedRoutineId(null); setLastAppliedRoutineName(null); setRoutineBuilderMode(false); }
             setUiFeedback(append ? "Shared exercises added." : "Shared workout is ready to edit.");
           };
           if (exercises.length) showAppDialog({ title: "A workout is already open", message: "Keep your workout, add the shared exercises, or replace the current draft. Replacing discards the current unsaved workout.", buttonLayout: "vertical", buttons: [{ text: "Keep current workout", role: "cancel", variant: "secondary" }, { text: "Add shared exercises", variant: "primary", onPress: () => apply(true) }, { text: "Replace current workout", role: "destructive", variant: "secondary", onPress: () => apply(false) }] });
@@ -2040,7 +2088,13 @@ export default function WorkoutLog() {
     setShowDiscardConfirmModal(true);
   };
 
-  const confirmDiscardWorkout = () => {
+  const confirmDiscardWorkout = async () => {
+    const uid = auth.currentUser?.uid;
+    if (uid) {
+      try { await removeParkedDraft(uid,workoutSlot); }
+      catch { setUiFeedback("Couldn't discard the workout. Please try again."); return; }
+    }
+    setProgramLink(null);setDeloadBackup(null);setWorkoutSaveId(null);workoutSaveIdRef.current=null;setWorkoutSlot("single");setWorkoutView("choices");
     restAlerts.clear();
     setRecommendationUsage(parseRecommendationUsage());
     resetGuidance();
@@ -2091,6 +2145,7 @@ export default function WorkoutLog() {
         .map((ex) => {
         const mode = getExerciseMode(ex.name);
         const cleanedSets = ex.sets.filter((s) => {
+          if(!s.done)return false;
           if (mode === "cardio") {
             const hasDistance = typeof s.distanceKm === "number" && s.distanceKm >= 0;
             const hasDuration = typeof s.durationSec === "number" && s.durationSec >= 0;
@@ -2141,7 +2196,7 @@ export default function WorkoutLog() {
 
       const totalCleanSets = sanitizedExercises.reduce((sum, ex) => sum + ex.sets.length, 0);
       if (totalCleanSets === 0) {
-        showAppAlert("Nothing to save", "Add reps to at least one set before saving.");
+        showAppAlert("No completed sets", "Mark at least one set Done before saving your workout.");
         setSaving(false);
         return;
       }
@@ -2179,7 +2234,13 @@ export default function WorkoutLog() {
         ...recommendationFeedback(recommendationUsage, feedbackAnswers),
         createdAt: Timestamp.now(),
       };
-      await addDoc(collection(db, "users", user.uid, "workouts"), payload);
+      const saveId = workoutSaveIdRef.current ?? doc(collection(db, "users", user.uid, "workouts")).id;
+      workoutSaveIdRef.current = saveId; setWorkoutSaveId(saveId);
+      await AsyncStorage.setItem(getDraftKey(user.uid), serializeWorkoutDraft({ ...workoutDraftPayload, workoutSaveId: saveId }));
+      await saveLinkedWorkout(user.uid, saveId, payload, programLink);
+      await removeParkedDraft(user.uid, workoutSlot);
+      setProgramLink(null); setDeloadBackup(null); setWorkoutSaveId(null); workoutSaveIdRef.current = null; setWorkoutSlot("single");
+      setWorkoutView("choices");
       restAlerts.clear();
       setRecommendationUsage(parseRecommendationUsage());
       resetGuidance();
@@ -2336,10 +2397,21 @@ export default function WorkoutLog() {
         updatedAt: Timestamp.now(),
         ...(editingRoutineId ? {} : { createdAt: Timestamp.now() }),
       };
-      if (editingRoutineId) {
-        await setDoc(doc(db, "users", user.uid, "routines", editingRoutineId), payload, { merge: true });
+      const targetRoutineId = programRoutineAssignment?.routineId ?? editingRoutineId;
+      if (targetRoutineId) {
+        await setDoc(doc(db, "users", user.uid, "routines", targetRoutineId), payload, { merge: true });
       } else {
         await addDoc(collection(db, "users", user.uid, "routines"), payload);
+      }
+      if (programRoutineAssignment) {
+        const assignment = programRoutineAssignment;
+        const programSnapshot = await getDoc(doc(db, "users", user.uid, "workoutPrograms", assignment.programId));
+        if (!programSnapshot.exists()) throw new Error("The program was removed. Your routine is saved.");
+        const program = { ...programSnapshot.data(), id: assignment.programId } as ProgramRecord;
+        await saveProgram(user.uid, { ...program, days: program.days.map((day,index) => index === assignment.day ? { type: "workout", routineId: assignment.routineId, title: name } : day) });
+        await switchWorkoutPath(assignment.returnSlot, { exercises: [], exerciseUnits: {}, sessionTitle: "", programLink: null });
+        await removeParkedDraft(user.uid, workoutSlot);
+        setProgramManagerRequest({programId:assignment.programId,token:guidanceNowMs});
       }
       setShowRoutineNameModal(false);
       setRoutineNameInput("");
@@ -2858,23 +2930,27 @@ export default function WorkoutLog() {
     sessionDateText !== toLocalDateKey(new Date()) ||
     (!guidanceApplied && workoutGuidanceSignature(todayGuidance.inputs.plannedWorkout) !== currentGuidanceSignature)
   ));
-  const applyWorkoutGuidance = () => {
+  const applyWorkoutGuidance = (selected: string[]) => {
     if (!auth.currentUser || !todayGuidance || todayPlan.busy || todayPlan.error || guidanceStale || guidanceApplied || saving) return;
     try {
-      const applied = applyTodayPlanToWorkoutDraft(serializeWorkoutDraft(workoutDraftPayload), todayGuidance.result.exerciseAdjustments ?? []);
-      const next = JSON.parse(applied.raw).exercises as Exercise[];
+      const applied = applyTodayPlanToWorkoutDraft(serializeWorkoutDraft(workoutDraftPayload), (todayGuidance.result.exerciseAdjustments ?? []).filter(item => selected.includes(item.exerciseName)));
+      const deloadId=todayGuidance.inputs.deload?.id;
+      const next = (JSON.parse(applied.raw).exercises as Exercise[]).map(exercise=>deloadId&&selected.includes(exercise.name)?{...exercise,deloadAppliedId:deloadId}:exercise);
+      const backup=deloadId?{id:deloadId,before:exercises,after:next}:deloadBackup;
+      const appliedRaw=JSON.stringify({...JSON.parse(applied.raw),exercises:next,deloadBackup:backup});
       if (!applied.changedExercises) {
         showAppAlert("No changes applied", "The suggested changes do not affect any unfinished working sets.");
         return;
       }
+      setDeloadBackup(backup);
       setAppliedGuidance({
         plan: todayGuidance,
         before: exercises,
         after: next,
-        signature: workoutGuidanceSignature(withAvailableWeights(parseWorkoutDraftPlan(applied.raw), availableWeightsPreferences.values)),
+        signature: workoutGuidanceSignature({ ...guidanceWorkout, exercises: guidanceWorkout.exercises?.map(exercise => { const after = parseWorkoutDraftPlan(appliedRaw)?.exercises?.find(item => item.name === exercise.name); return after ? { ...exercise, sets: after.sets,deloadAppliedId:after.deloadAppliedId??null } : exercise; }) }),
       });
       setExercises(next);
-      void AsyncStorage.setItem(getDraftKey(auth.currentUser!.uid), applied.raw)
+      void AsyncStorage.setItem(getDraftKey(auth.currentUser!.uid), appliedRaw)
         .catch((error) => console.log("Failed to save applied workout guidance", error));
       setShowTodayGuidance(false);
     } catch (error) {
@@ -2909,6 +2985,66 @@ export default function WorkoutLog() {
   // Cache unchanged card JSX so navigation and background context updates don't rebuild every row.
   const exerciseCards = useWorkoutExerciseCards({ targetsEditorOpen: !!targetsExercise, exercises, exerciseUnits, getExerciseMode, effortScale, previousExerciseSetsByName, findCatalogExercise, restTimerByExercise, replaceTarget, replaceSearch, replaceGroup, replacementOptions, replacementLimit, replacementPageKey, isTabletLayout, formatLastSetSummary, scrollNativeGesture, getExerciseZone, undoDeletedSet, cardActions, styles, colors, fontScale, editingSet, warmupTarget, cardioTimeTarget, cardioDistanceTarget, showCardioTimeModal, showCardioDistanceModal, setEditingSet, setReplacementPage });
 
+  const { cancelProgramRoutine, switchWorkoutPath, removeParkedDraft, openSavedDrafts } = useEventCallbacks({
+  openSavedDrafts: async () => {
+    const uid=activeUid;if(!uid)return;
+    const request=++savedDraftPickerRequest.current;
+    setSavedDraftPicker({uid,slots:null,error:null});setShowSavedDrafts(true);
+    try {
+      const {raw,slots}=await loadWorkoutDraftCache(AsyncStorage,getDraftKey(uid),`workout-draft-slots-v1:${uid}`);
+      const current=raw?JSON.parse(raw):null;
+      const all={...slots};
+      if(current&&(current.exercises?.length||current.routineBuilderMode)){
+        const link=normalizeProgramLink(current.programLink);
+        all[link?programDraftSlot(link.runId,link.ordinal):current.workoutSlot??"single"]=current;
+      }
+      if(draftHydratedRef.current&&(workoutDraftPayload.exercises.length||workoutDraftPayload.routineBuilderMode))all[workoutSlot]=workoutDraftPayload;
+      if(auth.currentUser?.uid===uid&&savedDraftPickerRequest.current===request)setSavedDraftPicker({uid,slots:all,error:null});
+    }catch {
+      if(auth.currentUser?.uid===uid&&savedDraftPickerRequest.current===request)setSavedDraftPicker({uid,slots:null,error:"Couldn't load saved workouts. Your drafts are preserved."});
+    }
+  },
+  cancelProgramRoutine: async () => {
+    const assignment=programRoutineAssignment,uid=activeUid,slot=workoutSlot;
+    if(!assignment||!uid)return;
+    try {
+      await switchWorkoutPath(assignment.returnSlot,{exercises:[],exerciseUnits:{},sessionTitle:""});
+      if(auth.currentUser?.uid!==uid)return;
+      await removeParkedDraft(uid,slot);
+      setProgramManagerRequest({programId:assignment.programId,token:guidanceNowMs});
+    }catch{setUiFeedback("Couldn't restore your workout. Your drafts are preserved; try again.");}
+  },
+  switchWorkoutPath: async (destination: string, seed: Record<string, unknown>) => {
+    const uid = auth.currentUser?.uid;
+    if (!uid || uid !== activeUid || !draftHydratedRef.current) throw new Error("Wait for your workout draft to load.");
+    draftHydratedRef.current = false;
+    try {
+      const key = `workout-draft-slots-v1:${uid}`;
+      const slots = readDraftSlots(await AsyncStorage.getItem(key));
+      const result = switchDraftSlot(slots, workoutDraftPayload, destination, seed);
+      // Park first: failure must never replace the only copy of an unfinished workout.
+      await AsyncStorage.setItem(key, JSON.stringify(result.slots));
+      await AsyncStorage.setItem(getDraftKey(uid), serializeDraftSlot(refreshResumedWorkoutDate(result.draft, toLocalDateKey(new Date()))));
+      if (auth.currentUser?.uid !== uid) return;
+      setParkedDraftSnapshot({uid,slots:result.slots});
+      resetGuidance(); setAppliedGuidance(null); restAlerts.clear();
+      setWorkoutView("editor"); setDraftReload(value => value + 1);
+    } catch (failure) { draftHydratedRef.current = true; throw failure; }
+  },
+  removeParkedDraft: async (uid: string, slot: string) => {
+    const key = `workout-draft-slots-v1:${uid}`;
+    const slots = readDraftSlots(await AsyncStorage.getItem(key));
+    delete slots[slot]; await AsyncStorage.setItem(key, JSON.stringify(slots));
+    if(auth.currentUser?.uid===uid)setParkedDraftSnapshot({uid,slots});
+  }
+  });
+  useLayoutEffect(()=>{
+    routineBackRef.current=()=>showAppDialog({title:"Cancel routine?",message:"Restore your previous workout and return to program setup. The assigned routine stays unchanged.",buttons:[{text:"Keep editing",role:"cancel"},{text:"Cancel routine",onPress:()=>void cancelProgramRoutine()}]});
+    return()=>{routineBackRef.current=null;};
+  },[cancelProgramRoutine]);
+
+
+
   return (
     <SafeAreaView style={styles.screen} edges={["top", "left", "right"]}>
       <KeyboardAvoidingView
@@ -2917,7 +3053,7 @@ export default function WorkoutLog() {
         keyboardVerticalOffset={Platform.OS === "ios" ? insets.top : 0}
       >
         <View style={styles.scrollShell}>
-        <NotebookHeader compact={keyboardHeight > 0 && width > height} title={routineBuilderMode ? "Routine builder" : "Workout"} onBack={handleGoBack} right={!routineBuilderMode ? <SharingInboxButton /> : undefined} action={exercises.length && routineBuilderMode ? "Save" : undefined} onAction={openCreateRoutineModal} disabled={saving} />
+        <NotebookHeader compact={keyboardHeight > 0 && width > height} title={routineBuilderMode ? "Routine builder" : "Workout"} onBack={handleGoBack} right={!routineBuilderMode ? <SharingInboxButton /> : undefined} disabled={saving} />
         <GestureDetector gesture={scrollNativeGesture}>
           <ScrollView
             ref={noteScrollRef}
@@ -2931,6 +3067,16 @@ export default function WorkoutLog() {
             keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
             scrollEventThrottle={16}
           >
+      {activeUid ? <WorkoutProgramPanel key={activeUid} managerRequest={programManagerRequest ?? (routerParams.programAction ? {action:routerParams.programAction === "create" ? "create" : "library",token:0} : null)} onManagerOpened={() => { setProgramManagerRequest(null); if(routerParams.programAction)router.setParams({programAction:""}); }} uid={activeUid} data={workoutView === "choices" || programLink?.programId === programs.activeId ? programs : { ...programs, active: null, run: null }} routines={routines} choices={workoutView === "choices"} hasDraft={Object.keys(savedDrafts).length>0}
+        onResume={() => void openSavedDrafts()}
+        onRestDay={() => setWorkoutView("choices")}
+        onStandalone={() => switchWorkoutPath("single", { exercises: [], exerciseUnits: {}, sessionTitle: "", sessionDateText: toLocalDateKey(new Date()), elapsedSeconds: 0, programLink: null })}
+        onWorkout={(routine, link, reviewedDraft) => switchWorkoutPath(programDraftSlot(link.runId,link.ordinal), reviewedDraft??programRoutineDraft(routine, link, () => `${Date.now()}-${Math.random().toString(16).slice(2)}`))}
+        onCreateRoutine={async (program, day) => {
+          await switchWorkoutPath(`builder:${program.id}:${day}`, { exercises: [], exerciseUnits: {}, sessionTitle: "", sessionDateText: toLocalDateKey(new Date()), elapsedSeconds: 0,
+            routineBuilderMode: true, programLink: null, programRoutineAssignment: { programId: program.id, day, returnSlot: workoutSlot, routineId: doc(collection(db, "users", activeUid, "routines")).id } });
+        }} /> : null}
+      {workoutView === "editor" ? <>
       {exercises.length > 0 || routineBuilderMode ? <WorkoutSessionCard
         title={sessionTitle}
         dateLabel={
@@ -2955,9 +3101,20 @@ export default function WorkoutLog() {
 
       {!routineBuilderMode && sessionDateText === toLocalDateKey(new Date()) ? (
         <WorkoutTodayPlan
+          recoveryContent={todayPlan.contextVisible && activeUid ? <RecoveryCheckInSheet embedded uid={activeUid} plan={guidanceWorkout} requiredForReview
+        onClose={() => { todayPlan.setContextVisible(false); setShowTodayGuidance(Boolean(todayGuidance)); }}
+        onSaved={async () => { todayPlan.setContextVisible(false); await todayPlan.review(); }} /> : null}
           effortScale={effortScale}
+          hasDeloadBackup={Boolean(deloadBackup)}
+          onStartDeload={()=>showAppDialog({title:"Plan a deload week?",message:"Use a lighter plan for seven days. Review the exercises before applying it. Normal routine prescriptions and phase dates stay saved.",buttons:[{text:"Cancel",role:"cancel"},{text:"Start deload",onPress:()=>void todayPlan.changeDeload(true).catch(()=>showAppAlert("Deload not saved","Please try again."))}]})}
+          onEndDeload={()=>showAppDialog({title:"Return to normal plan?",message:"End the deload period and restore unchanged planned sets. Recorded or edited sets stay untouched.",buttons:[{text:"Cancel",role:"cancel"},{text:"Return to normal",onPress:()=>{
+            void todayPlan.changeDeload(false).then(()=>{
+              if(deloadBackup){const restored=restoreDeloadExercises(exercises,deloadBackup);setExercises(restored.exercises);if(restored.manual.length)showAppAlert("Recorded sets kept",`${restored.manual.join(", ")}: recorded or edited sets stayed unchanged. Review these prescriptions manually.`);}
+              setDeloadBackup(null);setAppliedGuidance(null);setShowTodayGuidance(false);
+            }).catch(()=>showAppAlert("Couldn't end deload","Please try again."));
+          }}]})}
           plan={todayGuidance}
-          busy={todayPlan.busy || !availableWeightsPreferences.loaded}
+          busy={todayPlan.busy || !availableWeightsPreferences.loaded || !progressionPreferences.loaded}
           error={todayPlan.error}
           recovery={todayPlan.recovery}
           contextSummary={getDailyContextSummary(todayGuidance?.inputs.dailyContext ?? null)}
@@ -2972,14 +3129,15 @@ export default function WorkoutLog() {
             return exercise && exerciseUnits[exercise.id] === "lbs" ? "lbs" : "kg";
           }}
           onOpen={() => { if (guidanceApplied && !guidanceStale) setShowTodayGuidance(true); else void todayPlan.review(); }}
-          onClose={() => setShowTodayGuidance(false)}
+          onClose={() => { if(todayPlan.contextVisible){todayPlan.setContextVisible(false);setShowTodayGuidance(Boolean(todayGuidance));}else setShowTodayGuidance(false); }}
           onApply={applyWorkoutGuidance}
           onUndo={() => {
             if (appliedGuidance?.after !== exercises) return;
             setExercises(appliedGuidance.before);
+            setDeloadBackup(null);
             if (auth.currentUser) {
               void AsyncStorage.setItem(getDraftKey(auth.currentUser.uid), serializeWorkoutDraft({
-                ...workoutDraftPayload, exercises: appliedGuidance.before,
+                ...workoutDraftPayload, exercises: appliedGuidance.before,deloadBackup:null,
               })).catch((error) => console.log("Failed to save guidance undo", error));
             }
             setAppliedGuidance(null);
@@ -3019,7 +3177,7 @@ export default function WorkoutLog() {
         </View>
       ) : null}
 
-      <WorkoutActionGrid
+      {!routineBuilderMode ? <WorkoutActionGrid
         hasWorkout={exercises.length > 0}
         onRoutines={() => setShowMyRoutinesModal(true)}
         onCreate={beginCreateRoutine}
@@ -3027,8 +3185,10 @@ export default function WorkoutLog() {
         onRecommend={() => setShowSetup(true)}
         onShare={() => { try { sharing.open(workoutToSharingPlan(sessionTitle, exercises, exerciseUnits, getExerciseMode, restPreferenceByExercise, effortScale)); } catch (e) { setUiFeedback(e instanceof Error ? e.message : "Complete the planned sets before sharing."); } }}
         onDiscard={discardWorkout}
-      />
-      {routineBuilderMode ? <TouchableOpacity style={styles.textAction} onPress={() => setRoutineBuilderMode(false)}><Text style={styles.linkText}>Exit builder</Text></TouchableOpacity> : null}
+      /> : null}
+      {routineBuilderMode ? <TouchableOpacity style={styles.textAction} onPress={() => {
+        if(programRoutineAssignment)void cancelProgramRoutine();else setRoutineBuilderMode(false);
+      }}><Text style={styles.linkText}>Cancel routine</Text></TouchableOpacity> : null}
 
       {exerciseCards}
 
@@ -3040,7 +3200,18 @@ export default function WorkoutLog() {
       </TouchableOpacity>
 
       {!routineBuilderMode && exercises.length ? <TouchableOpacity accessibilityRole="button" disabled={saving} style={[styles.primaryButton, { marginTop: 16 }]} onPress={finishWorkout}><Text style={styles.primaryText}>Finish</Text></TouchableOpacity> : null}
-      {exercises.length ? <TouchableOpacity style={[styles.secondaryButton, { marginTop: 12 }]} onPress={openCreateRoutineModal}><Text style={styles.secondaryText}>Save as routine</Text></TouchableOpacity> : null}
+      {exercises.length || routineBuilderMode ? <TouchableOpacity disabled={!exercises.length || routineSaving} style={[routineBuilderMode ? styles.primaryButton : styles.secondaryButton, { marginTop: 12 },!exercises.length&&{opacity:0.5}]} onPress={openCreateRoutineModal}><Text style={routineBuilderMode ? styles.primaryText : styles.secondaryText}>{routineBuilderMode ? "Save routine" : "Save as routine"}</Text></TouchableOpacity> : null}
+      </> : null}
+      <WorkoutModalShell visible={showSavedDrafts} onRequestClose={()=>setShowSavedDrafts(false)} backdropStyle={styles.modalBackdrop} cardStyle={styles.modalCard}>
+        <Text style={styles.modalTitle}>Resume workout</Text>
+        {savedDraftPicker?.uid!==activeUid||!savedDraftPicker.slots ? <View style={{paddingVertical:16,gap:12}}>
+          <Text style={styles.muted}>{savedDraftPicker?.error??"Loading saved workouts..."}</Text>
+          {savedDraftPicker?.error?<TouchableOpacity style={styles.textAction} onPress={()=>void openSavedDrafts()}><Text style={styles.linkText}>Try again</Text></TouchableOpacity>:null}
+        </View> : Object.entries(savedDraftPicker.slots).map(([slot,draft])=><TouchableOpacity key={slot} style={[styles.exerciseOptionRow,{paddingVertical:16}]} onPress={()=>{
+          void switchWorkoutPath(slot,{}).then(()=>setShowSavedDrafts(false)).catch(()=>setUiFeedback("Couldn't restore your workout. Try again."));
+        }}><View style={{flex:1,gap:6}}><Text style={styles.exerciseOptionText}>{String(draft.sessionTitle || (draft.routineBuilderMode?"Routine draft":"Untitled workout"))}</Text><Text style={styles.muted}>{workoutDraftContext(draft,programs.programs)}</Text></View><Ionicons name="chevron-forward" size={20} color={colors.muted}/></TouchableOpacity>)}
+        <TouchableOpacity style={styles.textAction} onPress={()=>setShowSavedDrafts(false)}><Text style={styles.linkText}>Cancel</Text></TouchableOpacity>
+      </WorkoutModalShell>
       <WorkoutModalShell visible={showSetup} onRequestClose={() => setShowSetup(false)} backdropStyle={styles.modalBackdrop} cardStyle={styles.modalCard}>
         <Text style={styles.modalTitle}>Recommend workout</Text>
         <WorkoutRecommendationSection styles={styles} focuses={RECOMMENDATION_FOCUSES} selectedFocus={recommendationFocus} recommending={recommending} summary={recommendationSummary} onSelectFocus={setRecommendationFocus} onOpenLengthPicker={() => { setShowSetup(false); setShowWorkoutLengthModal(true); }} />
@@ -3136,7 +3307,7 @@ export default function WorkoutLog() {
           <View style={styles.modalBackdrop}>
             <TouchableWithoutFeedback onPress={() => {}}>
               <AdaptiveModalCard style={styles.modalCard}>
-                <WorkoutExerciseActions openExerciseTargets={openExerciseTargets} effortScale={effortScale} styles={styles} colors={colors} activeActionExercise={activeActionExercise} activeActionMode={activeActionMode} activeActionUnit={activeActionUnit} activeExerciseActionId={activeExerciseActionId} activeActionIndex={activeActionIndex} exercises={exercises} availableWeightsPreferences={availableWeightsPreferences} setAvailableWeightsTarget={setAvailableWeightsTarget} closeExerciseActions={closeExerciseActions} moveExercise={moveExercise} setReplaceTarget={setReplaceTarget} setReplaceSearch={setReplaceSearch} setReplaceGroup={setReplaceGroup} toggleFavoriteExercise={toggleFavoriteExercise} activeActionIsFavorite={activeActionIsFavorite} deleteExercise={deleteExercise} toggleExerciseUnit={toggleExerciseUnit} />
+                <WorkoutExerciseActions openProgressionSettings={(name,unit) => setProgressionTarget({name,unit})} openExerciseTargets={openExerciseTargets} effortScale={effortScale} styles={styles} colors={colors} activeActionExercise={activeActionExercise} activeActionMode={activeActionMode} activeActionUnit={activeActionUnit} activeExerciseActionId={activeExerciseActionId} activeActionIndex={activeActionIndex} exercises={exercises} availableWeightsPreferences={availableWeightsPreferences} setAvailableWeightsTarget={setAvailableWeightsTarget} closeExerciseActions={closeExerciseActions} moveExercise={moveExercise} setReplaceTarget={setReplaceTarget} setReplaceSearch={setReplaceSearch} setReplaceGroup={setReplaceGroup} toggleFavoriteExercise={toggleFavoriteExercise} activeActionIsFavorite={activeActionIsFavorite} deleteExercise={deleteExercise} toggleExerciseUnit={toggleExerciseUnit} />
               </AdaptiveModalCard>
             </TouchableWithoutFeedback>
           </View>
@@ -4037,15 +4208,8 @@ export default function WorkoutLog() {
           onSave={(settings) => availableWeightsPreferences.save(availableWeightsTarget.name, settings)}
         />
       ) : null}
-      <TodayPlanContextModal
-        key={`${todayPlan.contextVisible}:${todayGuidance?.createdAt.toMillis() ?? 0}`}
-        visible={todayPlan.contextVisible}
-        context={todayGuidance?.inputs.dailyContext ?? null}
-        plan={guidanceWorkout}
-        saving={todayPlan.contextSaving}
-        onClose={() => { todayPlan.setContextVisible(false); setShowTodayGuidance(true); }}
-        onSave={(context) => void todayPlan.saveContext(context)}
-      />
+      {progressionTarget ? <ProgressionSettingsSheet name={progressionTarget.name} unit={progressionTarget.unit} initial={normalizeProgressionPreferences(progressionPreferences.values[weightPreferenceKey(progressionTarget.name)])} onClose={() => setProgressionTarget(null)} onSave={value => progressionPreferences.save(progressionTarget.name,value)} /> : null}
+
     </SafeAreaView>
   );
 }
