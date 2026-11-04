@@ -4,6 +4,7 @@ import { getAuth } from "firebase-admin/auth";
 import { deleteProfilePhotosForAccount } from "./profilePhotos";
 import { deleteWorkoutSharingForAccount } from "./workoutSharing";
 export { workoutSharing, syncSharingNickname } from "./workoutSharing";
+export { sharingPage } from "./sharingPage";
 export { expireWorkoutSharingInbox } from "./sharingRetention";
 export { stageProfilePhoto, commitProfilePhoto, getProfilePhoto, discardProfilePhotoUpload, cleanupAbandonedProfilePhotos } from "./profilePhotos";
 import * as functions from "firebase-functions/v1";

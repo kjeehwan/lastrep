@@ -7,6 +7,11 @@
     <meta name="robots" content="noindex,nofollow,noarchive" />
     <meta name="color-scheme" content="light dark" />
     <title>Shared plan · Lastrep</title>
+    <meta property="og:title" content="Shared plan · Lastrep" />
+    <meta property="og:type" content="website" />
+    <meta property="og:description" content="Preview this shared plan and open it in Lastrep." />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="Shared plan · Lastrep" />
     <link rel="stylesheet" href="/sharing.css" />
     <script type="module" src="/sharing.mjs"></script>
   </head>
@@ -15,19 +20,19 @@
       <header>
         <img src="/wordmark.svg" alt="Lastrep" width="144" height="48" />
       </header>
-      <p class="eyebrow">Shared plan</p>
+      <p id="plan-kind" class="eyebrow">Shared plan</p>
       <h1 id="title">A plan for you</h1>
       <p id="status" role="status" aria-live="polite">
         Checking this sharing link…
       </p>
       <section id="preview" aria-label="Shared plan" hidden></section>
       <nav aria-label="Open shared plan">
-        <a id="open" class="button" hidden>Open in Lastrep</a>
+        <a id="open" class="button" hidden><img class="action-icon app-icon" src="/app-icon.png" alt="" width="32" height="32" /><span>Open in Lastrep</span></a>
         <a
           class="button button-secondary"
           href="https://play.google.com/store/apps/details?id=com.kjeehwan.lastrep"
           rel="noreferrer"
-          >Get Lastrep on Google Play</a
+          ><img class="action-icon" src="/google-play.svg" alt="" width="28" height="28" /><span>Get Lastrep on Google Play</span></a
         >
       </nav>
       <p class="footnote">
@@ -40,6 +45,7 @@
         open the plan.
       </p>
       <button id="retry" type="button" hidden>Try again</button>
+      <footer><a href="/privacy">Privacy policy</a></footer>
     </main>
   </body>
 </html>
