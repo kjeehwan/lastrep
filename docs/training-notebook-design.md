@@ -1,6 +1,6 @@
 # Lastrep Training Notebook Design Specification
 
-Version: 1.59 | Date: November 4, 2026
+Version: 1.60 | Date: November 4, 2026
 
 Status: Workout, Home, Nutrition, Sleep, Profile and Settings browser design
 directions approved through iterative review. Shared rules below incorporate that
@@ -43,7 +43,10 @@ controls share one row, equal size and a label above the brand: OPEN ON / Lastre
 and GET LASTREP ON / Google Play. Omit a redundant launch caret. Use HTML text
 for custom action wording; retain official badge artwork unmodified when using
 the standard badge. Place rest/tempo context below targets and before the set
-prescriptions, joined with a middle dot on one row at normal mobile sizes.
+prescriptions. Exercise guidance uses subtle static badges: targets/effort in the
+first row, rest/tempo in the second. Wrap whole badges on narrow screens without
+button roles or selection states. Use Google's own Play icon artwork rather than
+an approximate polygon drawing.
 The public privacy page is generated from doc/privacy.md; do not maintain a
 separate manually edited policy copy. Host fonts/icons locally and include licenses.
 Generate the deletion-request page from doc/account-and-data-deletion.md using

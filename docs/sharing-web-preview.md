@@ -82,3 +82,11 @@ email-handler differences added unnecessary friction. The canonical deletion
 instructions, support address, request subjects and six sections remain intact.
 Shared target summaries omit the colon; the Google Play name gains its locally
 hosted icon while retaining the paired launch-card layout.
+
+## Exercise guidance badges (November 4)
+
+Target reps and target RPE/RIR use separate non-interactive badges, followed by
+rest and tempo badges in a second row. Their surfaces use Notebook input/rule
+tokens and wrap as whole labels; they are information rather than choice controls.
+The simplified pointy Google Play SVG is replaced with the rounded four-color
+artwork from Google's own storefront, https://play.google.com/store/games.
