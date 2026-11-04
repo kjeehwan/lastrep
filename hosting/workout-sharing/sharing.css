@@ -142,15 +142,7 @@ summary:focus-visible { outline: 2px solid #667fbd; outline-offset: 3px; }
 .launch-card-secondary { background: transparent; color: var(--ink); }
 .launch-label { font-size: 10px; font-weight: 600; letter-spacing: .06em; line-height: 14px; white-space: nowrap; }
 .launch-card .action-wordmark { width: 104px; max-width: 100%; height: 35px; object-fit: contain; }
-.store-name { font-size: clamp(20px,5.8vw,24px); font-weight: 600; letter-spacing: -.04em; line-height: 35px; white-space: nowrap; }
-.email-help { border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); padding: 16px 0; margin-bottom: 24px; }
-.email-help summary { cursor: pointer; font-weight: 600; display: flex; align-items: center; justify-content: space-between; gap: 12px; list-style: none; }
-.email-help summary::-webkit-details-marker { display: none; }
-.email-help summary::after { content: ''; flex-shrink: 0; width: 8px; height: 8px; border-right: 1.7px solid var(--muted); border-bottom: 1.7px solid var(--muted); transform: rotate(-45deg); margin-right: 4px; }
-.email-help[open] > summary::after { transform: rotate(45deg); }
-.request-copy-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 16px; margin: 16px 0; }
-.copy-status { color: var(--muted); font-size: 14px; }
-.request-fallback { width: 100%; box-sizing: border-box; padding: 12px; border: 1px solid var(--rule); border-radius: 8px; background: var(--input); color: var(--ink); font: inherit; resize: vertical; }
+.store-name { font-size: clamp(17px,4.8vw,20px); font-weight: 600; letter-spacing: -.04em; line-height: 35px; white-space: nowrap; }
 footer { margin-top: 32px; color: var(--muted); font-size: 14px; }
 .policy h2 { margin-top: 32px; margin-bottom: 12px; }
 .policy li { margin: 8px 0; }
@@ -165,3 +157,6 @@ details.program-day article { margin: 0 12px; }
     --input: #242521;
   }
 }
+
+.store-brand { display: flex; align-items: center; gap: 6px; min-height: 35px; }
+.store-brand img { flex-shrink: 0; width: 20px; height: 22px; }

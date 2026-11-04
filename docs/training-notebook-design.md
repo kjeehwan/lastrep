@@ -1,6 +1,6 @@
 # Lastrep Training Notebook Design Specification
 
-Version: 1.58 | Date: November 4, 2026
+Version: 1.59 | Date: November 4, 2026
 
 Status: Workout, Home, Nutrition, Sleep, Profile and Settings browser design
 directions approved through iterative review. Shared rules below incorporate that
@@ -49,9 +49,10 @@ separate manually edited policy copy. Host fonts/icons locally and include licen
 Generate the deletion-request page from doc/account-and-data-deletion.md using
 the same legal-page styling. Distinguish account deletion from selected-data
 requests and keep their email subjects separate.
-Email-request controls explain that they open the device's configured email app.
-Provide copyable request details when no email handler is configured, and show
-selectable text if clipboard access fails. Copying details does not send a request.
+Keep deletion instructions as readable in-app steps and email instructions with
+the support address and distinct subjects. Omit extra email-draft and copy controls.
+Shared target summaries use “Target 6–8 reps” without a colon. Place the Google
+Play icon beside its name, with both launch cards fitting one row on small screens.
 
 ## Shared input surfaces (October 23 follow-up)
 

@@ -74,3 +74,11 @@ Nineteen focused tests, backend build and focused lint passed. Browser checks
 verified light/dark paired controls, the single context row, equal card geometry,
 no narrow-screen overflow, actual clipboard text/subjects and visible feedback,
 and the selectable fallback after an injected clipboard denial.
+
+## Simplified preview and deletion page (November 4)
+
+The follow-up review removes the email-draft buttons and copy fallback: device
+email-handler differences added unnecessary friction. The canonical deletion
+instructions, support address, request subjects and six sections remain intact.
+Shared target summaries omit the colon; the Google Play name gains its locally
+hosted icon while retaining the paired launch-card layout.

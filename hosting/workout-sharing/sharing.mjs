@@ -79,7 +79,7 @@ export function renderSnapshot(doc, snapshot) {
     if (exercise.mode !== "cardio" && exercise.targets) {
       const targets = exercise.targets;
       const parts = [targets.minReps != null ? `${targets.minReps}\u2013${targets.maxReps} reps` : "", targets.targetRpe != null ? `${plan.effortScale.toUpperCase()} ${number(plan.effortScale === "rir" ? 10 - targets.targetRpe : targets.targetRpe)}` : ""].filter(Boolean);
-      if (parts.length) add(article, "p", `Target: ${parts.join(" \u00b7 ")}`, "details");
+      if (parts.length) add(article, "p", `Target ${parts.join(" \u00b7 ")}`, "details");
     }
     const details = [
       exercise.restSec ? `Rest ${number(exercise.restSec)} sec` : "",
