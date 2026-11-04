@@ -49,6 +49,18 @@ function documentFixture() {
   return { getElementById: (id) => nodes.get(id), createElement: node };
 }
 describe("public sharing landing page", () => {
+  it("renders a program's day order, rest days and safely escaped routine details", async () => {
+    const program = {version:2,kind:"program",title:"Four-day cycle",effortScale:"rir",days:[{type:"workout",title:"Chest",routineKey:"r1"},{type:"rest",title:"Rest",routineKey:null}],routines:[{key:"r1",plan}]};
+    const snapshot={sender:{nickname:"Example"},plan:program},doc=documentFixture();
+    const fetcher=vi.fn().mockResolvedValue({ok:true,json:async()=>({result:snapshot})});
+    expect((await loadSnapshot(shortToken,fetcher)).plan.version).toBe(2);
+    renderSnapshot(doc,snapshot);
+    const preview=doc.getElementById("preview");
+    expect(preview.children[0].textContent).toBe("2-day cycle · 1 routines");
+    expect(preview.children[1].tag).toBe("details");expect(preview.children[1].children[0].textContent).toBe("1 · Chest");
+    expect(preview.children[1].children[1].children[0].textContent).toBe("Bench press");
+    expect(preview.children[2].children[0].textContent).toBe("2 · Rest");
+  });
   it("shows exercise targets separately from set prescriptions using the chosen effort scale", () => {
     const doc = documentFixture();
     renderSnapshot(doc, { sender: { nickname: "Example" }, plan: { ...plan, exercises: [{ ...plan.exercises[0], targets: { minReps: 8, maxReps: 12, targetRpe: 8.5 } }] } });
@@ -99,7 +111,7 @@ describe("public sharing landing page", () => {
       });
     await loadSnapshot(token, fetcher);
     expect(JSON.parse(fetcher.mock.calls[0][1].body)).toEqual({
-      data: { op: "snapshot", token, expectedUid: null },
+      data: { op: "snapshot", token, expectedUid: null, supportedPlanVersion: 2 },
     });
     expect(fetcher.mock.calls[0][1]).toMatchObject({
       credentials: "omit",

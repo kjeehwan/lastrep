@@ -36,7 +36,7 @@ export async function loadSnapshot(token, fetcher = fetch, signal) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      data: { op: "snapshot", token, expectedUid: null },
+      data: { op: "snapshot", token, expectedUid: null, supportedPlanVersion: 2 },
     }),
     credentials: "omit",
     referrerPolicy: "no-referrer",
@@ -51,7 +51,7 @@ export async function loadSnapshot(token, fetcher = fetch, signal) {
     throw error;
   }
   const snapshot = body.result ?? body.data;
-  if (!snapshot?.plan || !Array.isArray(snapshot.plan.exercises))
+  if (!snapshot?.plan || !(snapshot.plan.version === 2 ? Array.isArray(snapshot.plan.days) && Array.isArray(snapshot.plan.routines) : Array.isArray(snapshot.plan.exercises)))
     throw new Error("retry");
   return snapshot;
 }
@@ -68,19 +68,25 @@ export function renderSnapshot(doc, snapshot) {
     `From ${snapshot.sender.nickname || "a Lastrep user"}`;
   const preview = doc.getElementById("preview");
   preview.replaceChildren();
-  for (const exercise of snapshot.plan.exercises) {
-    const article = add(preview, "article", "");
+  const renderExercises = (parent, plan) => {
+  for (const exercise of plan.exercises) {
+    const article = add(parent, "article", "");
     add(article, "h2", exercise.name);
     if (exercise.mode !== "cardio" && exercise.targets) {
       const targets = exercise.targets;
-      const parts = [targets.minReps != null ? `${targets.minReps}\u2013${targets.maxReps} reps` : "", targets.targetRpe != null ? `${snapshot.plan.effortScale.toUpperCase()} ${number(snapshot.plan.effortScale === "rir" ? 10 - targets.targetRpe : targets.targetRpe)}` : ""].filter(Boolean);
+      const parts = [targets.minReps != null ? `${targets.minReps}\u2013${targets.maxReps} reps` : "", targets.targetRpe != null ? `${plan.effortScale.toUpperCase()} ${number(plan.effortScale === "rir" ? 10 - targets.targetRpe : targets.targetRpe)}` : ""].filter(Boolean);
       if (parts.length) add(article, "p", `Target: ${parts.join(" \u00b7 ")}`, "details");
     }
-    for (const set of exercise.sets)
+    const groups=[];
+    for (const set of exercise.sets) {
+      const key=JSON.stringify(set),last=groups[groups.length-1];
+      if(last?.key===key)last.count++;else groups.push({key,set,count:1});
+    }
+    for (const {set,count} of groups)
       add(
         article,
         "p",
-        setPrescription(set, exercise, snapshot.plan.effortScale),
+        `${count>1?`${count} sets · `:""}${setPrescription(set, exercise, plan.effortScale)}`,
         "prescription",
       );
     const details = [
@@ -92,6 +98,19 @@ export function renderSnapshot(doc, snapshot) {
     ].filter(Boolean);
     if (details.length) add(article, "p", details.join("\n"), "details");
   }
+  };
+  if (snapshot.plan.version === 2) {
+    const program = snapshot.plan;
+    add(preview, "p", `${program.days.length}-day cycle · ${program.routines.length} routines`, "details");
+    program.days.forEach((day,index) => {
+      if(day.type === "rest") { const row=add(preview,"article","");add(row,"h2",`${index+1} · ${day.title}`);return; }
+      const routine=program.routines.find(r=>r.key===day.routineKey);
+      if(!routine) return;
+      const detail=add(preview,"details","");
+      add(detail,"summary",`${index+1} · ${day.title}`);
+      renderExercises(detail,routine.plan);
+    });
+  } else renderExercises(preview,snapshot.plan);
   preview.hidden = false;
 }
 export async function startPage(doc, location, fetcher = fetch) {

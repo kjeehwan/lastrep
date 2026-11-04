@@ -112,6 +112,9 @@ button:focus-visible {
 [hidden] {
   display: none !important;
 }
+details { border-bottom: 1px solid var(--rule); padding: 16px 0; }
+summary { cursor: pointer; font-weight: 600; padding: 8px 0; }
+details article { margin-left: 12px; margin-right: 12px; }
 @media (prefers-color-scheme: dark) {
   :root {
     --paper: #171914;
