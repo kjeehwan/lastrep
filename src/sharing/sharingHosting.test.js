@@ -57,9 +57,10 @@ describe("public sharing landing page", () => {
     renderSnapshot(doc,snapshot);
     const preview=doc.getElementById("preview");
     expect(preview.children[0].textContent).toBe("2-day cycle · 1 routines");
-    expect(preview.children[1].tag).toBe("details");expect(preview.children[1].children[0].textContent).toBe("1 · Chest");
+    expect(preview.children[1].tag).toBe("details");expect(preview.children[1].children[0].children.map(n=>n.textContent)).toEqual(["1","Chest"]);
     expect(preview.children[1].children[1].children[0].textContent).toBe("Bench press");
-    expect(preview.children[2].children[0].textContent).toBe("2 · Rest");
+    expect(preview.children[2].children[0].children.map(n=>n.textContent)).toEqual(["2","Rest"]);
+    expect(doc.title).toBe("Shared program · Lastrep");
   });
   it("shows exercise targets separately from set prescriptions using the chosen effort scale", () => {
     const doc = documentFixture();
@@ -168,8 +169,9 @@ describe("public sharing landing page", () => {
         source: "/api/workout-sharing",
         function: { functionId: "workoutSharing", region: "asia-northeast3" },
       },
-      { source: "/shared-workout", destination: "/index.html" },
-      { source: "/w/**", destination: "/index.html" },
+      { source: "/shared-workout", function: {functionId:"sharingPage",region:"asia-northeast3"} },
+      { source: "/w/**", function: {functionId:"sharingPage",region:"asia-northeast3"} },
+      { source: "/privacy", destination: "/privacy/index.html" },
     ]);
     expect(config.ignore).not.toContain("**/.*");
     const association = JSON.parse(

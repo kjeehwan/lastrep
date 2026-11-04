@@ -64,6 +64,10 @@ export function renderSnapshot(doc, snapshot) {
     return node;
   };
   doc.getElementById("title").textContent = snapshot.plan.title;
+  const kind = snapshot.plan.version === 2 ? "Shared program" : "Shared workout";
+  doc.title = `${kind} · Lastrep`;
+  const kindLabel = doc.getElementById("plan-kind");
+  if (kindLabel) kindLabel.textContent = kind;
   doc.getElementById("status").textContent =
     `From ${snapshot.sender.nickname || "a Lastrep user"}`;
   const preview = doc.getElementById("preview");
@@ -103,11 +107,16 @@ export function renderSnapshot(doc, snapshot) {
     const program = snapshot.plan;
     add(preview, "p", `${program.days.length}-day cycle · ${program.routines.length} routines`, "details");
     program.days.forEach((day,index) => {
-      if(day.type === "rest") { const row=add(preview,"article","");add(row,"h2",`${index+1} · ${day.title}`);return; }
+      const dayHeader = (parent, tag) => {
+        const row=add(parent,tag,"","day-row");
+        add(row,"span",String(index+1),"day-number");
+        add(row,"span",day.title,"day-title");
+      };
+      if(day.type === "rest") { const row=add(preview,"div","","program-day rest-day");dayHeader(row,"div");return; }
       const routine=program.routines.find(r=>r.key===day.routineKey);
       if(!routine) return;
-      const detail=add(preview,"details","");
-      add(detail,"summary",`${index+1} · ${day.title}`);
+      const detail=add(preview,"details","","program-day");
+      dayHeader(detail,"summary");
       renderExercises(detail,routine.plan);
     });
   } else renderExercises(preview,snapshot.plan);
@@ -138,7 +147,7 @@ export async function startPage(doc, location, fetcher = fetch) {
     status.textContent =
       error.message === "unavailable"
         ? "This sharing link has expired, was revoked, or is unavailable. Ask the sender for a new link."
-        : "Couldn’t load this workout. Check your connection and try again.";
+        : "Couldn’t load this plan. Check your connection and try again.";
     retry.hidden = error.message === "unavailable";
   } finally {
     clearTimeout(timeout);

@@ -1,3 +1,6 @@
+@font-face { font-family: NotebookSans; src: url('/fonts/source-sans-3.ttf') format('truetype'); font-weight: 400; font-display: swap; }
+@font-face { font-family: NotebookSans; src: url('/fonts/source-sans-3-semibold.ttf') format('truetype'); font-weight: 600 700; font-display: swap; }
+@font-face { font-family: NotebookSerif; src: url('/fonts/source-serif-4.ttf') format('truetype'); font-weight: 600; font-display: swap; }
 :root {
   color-scheme: light dark;
   --paper: #f5f1e8;
@@ -14,7 +17,7 @@ body {
   background: var(--paper);
   color: var(--ink);
   font:
-    16px/1.6 system-ui,
+    16px/1.5 NotebookSans, system-ui,
     sans-serif;
 }
 main {
@@ -34,7 +37,9 @@ h2 {
   overflow-wrap: anywhere;
 }
 h1 {
-  font-size: 30px;
+  font-family: NotebookSerif, Georgia, serif;
+  font-size: 28px;
+  font-weight: 600;
   margin: 8px 0 16px;
 }
 h2 {
@@ -88,6 +93,7 @@ button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 12px;
   min-height: 48px;
   font: inherit;
   font-weight: 600;
@@ -112,9 +118,22 @@ button:focus-visible {
 [hidden] {
   display: none !important;
 }
-details { border-bottom: 1px solid var(--rule); padding: 16px 0; }
-summary { cursor: pointer; font-weight: 600; padding: 8px 0; }
-details article { margin-left: 12px; margin-right: 12px; }
+.program-day { border-bottom: 1px solid var(--rule); }
+.day-row { display: flex; align-items: center; gap: 12px; padding: 16px 0; min-height: 56px; font-size: 18px; font-weight: 600; line-height: 1.4; }
+.day-number { width: 24px; flex-shrink: 0; text-align: center; }
+.day-title { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+summary.day-row { cursor: pointer; list-style: none; }
+summary.day-row::-webkit-details-marker { display: none; }
+summary.day-row::after { content: ''; flex-shrink: 0; width: 8px; height: 8px; border-right: 1.7px solid var(--muted); border-bottom: 1.7px solid var(--muted); transform: rotate(-45deg); margin: 0 5px; }
+details[open] > summary.day-row::after { transform: rotate(45deg); }
+summary:focus-visible { outline: 2px solid #667fbd; outline-offset: 3px; }
+.action-icon { display: block; flex-shrink: 0; object-fit: contain; }
+.app-icon { border-radius: 7px; }
+footer { margin-top: 32px; color: var(--muted); font-size: 14px; }
+.policy h2 { margin-top: 32px; margin-bottom: 12px; }
+.policy li { margin: 8px 0; }
+.policy p { margin: 16px 0; }
+details.program-day article { margin: 0 12px; }
 @media (prefers-color-scheme: dark) {
   :root {
     --paper: #171914;

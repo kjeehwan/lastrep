@@ -1,6 +1,6 @@
 # Lastrep Training Notebook Design Specification
 
-Version: 1.55 | Date: November 3, 2026
+Version: 1.56 | Date: November 4, 2026
 
 Status: Workout, Home, Nutrition, Sleep, Profile and Settings browser design
 directions approved through iterative review. Shared rules below incorporate that
@@ -27,6 +27,19 @@ approved browser designs. The native implementation and November 3 refinements
 passed the user's phone review; verification and release boundaries are recorded
 in workout-programs-native-review.md. The browser remains a design reference. See the current flow at the end of this specification
 and [the mockup review notes](unified-todays-plan-mockup.md).
+
+## Shared web pages (November 4 follow-up)
+
+Public sharing previews use the bundled Notebook fonts and paper/ink/rule colors.
+Workout-day and rest-day headers share font size, weight, number/title alignment,
+vertical padding and bottom dividers. Expandable rows put their caret on the right;
+rest rows reserve the same title alignment without a caret. Keep native and browser
+type labels explicit: Shared workout or Shared program. Messaging-preview titles
+must be present in the server HTML, independent of JavaScript execution.
+
+App/store actions pair the app or store icon with a descriptive text label.
+The public privacy page is generated from doc/privacy.md; do not maintain a
+separate manually edited policy copy. Host fonts/icons locally and include licenses.
 
 ## Shared input surfaces (October 23 follow-up)
 
