@@ -1,6 +1,6 @@
 # Lastrep Training Notebook Design Specification
 
-Version: 1.56 | Date: November 4, 2026
+Version: 1.57 | Date: November 4, 2026
 
 Status: Workout, Home, Nutrition, Sleep, Profile and Settings browser design
 directions approved through iterative review. Shared rules below incorporate that
@@ -37,9 +37,15 @@ rest rows reserve the same title alignment without a caret. Keep native and brow
 type labels explicit: Shared workout or Shared program. Messaging-preview titles
 must be present in the server HTML, independent of JavaScript execution.
 
-App/store actions pair the app or store icon with a descriptive text label.
+App actions use a readable brand mark with a descriptive action label; do not
+shrink a padded launcher icon until its wordmark becomes illegible. Store links
+use the official store badge. Place rest/tempo context below targets and before
+the set prescriptions in shared previews.
 The public privacy page is generated from doc/privacy.md; do not maintain a
 separate manually edited policy copy. Host fonts/icons locally and include licenses.
+Generate the deletion-request page from doc/account-and-data-deletion.md using
+the same legal-page styling. Distinguish account deletion from selected-data
+requests and keep their email subjects separate.
 
 ## Shared input surfaces (October 23 follow-up)
 

@@ -25,3 +25,29 @@ focused ESLint passed. Browser automation checked both themes, day-row typograph
 icon loading, program targets/grouped sets, and all twelve generated policy
 sections. Tests cover ambiguous tokens, unavailable/expired previews, transient
 errors, raw HTML escaping and exact policy regeneration.
+
+## November 4 review follow-up
+
+Rest, tempo and exercise context appear immediately below targets and before set
+prescriptions. The app action uses the readable Lastrep wordmark with an Open app
+label and chevron; the store action uses Google's official English Play badge
+from https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png.
+
+The exact reported URL returned Shared program in its initial title and OG
+metadata under normal and Kakao-style request headers. A fresh path was confirmed
+by the user to show Shared program on the phone. Existing Kakao cards can retain
+cached metadata; desktop preview-card creation was inconsistent and is not claimed
+as controlled by Lastrep. Kakao documents OG cache reset at
+https://developers.kakao.com/docs/ko/message-template/faq.
+
+No separate local deletion-policy Markdown was found. The supplied public Notion
+page was read and migrated to doc/account-and-data-deletion.md, preserving its
+October 9 effective date and policy wording. /data-deletion is generated from
+that source. It includes two distinct mailto request actions, with the existing
+Account Deletion Request and Data Deletion Request subjects; neither action
+deletes records or sends email automatically. The same page covers both Play
+Console account-deletion and selected-data-deletion URL fields.
+
+Sixteen focused tests, functions build and focused lint passed. Browser review
+confirmed context ordering, readable branding and badge loading in both themes,
+six policy sections and both mailto subjects. No personal records were altered.

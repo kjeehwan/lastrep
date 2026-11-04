@@ -81,6 +81,14 @@ export function renderSnapshot(doc, snapshot) {
       const parts = [targets.minReps != null ? `${targets.minReps}\u2013${targets.maxReps} reps` : "", targets.targetRpe != null ? `${plan.effortScale.toUpperCase()} ${number(plan.effortScale === "rir" ? 10 - targets.targetRpe : targets.targetRpe)}` : ""].filter(Boolean);
       if (parts.length) add(article, "p", `Target: ${parts.join(" \u00b7 ")}`, "details");
     }
+    const details = [
+      exercise.restSec ? `Rest ${number(exercise.restSec)} sec` : "",
+      exercise.tempo ? `Tempo ${exercise.tempo}` : "",
+      exercise.cardioSessionType || "",
+      exercise.cardioEffortLevel || "",
+      exercise.instructions,
+    ].filter(Boolean);
+    if (details.length) add(article, "p", details.join("\n"), "details exercise-details");
     const groups=[];
     for (const set of exercise.sets) {
       const key=JSON.stringify(set),last=groups[groups.length-1];
@@ -93,14 +101,6 @@ export function renderSnapshot(doc, snapshot) {
         `${count>1?`${count} sets · `:""}${setPrescription(set, exercise, plan.effortScale)}`,
         "prescription",
       );
-    const details = [
-      exercise.restSec ? `Rest ${number(exercise.restSec)} sec` : "",
-      exercise.tempo ? `Tempo ${exercise.tempo}` : "",
-      exercise.cardioSessionType || "",
-      exercise.cardioEffortLevel || "",
-      exercise.instructions,
-    ].filter(Boolean);
-    if (details.length) add(article, "p", details.join("\n"), "details");
   }
   };
   if (snapshot.plan.version === 2) {

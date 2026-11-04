@@ -27,12 +27,13 @@
       </p>
       <section id="preview" aria-label="Shared plan" hidden></section>
       <nav aria-label="Open shared plan">
-        <a id="open" class="button" hidden><img class="action-icon app-icon" src="/app-icon.png" alt="" width="32" height="32" /><span>Open in Lastrep</span></a>
+        <a id="open" class="button app-launch" aria-label="Open in Lastrep" hidden><img class="action-wordmark" src="/wordmark.svg" alt="" width="104" height="35" /><span>Open app</span><span class="action-chevron" aria-hidden="true"></span></a>
         <a
-          class="button button-secondary"
+          class="play-badge-link"
+          aria-label="Get Lastrep on Google Play"
           href="https://play.google.com/store/apps/details?id=com.kjeehwan.lastrep"
           rel="noreferrer"
-          ><img class="action-icon" src="/google-play.svg" alt="" width="28" height="28" /><span>Get Lastrep on Google Play</span></a
+          ><img class="play-badge" src="/google-play-badge.png" alt="Get it on Google Play" width="220" height="85" /></a
         >
       </nav>
       <p class="footnote">
@@ -45,7 +46,7 @@
         open the plan.
       </p>
       <button id="retry" type="button" hidden>Try again</button>
-      <footer><a href="/privacy">Privacy policy</a></footer>
+      <footer class="legal-links"><a href="/privacy">Privacy policy</a><a href="/data-deletion">Account and data deletion</a></footer>
     </main>
   </body>
 </html>

@@ -67,7 +67,8 @@ describe("public sharing landing page", () => {
     renderSnapshot(doc, { sender: { nickname: "Example" }, plan: { ...plan, exercises: [{ ...plan.exercises[0], targets: { minReps: 8, maxReps: 12, targetRpe: 8.5 } }] } });
     const article = doc.getElementById("preview").children[0];
     expect(article.children[1].textContent).toBe("Target: 8–12 reps · RIR 1.5");
-    expect(article.children[2].textContent).toContain("RIR 2");
+    expect(article.children[2].textContent).toContain("Rest 90 sec");
+    expect(article.children[3].textContent).toContain("RIR 2");
   });
   it("accepts one opaque token and rejects ambiguous or executable input", () => {
     expect(sharingToken(`?token=${token}`)).toBe(token);
@@ -128,7 +129,7 @@ describe("public sharing landing page", () => {
     }));
     expect(doc.getElementById("title").textContent).toBe(plan.title);
     const article = doc.getElementById("preview").children[0];
-    expect(article.children.at(-1).textContent).toContain(
+    expect(article.children.find(n=>n.className === "details exercise-details").textContent).toContain(
       "<script>private</script>",
     );
     expect(doc.getElementById("open").hidden).toBe(false);
@@ -172,6 +173,7 @@ describe("public sharing landing page", () => {
       { source: "/shared-workout", function: {functionId:"sharingPage",region:"asia-northeast3"} },
       { source: "/w/**", function: {functionId:"sharingPage",region:"asia-northeast3"} },
       { source: "/privacy", destination: "/privacy/index.html" },
+      { source: "/data-deletion", destination: "/data-deletion/index.html" },
     ]);
     expect(config.ignore).not.toContain("**/.*");
     const association = JSON.parse(
