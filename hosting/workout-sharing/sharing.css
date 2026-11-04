@@ -134,7 +134,10 @@ summary:focus-visible { outline: 2px solid #667fbd; outline-offset: 3px; }
 .action-chevron { width: 8px; height: 8px; border-right: 1.7px solid currentColor; border-top: 1.7px solid currentColor; transform: rotate(45deg); flex-shrink: 0; }
 .play-badge-link { display: flex; align-items: center; justify-content: center; min-height: 64px; align-self: center; margin: -8px 0; border-radius: 8px; }
 .play-badge { display: block; width: 220px; height: auto; }
-.exercise-details { margin-top: 8px; margin-bottom: 20px; }
+.guidance-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 8px; }
+.guidance-row:empty { display: none; }
+.guidance-row + .prescription { margin-top: 20px; }
+.guidance-badge { display: inline-block; padding: 4px 9px; border: 1px solid var(--rule); border-radius: 6px; background: var(--input); color: var(--ink); font-size: 14px; line-height: 20px; font-variant-numeric: tabular-nums; }
 .legal-links { display: flex; flex-wrap: wrap; gap: 12px 24px; }
 .sharing-actions { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
 #open[hidden] + .launch-card-secondary { grid-column: 1 / -1; }
@@ -159,4 +162,4 @@ details.program-day article { margin: 0 12px; }
 }
 
 .store-brand { display: flex; align-items: center; gap: 6px; min-height: 35px; }
-.store-brand img { flex-shrink: 0; width: 20px; height: 22px; }
+.store-brand img { flex-shrink: 0; width: 24px; height: 24px; }

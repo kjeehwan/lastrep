@@ -76,10 +76,11 @@ export function renderSnapshot(doc, snapshot) {
   for (const exercise of plan.exercises) {
     const article = add(parent, "article", "");
     add(article, "h2", exercise.name);
+    const targetsRow = add(article, "div", "", "guidance-row");
     if (exercise.mode !== "cardio" && exercise.targets) {
       const targets = exercise.targets;
-      const parts = [targets.minReps != null ? `${targets.minReps}\u2013${targets.maxReps} reps` : "", targets.targetRpe != null ? `${plan.effortScale.toUpperCase()} ${number(plan.effortScale === "rir" ? 10 - targets.targetRpe : targets.targetRpe)}` : ""].filter(Boolean);
-      if (parts.length) add(article, "p", `Target ${parts.join(" \u00b7 ")}`, "details");
+      if (targets.minReps != null) add(targetsRow, "span", `Target ${targets.minReps}\u2013${targets.maxReps} reps`, "guidance-badge");
+      if (targets.targetRpe != null) add(targetsRow, "span", `${plan.effortScale.toUpperCase()} ${number(plan.effortScale === "rir" ? 10 - targets.targetRpe : targets.targetRpe)}`, "guidance-badge");
     }
     const details = [
       exercise.restSec ? `Rest ${number(exercise.restSec)} sec` : "",
@@ -87,7 +88,8 @@ export function renderSnapshot(doc, snapshot) {
       exercise.cardioSessionType || "",
       exercise.cardioEffortLevel || "",
     ].filter(Boolean);
-    if (details.length) add(article, "p", details.join(" · "), "details exercise-details");
+    const detailsRow = add(article, "div", "", "guidance-row");
+    for (const detail of details) add(detailsRow, "span", detail, "guidance-badge");
     if (exercise.instructions) add(article, "p", exercise.instructions, "details instructions");
     const groups=[];
     for (const set of exercise.sets) {
