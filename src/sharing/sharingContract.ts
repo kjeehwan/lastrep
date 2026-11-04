@@ -27,6 +27,16 @@ export type SharedWorkoutPlan = {
   effortScale: "rpe" | "rir";
   exercises: SharedWorkoutExercise[];
 };
+export type SharedProgramPlan = {
+  version: 2;
+  kind: "program";
+  title: string;
+  effortScale: "rpe" | "rir";
+  days: { type: "workout" | "rest"; title: string; routineKey: string | null }[];
+  routines: { key: string; plan: SharedWorkoutPlan }[];
+};
+export type SharedPlan = SharedWorkoutPlan | SharedProgramPlan;
+export const isSharedProgram = (plan: SharedPlan): plan is SharedProgramPlan => plan.version === 2;
 export type SharingPerson = { uid: string; nickname: string; username: string };
 export type SharingSettings = {
   enabled: boolean;
@@ -35,6 +45,7 @@ export type SharingSettings = {
   requestCount: number;
 };
 export type SharingDelivery = {
+  kind?: "workout" | "program";
   id: string;
   snapshotId: string;
   title: string;
@@ -44,10 +55,11 @@ export type SharingDelivery = {
   createdAtMs: number;
 };
 export type SharingSent = {
+  kind?: "workout" | "program";
   id: string;
   snapshotId: string;
   title: string;
-  recipients: (SharingPerson & { status: string })[];
+  recipients: (SharingPerson & { status: "request" | "inbox" | "viewed" })[];
   createdAtMs: number;
 };
 export const SHARING_LIMITS = {
@@ -60,6 +72,10 @@ export const SHARING_LIMITS = {
   linkDays: 30,
   exercises: 40,
   sets: 40,
+  programDays: 14,
+  programExercises: 160,
+  programSets: 1600,
+  programCharacters: 120000,
 } as const;
 export function normalizeSharingUsername(value: string) {
   return value.trim().replace(/^@/, "").toLowerCase();
@@ -226,5 +242,33 @@ export function parseSharedWorkoutPlan(input: unknown): SharedWorkoutPlan {
   };
   if (JSON.stringify(result).length > 48000)
     throw Error("This workout is too large to share.");
+  return result;
+}
+
+/** Program snapshots contain local references only, never account/routine IDs or run history. */
+export function parseSharedPlan(input: unknown): SharedPlan {
+  const p = object(input);
+  if (p.version !== 2) return parseSharedWorkoutPlan(input);
+  keys(p, ["version", "kind", "title", "effortScale", "days", "routines"]);
+  if (p.kind !== "program" || !["rpe", "rir"].includes(String(p.effortScale)) || !Array.isArray(p.days) || !p.days.length || p.days.length > SHARING_LIMITS.programDays || !Array.isArray(p.routines) || !p.routines.length || p.routines.length > SHARING_LIMITS.programDays) throw Error("Assign a routine or Rest to every program day.");
+  const routines = p.routines.map(raw => {
+    const r = object(raw); keys(r, ["key", "plan"]);
+    const key = text(r.key, 24, true);
+    if (!/^[a-zA-Z0-9_-]+$/.test(key)) throw Error("Invalid routine reference.");
+    return { key, plan: parseSharedWorkoutPlan(r.plan) };
+  });
+  const references = new Set(routines.map(r => r.key));
+  if (references.size !== routines.length) throw Error("Routine references must be unique.");
+  const days = p.days.map(raw => {
+    const d = object(raw); keys(d, ["type", "title", "routineKey"]);
+    if (d.type !== "rest" && d.type !== "workout") throw Error("Assign every program day before sharing.");
+    if (d.type === "rest" ? d.routineKey !== null : typeof d.routineKey !== "string" || !references.has(d.routineKey)) throw Error("The assigned routine is unavailable.");
+    return { type: d.type as "workout" | "rest", title: text(d.title, 100, true), routineKey: d.routineKey as string | null };
+  });
+  const used = new Set(days.flatMap(d => d.routineKey ? [d.routineKey] : []));
+  if (used.size !== references.size) throw Error("Share only routines assigned to this program.");
+  const exercises = routines.flatMap(r => r.plan.exercises);
+  const result: SharedProgramPlan = { version: 2, kind: "program", title: text(p.title, 100, true), effortScale: p.effortScale as "rpe" | "rir", days, routines };
+  if (exercises.length > SHARING_LIMITS.programExercises || exercises.reduce((n,e) => n + e.sets.length, 0) > SHARING_LIMITS.programSets || JSON.stringify(result).length > SHARING_LIMITS.programCharacters) throw Error("This program is too large to share. Try a smaller cycle.");
   return result;
 }

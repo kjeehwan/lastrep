@@ -4,12 +4,14 @@ import { getAuth } from "firebase/auth";
 import { getFunctions, httpsCallable } from "firebase/functions";
 import {
   SHARING_LIMITS,
-  type SharedWorkoutPlan,
+  type SharedPlan,
   type SharingPerson,
 } from "./sharingContract";
 
 export type {
   SharedWorkoutPlan,
+  SharedProgramPlan,
+  SharedPlan,
   SharingPerson,
   SharingSettings,
   SharingDelivery,
@@ -18,7 +20,7 @@ export type {
 export type SharingCursor = { createdAtMs: number; id: string } | null;
 export type SharingSnapshot = {
   snapshotId: string;
-  plan: SharedWorkoutPlan;
+  plan: SharedPlan;
   sender: SharingPerson;
 };
 export async function sharingCall<T>(
@@ -33,14 +35,14 @@ export async function sharingCall<T>(
   const expectedUid = Object.prototype.hasOwnProperty.call(data, "expectedUid")
     ? data.expectedUid
     : (getAuth().currentUser?.uid ?? null);
-  return (await call({ ...data, op, expectedUid })).data;
+  return (await call({ supportedPlanVersion: 2, ...data, op, expectedUid })).data;
 }
 export function sharingError(error: unknown): string {
   const code = (error as { code?: string })?.code || "";
   if (/not-found/.test(code))
-    return "This shared workout is unavailable or has expired. Ask the sender to share it again.";
+    return "This shared plan is unavailable or has expired. Ask the sender to share it again.";
   if (/unavailable|internal/.test(code))
-    return "Workout sharing is unavailable right now. Please try again later.";
+    return "Sharing is unavailable right now. Please try again later.";
   if (/unauthenticated/.test(code)) return "Sign in to continue.";
   return error instanceof Error
     ? error.message.replace(/^Firebase:\s*/, "")
@@ -52,7 +54,7 @@ export function sharingRequestId() {
 }
 export async function sendWorkoutInLastrep(
   uid: string,
-  plan: SharedWorkoutPlan,
+  plan: SharedPlan,
   recipients: string[],
 ) {
   if (getAuth().currentUser?.uid !== uid) throw Error("Sign in to continue.");

@@ -287,6 +287,7 @@ export default function WorkoutLog() {
     showSharedRoutines?: string;
     trainingPhase?: string;
     programAction?: string;
+    sharedProgramId?: string;
     createRoutine?: string;
     todayPlanApplied?: string;
     showTodayGuidance?: string;
@@ -297,7 +298,7 @@ export default function WorkoutLog() {
   const [showSavedDrafts,setShowSavedDrafts]=useState(false);
   const [savedDraftPicker,setSavedDraftPicker]=useState<{uid:string;slots:DraftSlots|null;error:string|null}|null>(null);
   const savedDraftPickerRequest=useRef(0);
-  const [programManagerRequest,setProgramManagerRequest] = useState<{programId?:string;action?:"library"|"create";token:number}|null>(null);
+  const [programManagerRequest,setProgramManagerRequest] = useState<{programId?:string;action?:"library"|"create"|"start";token:number}|null>(null);
   const [workoutView, setWorkoutView] = useState<"choices" | "editor">("choices");
   const [programLink, setProgramLink] = useState<ProgramLink | null>(null);
   const [workoutSlot, setWorkoutSlot] = useState("single");
@@ -1158,6 +1159,11 @@ export default function WorkoutLog() {
     const task = scheduleAfterInteractions(async () => { await loadRoutines(); setShowMyRoutinesModal(true); });
     return () => task.cancel();
   }, [routerParams.showSharedRoutines, loadRoutines]);
+  useEffect(() => {
+    if (!routerParams.sharedProgramId) return;
+    const task = scheduleAfterInteractions(() => { void loadRoutines(); });
+    return () => task.cancel();
+  }, [routerParams.sharedProgramId, loadRoutines]);
 
   useEffect(() => {
     if (!uiFeedback) return;
@@ -3067,7 +3073,7 @@ export default function WorkoutLog() {
             keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
             scrollEventThrottle={16}
           >
-      {activeUid ? <WorkoutProgramPanel key={activeUid} managerRequest={programManagerRequest ?? (routerParams.programAction ? {action:routerParams.programAction === "create" ? "create" : "library",token:0} : null)} onManagerOpened={() => { setProgramManagerRequest(null); if(routerParams.programAction)router.setParams({programAction:""}); }} uid={activeUid} data={workoutView === "choices" || programLink?.programId === programs.activeId ? programs : { ...programs, active: null, run: null }} routines={routines} choices={workoutView === "choices"} hasDraft={Object.keys(savedDrafts).length>0}
+      {activeUid ? <WorkoutProgramPanel effortScale={effortScale} key={activeUid} managerRequest={programManagerRequest ?? (routerParams.programAction ? {action:routerParams.programAction === "create" ? "create" : routerParams.programAction === "start" ? "start" : "library",programId:routerParams.sharedProgramId,token:0} : null)} onManagerOpened={() => { setProgramManagerRequest(null); if(routerParams.programAction)router.setParams({programAction:"",sharedProgramId:""}); }} uid={activeUid} data={workoutView === "choices" || programLink?.programId === programs.activeId ? programs : { ...programs, active: null, run: null }} routines={routines} choices={workoutView === "choices"} hasDraft={Object.keys(savedDrafts).length>0}
         onResume={() => void openSavedDrafts()}
         onRestDay={() => setWorkoutView("choices")}
         onStandalone={() => switchWorkoutPath("single", { exercises: [], exerciseUnits: {}, sessionTitle: "", sessionDateText: toLocalDateKey(new Date()), elapsedSeconds: 0, programLink: null })}

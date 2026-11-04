@@ -19,7 +19,7 @@ import { scheduleAfterInteractions } from "../utils/scheduleAfterInteractions";
 import {
   sharingCall,
   sharingError,
-  type SharedWorkoutPlan,
+  type SharedPlan,
   type SharingSettings,
 } from "./sharingService";
 
@@ -33,7 +33,7 @@ type SharingContextValue = {
   uid: string | null;
   settings: SharingSettings;
   settingsError: string;
-  open: (plan?: SharedWorkoutPlan) => void;
+  open: (plan?: SharedPlan) => void;
   openUsername: () => void;
   openToken: (token: string) => void;
   resumeLinkAfterSignIn: (token: string) => void;
@@ -54,7 +54,7 @@ export function SharingProvider({ children }: { children: React.ReactNode }) {
   const [screen, setScreen] = useState<
       "center" | "send" | "username" | "link" | null
     >(null),
-    [plan, setPlan] = useState<SharedWorkoutPlan | null>(null),
+    [plan, setPlan] = useState<SharedPlan | null>(null),
     [token, setToken] = useState("");
   const [busy, setBusy] = useState(false),
     [hint, setHint] = useState("");
@@ -201,7 +201,7 @@ export function SharingInboxButton() {
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`Workout sharing${count > 0 ? `, ${count} new` : ""}`}
+      accessibilityLabel={`Sharing${count > 0 ? `, ${count} new` : ""}`}
       onPress={() => sharing.open()}
       style={{
         minWidth: 44,

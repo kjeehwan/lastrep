@@ -1,4 +1,6 @@
-import { exerciseTargetsText } from "../workouts/exerciseTargets";
+import { SharingPlanPreview } from "./SharingPlanPreview";
+import { SharingProgramPreview } from "./SharingProgramPreview";
+import { isSharedProgram, type SharedPlan } from "./sharingContract";
 import { NotebookInfoButton } from "../ui/notebook/NotebookInfoButton";
 import { showAppAlert } from "../ui/appDialog";
 import * as Clipboard from "expo-clipboard";
@@ -13,13 +15,13 @@ import {
   orderBy,
   where,
 } from "firebase/firestore";
-import { Ban, Check, CheckCircle2, CircleAlert, Clock3, Copy, Mail, MessageCircle, X } from "lucide-react-native";
+import { Ban, Check, CheckCheck, CheckCircle2, CircleAlert, Clock3, Copy, Mail, MessageCircle, X } from "lucide-react-native";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, Share, Switch, Text, View, useWindowDimensions } from "react-native";
 import { db } from "../config/firebaseConfig";
 import { useNotebook, useNotebookStyles } from "../ui/notebook/Notebook";
 import { NotebookTextInput } from "../ui/notebook/NotebookTextInput";
-import { rpeToEffort } from "../workouts/effortScale";
+
 import { WorkoutModalShell } from "../workouts/workoutLog/WorkoutModalShell";
 import { createStyles } from "../workouts/workoutLog/workoutLogStyles";
 import { SharingPlanEditor } from "./SharingPlanEditor";
@@ -35,7 +37,7 @@ import {
   sendWorkoutInLastrep,
   sharingCall as invokeSharing,
   sharingError,
-  type SharedWorkoutPlan,
+
   type SharingCursor,
   type SharingDelivery,
   type SharingPerson,
@@ -45,7 +47,7 @@ import {
 type Props = {
   uid: string | null;
   screen: "center" | "send" | "username" | "link";
-  initialPlan: SharedWorkoutPlan | null;
+  initialPlan: SharedPlan | null;
   token: string;
   username: string;
   enabled: boolean;
@@ -61,7 +63,9 @@ type Step =
   | "edit"
   | "people"
   | "result"
-  | "external";
+  | "external"
+  | "program-routine"
+  | "program-saved";
 type Outcome = SharingPerson & {
   status: string;
 };
@@ -109,6 +113,8 @@ export function SharingDialogs({
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [feedback, setFeedback] = useState("");
+  const [programRoutineKey, setProgramRoutineKey] = useState<string | null>(null);
+  const [savedProgram, setSavedProgram] = useState<{id:string;routineCount:number;hasRun?:boolean}|null>(null);
   const [pageSize, setPageSize] = useState(40),
     [listReadyKey, setListReadyKey] = useState("");
   const [retentionTick, setRetentionTick] = useState(0);
@@ -274,7 +280,7 @@ export function SharingDialogs({
       setSelectedItem(item);
       setIncludeWeights(true);
       setStep("preview");
-      if ("sender" in item && item.unread) {
+      if ("sender" in item) {
         await sharingCall("respond", { deliveryId: item.id, action: "read" });
         setItems((old) =>
           old.map((i) => (i.id === item.id ? { ...i, unread: false } : i)),
@@ -286,7 +292,7 @@ export function SharingDialogs({
       await sharingCall("respond", { deliveryId: item.id, action });
       setFeedback(
         action === "accept"
-          ? "Request accepted. Open the workout from Inbox."
+          ? "Request accepted. Open the plan from Inbox."
           : action === "block"
             ? "Sender blocked."
             : "Request declined.",
@@ -330,7 +336,8 @@ export function SharingDialogs({
   const externalDraft = (kind: "messages" | "email" | "chooser" | "copy") =>
     void run(async () => {
       if (!link) return;
-      const message = sharingDraftMessage(plan?.title || "Workout", link.url);
+      const planKind = plan && isSharedProgram(plan) ? "program" : "workout";
+      const message = sharingDraftMessage(plan?.title || "Workout", link.url, planKind);
       if (kind === "copy") {
         await Clipboard.setStringAsync(link.url);
         setFeedback("Link copied.");
@@ -339,11 +346,20 @@ export function SharingDialogs({
         await Linking.openURL(
           kind === "messages"
             ? `sms:?body=${encodeURIComponent(message)}`
-            : sharingEmailDraftUrl(plan?.title || "Workout", link.url),
+            : sharingEmailDraftUrl(plan?.title || "Workout", link.url, planKind),
         );
     });
+  const openSavedProgram = (start = false) => {
+    if (!savedProgram) return;
+    onClose();
+    router.navigate({pathname:"/workout/log",params:{sharedProgramId:savedProgram.id,programAction:start?"start":"library"}});
+  };
+  const saveSharedProgram = () => void run(async () => {
+    const result = await sharingCall<{id:string;routineCount:number;hasRun?:boolean}>("importProgram",screen === "link" ? {token} : selectedItem && "sender" in selectedItem ? {deliveryId:selectedItem.id} : {sentId:selectedItem?.id});
+    if(mounted.current){setSavedProgram(result);setStep("program-saved");}
+  });
   const useWorkout = () => {
-    if (!uid || !plan) {
+    if (!uid || !plan || isSharedProgram(plan)) {
       setError("Sign in to use this workout.");
       return;
     }
@@ -381,11 +397,14 @@ export function SharingDialogs({
         i.status === (tab === "Requests" ? "request" : "inbox"),
   );
   const sentPreview = selectedItem && !("sender" in selectedItem);
-  const title =
+  const programPlan = outgoing && isSharedProgram(outgoing) ? outgoing : null;
+  const programRoutine = programPlan?.routines.find(r => r.key === programRoutineKey);
+  const planWord = programPlan ? "program" : "workout";
+  const title = step === "program-routine" ? programRoutine?.plan.title ?? "Routine" : step === "program-saved" ? "Program saved" :
     screen === "username"
       ? "Username"
       : step === "center"
-        ? "Workout sharing"
+        ? "Sharing"
         : step === "edit"
           ? "Edit workout"
           : step === "people"
@@ -396,15 +415,15 @@ export function SharingDialogs({
                   : outcomes.length === 1 && outcomes[0].status === "awaiting-acceptance"
                     ? "Request pending"
                   : outcomes.some((person) => person.status === "inbox" || person.status === "request")
-                    ? "Workout sent"
+                    ? programPlan ? "Program sent" : "Workout sent"
                     : "Sharing update"
                 : step === "external"
                   ? "Share with"
                   : sentPreview
-                    ? "Sent workout"
+                    ? programPlan ? "Sent program" : "Sent workout"
                     : screen === "center" || screen === "link"
-                      ? "Shared workout"
-                      : "Review workout";
+                      ? programPlan ? "Received program" : "Shared workout"
+                      : programPlan ? "Review program" : "Review workout";
   return (
     <WorkoutModalShell
       visible
@@ -413,7 +432,7 @@ export function SharingDialogs({
       backdropStyle={styles.modalBackdrop}
       cardStyle={{ ...styles.modalCard, maxWidth: step === "edit" ? 760 : 600, ...(step === "center" ? { height: centerHeight } : {}) }}
     >
-      {step === "edit" && plan ? (
+      {step === "edit" && plan && !isSharedProgram(plan) ? (
         <SharingPlanEditor
           plan={plan}
           onCancel={() => setStep("preview")}
@@ -434,13 +453,13 @@ export function SharingDialogs({
             >
               {title}
             </Text>
-            {step === "center" && (
+            {(step === "center" || step === "preview" && !!programPlan) && (
               <NotebookInfoButton
-                label="About workout sharing"
+                label="About sharing"
                 onPress={() =>
                   showAppAlert(
-                    "Workout sharing",
-                    `Sharing history and links expire after ${SHARING_LIMITS.historyDays} days. Saved workouts and routines stay in your account. Sharing the plan again creates a new delivery.`,
+                    "Sharing",
+                    `Share routine plans and targets. Personal notes, recorded effort, completed days and recovery are not included. In Sent, a clock means awaiting acceptance, one check means delivered to their Inbox, and two checks mean they opened the preview. External links do not report who viewed them. Sharing history and links expire after ${SHARING_LIMITS.historyDays} days. Imported programs, workouts and routines stay in your account. Sharing again creates a new delivery.`,
                   )
                 }
               />
@@ -448,7 +467,7 @@ export function SharingDialogs({
             </View>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Close workout sharing"
+              accessibilityLabel="Close sharing"
               disabled={busy}
               onPress={close}
               style={{ width: 44, height: 44, alignItems: "center", justifyContent: "center" }}
@@ -576,6 +595,7 @@ export function SharingDialogs({
                       onPress={() => openItem(item)}
                       style={{ minHeight: 48, gap: 8, paddingVertical: 4, ...("sender" in item && item.status === "request" && inlineRequestActions ? { flex: 1, minWidth: 0 } : {}) }}
                     >
+                      <Text style={styles.muted}>{item.kind === "program" ? "Program" : "Workout"}</Text>
                       <Text style={[styles.sectionTitle, "sender" in item && item.status === "request" && { marginBottom: 0 }]}>{item.title}</Text>
                       {"sender" in item && item.status === "request" ? (
                         <View style={{ gap: 2 }}>
@@ -583,13 +603,25 @@ export function SharingDialogs({
                           <Text style={styles.muted}>@{item.sender.username}</Text>
                         </View>
                       ) : (
-                        <Text style={styles.muted}>
-                          {"sender" in item
-                            ? `${item.sender.nickname} · @${item.sender.username}`
-                            : item.recipients
-                                .map((p) => `${p.nickname} · @${p.username}`)
-                                .join(", ")}
-                        </Text>
+                        "sender" in item ? (
+                          <Text style={styles.muted}>{item.sender.nickname} · @{item.sender.username}</Text>
+                        ) : (
+                          <View style={{ gap: 8 }}>
+                            {item.recipients.map((person) => {
+                              const viewed = person.status === "viewed";
+                              const delivered = viewed || person.status === "inbox";
+                              const StatusIcon = viewed ? CheckCheck : delivered ? Check : Clock3;
+                              const label = viewed ? "Viewed" : delivered ? "Delivered" : "Awaiting acceptance";
+                              return <View key={person.uid} style={{ gap: 2 }}>
+                                <Text style={styles.muted}>{person.nickname} · @{person.username}</Text>
+                                <View style={{ flexDirection: "row", gap: 6, alignItems: "center" }} accessibilityLabel={`${person.nickname}: ${label}`}>
+                                  <StatusIcon size={16} color={viewed ? colors.accent : colors.muted} strokeWidth={1.7}/>
+                                  <Text style={styles.muted}>{label}</Text>
+                                </View>
+                              </View>;
+                            })}
+                          </View>
+                        )
                       )}
                       <Text style={styles.muted}>
                         {new Date(item.createdAtMs).toLocaleString()}
@@ -704,9 +736,9 @@ export function SharingDialogs({
               {query.trim().replace(/^@/, "").length >= 2 && searchResult.query === query && !people.length && (
                 <Text style={styles.muted}>No people found.</Text>
               )}
-              <Text style={styles.muted}>Each person receives a separate workout.</Text>
+              <Text style={styles.muted}>Each person receives a separate {planWord}.</Text>
               <SharingButton
-                label={selected.length > 1 ? `Send workout to ${selected.length} people` : "Send workout"}
+                label={selected.length > 1 ? `Send ${planWord} to ${selected.length} people` : `Send ${planWord}`}
                 onPress={send}
                 primary
                 disabled={!selected.length}
@@ -724,14 +756,14 @@ export function SharingDialogs({
             <>
               <Text style={styles.muted}>
                 {outcomes.length === 1 && outcomes[0].status === "inbox"
-                  ? "They'll find your workout in their Inbox."
+                  ? `They'll find your ${planWord} in their Inbox.`
                   : outcomes.length === 1 && outcomes[0].status === "request"
-                    ? "They'll see your request in Workout sharing."
+                    ? "They'll see your request in Sharing."
                     : outcomes.length === 1 && outcomes[0].status === "awaiting-acceptance"
-                      ? "You can send another workout after they accept your request."
+                      ? `You can send another ${planWord} after they accept your request.`
                     : outcomes.some((person) => person.status === "inbox" || person.status === "request")
                       ? "Each person gets a separate copy. See their status below."
-                      : "This workout was not sent. You can try again from Review workout."}
+                      : "This plan was not sent. You can try again from the preview."}
               </Text>
               <View style={{ gap: 10, marginTop: 6 }}>
                 {outcomes.map((person) => {
@@ -761,8 +793,8 @@ export function SharingDialogs({
             <>
               <Text style={styles.modalText}>
                 {process.env.EXPO_PUBLIC_WORKOUT_SHARING_URL
-                  ? `Anyone with this link can view the workout for ${SHARING_LIMITS.linkDays} days.`
-                  : `This development link can open a workout in Lastrep Dev for ${SHARING_LIMITS.linkDays} days.`}
+                  ? `Anyone with this link can view the ${planWord} for ${SHARING_LIMITS.linkDays} days.`
+                  : `This development link can open a ${planWord} in Lastrep Dev for ${SHARING_LIMITS.linkDays} days.`}
                 {" "}Messages and Email open drafts for you to send.
               </Text>
               {!process.env.EXPO_PUBLIC_WORKOUT_SHARING_URL && (
@@ -834,9 +866,13 @@ export function SharingDialogs({
                 />
               }
             </>
+          ) : step === "program-routine" && programRoutine ? (
+            <><SharingPlanPreview plan={programRoutine.plan} showTitle={false}/><SharingButton label="Back to program" onPress={()=>setStep("preview")} busy={busy}/></>
+          ) : step === "program-saved" && programPlan && savedProgram ? (
+            <><View style={{gap:8}}><Text style={styles.sessionTitle}>{programPlan.title}</Text><Text style={styles.muted}>{programPlan.days.length}-day cycle · {savedProgram.routineCount} routines saved</Text></View><View style={{gap:16,marginVertical:6}}><Text style={styles.modalText}>Saved to My programs and My routines. Changes by the sender will not change your copies.</Text><Text style={styles.muted}>Your current program and unfinished workout are unchanged.</Text></View><SharingButton label={savedProgram.hasRun ? "View program" : "Start program"} primary onPress={()=>openSavedProgram(!savedProgram.hasRun)} busy={busy}/><SharingButton label="View in My programs" onPress={()=>openSavedProgram()} busy={busy}/><SharingButton label="Done" onPress={onClose} busy={busy}/></>
           ) : plan ? (
             <>
-              {snapshot && !sentPreview && (
+              {snapshot && !sentPreview && !programPlan && (
                 <Text style={styles.muted}>
                   From {snapshot.sender.nickname}
                   {snapshot.sender.username
@@ -844,7 +880,7 @@ export function SharingDialogs({
                     : ""}
                 </Text>
               )}
-              <SharingPlanPreview plan={outgoing!} />
+              {outgoing && isSharedProgram(outgoing) ? <SharingProgramPreview plan={outgoing} sender={snapshot && !sentPreview ? snapshot.sender : undefined} onRoutine={(key)=>{setProgramRoutineKey(key);setStep("program-routine");}}/> : outgoing ? <SharingPlanPreview plan={outgoing}/> : null}
               {screen === "send" || !snapshot ? (
                 <>
                   <View
@@ -879,9 +915,9 @@ export function SharingDialogs({
                     </Text>
                   )}
                   <View style={{ flexDirection: "row", gap: 10 }}>
-                    <View style={{ flex: 1 }}>
+                    {!programPlan && <View style={{ flex: 1 }}>
                       <SharingButton label="Edit workout" onPress={() => setStep("edit")} busy={busy} />
-                    </View>
+                    </View>}
                     <View style={{ flex: 1 }}>
                       <SharingButton label="Share a link" onPress={createLink} busy={busy} />
                     </View>
@@ -894,9 +930,10 @@ export function SharingDialogs({
                       .map((p) => `${p.nickname} · @${p.username}`)
                       .join(", ")}
                   </Text>
-                  {
+                  {!programPlan &&
                     <SharingButton
                       label={"Edit workout"}
+                      disabled={!!programPlan}
                       onPress={() => {
                         setSelected((selectedItem as SharingSent).recipients);
                         setStep("edit");
@@ -920,14 +957,14 @@ export function SharingDialogs({
                 <>
                   {uid ? (
                     <SharingButton
-                      label={"Use for a new workout"}
-                      onPress={useWorkout}
+                      label={programPlan ? "Save to My programs" : "Use for a new workout"}
+                      onPress={programPlan ? saveSharedProgram : useWorkout}
                       primary={true}
                       busy={busy}
                     />
                   ) : (
                     <SharingButton
-                      label="Sign in to use this workout"
+                      label={`Sign in to use this ${planWord}`}
                       onPress={() => {
                         onSignInRequested();
                         onClose();
@@ -937,7 +974,7 @@ export function SharingDialogs({
                       busy={busy}
                     />
                   )}
-                  {uid && (
+                  {uid && !programPlan && (
                     <SharingButton
                       label={"Save to My routines"}
                       onPress={saveRoutine}
@@ -963,7 +1000,7 @@ export function SharingDialogs({
             !busy &&
             !error && (
               <Text style={styles.modalText}>
-                This shared workout is unavailable.
+                This shared plan is unavailable.
               </Text>
             )
           )}
@@ -986,56 +1023,6 @@ export function SharingDialogs({
         </>
       )}
     </WorkoutModalShell>
-  );
-}
-export function SharingPlanPreview({ plan }: { plan: SharedWorkoutPlan }) {
-  const styles = useNotebookStyles(createStyles);
-  return (
-    <ScrollView style={{ maxHeight: 350 }}>
-      <Text style={[styles.sessionTitle, { marginBottom: 16 }]}>{plan.title}</Text>
-      {plan.exercises.map((e, i) => {
-        let working = 0;
-        return (
-          <View key={`${i}:${e.name}`} style={[styles.card, { borderTopWidth: 0, paddingHorizontal: 12, borderRadius: 12 }]}>
-            <Text style={styles.sectionTitle}>
-              {String(i + 1).padStart(2, "0")} · {e.name}
-            </Text>
-            <Text style={styles.muted}>
-              Rest {e.restSec}s{e.tempo ? ` · Tempo ${e.tempo}` : ""}
-            </Text>
-            {e.mode === "cardio" &&
-              (e.cardioSessionType || e.cardioEffortLevel) && (
-                <Text style={styles.muted}>
-                  {[e.cardioSessionType, e.cardioEffortLevel]
-                    .filter(Boolean)
-                    .join(" · ")}
-                </Text>
-              )}
-            {!!e.instructions && (
-              <Text style={styles.modalText}>{e.instructions}</Text>
-            )}
-            {e.mode !== "cardio" && exerciseTargetsText(e.targets, plan.effortScale) ? <Text style={styles.muted}>Target: {exerciseTargetsText(e.targets, plan.effortScale)}</Text> : null}
-            {e.sets.map((s, j) => (
-              <Text key={j} style={styles.modalText}>
-                {s.setType === "warmup" ? "W" : ++working}
-                {s.setType === "drop"
-                  ? " D"
-                  : s.setType === "failure"
-                    ? " F"
-                    : ""}{" "}
-                ·{" "}
-                {e.mode === "cardio"
-                  ? `${Math.round(((s.durationSec || 0) / 60) * 100) / 100} min${s.distanceKm == null ? "" : ` · ${Math.round((e.unit === "mi" ? s.distanceKm / 1.60934 : s.distanceKm) * 100) / 100} ${e.unit}`}`
-                  : `${s.weightKg == null ? "" : `${Math.round(s.weightKg * (e.unit === "lbs" ? 2.20462 : 1) * 10) / 10} ${e.unit} × `}${s.reps} reps`}
-                {s.targetRpe == null
-                  ? ""
-                  : ` · Target ${plan.effortScale.toUpperCase()} ${rpeToEffort(s.targetRpe, plan.effortScale)}`}
-              </Text>
-            ))}
-          </View>
-        );
-      })}
-    </ScrollView>
   );
 }
 

@@ -80,6 +80,39 @@ describe.skipIf(!enabled)("workout sharing Firestore transactions", () => {
     ]);
     expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
   });
+  it("tracks each recipient independently, including legacy deliveries and repeated reads", async () => {
+    const sender = `receipt-s-${suffix}`, one = `receipt-a-${suffix}`, two = `receipt-b-${suffix}`;
+    for (const uid of [sender, one, two]) {
+      await getFirestore().doc(`users/${uid}`).set({ nickname: uid });
+      await call({ op: "username", username: uid.replaceAll("-", ".").slice(0, 24) }, uid);
+      await call({ op: "enabled", enabled: true }, uid);
+    }
+    const result = await call({ op: "send", requestId: `receipt-${suffix}`, plan: sample, recipients: [one, two] }, sender) as any;
+    const first = ((await call({ op: "list", kind: "requests" }, one)) as any).items[0];
+    const second = ((await call({ op: "list", kind: "requests" }, two)) as any).items[0];
+    const receipt = async () => (await getFirestore().doc(`users/${sender}/sharingSent/${result.id}`).get()).data()!;
+    const states = async () => Object.fromEntries((await receipt()).recipients.map((p: any) => [p.uid, p.status]));
+    expect(await states()).toEqual({ [one]: "request", [two]: "request" });
+    await expect(call({ op: "respond", deliveryId: first.id, action: "read" }, one)).rejects.toMatchObject({ code: "permission-denied" });
+    await call({ op: "respond", deliveryId: first.id, action: "accept" }, one);
+    expect(await states()).toEqual({ [one]: "inbox", [two]: "request" });
+    await call({ op: "respond", deliveryId: first.id, action: "read" }, one);
+    expect(await states()).toEqual({ [one]: "viewed", [two]: "request" });
+    // Simulate an existing delivery written before sentId was introduced.
+    const secondRef = getFirestore().doc(`users/${two}/sharingInbox/${second.id}`);
+    const legacy = (await secondRef.get()).data()!;
+    delete legacy.sentId;
+    await secondRef.set(legacy);
+    await Promise.all([
+      call({ op: "respond", deliveryId: first.id, action: "read" }, one),
+      call({ op: "respond", deliveryId: second.id, action: "accept" }, two),
+    ]);
+    expect(await states()).toEqual({ [one]: "viewed", [two]: "inbox" });
+    await call({ op: "respond", deliveryId: first.id, action: "accept" }, one);
+    await call({ op: "respond", deliveryId: second.id, action: "read" }, two);
+    expect(await states()).toEqual({ [one]: "viewed", [two]: "viewed" });
+    await expect(call({ op: "respond", deliveryId: first.id, action: "read" }, two)).rejects.toMatchObject({ code: "not-found" });
+  });
   it("defaults sharing off, keeps identity separate, and removes opted-out accounts from discovery", async () => {
     const uid = `fresh-${suffix}`;
     await getFirestore().doc(`users/${uid}`).set({ nickname: "Fresh Example" });

@@ -5,7 +5,7 @@ import { startSharingCopy, sharingCopyDialog, handleSharingCopy, sharingCopyInpu
 export { installSharingEditorGestures } from './sharing-editor.mjs';
 export function sharingInboxButton(social) {
   const count = social.inbox.filter(item => item.when.includes('New')).length + social.requests.length;
-  return `<button type="button" class="icon-button sharing-inbox-button" data-action="social-inbox" aria-label="Workout sharing${count ? `, ${count} new items` : ''}" title="Workout sharing">${notebookIcon('inbox')}${count ? `<span class="sharing-inbox-badge" aria-hidden="true">${count > 99 ? '99+' : count}</span>` : ''}</button>`;
+  return `<button type="button" class="icon-button sharing-inbox-button" data-action="social-inbox" aria-label="${social.supportsPrograms?'Sharing':'Workout sharing'}${count ? `, ${count} new items` : ''}" title="${social.supportsPrograms?'Sharing':'Workout sharing'}">${notebookIcon('inbox')}${count ? `<span class="sharing-inbox-badge" aria-hidden="true">${count > 99 ? '99+' : count}</span>` : ''}</button>`;
 }
 const KEY = 'lastrep-sharing-study-v1';
 export function readSharingPreferences() {
