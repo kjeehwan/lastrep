@@ -37,6 +37,10 @@
       {
         "source": "/privacy",
         "destination": "/privacy/index.html"
+      },
+      {
+        "source": "/data-deletion",
+        "destination": "/data-deletion/index.html"
       }
     ],
     "headers": [

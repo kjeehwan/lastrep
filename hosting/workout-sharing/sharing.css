@@ -129,6 +129,13 @@ details[open] > summary.day-row::after { transform: rotate(45deg); }
 summary:focus-visible { outline: 2px solid #667fbd; outline-offset: 3px; }
 .action-icon { display: block; flex-shrink: 0; object-fit: contain; }
 .app-icon { border-radius: 7px; }
+.app-launch { min-height: 64px; justify-content: space-between; padding: 12px 20px; }
+.action-wordmark { display: block; width: 104px; height: 35px; flex-shrink: 0; }
+.action-chevron { width: 8px; height: 8px; border-right: 1.7px solid currentColor; border-top: 1.7px solid currentColor; transform: rotate(45deg); flex-shrink: 0; }
+.play-badge-link { display: flex; align-items: center; justify-content: center; min-height: 64px; align-self: center; margin: -8px 0; border-radius: 8px; }
+.play-badge { display: block; width: 220px; height: auto; }
+.exercise-details { margin-top: 8px; margin-bottom: 20px; }
+.legal-links { display: flex; flex-wrap: wrap; gap: 12px 24px; }
 footer { margin-top: 32px; color: var(--muted); font-size: 14px; }
 .policy h2 { margin-top: 32px; margin-bottom: 12px; }
 .policy li { margin: 8px 0; }
