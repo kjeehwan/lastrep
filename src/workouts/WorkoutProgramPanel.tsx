@@ -1,16 +1,18 @@
+import { useSharing } from "../sharing/SharingProvider";
+import { programToSharingPlan } from "../sharing/programSharingPlan";
 import React, { useEffect, useState } from "react";
 import { ActivityIndicator, TouchableOpacity as Pressable, Text, View, useWindowDimensions } from "react-native";
 import { Play, Pencil, Square, RotateCcw, Share2, Trash2 } from "lucide-react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { collection, doc, getDocs, limit, orderBy, query, startAfter, type QueryDocumentSnapshot } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, limit, orderBy, query, startAfter, type QueryDocumentSnapshot } from "firebase/firestore";
 import { db } from "../config/firebaseConfig";
 import { useNotebook, useNotebookStyles, notebookSheet } from "../ui/notebook/Notebook";
 import type { NotebookColors } from "../ui/notebook/tokens";
 import { NotebookTextInput } from "../ui/notebook/NotebookTextInput";
 import { WorkoutModalShell } from "./workoutLog/WorkoutModalShell";
-import { showAppAlert, showAppDialog } from "../ui/appDialog";
+import { showAppDialog } from "../ui/appDialog";
 import type { Routine } from "./workoutLog/workoutLogModel";
-import { activateStoredProgram, deleteStoredProgram, saveProgram, stopStoredProgram, updateProgramRun } from "./programStore";
+import { runRef, activateStoredProgram, deleteStoredProgram, saveProgram, stopStoredProgram, updateProgramRun } from "./programStore";
 import { changeProgramSchedule, currentProgramOrdinal, dateKey, emptyProgramDays, programDateLabel, programDayLink, programOccurrence, programSetupError,
   type ProgramLink, type ProgramRecord, type ProgramRun, type ProgramScheduleAction } from "./programFlow";
 import type { useWorkoutPrograms } from "./useWorkoutPrograms";
@@ -18,8 +20,8 @@ import { useEventCallbacks } from "../hooks/useEventCallbacks";
 import { useNow } from "../hooks/useNow";
 
 type Programs = ReturnType<typeof useWorkoutPrograms>;
-type Props = { uid: string; data: Programs; routines: Routine[]; choices: boolean; hasDraft: boolean;
-  managerRequest?: {programId?:string;action?:"library"|"create";token:number}|null;
+type Props = { effortScale?: "rpe" | "rir"; uid: string; data: Programs; routines: Routine[]; choices: boolean; hasDraft: boolean;
+  managerRequest?: {programId?:string;action?:"library"|"create"|"start";token:number}|null;
   onManagerOpened?: () => void;
   onResume: () => void; onStandalone: () => Promise<void>;
   onRestDay: () => void;
@@ -28,6 +30,8 @@ type Props = { uid: string; data: Programs; routines: Routine[]; choices: boolea
 
 export function WorkoutProgramPanel(props: Props) {
   const { colors } = useNotebook();
+  const sharing = useSharing();
+  const [pendingSharedStart,setPendingSharedStart] = useState<string|null>(null);
   const styles = useNotebookStyles(createStyles);
   const { fontScale } = useWindowDimensions();
   const actionColumns = fontScale >= 1.5 ? 2 : 3;
@@ -54,14 +58,14 @@ export function WorkoutProgramPanel(props: Props) {
   const { openManager } = useEventCallbacks({openManager:()=>{
     const request=props.managerRequest;if(!request)return;
     if(request.action==="create")newProgram();
-    else if(request.programId){const program=props.data.programs.find(item=>item.id===request.programId);if(!program)return;open(program,"edit");}
+    else if(request.programId){const program=props.data.programs.find(item=>item.id===request.programId);if(!program)return;if(program.days.some(day=>day.routineId&&!props.routines.some(r=>r.id===day.routineId)))return;open(program,"details");if(request.action==="start"&&!program.runId)setPendingSharedStart(program.id);}
     else setPage("library");
     props.onManagerOpened?.();
   }});
   useEffect(()=>{
     if(!props.managerRequest||!props.data.loaded)return;
     const task=setTimeout(openManager,0);return()=>clearTimeout(task);
-  },[props.managerRequest,props.data.loaded,props.data.programs,openManager]);
+  },[props.managerRequest,props.data.loaded,props.data.programs,props.routines,openManager]);
   const button = (label: string, onPress: () => void, kind: "primary" | "neutral" | "danger" = "neutral") => <Pressable key={label} accessibilityRole="button" disabled={busy} onPress={onPress} style={[styles.button, kind === "primary" && styles.primary]}>
     <Text style={[styles.buttonText, kind === "primary" && { color: colors.onPrimary }, kind === "danger" && { color: colors.danger }]}>{label}</Text>
   </Pressable>;
@@ -69,7 +73,8 @@ export function WorkoutProgramPanel(props: Props) {
     <View style={{ flex: 1, gap: 6 }}><Text style={[styles.rowTitle, primary && { color: colors.accent }]}>{title}</Text>{detail ? <Text style={styles.muted}>{detail}</Text> : null}</View><Ionicons name="chevron-forward" size={20} color={colors.muted} />
   </Pressable>;
   const continueProgram = async () => {
-    const { active, run } = props.data;
+    const active = props.data.active ?? props.data.programs.find(item=>item.id===props.data.activeId);
+    const run = props.data.run ?? (active?.runId ? (await getDoc(runRef(props.uid,active.id,active.runId))).data() as ProgramRun | undefined : undefined);
     if (!active || !run) throw new Error("The program schedule is still loading.");
     const ordinal = currentProgramOrdinal(active, run);
     const occurrence = programOccurrence(active, run, ordinal);
@@ -97,6 +102,8 @@ export function WorkoutProgramPanel(props: Props) {
   const startConfirmation = (mode: "start" | "restart") => showAppDialog({ title: mode === "restart" ? "Restart program?" : "Start program?",
     message: mode === "restart" ? "Start Day 1 today in a new run. Previous runs, routines and workouts stay saved." : "Use this program from today. Your current workout draft stays saved.",
     buttons: [{ text: "Cancel", role: "cancel" }, { text: mode === "restart" ? "Restart program" : "Start program", onPress: () => activate(mode) }] });
+  const {confirmSharedStart}=useEventCallbacks({confirmSharedStart:()=>{if(pendingSharedStart && draft?.id===pendingSharedStart){setPendingSharedStart(null);startConfirmation("start");}}});
+  useEffect(()=>{if(!pendingSharedStart||draft?.id!==pendingSharedStart)return;const task=setTimeout(confirmSharedStart,0);return()=>clearTimeout(task);},[pendingSharedStart,draft?.id,confirmSharedStart]);
   const showDetails = async (program: ProgramRecord) => {
     open(program, "details"); setSelectedRun(null);
     if (!program.runId) return;
@@ -165,7 +172,7 @@ export function WorkoutProgramPanel(props: Props) {
             { label: "Edit", Icon: Pencil, color: colors.ink, onPress: () => setPage("edit") },
             ...(isActive ? [{ label: "Stop", Icon: Square, color: colors.ink, onPress: () => void execute(() => stopStoredProgram(props.uid, draft.id)) }] : []),
             ...(draft.runId ? [{ label: "Restart", Icon: RotateCcw, color: colors.ink, onPress: () => startConfirmation("restart") }] : []),
-            { label: "Share", Icon: Share2, color: colors.ink, onPress: () => showAppAlert("Share program", "Program sharing isn't available yet.") },
+            { label: "Share", Icon: Share2, color: colors.ink, onPress: () => { try { const plan=programToSharingPlan(draft,props.routines,props.effortScale??"rpe");setPage(null);sharing.open(plan); } catch(e) {setError(e instanceof Error ? e.message : "Could not prepare this program.");} } },
             { label: "Delete", Icon: Trash2, color: colors.danger, onPress: () => showAppDialog({ title: "Delete program?", message: "Remove this program and its schedule. Saved workouts, routines and your current draft stay saved.", buttons: [{ text: "Cancel", role: "cancel" }, { text: "Delete program", role: "destructive", onPress: () => void execute(async () => { await deleteStoredProgram(props.uid, draft.id); setPage("library"); }) }] }) },
           ];
           return <View style={styles.actionGrid}>{Array.from({ length: Math.ceil(actions.length / actionColumns) }, (_, rowIndex) => <View key={rowIndex} style={styles.actionRow}>

@@ -35,7 +35,7 @@ export function SharingSettingsSection() {
       <SettingsRow
         icon={<UsersRound size={20} strokeWidth={1.5} color={colors.ink} />}
         label="Sharing within Lastrep"
-        labelAccessory={<NotebookInfoButton label="About sharing within Lastrep" onPress={() => showAppAlert("Sharing within Lastrep", "When on, people can find your nickname and @username and send you workouts.")} />}
+        labelAccessory={<NotebookInfoButton label="About sharing within Lastrep" onPress={() => showAppAlert("Sharing within Lastrep", "When on, people can find your nickname and @username and send you workouts and programs.")} />}
         control={<View style={{ minWidth: 64, minHeight: 48, alignItems: "center", justifyContent: "center" }}><Switch
           accessibilityLabel="Sharing within Lastrep"
           disabled={!!pending || sharing.busy || !!sharing.settingsError}

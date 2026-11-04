@@ -1,6 +1,8 @@
 import { normalizeExerciseTargets } from "../workouts/exerciseTargets";
 import {
   parseSharedWorkoutPlan,
+  isSharedProgram,
+  type SharedPlan,
   type SharedWorkoutPlan,
 } from "./sharingContract";
 import type {
@@ -47,7 +49,10 @@ export function workoutToSharingPlan(
     })),
   });
 }
-export function omitSharingWeights(plan: SharedWorkoutPlan): SharedWorkoutPlan {
+export function omitSharingWeights(plan: SharedWorkoutPlan): SharedWorkoutPlan;
+export function omitSharingWeights(plan: SharedPlan): SharedPlan;
+export function omitSharingWeights(plan: SharedPlan): SharedPlan {
+  if (isSharedProgram(plan)) return {...plan, routines: plan.routines.map(r => ({...r,plan:omitSharingWeights(r.plan)}))};
   return {
     ...plan,
     exercises: plan.exercises.map((e) => ({

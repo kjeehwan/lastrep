@@ -45,7 +45,7 @@ function SharedWorkout() {
   }, [focused, token, openToken]);
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.canvas }}>
-      <NotebookHeader title="Shared workout" onBack={leaveLink} />
+      <NotebookHeader title="Shared plan" onBack={leaveLink} />
       <ScrollView
         contentContainerStyle={{ flexGrow: 1, padding: 20, paddingTop: 32 }}
       >
@@ -60,7 +60,7 @@ function SharedWorkout() {
                 lineHeight: 36,
               }}
             >
-              {validToken ? "A workout shared with you" : "Link unavailable"}
+              {validToken ? "A plan shared with you" : "Link unavailable"}
             </Text>
           <Text
             style={{
@@ -71,19 +71,19 @@ function SharedWorkout() {
             }}
           >
             {validToken
-              ? "Review the plan, use it for a new workout or save it to My routines."
+              ? "Review the shared workout or program, then choose how to use it."
               : "This sharing link is unavailable. Ask the sender for a new link."}
           </Text>
           </View>
           <View style={{ gap: 12 }}>
             {validToken && (
               <SettingsAction
-                label="Open shared workout"
+                label="Open shared plan"
                 primary
                 onPress={() => openToken(token!)}
               />
             )}
-            <SettingsAction label={uid ? "Go to Home" : "Sign in to use this workout"} onPress={leaveLink} />
+            <SettingsAction label={uid ? "Go to Home" : "Sign in to use this plan"} onPress={leaveLink} />
           </View>
         </View>
       </ScrollView>
