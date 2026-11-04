@@ -16,6 +16,10 @@ describe("hosted privacy policy",()=>{
    expect(html).toContain('href="mailto:lastrep.dev@gmail.com?subject=Data%20Deletion%20Request"');
    expect(html).toContain('https://lastrep.web.app/data-deletion');
    expect((html.match(/<h2>/g)||[]).length).toBe(6);
+   expect(html).toContain('data-copy-request="account"');
+   expect(html).toContain('data-copy-request="data"');
+   expect(html).toContain('src="/legal.mjs"');
+   expect(html).toContain('These buttons open an email draft');
  });
  it("escapes raw HTML while rendering headings, paragraphs, bold text and lists",()=>{
    const html=renderPrivacyMarkdown('# Policy\n\n**Date:** today\n\n- <script>unsafe</script>\n- Second item');
