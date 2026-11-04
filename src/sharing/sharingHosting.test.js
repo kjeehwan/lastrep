@@ -66,7 +66,7 @@ describe("public sharing landing page", () => {
     const doc = documentFixture();
     renderSnapshot(doc, { sender: { nickname: "Example" }, plan: { ...plan, exercises: [{ ...plan.exercises[0], targets: { minReps: 8, maxReps: 12, targetRpe: 8.5 } }] } });
     const article = doc.getElementById("preview").children[0];
-    expect(article.children[1].textContent).toBe("Target: 8–12 reps · RIR 1.5");
+    expect(article.children[1].textContent).toBe("Target 8–12 reps · RIR 1.5");
     expect(article.children[2].textContent).toContain("Rest 90 sec");
     expect(article.children[2].textContent).toContain("Rest 90 sec · Tempo 3-0-X-0");
     expect(article.children.find(n=>n.className === "prescription").textContent).toContain("RIR 2");

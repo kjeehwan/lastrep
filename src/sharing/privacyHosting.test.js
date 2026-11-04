@@ -8,18 +8,19 @@ describe("hosted privacy policy",()=>{
    expect(fs.readFileSync("hosting/workout-sharing/privacy/index.html","utf8").replaceAll("\r\n","\n")).toBe(renderPrivacyMarkdown(source));
    expect(renderPrivacyMarkdown(source)).toContain("https://lastrep.web.app/privacy");
  });
- it("publishes the migrated deletion policy and distinct email request actions",()=>{
+ it("publishes deletion instructions and distinct email subjects without extra controls",()=>{
    const source=fs.readFileSync("doc/account-and-data-deletion.md","utf8");
    const html=renderDeletionMarkdown(source);
    expect(fs.readFileSync("hosting/workout-sharing/data-deletion/index.html","utf8").replaceAll("\r\n","\n")).toBe(html);
-   expect(html).toContain('href="mailto:lastrep.dev@gmail.com?subject=Account%20Deletion%20Request"');
-   expect(html).toContain('href="mailto:lastrep.dev@gmail.com?subject=Data%20Deletion%20Request"');
+   expect(html).toContain('Account Deletion Request');
+   expect(html).toContain('Data Deletion Request');
+   expect(html).toContain('href="mailto:lastrep.dev@gmail.com"');
    expect(html).toContain('https://lastrep.web.app/data-deletion');
    expect((html.match(/<h2>/g)||[]).length).toBe(6);
-   expect(html).toContain('data-copy-request="account"');
-   expect(html).toContain('data-copy-request="data"');
-   expect(html).toContain('src="/legal.mjs"');
-   expect(html).toContain('These buttons open an email draft');
+   expect(html).not.toContain('<button');
+   expect(html).not.toContain('Deletion requests');
+   expect(html).not.toContain('/legal.mjs');
+   expect(html).not.toContain('email-help');
  });
  it("escapes raw HTML while rendering headings, paragraphs, bold text and lists",()=>{
    const html=renderPrivacyMarkdown('# Policy\n\n**Date:** today\n\n- <script>unsafe</script>\n- Second item');
