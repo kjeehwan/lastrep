@@ -1,5 +1,9 @@
 // Approved outline vocabulary, copied from the reviewed Home study.
 const paths = {
+  edit:'<path d="m4 16 12-12 4 4L8 20H4v-4ZM14 6l4 4"/>',
+  share:'<path d="M12 16V3m-5 5 5-5 5 5M5 12v9h14v-9"/>',
+  stop:'<rect x="5" y="5" width="14" height="14" rx="1"/>',
+  repeat:'<path d="M3 10a9 9 0 1 1 2 8M3 4v6h6"/>',
   inbox: '<path d="M5 4h14l3 11v5H2v-5L5 4Z"/><path d="M2 15h6l2 3h4l2-3h6"/>',
   play: '<path d="m8 5 11 7-11 7Z"/>',
   options: '<path d="M4 6h16M4 12h16M4 18h16"/><circle cx="8" cy="6" r="2"/><circle cx="16" cy="12" r="2"/><circle cx="10" cy="18" r="2"/>',
@@ -18,6 +22,7 @@ const paths = {
   barcode: '<path d="M3 5v14M6 5v14M10 5v14M12 5v14M16 5v14M20 5v14"/><path d="M3 3H1v4M21 3h2v4M3 21H1v-4M21 21h2v-4"/>',
   more: '<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',
   clock: '<circle cx="12" cy="12" r="9"/><path d="M12 6v7h5"/>',
+  'check-circle': '<circle cx="12" cy="12" r="9"/><path d="m7 12 3 3 7-7"/>',
   speedometer: '<path d="M4 19a10 10 0 1 1 16 0Z"/><path d="m12 12 5-5M12 3v2M4.9 5.9l1.4 1.4M2 13h2M20 13h2"/><circle cx="12" cy="13" r="1.5"/>',
 
   calendar: '<rect x="4" y="5" width="16" height="16" rx="1"/><path d="M8 3v4M16 3v4M4 10h16M8 14h3M8 17h6"/>',

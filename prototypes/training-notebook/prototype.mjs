@@ -1,3 +1,4 @@
+import { programSharingStates, setupProgramSharing, programSharingDialog, handleProgramSharing, programSharingInput } from './program-sharing.mjs';
 import { unifiedStates, setupUnified, unifiedHeader, unifiedDialog, unifiedInput, handleUnified, invalidateUnified, syncUnifiedRecovery } from './unified-plan.mjs';
 import { beginProgressOptions, saveProgressOptions, beginProgressWeights, renderProgressWeights, saveProgressWeights, changeProgressWeightChoice, refreshProgressWeightHint } from './progression-settings.mjs';
 import { progressionStates, setupProgression, renderProgression, progressionDetails, applyProgression, undoProgression } from './progression.mjs';
@@ -13,7 +14,7 @@ import { readNotebookPreferences } from './notebook-preferences.mjs';
 import { setReviewState } from './review-state-picker.mjs';
 import { readCheckIn, writeCheckIn, clearCheckIn, checkInFields, createCheckInDraft, painValidation } from './check-in.mjs';
 import { copy, fixture, catalog, exerciseFromCatalog, lastText, effortValue, guidanceChanges, moveExercise, summary, setUnit, states } from './model.mjs';
-states.unshift(...unifiedStates, ...progressionStates, ['Exercise targets', 'layout-minimal-targets', 'Targets / configured', 'Exercise targets stay separate from the set log. Open the three-dot menu, then Targets.'], ['Exercise targets', 'layout-minimal-targets-empty', 'Targets / not set', 'No extra row appears until a rep range or target effort is configured.'], ['Minimal layout', 'layout-minimal', 'Compact header / icon actions', 'Combined phase and totals, six visible actions, no routine row.'], ['Minimal layout', 'layout-minimal-cardio', 'Compact header / cardio', 'The same icon actions and compact header with cardio controls.'], ['Layout review', 'layout', 'Workout header / resistance', 'Editable title, balanced spacing and planned session totals.'], ['Layout review', 'layout-tempo', 'Workout header / tempo set', 'The tool row keeps its spacing when a tempo is set.'], ['Layout review', 'layout-cardio', 'Workout header / cardio', 'Zone takes the place of resistance tempo.'], ...sharingStates, ...socialExamples);
+states.unshift(...programSharingStates, ...unifiedStates, ...progressionStates, ['Exercise targets', 'layout-minimal-targets', 'Targets / configured', 'Exercise targets stay separate from the set log. Open the three-dot menu, then Targets.'], ['Exercise targets', 'layout-minimal-targets-empty', 'Targets / not set', 'No extra row appears until a rep range or target effort is configured.'], ['Minimal layout', 'layout-minimal', 'Compact header / icon actions', 'Combined phase and totals, six visible actions, no routine row.'], ['Minimal layout', 'layout-minimal-cardio', 'Compact header / cardio', 'The same icon actions and compact header with cardio controls.'], ['Layout review', 'layout', 'Workout header / resistance', 'Editable title, balanced spacing and planned session totals.'], ['Layout review', 'layout-tempo', 'Workout header / tempo set', 'The tool row keeps its spacing when a tempo is set.'], ['Layout review', 'layout-cardio', 'Workout header / cardio', 'Zone takes the place of resistance tempo.'], ...sharingStates, ...socialExamples);
 
 const $ = (q, root = document) => root.querySelector(q);
 const escape = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -81,8 +82,10 @@ function makeState(id) {
   }
   if (id.startsWith('layout-minimal-progression-')) setupProgression(state, id);
   if (id.startsWith('layout-minimal-today-')) setupUnified(state,id);
+  if (id.startsWith('layout-minimal-program-share-')) setupUnified(state,id.endsWith('-newuser')?'layout-minimal-today-newuser':'layout-minimal-today-entry');
   state.sharing = sharingState(id);
   state.social = socialState(id);
+  if (id.startsWith('layout-minimal-program-share-')) setupProgramSharing(state,id);
   if (id.startsWith('social-')) state.modal = id;
   if (id.startsWith('share-')) {
     state.modal = id;
@@ -213,6 +216,7 @@ function warmupDialog(e) { return renderWarmupSheet(e,s.warmup,{shell:dialogShel
 function updateWarmupAction() { updateWarmupControls($('#stage'),getExercise(),s.warmup); }
 
 function modal() {
+  const programShare = programSharingDialog(s,{shell:dialogShell}); if(programShare)return programShare;
   if (s.unified) { const content = unifiedDialog(s,scale,{shell:dialogShell,button}); if(content) return content; }
   if (s.modal.startsWith('social-')) return socialDialog(s, { shell: dialogShell, escape, paragraph });
   if (s.modal.startsWith('share-')) return sharingDialog(s, { shell: dialogShell, button, paragraph, escape });
@@ -321,6 +325,7 @@ function chooseRoutine(append = false) {
 installSharingEditorGestures($('#stage'),()=>s,render);
 $('#stage').addEventListener('input', event => {
   const el = event.target;
+  if (programSharingInput(s, el, render)) return;
   if (socialInput(s, el, render)) return;
   if (!el.closest('.interactive')) return;
   const unifiedInputResult=unifiedInput(s,el);if (unifiedInputResult) { if(unifiedInputResult!=='live')render(); return; }
@@ -372,6 +377,7 @@ $('#stage').addEventListener('click', async event => {
   if (action === 'outside' && event.target !== b) return;
   if (['close', 'outside'].includes(action) && s.modal.startsWith('social-copy-')) { handleSocialAction(s, 'social-copy-dismiss', d, name => { s.modal = name; }); render(); return; }
   const e = getExercise(d.id || s.selectedId);
+  if (handleProgramSharing(s, action, d)) { render(); return; }
   if (handleSocialAction(s, action, d, name => { s.modal = name; })) { render(); return; }
   const unifiedActionResult=handleUnified(s,action,d,scale);if (unifiedActionResult) { if(unifiedActionResult!=='live')render(); return; }
   switch (action) {

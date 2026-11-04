@@ -777,3 +777,18 @@ equipment settings, the mockup does not invent a smallest increment.
 Verified preferred/default/fallback behavior, maximum limits, invalid edits,
 Apply/Undo/cancel and history preservation, plus 220 viewport/theme/text
 combinations. The maximum explanation remains beneath its input.
+
+## Program sharing ? November 3, 2026
+
+Review on the usual page: `index.html#layout-minimal-program-share-send`.
+The Program sharing state group contains sending, receiving, a new user with no
+program, mixed requests, sent programs and an external browser-preview example.
+My programs ? program details ? Share also reaches the flow. Workouts and
+programs share the inbox header, distinguished by type. Saving copies routine
+identities and day assignments; starting is a separate confirmed action.
+
+Run local checks with `node --test program-sharing.verify.mjs verify.mjs`.
+This is synthetic browser-only work, not native delivery or production link
+creation. See `../../docs/program-sharing-mockup.md` for scope and verification
+limits. The browser connector was unavailable during preparation, so visual
+layout review remains pending.
