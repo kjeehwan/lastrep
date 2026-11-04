@@ -51,3 +51,26 @@ Console account-deletion and selected-data-deletion URL fields.
 Sixteen focused tests, functions build and focused lint passed. Browser review
 confirmed context ordering, readable branding and badge loading in both themes,
 six policy sections and both mailto subjects. No personal records were altered.
+
+## Paired actions and email-handler follow-up
+
+Rest and tempo share one middle-dot row. The two equal-size action cards occupy
+one row at widths down to 320 px, with OPEN ON above the Lastrep wordmark and
+GET LASTREP ON above the Google Play name. The launch arrow is removed. The
+custom wording is HTML; the downloaded official badge image is not altered.
+The generic word plan remains appropriate in shared explanatory copy; explicit
+Shared workout / Shared program titles identify the scope of the received item.
+
+Deletion buttons remain mailto links. Phone Gmail/Outlook can handle them; PC
+browser selection alone does not necessarily provide a configured email composer.
+See Microsoft's URI handler documentation:
+https://learn.microsoft.com/en-us/windows/apps/develop/launch-default-app.
+The page explains this dependency and includes an expandable Email draft didn't
+open? section. Copy details writes only the fixed support address, the correct
+request subject and placeholders/instructions. Denied/unavailable clipboard
+access shows selectable text instead. It never opens a composer or sends mail.
+
+Nineteen focused tests, backend build and focused lint passed. Browser checks
+verified light/dark paired controls, the single context row, equal card geometry,
+no narrow-screen overflow, actual clipboard text/subjects and visible feedback,
+and the selectable fallback after an injected clipboard denial.

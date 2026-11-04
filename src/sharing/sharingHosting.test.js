@@ -68,7 +68,8 @@ describe("public sharing landing page", () => {
     const article = doc.getElementById("preview").children[0];
     expect(article.children[1].textContent).toBe("Target: 8–12 reps · RIR 1.5");
     expect(article.children[2].textContent).toContain("Rest 90 sec");
-    expect(article.children[3].textContent).toContain("RIR 2");
+    expect(article.children[2].textContent).toContain("Rest 90 sec · Tempo 3-0-X-0");
+    expect(article.children.find(n=>n.className === "prescription").textContent).toContain("RIR 2");
   });
   it("accepts one opaque token and rejects ambiguous or executable input", () => {
     expect(sharingToken(`?token=${token}`)).toBe(token);
@@ -129,7 +130,7 @@ describe("public sharing landing page", () => {
     }));
     expect(doc.getElementById("title").textContent).toBe(plan.title);
     const article = doc.getElementById("preview").children[0];
-    expect(article.children.find(n=>n.className === "details exercise-details").textContent).toContain(
+    expect(article.children.find(n=>n.className === "details instructions").textContent).toContain(
       "<script>private</script>",
     );
     expect(doc.getElementById("open").hidden).toBe(false);

@@ -86,9 +86,9 @@ export function renderSnapshot(doc, snapshot) {
       exercise.tempo ? `Tempo ${exercise.tempo}` : "",
       exercise.cardioSessionType || "",
       exercise.cardioEffortLevel || "",
-      exercise.instructions,
     ].filter(Boolean);
-    if (details.length) add(article, "p", details.join("\n"), "details exercise-details");
+    if (details.length) add(article, "p", details.join(" · "), "details exercise-details");
+    if (exercise.instructions) add(article, "p", exercise.instructions, "details instructions");
     const groups=[];
     for (const set of exercise.sets) {
       const key=JSON.stringify(set),last=groups[groups.length-1];
