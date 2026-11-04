@@ -17,7 +17,9 @@ import {
   normalizeSharingUsername,
   validSharingUsername,
   sharingSearchKey,
-  parseSharedWorkoutPlan,
+  parseSharedPlan,
+  isSharedProgram,
+  type SharedPlan,
   SHARING_LIMITS,
   type SharingPerson,
   type SharedWorkoutPlan,
@@ -64,7 +66,7 @@ const id = (value: unknown) =>
     : fail("invalid-argument", "Invalid request identifier.");
 function plan(input: unknown) {
   try {
-    return parseSharedWorkoutPlan(input);
+    return parseSharedPlan(input);
   } catch (error) {
     return fail(
       "invalid-argument",
@@ -293,9 +295,11 @@ async function send(uid: string, input: Record<string, unknown>) {
       }
       const deliveryId = hash(uid + ":" + requestId + ":" + r);
       tx.create(inbox(r).doc(deliveryId), {
+        sentId: requestId,
         snapshotId,
         sender,
         title: snapshot.title,
+        kind: isSharedProgram(snapshot) ? "program" : "workout",
         status: accepted ? "inbox" : "request",
         unread: accepted,
         createdAtMs: now,
@@ -352,6 +356,7 @@ async function send(uid: string, input: Record<string, unknown>) {
       tx.create(sentRef, {
         snapshotId,
         title: snapshot.title,
+        kind: isSharedProgram(snapshot) ? "program" : "workout",
         recipients: delivered,
         createdAtMs: now,
         createdAt: Timestamp.fromMillis(now),
@@ -393,11 +398,29 @@ async function respond(uid: string, input: Record<string, unknown>) {
       counts = defaults(prefs.data()),
       relRef = relation(uid, data.sender.uid),
       rel = await tx.get(relRef);
+    // Legacy deliveries lack the back-reference. Match their exact delivery ID.
+    const sentRecord = typeof data.sentId === "string"
+      ? await tx.get(sent(data.sender.uid).doc(data.sentId))
+      : (await tx.get(sent(data.sender.uid).where("createdAtMs", "==", data.createdAtMs))).docs
+          .find((record) => hash(data.sender.uid + ":" + record.id + ":" + uid) === deliveryId);
+    const updateReceipt = (status: "inbox" | "viewed") => {
+      if (!sentRecord?.exists || sharingExpired(sentRecord.data())) return;
+      const record = sentRecord.data()!;
+      if (record.snapshotId !== data.snapshotId ||
+          hash(data.sender.uid + ":" + sentRecord.id + ":" + uid) !== deliveryId) return;
+      tx.update(sentRecord.ref, {
+        recipients: record.recipients.map((recipient: SharingPerson & { status: string }) =>
+          recipient.uid === uid
+            ? { ...recipient, status: recipient.status === "viewed" ? "viewed" : status }
+            : recipient),
+      });
+    };
     if ((action === "read" || action === "accept") && sharingExpired(data))
       fail("not-found", "This shared workout has expired.");
     if (action === "read") {
       if (data.status !== "inbox")
         fail("permission-denied", "Accept this sharing request first.");
+      updateReceipt("viewed");
       if (data.unread) {
         tx.update(ref, { unread: false });
         tx.set(
@@ -428,6 +451,7 @@ async function respond(uid: string, input: Record<string, unknown>) {
         });
     } else {
       if (data.status !== "request" && action !== "block") return { ok: true };
+      if (action === "accept") updateReceipt("inbox");
       const pending = data.status === "request";
       tx.set(relRef, {
         senderUid: data.sender.uid,
@@ -475,7 +499,7 @@ async function authorizedSnapshot(
   input: Record<string, unknown>,
 ): Promise<{
   snapshotId: string;
-  plan: SharedWorkoutPlan;
+  plan: SharedPlan;
   sender: SharingPerson;
 }> {
   let snapshotId: string | undefined;
@@ -527,9 +551,10 @@ async function authorizedSnapshot(
     fail("not-found", "This shared workout has expired.");
   if (!snapshot || !live((await profile(snapshot.ownerUid).get()).data()))
     fail("not-found", "This shared workout is unavailable.");
+  if (snapshot.plan?.version === 2 && Number(input.supportedPlanVersion ?? 0) < 2) fail("failed-precondition", "Update Lastrep to open this shared program.");
   return {
     snapshotId,
-    plan: parseSharedWorkoutPlan(snapshot.plan),
+    plan: parseSharedPlan(snapshot.plan),
     sender: snapshot.sender,
   };
 }
@@ -692,41 +717,56 @@ async function reviewRecipients(uid: string, input: Record<string, unknown>) {
     ),
   };
 }
+function routineExercises(plan: SharedWorkoutPlan) {
+  return plan.exercises.map(e => ({
+    name: e.name, mode: e.mode, notes: e.instructions, targets: e.targets ?? null,
+    tempo: e.tempo, restSec: e.restSec, unit: e.unit,
+    cardioSessionType: e.cardioSessionType ?? null, cardioEffortLevel: e.cardioEffortLevel ?? null,
+    sets: e.sets.map(s => ({ reps: s.reps, defaultWeightKg: s.weightKg,
+      defaultDistanceKm: s.distanceKm, defaultDurationSec: s.durationSec,
+      setType: s.setType, targetRpe: s.targetRpe })),
+  }));
+}
 async function importRoutine(uid: string, input: Record<string, unknown>) {
   await throttle(uid, "import", 20);
-  const shared = await authorizedSnapshot(uid, input),
-    ref = db().doc(`users/${uid}/routines/shared-${shared.snapshotId}`);
-  return db().runTransaction(async (tx) => {
+  const shared = await authorizedSnapshot(uid, input);
+  if (isSharedProgram(shared.plan)) fail("invalid-argument", "Save this plan to My programs instead.");
+  const workout = shared.plan, ref = db().doc(`users/${uid}/routines/shared-${shared.snapshotId}`);
+  return db().runTransaction(async tx => {
     const [existing, user] = await tx.getAll(ref, profile(uid));
-    if (!live(user.data()))
-      fail("failed-precondition", "Your account is unavailable.");
+    if (!live(user.data())) fail("failed-precondition", "Your account is unavailable.");
     if (existing.exists) return { created: false, id: ref.id };
-    tx.create(ref, {
-      name: shared.plan.title,
-      sharedSnapshotId: shared.snapshotId,
-      createdAt: Timestamp.now(),
-      updatedAt: Timestamp.now(),
-      exercises: shared.plan.exercises.map((e) => ({
-        name: e.name,
-        mode: e.mode,
-        notes: e.instructions,
-        targets: e.targets ?? null,
-        tempo: e.tempo,
-        restSec: e.restSec,
-        unit: e.unit,
-        cardioSessionType: e.cardioSessionType ?? null,
-        cardioEffortLevel: e.cardioEffortLevel ?? null,
-        sets: e.sets.map((s) => ({
-          reps: s.reps,
-          defaultWeightKg: s.weightKg,
-          defaultDistanceKm: s.distanceKm,
-          defaultDurationSec: s.durationSec,
-          setType: s.setType,
-          targetRpe: s.targetRpe,
-        })),
-      })),
-    });
+    tx.create(ref, { name: workout.title, sharedSnapshotId: shared.snapshotId,
+      createdAt: Timestamp.now(), updatedAt: Timestamp.now(), exercises: routineExercises(workout) });
     return { created: true, id: ref.id };
+  });
+}
+async function importProgram(uid: string, input: Record<string, unknown>) {
+  await throttle(uid, "import", 20);
+  const shared = await authorizedSnapshot(uid, input);
+  if (!isSharedProgram(shared.plan)) fail("invalid-argument", "This is a shared workout, not a program.");
+  const program = shared.plan;
+  // Repeat imports of one delivery are idempotent. A separate delivery creates independent copies.
+  const origin = input.deliveryId ? `delivery:${id(input.deliveryId)}` : input.sentId ? `sent:${id(input.sentId)}` : `snapshot:${shared.snapshotId}`;
+  const importId = hash(uid + ":" + origin), ref = db().doc(`users/${uid}/workoutPrograms/shared-${importId}`);
+  const routineId = (key: string) => `shared-program-${importId}-${key}`;
+  return db().runTransaction(async tx => {
+    const [existing, user] = await tx.getAll(ref, profile(uid));
+    if (!live(user.data())) fail("failed-precondition", "Your account is unavailable.");
+    if (existing.exists) return { created: false, id: ref.id, routineCount: program.routines.length, hasRun: typeof existing.data()?.runId === "string" };
+    const routineRefs = program.routines.map(r => db().doc(`users/${uid}/routines/${routineId(r.key)}`));
+    const existingRoutines = await tx.getAll(...routineRefs);
+    const now = Date.now();
+    program.routines.forEach((r,i) => {
+      // Reimport after program deletion must never overwrite an independently edited routine.
+      if (!existingRoutines[i].exists) tx.create(routineRefs[i], { name: r.plan.title,
+        sharedSnapshotId: shared.snapshotId, createdAt: Timestamp.fromMillis(now),
+        updatedAt: Timestamp.fromMillis(now), exercises: routineExercises(r.plan) });
+    });
+    tx.create(ref, { id: ref.id, name: program.title, status: "saved", runId: null,
+      updatedAt: now, sharedSnapshotId: shared.snapshotId,
+      days: program.days.map(d => ({ type: d.type, title: d.title, routineId: d.routineKey ? routineId(d.routineKey) : null })) });
+    return { created: true, id: ref.id, routineCount: program.routines.length, hasRun: false };
   });
 }
 export async function handleWorkoutSharing(raw: unknown, uid: string | null) {
@@ -752,6 +792,7 @@ export async function handleWorkoutSharing(raw: unknown, uid: string | null) {
   if (input.op === "search") return search(uid, input);
   if (input.op === "review") return reviewRecipients(uid, input);
   if (input.op === "importRoutine") return importRoutine(uid, input);
+  if (input.op === "importProgram") return importProgram(uid, input);
   if (input.op === "send") return send(uid, input);
   if (input.op === "respond") return respond(uid, input);
   if (input.op === "snapshot") return authorizedSnapshot(uid, input);
