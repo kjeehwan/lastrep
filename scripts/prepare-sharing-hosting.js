@@ -4,7 +4,7 @@ const path = require("node:path");
 const root = path.resolve(__dirname, "..");
 const escape = (text) => text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
 const inline = (text) => escape(text).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>").replaceAll("lastrep.dev@gmail.com", '<a href="mailto:lastrep.dev@gmail.com">lastrep.dev@gmail.com</a>');
-function renderLegalMarkdown(markdown, {title, route, deletionActions = false}) {
+function renderLegalMarkdown(markdown, {title, route, deletionPage = false}) {
   const lines = markdown.replaceAll("\r\n", "\n").trim().split("\n");
   let output = [], paragraph = [], list = false;
   const flush = () => { if (paragraph.length) { output.push(`<p>${inline(paragraph.join(" "))}</p>`); paragraph = []; } };
@@ -17,13 +17,12 @@ function renderLegalMarkdown(markdown, {title, route, deletionActions = false}) 
     else { closeList(); paragraph.push(line.trim()); }
   }
   flush(); closeList();
-  let content = output.join("\n");
-  if (deletionActions) content = content.replace('<h2>', '<p class="details">These buttons open an email draft in your chosen email app, with the recipient and subject filled in.</p><nav aria-label="Deletion requests"><a class="button button-secondary" href="mailto:lastrep.dev@gmail.com?subject=Account%20Deletion%20Request">Request account deletion</a><a class="button button-secondary" href="mailto:lastrep.dev@gmail.com?subject=Data%20Deletion%20Request">Request selected data deletion</a></nav><details class="email-help"><summary>Email draft didn’t open?</summary><p>If a blank browser opens, start a new email in the email service you normally use. Copy the matching details below, then fill in your Lastrep account email and requested records.</p><div class="request-copy-row"><span>Account deletion</span><button class="button-secondary" type="button" data-copy-request="account">Copy details</button></div><div class="request-copy-row"><span>Selected data deletion</span><button class="button-secondary" type="button" data-copy-request="data">Copy details</button></div><p id="request-copy-status" class="copy-status" role="status" aria-live="polite"></p><textarea id="request-copy-fallback" class="request-fallback" rows="7" readonly hidden aria-label="Email request details to copy"></textarea></details><h2>');
-  const footer = deletionActions ? '<a href="/privacy">Privacy policy</a>' : '<a href="/data-deletion">Account and data deletion</a>';
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><title>${escape(title)} · Lastrep</title><link rel="canonical" href="https://lastrep.web.app${escape(route)}"><link rel="stylesheet" href="/sharing.css">${deletionActions ? '<script type="module" src="/legal.mjs"></script>' : ''}</head><body><main><header><img src="/wordmark.svg" alt="Lastrep" width="144" height="48"></header><div class="policy">${content}</div><footer>${footer}</footer></main></body></html>\n`;
+  const content = output.join("\n");
+  const footer = deletionPage ? '<a href="/privacy">Privacy policy</a>' : '<a href="/data-deletion">Account and data deletion</a>';
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><title>${escape(title)} · Lastrep</title><link rel="canonical" href="https://lastrep.web.app${escape(route)}"><link rel="stylesheet" href="/sharing.css"></head><body><main><header><img src="/wordmark.svg" alt="Lastrep" width="144" height="48"></header><div class="policy">${content}</div><footer>${footer}</footer></main></body></html>\n`;
 }
 const renderPrivacyMarkdown = markdown => renderLegalMarkdown(markdown, {title:"Privacy policy", route:"/privacy"});
-const renderDeletionMarkdown = markdown => renderLegalMarkdown(markdown, {title:"Account and data deletion", route:"/data-deletion", deletionActions:true});
+const renderDeletionMarkdown = markdown => renderLegalMarkdown(markdown, {title:"Account and data deletion", route:"/data-deletion", deletionPage:true});
 function prepare() {
   const hosting = path.join(root, "hosting/workout-sharing");
   fs.mkdirSync(path.join(hosting, "privacy"), {recursive: true});
