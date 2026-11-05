@@ -1,6 +1,6 @@
 # Lastrep Training Notebook Design Specification
 
-Version: 1.60 | Date: November 4, 2026
+Version: 1.61 | Date: November 4, 2026
 
 Status: Workout, Home, Nutrition, Sleep, Profile and Settings browser design
 directions approved through iterative review. Shared rules below incorporate that
@@ -2469,6 +2469,9 @@ data; the existence of a saved value does not imply this installation is connect
   focuses and selects the title. Size the title field to its text rather than
   stretching it across the row. Long titles wrap while reserving the pencil's
   44 dp tap target, so the icon remains visible beside the title block.
+  Program-title editing uses the same Lucide Pencil as workout-title editing:
+  18 dp, 1.5 stroke width and muted color, centered beside the title with a
+  44 dp minimum touch target. Do not substitute an inline icon from another set.
   This is an explicit exception to the ordinary shared-input surface rule:
   NotebookTextInput uses its canvas surface only for this heading; set values and
   ordinary form fields retain the shared input surface.
