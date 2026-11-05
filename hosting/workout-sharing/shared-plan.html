@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="referrer" content="no-referrer" />
+    <meta name="robots" content="noindex,nofollow,noarchive" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Shared plan · Lastrep</title>
+    <meta property="og:title" content="Shared plan · Lastrep" />
+    <meta property="og:type" content="website" />
+    <meta property="og:description" content="Preview this shared plan and open it in Lastrep." />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="Shared plan · Lastrep" />
+    <link rel="stylesheet" href="/sharing.css" />
+    <script type="module" src="/sharing.mjs"></script>
+  </head>
+  <body>
+    <main>
+      <header>
+        <img src="/wordmark.svg" alt="Lastrep" width="144" height="48" />
+      </header>
+      <p id="plan-kind" class="eyebrow">Shared plan</p>
+      <h1 id="title">A plan for you</h1>
+      <p id="status" role="status" aria-live="polite">
+        Checking this sharing link…
+      </p>
+      <section id="preview" aria-label="Shared plan" hidden></section>
+      <nav class="sharing-actions" aria-label="Open shared plan">
+        <a id="open" class="launch-card" aria-label="Open in Lastrep" hidden><span class="launch-label">OPEN ON</span><img class="action-wordmark" src="/wordmark.svg" alt="" width="104" height="35" /></a>
+        <a
+          class="launch-card launch-card-secondary"
+          aria-label="Get Lastrep on Google Play"
+          href="https://play.google.com/store/apps/details?id=com.kjeehwan.lastrep"
+          rel="noreferrer"
+          ><span class="launch-label">GET LASTREP ON</span><span class="store-brand"><img src="/google-play.svg" alt="" width="24" height="24" /><span class="store-name">Google Play</span></span></a
+        >
+      </nav>
+      <p class="footnote">
+        Previewing does not change your current workout or program. In Lastrep,
+        choose whether to use the workout or save the program and its routines.
+      </p>
+      <p class="footnote">
+        Anyone with this link can view the plan. Links remain available for 30
+        days unless revoked. After installing Lastrep, return to this link to
+        open the plan.
+      </p>
+      <button id="retry" type="button" hidden>Try again</button>
+      <footer class="legal-links"><a href="/privacy">Privacy policy</a><a href="/data-deletion">Account and data deletion</a></footer>
+    </main>
+  </body>
+</html>

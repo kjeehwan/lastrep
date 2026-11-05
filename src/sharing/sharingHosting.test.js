@@ -49,6 +49,32 @@ function documentFixture() {
   return { getElementById: (id) => nodes.get(id), createElement: node };
 }
 describe("public sharing landing page", () => {
+  it("permits indexing only the public information pages and lists no shared links in the sitemap", () => {
+    const { headers } = JSON.parse(fs.readFileSync("firebase.json", "utf8")).hosting;
+    const publicRule = headers.find(rule => rule.regex && rule.headers.some(h => h.key === "X-Robots-Tag"));
+    const allowed = new RegExp(publicRule.regex);
+    expect(publicRule.headers).toContainEqual({key:"X-Robots-Tag",value:"index, follow"});
+    for (const path of ["/", "/index.html", "/privacy", "/privacy/", "/privacy/index.html", "/data-deletion", "/data-deletion/", "/data-deletion/index.html"]) expect(allowed.test(path),path).toBe(true);
+    for (const path of ["/w/"+shortToken, "/shared-workout", "/shared-plan.html", "/api/workout-sharing", "/404.html", "/privacy-other", "/privacy/secret", "/unknown"]) expect(allowed.test(path),path).toBe(false);
+    const defaultHeaders = headers.find(rule => rule.source === "**").headers;
+    expect(defaultHeaders).toContainEqual({key:"X-Robots-Tag",value:"noindex, nofollow, noarchive"});
+    expect(headers.indexOf(publicRule)).toBeGreaterThan(headers.findIndex(rule => rule.source === "**"));
+    const sitemap = fs.readFileSync("hosting/workout-sharing/sitemap.xml", "utf8");
+    expect([...sitemap.matchAll(/<loc>(.*?)<\/loc>/g)].map(match=>match[1])).toEqual(["https://lastrep.web.app/", "https://lastrep.web.app/privacy", "https://lastrep.web.app/data-deletion"]);
+    expect(fs.readFileSync("hosting/workout-sharing/robots.txt", "utf8")).toContain("Sitemap: https://lastrep.web.app/sitemap.xml");
+    expect(fs.readFileSync("hosting/workout-sharing/shared-plan.html", "utf8")).toContain('name="robots" content="noindex,nofollow,noarchive"');
+  });
+  it("keeps the app homepage separate from the generated shared-plan page", () => {
+    const home = fs.readFileSync("hosting/workout-sharing/index.html", "utf8");
+    const shared = fs.readFileSync("hosting/workout-sharing/shared-plan.html", "utf8").replaceAll("\r\n", "\n");
+    const generated = fs.readFileSync("functions/src/sharingPageTemplate.ts", "utf8");
+    expect(home).toContain('href="/privacy"');
+    expect(home).toContain('href="/data-deletion"');
+    expect(home).not.toContain('src="/sharing.mjs"');
+    expect(generated).toContain(`export const sharingPageTemplate = ${JSON.stringify(shared)};`);
+    expect(shared).toContain('id="preview"');
+    expect(shared).not.toContain('class="hero"');
+  });
   it("renders a program's day order, rest days and safely escaped routine details", async () => {
     const program = {version:2,kind:"program",title:"Four-day cycle",effortScale:"rir",days:[{type:"workout",title:"Chest",routineKey:"r1"},{type:"rest",title:"Rest",routineKey:null}],routines:[{key:"r1",plan}]};
     const snapshot={sender:{nickname:"Example"},plan:program},doc=documentFixture();

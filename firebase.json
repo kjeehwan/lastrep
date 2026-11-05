@@ -70,6 +70,15 @@
         ]
       },
       {
+        "regex": "^/(index\\.html|privacy(/index\\.html|/)?|data-deletion(/index\\.html|/)?)?$",
+        "headers": [
+          {
+            "key": "X-Robots-Tag",
+            "value": "index, follow"
+          }
+        ]
+      },
+      {
         "source": "/.well-known/assetlinks.json",
         "headers": [
           {
