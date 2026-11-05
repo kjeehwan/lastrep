@@ -3,50 +3,78 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="referrer" content="no-referrer" />
-    <meta name="robots" content="noindex,nofollow,noarchive" />
+    <meta name="google-site-verification" content="tsNhbDsDdqcCtq2Y4yHclACz3NNEq3hyY1S8o7ab0e4" />
     <meta name="color-scheme" content="light dark" />
-    <title>Shared plan · Lastrep</title>
-    <meta property="og:title" content="Shared plan · Lastrep" />
+    <title>Lastrep · Your training, in one place</title>
+    <meta name="description" content="Plan your workouts, record your sets and follow your progress. Lastrep brings strength training, nutrition and recovery into one Android app." />
+    <meta property="og:title" content="Lastrep · Your training, in one place" />
+    <meta property="og:description" content="Workouts, nutrition and recovery. A training notebook that goes with you." />
     <meta property="og:type" content="website" />
-    <meta property="og:description" content="Preview this shared plan and open it in Lastrep." />
-    <meta name="twitter:card" content="summary" />
-    <meta name="twitter:title" content="Shared plan · Lastrep" />
+    <meta property="og:url" content="https://lastrep.web.app/" />
+    <link rel="canonical" href="https://lastrep.web.app/" />
+    <script src="/appearance.js"></script>
     <link rel="stylesheet" href="/sharing.css" />
-    <script type="module" src="/sharing.mjs"></script>
+    <link rel="stylesheet" href="/home.css" />
+    <script type="module" src="/home.mjs"></script>
   </head>
-  <body>
-    <main>
-      <header>
-        <img src="/wordmark.svg" alt="Lastrep" width="144" height="48" />
-      </header>
-      <p id="plan-kind" class="eyebrow">Shared plan</p>
-      <h1 id="title">A plan for you</h1>
-      <p id="status" role="status" aria-live="polite">
-        Checking this sharing link…
-      </p>
-      <section id="preview" aria-label="Shared plan" hidden></section>
-      <nav class="sharing-actions" aria-label="Open shared plan">
-        <a id="open" class="launch-card" aria-label="Open in Lastrep" hidden><span class="launch-label">OPEN ON</span><img class="action-wordmark" src="/wordmark.svg" alt="" width="104" height="35" /></a>
-        <a
-          class="launch-card launch-card-secondary"
-          aria-label="Get Lastrep on Google Play"
-          href="https://play.google.com/store/apps/details?id=com.kjeehwan.lastrep"
-          rel="noreferrer"
-          ><span class="launch-label">GET LASTREP ON</span><span class="store-brand"><img src="/google-play.svg" alt="" width="24" height="24" /><span class="store-name">Google Play</span></span></a
-        >
+  <body class="home">
+    <a class="skip-link" href="#main">Skip to content</a>
+    <header class="site-header">
+      <a href="/" aria-label="Lastrep home"><img src="/wordmark.svg" alt="Lastrep" width="144" height="48" /></a>
+      <nav aria-label="Main navigation">
+        <a href="#features">How it works</a><a href="#support">Support</a>
+        <details class="appearance-picker" hidden>
+          <summary>Appearance<span class="appearance-caret" aria-hidden="true"></span></summary>
+          <fieldset class="appearance-options"><legend class="sr-only">Choose appearance</legend>
+            <label><input type="radio" name="appearance" value="light" />Light</label>
+            <label><input type="radio" name="appearance" value="dark" />Dark</label>
+            <label><input type="radio" name="appearance" value="system" checked />System</label>
+          </fieldset>
+        </details>
       </nav>
-      <p class="footnote">
-        Previewing does not change your current workout or program. In Lastrep,
-        choose whether to use the workout or save the program and its routines.
-      </p>
-      <p class="footnote">
-        Anyone with this link can view the plan. Links remain available for 30
-        days unless revoked. After installing Lastrep, return to this link to
-        open the plan.
-      </p>
-      <button id="retry" type="button" hidden>Try again</button>
-      <footer class="legal-links"><a href="/privacy">Privacy policy</a><a href="/data-deletion">Account and data deletion</a></footer>
+    </header>
+    <main id="main">
+      <section class="hero" aria-labelledby="intro">
+        <div class="hero-copy">
+          <p class="eyebrow">Your training notebook</p>
+          <h1 id="intro">Build on your<br />last rep.</h1>
+          <p class="intro">Plan your workouts. Record what you lift. See how far you’ve come.</p>
+          <p class="hero-detail">Lastrep brings your strength training, nutrition and recovery together, so your next workout starts with the context of the last.</p>
+          <a class="play-link" href="https://play.google.com/store/apps/details?id=com.kjeehwan.lastrep" rel="noreferrer"><img src="/google-play.svg" alt="" width="28" height="28" /><span><span class="launch-label">GET LASTREP ON</span><span class="play-name">Google Play</span></span></a>
+          <p class="platform-note">For Android · Availability may vary by region and release.</p>
+        </div>
+        <aside class="notebook-preview" aria-label="Illustrative workout log">
+          <div class="preview-heading"><span class="eyebrow">A page from your notebook</span><span class="example-label">Example</span></div>
+          <h2>Chest + Triceps</h2>
+          <p class="preview-meta">Bench press</p>
+          <p class="preview-target">Target 6–8 reps · RPE 8</p>
+          <table><caption class="sr-only">Example bench press sets</caption><thead><tr><th scope="col">Set</th><th scope="col">kg</th><th scope="col">Reps</th><th scope="col">RPE</th></tr></thead><tbody><tr><th scope="row">1</th><td>80</td><td>8</td><td>8</td></tr><tr><th scope="row">2</th><td>80</td><td>8</td><td>8.5</td></tr><tr><th scope="row">3</th><td>80</td><td>8</td><td>9</td></tr></tbody></table>
+          <p class="preview-note">Your plan. Your pace. Your progress.</p>
+        </aside>
+      </section>
+      <section id="features" class="features" aria-labelledby="features-title">
+        <div class="section-intro"><p class="eyebrow">How Lastrep works</p><h2 id="features-title">From your next session to your bigger picture.</h2></div>
+        <div class="feature-grid">
+          <article><span class="feature-number" aria-hidden="true">01</span><h3>Build your plan</h3><p>Start a workout, save a routine or arrange your routines into a program. Set your reps, effort, rest and tempo.</p></article>
+          <article><span class="feature-number" aria-hidden="true">02</span><h3>Keep your record</h3><p>Log your sets and meals. Record sleep and recovery, or connect supported health data, to put your training in context.</p></article>
+          <article><span class="feature-number" aria-hidden="true">03</span><h3>Review &amp; move forward</h3><p>Use your history and trends to plan what comes next. Share workouts and programs, or make a received plan your own.</p></article>
+        </div>
+      </section>
+      <section id="inside" class="inside home-section" aria-labelledby="inside-title">
+        <div class="section-intro"><p class="eyebrow">Inside Lastrep</p><h2 id="inside-title">A closer look at your notebook.</h2></div>
+        <div class="view-tabs" aria-label="App views"><a href="#view-home" aria-current="true">Home</a><a href="#view-workout">Workout</a><a href="#view-nutrition">Nutrition</a><a href="#view-sleep">Sleep</a><a href="#view-sharing">Sharing</a></div>
+        <div class="app-gallery" aria-label="Screens from Lastrep" tabindex="0">
+          <figure id="view-home" class="app-view"><div class="screen-frame"><img src="/screens/home.png" alt="Lastrep Home showing body-composition progress and an 81 percent sample readiness summary." width="1080" height="2400" loading="lazy" /></div><figcaption><span class="eyebrow">Home</span><h3>See the bigger picture.</h3><p>Follow body-composition trends and check in on recovery. Day, week, month and year views help you look beyond a single measurement.</p><p class="screen-note">App screenshot · Sample account</p></figcaption></figure>
+          <figure id="view-workout" class="app-view"><div class="screen-frame"><img src="/screens/workout.png" alt="Lastrep Workout showing completed bench press sets with reps and recorded effort." width="1080" height="2400" loading="lazy" /></div><figcaption><span class="eyebrow">Workout</span><h3>Keep the details that matter.</h3><p>Plan your sets, record reps and effort, and keep rest and tempo close at hand. Reuse routines or follow a program across workout and rest days.</p><p class="screen-note">App screenshot · Sample account</p></figcaption></figure>
+          <figure id="view-nutrition" class="app-view"><div class="screen-frame"><img src="/screens/nutrition.png" alt="Lastrep Nutrition showing daily calories, protein and meal logging." width="1080" height="2400" loading="lazy" /></div><figcaption><span class="eyebrow">Nutrition</span><h3>Give your training its daily context.</h3><p>Log meals, search foods or scan a barcode. See your calories and macros against your daily targets, alongside the rest of your training record.</p><p class="screen-note">App screenshot · Sample account</p></figcaption></figure>
+          <figure id="view-sleep" class="app-view"><div class="screen-frame"><img src="/screens/sleep.png" alt="Lastrep Sleep showing recorded sleep duration and a saved sleep session." width="1080" height="2400" loading="lazy" /></div><figcaption><span class="eyebrow">Sleep</span><h3>Keep recovery in view.</h3><p>Record sleep yourself or import available sessions through an optional health connection. Compare your nightly history with your sleep target.</p><p class="screen-note">App screenshot · Sample account</p></figcaption></figure>
+          <figure id="view-sharing" class="app-view"><div class="screen-frame"><img src="/screens/sharing.png" alt="Lastrep Sharing inbox with a sample received workout and program." width="1080" height="2400" loading="lazy" /></div><figcaption><span class="eyebrow">Sharing</span><h3>A good plan can travel.</h3><p>Send workouts and programs to other Lastrep users, or share a link with a browser preview. Recipients can use a workout or save a program and its routines to their own account.</p><p class="screen-note">App screenshot · Sample accounts</p></figcaption></figure>
+        </div>
+        <p class="gallery-hint">Choose a view, or swipe to explore.</p>
+      </section>
+      <section class="health-note home-section" aria-labelledby="health-title"><div class="section-intro"><p class="eyebrow">Optional health connection</p><h2 id="health-title">Connect what helps you.</h2></div><p>Optional Health Connect integration brings in available steps, sleep and supported body measurements from your connected apps. You choose whether to connect and which permissions to grant.</p><a href="/privacy">How Lastrep handles your data <span aria-hidden="true">→</span></a></section>
+      <section id="support" class="support" aria-labelledby="support-title"><div><p class="eyebrow">Get in touch</p><h2 id="support-title">Questions about Lastrep?</h2><p>For app support or privacy requests, email us.</p></div><a class="support-email" href="mailto:lastrep.dev@gmail.com">lastrep.dev@gmail.com <span aria-hidden="true">↗</span></a></section>
     </main>
+    <footer class="site-footer"><p class="operator">Operated by <span lang="ko">라스트렙(Lastrep)</span></p><nav aria-label="Legal"><a href="/privacy">Privacy policy</a><a href="/data-deletion">Account and data deletion</a></nav></footer>
   </body>
 </html>

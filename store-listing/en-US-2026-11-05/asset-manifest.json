@@ -1,0 +1,208 @@
+{
+  "prepared": "2026-11-05",
+  "locale": "en-US",
+  "shortDescriptionCharacters": 65,
+  "fullDescriptionCharacters": 2431,
+  "assets": [
+    {
+      "file": "phone/phone-01-home-progress.png",
+      "width": 1080,
+      "height": 1920,
+      "bytes": 162625,
+      "format": "PNG, RGB, no alpha",
+      "sha256": "0ff4edaabdff6d238598d7155f60ac0e7eb41f4a495ef13168156f14ce7004fe"
+    },
+    {
+      "file": "phone/phone-02-workout.png",
+      "width": 1080,
+      "height": 1920,
+      "bytes": 133800,
+      "format": "PNG, RGB, no alpha",
+      "sha256": "dae65d2cdfb91e2625443663810822b2fce644fc81be275bbe191b864be81f58"
+    },
+    {
+      "file": "phone/phone-03-program.png",
+      "width": 1080,
+      "height": 1920,
+      "bytes": 123017,
+      "format": "PNG, RGB, no alpha",
+      "sha256": "4400430a8f85aa2b7980005bacda5de597eb96487d8aade9a90ada43746b9bfd"
+    },
+    {
+      "file": "phone/phone-04-nutrition.png",
+      "width": 1080,
+      "height": 1920,
+      "bytes": 132294,
+      "format": "PNG, RGB, no alpha",
+      "sha256": "60336dc02dbd160061bdce90035a795829ee8cb63cf076bfce35d40eb56b9386"
+    },
+    {
+      "file": "phone/phone-05-food-search.png",
+      "width": 1080,
+      "height": 1920,
+      "bytes": 236360,
+      "format": "PNG, RGB, no alpha",
+      "sha256": "d03c75f970dfdf69716c7df5c60454105e0d68e20a4171fb30090ca5ff31a2a3"
+    },
+    {
+      "file": "phone/phone-06-sleep.png",
+      "width": 1080,
+      "height": 1920,
+      "bytes": 140675,
+      "format": "PNG, RGB, no alpha",
+      "sha256": "81e720deeaadfd59798d590fca9f196fdea9d2cc19c8849dd25577870c511469"
+    },
+    {
+      "file": "phone/phone-07-sharing.png",
+      "width": 1080,
+      "height": 1920,
+      "bytes": 136418,
+      "format": "PNG, RGB, no alpha",
+      "sha256": "2b0627ab1808379ddc1dcdfa864105b747cc7a51a48b6fa0fedc414d239c16c7"
+    },
+    {
+      "file": "phone/phone-08-recovery.png",
+      "width": 1080,
+      "height": 1920,
+      "bytes": 204893,
+      "format": "PNG, RGB, no alpha",
+      "sha256": "b0faca1f28bdebdff0b9b01eff88103f8e2f1b0b97ad743d3a90f61139557e0c"
+    },
+    {
+      "file": "tablet-7-inch/tablet-7-inch-01-home-progress.png",
+      "width": 1080,
+      "height": 1920,
+      "bytes": 154663,
+      "format": "PNG, RGB, no alpha",
+      "sha256": "0dee5fc245216b6e36b007c3f17e554b05719d6102c4ff8f3497b7ed31c020c6"
+    },
+    {
+      "file": "tablet-7-inch/tablet-7-inch-02-workout.png",
+      "width": 1080,
+      "height": 1920,
+      "bytes": 112698,
+      "format": "PNG, RGB, no alpha",
+      "sha256": "c355189684ac901b96a0fee1e8409184eef390795e632c2b1be3c9c77ed89711"
+    },
+    {
+      "file": "tablet-7-inch/tablet-7-inch-03-program.png",
+      "width": 1080,
+      "height": 1920,
+      "bytes": 121110,
+      "format": "PNG, RGB, no alpha",
+      "sha256": "4708151c0497f87d8a82c560b34e1326d2a8b121496ba5132c2041784a3b2545"
+    },
+    {
+      "file": "tablet-7-inch/tablet-7-inch-04-nutrition.png",
+      "width": 1080,
+      "height": 1920,
+      "bytes": 137570,
+      "format": "PNG, RGB, no alpha",
+      "sha256": "e7489a9dd81a635f79f365d80d71b3a50731f74f6157f639954f9b5bf05390ef"
+    },
+    {
+      "file": "tablet-7-inch/tablet-7-inch-05-food-search.png",
+      "width": 1080,
+      "height": 1920,
+      "bytes": 234635,
+      "format": "PNG, RGB, no alpha",
+      "sha256": "4dde88cdef5f67eccdcd25f3683e2d8f948ad1bab33c8534e1b44098a6cb5b1c"
+    },
+    {
+      "file": "tablet-7-inch/tablet-7-inch-06-sleep.png",
+      "width": 1080,
+      "height": 1920,
+      "bytes": 141709,
+      "format": "PNG, RGB, no alpha",
+      "sha256": "a36d963f54b8e82c984ecabd10bbf7d7d1dfe9a7247937aa203b8b5c31a4894c"
+    },
+    {
+      "file": "tablet-7-inch/tablet-7-inch-07-sharing.png",
+      "width": 1080,
+      "height": 1920,
+      "bytes": 133660,
+      "format": "PNG, RGB, no alpha",
+      "sha256": "0974e02fdce5f58d3b2a5de66524ca843b71e69a129198f4d32b4bdf4f30773a"
+    },
+    {
+      "file": "tablet-7-inch/tablet-7-inch-08-recovery.png",
+      "width": 1080,
+      "height": 1920,
+      "bytes": 189156,
+      "format": "PNG, RGB, no alpha",
+      "sha256": "a1dfe59fc833ab7bda2e5e428b545eac71a9a71a2939e9c8a43a5723451005c4"
+    },
+    {
+      "file": "tablet-10-inch/tablet-10-inch-01-home-progress.png",
+      "width": 1440,
+      "height": 2560,
+      "bytes": 198634,
+      "format": "PNG, RGB, no alpha",
+      "sha256": "8159e6c381756cd2b31efdfa4e67966c1ad5d273c36ad9ef2aeb9165d6fbe9a0"
+    },
+    {
+      "file": "tablet-10-inch/tablet-10-inch-02-workout.png",
+      "width": 1440,
+      "height": 2560,
+      "bytes": 166538,
+      "format": "PNG, RGB, no alpha",
+      "sha256": "417a9d9c66bf9d5bf5342b1c30ee729f39272a8f0308b6e614a041b3483dd4a0"
+    },
+    {
+      "file": "tablet-10-inch/tablet-10-inch-03-program.png",
+      "width": 1440,
+      "height": 2560,
+      "bytes": 128773,
+      "format": "PNG, RGB, no alpha",
+      "sha256": "d696d1b6e85b089db37214766d1e6edc1cdfbeafbc13a8b16a7adaae21b809c4"
+    },
+    {
+      "file": "tablet-10-inch/tablet-10-inch-04-nutrition.png",
+      "width": 1440,
+      "height": 2560,
+      "bytes": 161796,
+      "format": "PNG, RGB, no alpha",
+      "sha256": "aa59add235be3ddba9d1240e7fdade074fff9edef5dd2bd213845f7333ef3a1e"
+    },
+    {
+      "file": "tablet-10-inch/tablet-10-inch-05-food-search.png",
+      "width": 1440,
+      "height": 2560,
+      "bytes": 344130,
+      "format": "PNG, RGB, no alpha",
+      "sha256": "39752297a051b6dca1759e5b6368c75f3db16df2ff0b6117693058c9747882dc"
+    },
+    {
+      "file": "tablet-10-inch/tablet-10-inch-06-sleep.png",
+      "width": 1440,
+      "height": 2560,
+      "bytes": 202301,
+      "format": "PNG, RGB, no alpha",
+      "sha256": "4f0d4241859a87e31e47d6c24047c71a4c33e890a8f270f361538459a58575b5"
+    },
+    {
+      "file": "tablet-10-inch/tablet-10-inch-07-sharing.png",
+      "width": 1440,
+      "height": 2560,
+      "bytes": 222860,
+      "format": "PNG, RGB, no alpha",
+      "sha256": "03655fe7b71b5da94e2cb057775c70f234bfdc1b614c7c2bd0bb6925b00adaae"
+    },
+    {
+      "file": "tablet-10-inch/tablet-10-inch-08-recovery.png",
+      "width": 1440,
+      "height": 2560,
+      "bytes": 261799,
+      "format": "PNG, RGB, no alpha",
+      "sha256": "cb1f883f6f588b0d4d3867e9166cf1f738ba9e717660038fc3c11fb43fa35cbb"
+    },
+    {
+      "file": "feature-graphic.png",
+      "width": 1024,
+      "height": 500,
+      "bytes": 34964,
+      "format": "PNG, RGB, no alpha",
+      "sha256": "3cc19c73757ea7b65b54324162245d299e8a2d856200f442765307c33c3a2ec7"
+    }
+  ]
+}
