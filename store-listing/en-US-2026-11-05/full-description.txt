@@ -1,0 +1,32 @@
+Build on your last rep.
+
+Lastrep is a training notebook for your workouts, nutrition and recovery. Plan your sessions, record what you do and use your history to decide what comes next.
+
+PLAN YOUR TRAINING
+Start a workout, create reusable routines or organize your routines into a program with workout and rest days. Customize your training and diet phases as your goals change.
+
+KEEP A DETAILED WORKOUT LOG
+Record resistance and cardio training. Log sets, weight, reps and effort using RPE or RIR. Add warm-up sets, target rep ranges, target effort, exercise notes, rest intervals and tempo. Use exercise history to review previous performance, and keep unfinished workouts as drafts.
+
+REVIEW TODAY'S PLAN
+Bring your planned workout together with relevant recent performance and recovery information. Record soreness, fatigue, motivation and any pain or discomfort, then review suggested adjustments before applying them. You remain in control of your workout.
+
+LOG YOUR NUTRITION
+Search foods, scan product barcodes or enter foods manually. Organize meals, save favorites and reusable meals, and compare daily calories and macros with your targets. Barcode coverage depends on the products available in the food database.
+
+FOLLOW SLEEP AND BODY-COMPOSITION TRENDS
+Record sleep sessions and body measurements. Browse body-composition charts by day, week, month or year, and keep recovery check-ins alongside your training history.
+
+CONNECT HEALTH DATA IF YOU CHOOSE
+On supported Android devices, connect Health Connect to read available steps, sleep and supported body measurements. You choose whether to connect and which permissions to grant. Available records depend on your device and connected apps. Steps are displayed without changing your nutrition targets.
+
+SHARE WORKOUTS AND PROGRAMS
+Send plans to other Lastrep users or share a link with a browser preview. Use a received workout, or save a received program and its routines to your own account. Sharing within Lastrep is optional and requires a username.
+
+MAKE IT YOUR NOTEBOOK
+Choose light, dark or system appearance, and set your preferred measurement units and effort scale.
+
+Some features require Premium. An account and an internet connection are required for account sync and online services. Training and recovery guidance is for general fitness information, not medical diagnosis or treatment.
+
+Website: https://lastrep.web.app/
+Support: lastrep.dev@gmail.com
