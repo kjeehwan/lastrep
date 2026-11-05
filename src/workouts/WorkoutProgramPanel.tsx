@@ -137,7 +137,7 @@ export function WorkoutProgramPanel(props: Props) {
       {!props.data.loaded && !props.data.error ? <ActivityIndicator color={colors.ink} /> : null}
       {props.data.error ? <><Text style={styles.error}>{props.data.error}</Text>{button("Try again", props.data.retry)}</> : null}
     </View> : active && run ? <View style={styles.strip}>
-      <View style={styles.heading}><Pressable accessibilityRole="button" onPress={() => open(active, "edit")}><Text style={styles.rowTitle}>{active.name} <Ionicons name="pencil-outline" size={15} /></Text></Pressable><Text style={styles.muted}>Week {Math.max(1, Math.floor((Date.parse(dateKey()) - Date.parse(run.startedDateKey)) / 604800000) + 1)}</Text></View>
+      <View style={styles.heading}><Pressable accessibilityRole="button" accessibilityLabel="Edit program title" style={styles.titleAction} onPress={() => open(active, "edit")}><Text style={[styles.rowTitle, styles.programName]}>{active.name}</Text><View style={styles.titlePencil}><Pencil size={18} strokeWidth={1.5} color={colors.muted} /></View></Pressable><Text style={styles.muted}>Week {Math.max(1, Math.floor((Date.parse(dateKey()) - Date.parse(run.startedDateKey)) / 604800000) + 1)}</Text></View>
       <View style={styles.days}>{active.days.map((_, index) => {
         const occurrenceOrdinal = Math.floor(ordinal / active.days.length) * active.days.length + index;
         const item = programOccurrence(active, run, occurrenceOrdinal);
@@ -214,6 +214,9 @@ const createStyles = (colors: NotebookColors) => notebookSheet({
   card: { backgroundColor: colors.surface, padding: 20, borderTopLeftRadius: 16, borderTopRightRadius: 16, width: "100%", maxWidth: 560 },
   title: { color: colors.ink, fontSize: 22, fontWeight: "600", flex: 1 },
   heading: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, paddingVertical: 16 },
+  titleAction: { flexDirection: "row", alignItems: "center", gap: 4, flexShrink: 1, minHeight: 44 },
+  programName: { flexShrink: 1 },
+  titlePencil: { minWidth: 44, minHeight: 44, alignItems: "center", justifyContent: "center" },
   row: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 20, borderBottomWidth: 1, borderBottomColor: colors.rule },
   detailRow: { gap: 8, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: colors.rule },
   rowTitle: { color: colors.ink, fontSize: 16, fontWeight: "600" }, muted: { color: colors.muted, fontSize: 14, lineHeight: 20 },
