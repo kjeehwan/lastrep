@@ -27,6 +27,11 @@ export function readSleepEntry(id: string, data: DocumentData): SleepEntry {
 
 export function sleepJournalProfileKey(data: DocumentData | undefined) {
   const profile = data?.sleepProfile;
+  // Firestore maps can arrive in different key orders across read paths. Preserve
+  // array order and Timestamp.toJSON() precision while comparing map contents.
   return JSON.stringify([profile?.journalRevision ?? 0, profile?.originAppPackage ?? null,
-    profile?.journalSummary ?? null, profile?.recentNightlyHours ?? null, profile?.sampleRecordedAt ?? null]);
+    profile?.journalSummary ?? null, profile?.recentNightlyHours ?? null, profile?.sampleRecordedAt ?? null],
+    (_key, value) => value && typeof value === "object" && !Array.isArray(value)
+      ? Object.fromEntries(Object.keys(value).sort().map(key => [key, value[key]]))
+      : value);
 }

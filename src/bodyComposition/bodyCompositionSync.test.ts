@@ -63,7 +63,7 @@ it.each(["health-connect", "samsung-health"])("does not reimport unchanged %s me
   const sync = provider === "health-connect" ? syncBodyCompositionFromHealthConnect : syncBodyCompositionFromSamsungHealth;
   expect((await sync("user", first)).status).toBe("success");
   const before = { ...fake.body };
-  expect((await sync("user", second)).status).toBe("no_data");
+  expect((await sync("user", second)).status).toBe("unchanged");
   expect(fake.write).toHaveBeenCalledTimes(1);
   expect(fake.body.lastSyncedAt).toBe(before.lastSyncedAt);
   expect(fake.body.history).toBe(before.history);
@@ -100,7 +100,7 @@ it.each(["health-connect", "samsung-health"])("does not invent new %s measuremen
   if (provider === "health-connect") Object.values(fake.records).forEach(rows => { delete rows[0].time; });
   else delete fake.samsung!.recordedAtMs;
   await sync("user", first);
-  expect((await sync("user", second)).status).toBe("no_data");
+  expect((await sync("user", second)).status).toBe("unchanged");
   expect(fake.write).toHaveBeenCalledTimes(1);
 });
 
@@ -108,7 +108,7 @@ it("baselines an existing profile without rewriting history or last-sync time", 
   await syncBodyCompositionFromHealthConnect("user", first);
   delete fake.body.importFingerprint; fake.write.mockClear();
   const previous = { ...fake.body };
-  expect((await syncBodyCompositionFromHealthConnect("user", second)).status).toBe("no_data");
+  expect((await syncBodyCompositionFromHealthConnect("user", second)).status).toBe("unchanged");
   expect(Object.keys(fake.write.mock.calls[0][1].bodyCompositionProfile)).toEqual(["importFingerprint"]);
   expect(fake.body.lastSyncedAt).toBe(previous.lastSyncedAt);
   expect(fake.body.history).toBe(previous.history);
@@ -146,6 +146,6 @@ it("does not treat a changed invalid metric as a new imported measurement", asyn
   fake.records.BodyFat[0].percentage = 200;
   await syncBodyCompositionFromHealthConnect("user", first);
   fake.records.BodyFat[0].time = "2026-10-21T11:00:00Z";
-  expect((await syncBodyCompositionFromHealthConnect("user", second)).status).toBe("no_data");
+  expect((await syncBodyCompositionFromHealthConnect("user", second)).status).toBe("unchanged");
   expect(fake.write).toHaveBeenCalledTimes(1);
 });

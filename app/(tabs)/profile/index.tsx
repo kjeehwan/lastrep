@@ -1084,7 +1084,7 @@ function ProfileContent() {
             : "No saved data"
         );
       }
-      if (bodyResult.status === "success") {
+      if (bodyResult.status === "success" || bodyResult.status === "unchanged") {
         await refreshBodyComposition(uid, weightUnit, true);
       }
 
@@ -1105,8 +1105,10 @@ function ProfileContent() {
             ? "Body composition synced from Samsung Health."
             : "Body composition synced from Health Connect."
         );
+      } else if (bodyResult.status === "unchanged") {
+        messages.push("Body composition is up to date.");
       } else if (bodyResult.status === "no_data") {
-        messages.push("No new body composition data found.");
+        messages.push("No body composition data found.");
       } else if (bodyResult.status === "permission_denied") {
         messages.push("Body composition permission missing.");
       } else if (bodyResult.status === "error") {

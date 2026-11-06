@@ -83,7 +83,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)("atomic body-composition p
       syncBodyCompositionFromSamsungHealth(uid, new Date("2026-11-06T10:01Z")),
       saveManualBodyCompositionEntry(uid, { weightKg: 82 }, new Date("2026-11-06T10:02Z")),
     ]);
-    expect(results.slice(0, 2).map(result => result!.status).sort()).toEqual(["no_data", "success"]);
+    expect(results.slice(0, 2).map(result => result!.status).sort()).toEqual(["success", "unchanged"]);
     const profile = await getBodyCompositionProfile(uid);
     expect(profile.history).toHaveLength(2);
     expect(profile.manual.weightKg).toBe(82);
