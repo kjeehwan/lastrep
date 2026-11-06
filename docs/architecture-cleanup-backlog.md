@@ -77,6 +77,15 @@ need a future app release.
 
 ## Continuing practice
 
+A8 now has a [read-only lifecycle review](legacy-ai-lifecycle-review-2026-11-06.md).
+Current Today's Plan has no cloud-decision caller. The deployed legacy callable
+still defaults OpenAI on, but the defined 30-day window contains only one
+unauthenticated 401 and no observed provider attempts; the debug endpoints show
+no activity. Keep the compatibility callable temporarily. Disabling new provider
+calls and retiring debug endpoints are proposed follow-ups requiring approval,
+not actions taken by this audit. Installed-version adoption and exact costs
+remain unverified.
+
 - Apply the review level in `AGENTS.md` to each PR; avoid making every cosmetic
   change a full audit.
 - Add small behavioral tests at the boundary being changed. Source-string tests
