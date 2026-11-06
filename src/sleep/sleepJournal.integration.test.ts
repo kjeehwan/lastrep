@@ -1,10 +1,11 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { initializeTestEnvironment, type RulesTestEnvironment } from "@firebase/rules-unit-testing";
-import { doc, getDoc, setDoc, Timestamp, type Firestore } from "firebase/firestore";
+import { doc, getDoc, setDoc, Timestamp, writeBatch, type Firestore } from "firebase/firestore";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { getSleepJournal, legacySleepEntries, mutateSleepJournal } from "./sleepJournal";
-import { commitManualSleep, emptySleepEntry, HOUR_MS, removeSleepEntry, type SleepEntry } from "./sleepSessionModel";
+import { executeSleepCommand, getSleepJournal, legacySleepEntries, mutateSleepJournal } from "./sleepJournal";
+import { getSleepJournalWindow } from "./sleepJournalWindow";
+import { commitManualSleep, deriveSleepDays, emptySleepEntry, HOUR_MS, removeSleepEntry, shiftSleepDate, type SleepEntry } from "./sleepSessionModel";
 import { providerSleepEntry, reconcileHealthSleep } from "./healthSleepImport";
 vi.mock("../config/firebaseConfig", () => ({ db: null }));
 
@@ -17,7 +18,7 @@ it("migrates known legacy daily dates without inventing session times", () => {
 });
 
 const emulator = process.env.FIRESTORE_EMULATOR_HOST;
-describe.skipIf(!emulator)("sleep journal persistence", () => {
+describe.skipIf(!emulator)("sleep journal persistence", { timeout: 30_000 }, () => {
   let env: RulesTestEnvironment;
   let database: Firestore;
   const now = new Date("2026-10-17T10:00Z");
@@ -29,6 +30,83 @@ describe.skipIf(!emulator)("sleep journal persistence", () => {
   });
   beforeEach(async () => { await env.clearFirestore(); });
   afterAll(async () => { await env.cleanup(); });
+  it.each([30, 365, 1825])("keeps initial display reads independent of %i unrelated historical dates", async count => {
+    const rows = Array.from({ length: count }, (_, n) => emptySleepEntry(`dated-${n}`, shiftSleepDate("2020-01-01", n), 7, now));
+    // Fixture setup bypasses rules; measured reads still use the authenticated client.
+    await env.withSecurityRulesDisabled(async context => {
+      const fixture = context.firestore() as unknown as Firestore;
+      for (let offset = 0; offset < rows.length; offset += 400) {
+        const batch = writeBatch(fixture);
+        for (const entry of rows.slice(offset, offset + 400)) batch.set(doc(fixture, "users", "alice", "sleepSessions", entry.id), entry);
+        await batch.commit();
+      }
+      await setDoc(doc(fixture, "users", "alice"), { sleepProfile: { journalRevision: 1, journalSummary: {
+        recentNightlyHours: rows.slice(-30).reverse().map(row => ({ dateKey: row.dateKey, sleepHours: row.hours })),
+      } } });
+    });
+    const start = performance.now();
+    const result = await getSleepJournalWindow("alice", null, database);
+    const elapsedMs = Math.round(performance.now() - start);
+    expect(result.fallback).toBeNull();
+    expect(result.readCounts.documents).toBe(14);
+    expect(result.entries).toHaveLength(14);
+    expect(result.readCounts.queries).toBe(4);
+    console.info("sleep display benchmark", JSON.stringify({ history: count, ...result.readCounts, derivedEntries: result.entries.length, elapsedMs }));
+  });
+  it("reads a sparse old window without loading unrelated history and keeps the latest recorded initial date", async () => {
+    const rows = Array.from({ length: 40 }, (_, n) => emptySleepEntry(`old-${n}`, shiftSleepDate("2020-01-01", n), 7, now));
+    await mutateSleepJournal("alice", () => rows, {}, database);
+    const result = await getSleepJournalWindow("alice", null, database);
+    expect(result.initialDate).toBe(rows.at(-1)!.dateKey);
+    expect(result.fallback).toBeNull();
+    expect(result.entries).toHaveLength(14);
+    expect(result.readCounts.documents).toBeLessThan(30);
+    expect(deriveSleepDays(result.entries).days).toEqual(deriveSleepDays(rows).days.slice(0, 14));
+  });
+  it("paginates complete date groups beyond 100 documents", async () => {
+    const rows = Array.from({ length: 125 }, (_, n) => ({ ...emptySleepEntry(`tiny-${n}`, "2026-10-17", 0.01, now), source: "health" as const }));
+    await mutateSleepJournal("alice", () => rows, {}, database);
+    const result = await getSleepJournalWindow("alice", { start: "2026-10-17", end: "2026-10-17" }, database);
+    expect(result.fallback).toBeNull();
+    expect(result.entries).toHaveLength(125);
+    expect(deriveSleepDays(result.entries).days).toEqual(deriveSleepDays(rows).days);
+  });
+  it("falls back to the complete ledger when interval dependency reads exceed the budget", async () => {
+    const rows = Array.from({ length: 260 }, (_, n) => ({ ...manual(`overlap-${n}`, "2026-10-17T01:00Z", "2026-10-17T02:00Z"), source: "health" as const }));
+    await mutateSleepJournal("alice", () => rows, {}, database);
+    const result = await getSleepJournalWindow("alice", { start: "2026-10-17", end: "2026-10-17" }, database);
+    expect(result.fallback).toBe("scope-budget");
+    expect(result.entries).toHaveLength(260);
+    expect(deriveSleepDays(result.entries).days).toEqual(deriveSleepDays(rows).days);
+  });
+  it("includes differently allocated overlaps and linked corrections with full-ledger totals", async () => {
+    const a = manual("a", "2026-10-16T23:00Z", "2026-10-17T07:00Z");
+    const b = { ...manual("b", "2026-10-17T06:00Z", "2026-10-17T09:00Z"), dateKey: "2026-10-18", source: "health" as const };
+    const correction = { ...emptySleepEntry("fix", "2026-10-19", 2, now), corrects: b.id };
+    await mutateSleepJournal("alice", () => [a, b, correction], {}, database);
+    const result = await getSleepJournalWindow("alice", { start: a.dateKey, end: a.dateKey }, database);
+    expect(result.entries.map(row => row.id).sort()).toEqual(["a", "b", "fix"]);
+    expect(deriveSleepDays(result.entries).days).toEqual(deriveSleepDays([a, b, correction]).days);
+  });
+  it("commands commit concurrently and return summary plus affected dates without the full ledger", async () => {
+    const a = manual("a", "2026-10-17T00:00Z", "2026-10-17T03:00Z");
+    const b = manual("b", "2026-10-17T04:00Z", "2026-10-17T07:00Z");
+    const results = await Promise.all([a, b].map(candidate => executeSleepCommand("alice", { kind: "manual", candidate }, {}, database)));
+    expect(results.every(result => !Object.hasOwn(result, "entries"))).toBe(true);
+    expect((await getSleepJournal("alice", database)).entries).toHaveLength(2);
+    const result = await executeSleepCommand("alice", { kind: "remove", expected: a }, {}, database);
+    expect(result.summary.latestSleepHours).toBe(3);
+    expect(result.affectedDates).toEqual([a.dateKey]);
+    await expect(executeSleepCommand("alice", { kind: "manual", candidate: a, expected: a }, {}, database)).rejects.toThrow("changed");
+  });
+  it("retains legacy root-only history through window fallback and the first command", async () => {
+    await setDoc(doc(database, "users", "alice"), { sleepProfile: { recentNightlyHours: [{ dateKey: "2020-01-01", sleepHours: 6 }] } });
+    const result = await getSleepJournalWindow("alice", null, database);
+    expect(result.fallback).toBe("legacy-profile");
+    expect(result.initialDate).toBe("2020-01-01");
+    await executeSleepCommand("alice", { kind: "manual", candidate: emptySleepEntry("new", "2026-10-17", 7, now) }, {}, database);
+    expect((await getSleepJournal("alice", database)).entries).toHaveLength(2);
+  });
   it("saves split sessions, reloads and updates the compatibility total atomically", async () => {
     const a = manual("one", "2026-10-16T23:00Z", "2026-10-17T03:00Z"), b = manual("two", "2026-10-17T04:00Z", "2026-10-17T07:00Z");
     const syncTime = Timestamp.fromMillis(100);

@@ -1,5 +1,6 @@
 import { beforeEach, expect, it, vi } from "vitest";
-import type { SleepEntry } from "./sleepSessionModel";
+import { applySleepCommand, type SleepCommand } from "./sleepCommands";
+import { deriveSleepDays, type SleepEntry } from "./sleepSessionModel";
 import { openHealthConnectAppPermissionsScreen, openHealthConnectSettingsScreen, syncSleepFromHealthConnect } from "./sleep";
 const fake = vi.hoisted(() => ({
   consent: true, permitted: true, storage: new Map<string, string>(), entries: [] as SleepEntry[],
@@ -13,7 +14,7 @@ vi.mock("expo-application", () => ({ get applicationId() { return fake.applicati
 vi.mock("@react-native-async-storage/async-storage", () => ({ default: { getItem: async (key: string) => fake.storage.get(key) ?? null, setItem: async (key: string, value: string) => { fake.storage.set(key, value); } } }));
 vi.mock("../config/firebaseConfig", () => ({ db: {} }));
 vi.mock("../health/healthSyncConsent", () => ({ hasHealthSyncConsent: async () => fake.consent }));
-vi.mock("./sleepJournal", () => ({ mutateSleepJournal: (...args: unknown[]) => fake.mutate(...args) }));
+vi.mock("./sleepJournal", () => ({ executeSleepCommand: (...args: unknown[]) => fake.mutate(...args) }));
 vi.mock("firebase/firestore", async (importOriginal) => ({
   ...await importOriginal<typeof import("firebase/firestore")>(),
   collection: () => ({}), doc: () => ({ id: "device-a" }),
@@ -33,8 +34,10 @@ beforeEach(() => {
   fake.platform.Version = 34; fake.applicationId = "com.kjeehwan.lastrep"; fake.sendIntent.mockResolvedValue(undefined);
   fake.confirm.mockResolvedValue(true);
   fake.sdk.mockResolvedValue(3); fake.read.mockResolvedValue({ records: [record] }); fake.changes.mockResolvedValue(changes());
-  fake.mutate.mockImplementation(async (_uid: string, change: (entries: SleepEntry[]) => SleepEntry[], options: { authorize: () => Promise<void> }) => {
-    await options.authorize(); fake.entries = change(fake.entries); return fake.entries;
+  fake.mutate.mockImplementation(async (_uid: string, command: SleepCommand, options: { authorize: () => Promise<void> }) => {
+    await options.authorize(); fake.entries = applySleepCommand(fake.entries, command);
+    const latest = deriveSleepDays(fake.entries).days[0];
+    return { summary: { latestSleepHours: latest?.hours ?? null, sampleRecordedAt: null } };
   });
 });
 
