@@ -5,6 +5,16 @@ import {
   workoutToSharingPlan,
 } from "./sharingPlan";
 describe("sharing adapters", () => {
+  it("shares mixed resistance/cardio with stale unit preferences without changing canonical values", () => {
+    const sets = [{ weightKg: 80, reps: "8", rpe: "9", done: true, durationSec: 600, distanceKm: 2 }];
+    const plan = workoutToSharingPlan("Mixed", [
+      { id: "lift", name: "Same name", mode: "resistance", sets },
+      { id: "cardio", name: "Same name", mode: "cardio", sets },
+    ], { lift: "mi", cardio: "kg" }, () => "resistance", {}, "rpe");
+    expect(plan.exercises.map(e => [e.mode, e.unit])).toEqual([["resistance", "kg"], ["cardio", "km"]]);
+    expect(plan.exercises[0].sets[0].weightKg).toBe(80);
+    expect(plan.exercises[1].sets[0]).toMatchObject({ distanceKm: 2, durationSec: 600 });
+  });
   it("does not copy personal notes, recorded effort or completion", () => {
     const original = [
       {

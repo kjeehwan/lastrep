@@ -24,29 +24,38 @@ export function workoutToSharingPlan(
     version: 1,
     title: title.trim() || "Workout",
     effortScale,
-    exercises: exercises.map((e) => ({
-      name: e.name,
-      ...(mode(e.name) !== "cardio" && normalizeExerciseTargets(e.targets) ? { targets: normalizeExerciseTargets(e.targets) } : {}),
-      mode: mode(e.name),
-      unit: units[e.id] || (mode(e.name) === "cardio" ? "km" : "kg"),
-      ...(mode(e.name) === "cardio" && e.cardioSessionType
-        ? { cardioSessionType: e.cardioSessionType }
-        : {}),
-      ...(mode(e.name) === "cardio" && e.cardioEffortLevel
-        ? { cardioEffortLevel: e.cardioEffortLevel }
-        : {}),
-      restSec: rest[e.id] ?? 90,
-      tempo: mode(e.name) === "cardio" ? "" : e.tempo || "",
-      instructions: "",
-      sets: e.sets.map((s) => ({
-        weightKg: s.weightKg,
-        reps: s.reps,
-        targetRpe: s.targetRpe ?? null,
-        setType: s.setType || "normal",
-        durationSec: s.durationSec ?? null,
-        distanceKm: s.distanceKm ?? null,
-      })),
-    })),
+    exercises: exercises.map((e) => {
+      const exerciseMode = e.mode ?? mode(e.name);
+      const savedUnit = units[e.id];
+      // Values are already stored in kg/km. A stale display-unit preference must
+      // not turn a cardio prescription into a weight prescription (or vice versa).
+      const unit = exerciseMode === "cardio"
+        ? savedUnit === "mi" ? "mi" : "km"
+        : savedUnit === "lbs" ? "lbs" : "kg";
+      return {
+        name: e.name,
+        ...(exerciseMode !== "cardio" && normalizeExerciseTargets(e.targets) ? { targets: normalizeExerciseTargets(e.targets) } : {}),
+        mode: exerciseMode,
+        unit,
+        ...(exerciseMode === "cardio" && e.cardioSessionType
+          ? { cardioSessionType: e.cardioSessionType }
+          : {}),
+        ...(exerciseMode === "cardio" && e.cardioEffortLevel
+          ? { cardioEffortLevel: e.cardioEffortLevel }
+          : {}),
+        restSec: rest[e.id] ?? 90,
+        tempo: exerciseMode === "cardio" ? "" : e.tempo || "",
+        instructions: "",
+        sets: e.sets.map((s) => ({
+          weightKg: s.weightKg,
+          reps: s.reps,
+          targetRpe: s.targetRpe ?? null,
+          setType: s.setType || "normal",
+          durationSec: s.durationSec ?? null,
+          distanceKm: s.distanceKm ?? null,
+        })),
+      };
+    }),
   });
 }
 export function omitSharingWeights(plan: SharedWorkoutPlan): SharedWorkoutPlan;
