@@ -1,7 +1,7 @@
 /** Program identity and calendar operations. Names never determine membership. */
 export type ProgramDay = { type: "workout" | "rest" | "unassigned"; routineId: string | null; title: string };
 export type ProgramRecord = { id: string; name: string; days: ProgramDay[]; status: "draft" | "saved"; runId: string | null; updatedAt: number; deleting?: boolean };
-export type ProgramMark = { status?: "completed" | "skipped"; dateKey?: string; day?: ProgramDay; dayNumber?:number; workoutId?: string };
+export type ProgramMark = { status?: "completed" | "skipped"; dateKey?: string; day?: ProgramDay; dayNumber?:number; workoutId?: string; completionDateVersion?: 1 };
 export type ProgramRun = { id: string; programId: string; startedDateKey: string; anchorDateKey: string; anchorOrdinal: number; cursor: number; marks: Record<string, ProgramMark>; endedDateKey?: string | null; revision?: number };
 export type ProgramLink = { programId: string; runId: string; ordinal: number; dayNumber: number; scheduledDateKey: string; routineId: string; title: string };
 export type ProgramOccurrence = ProgramDay & { ordinal: number; dayNumber: number; dateKey: string; status: "pending" | "completed" | "skipped"; workoutId?: string };
@@ -42,12 +42,12 @@ export function resumeProgramRun(program:ProgramRecord,run:ProgramRun,today=date
  Object.entries(marks).forEach(([key,mark])=>{if(Number(key)<cursor||mark.status)marks[key]={...mark,dateKey:programOccurrence(program,run,Number(key)).dateKey};});
  return {...run,cursor,anchorOrdinal:cursor,anchorDateKey:today,marks};
 }
-export function completeProgramOccurrence(program:ProgramRecord,run:ProgramRun,link:ProgramLink,workoutId:string,today=dateKey()):ProgramRun {
+export function completeProgramOccurrence(program:ProgramRecord,run:ProgramRun,link:ProgramLink,workoutId:string,today=dateKey(),completedDate=today):ProgramRun {
  if(link.programId!==program.id||link.runId!==run.id)throw new Error("Program day does not match this run.");
  const previous=run.marks[String(link.ordinal)];
  if(previous?.status==="completed")return run;
- const marks={...run.marks,[String(link.ordinal)]:{...previous,status:"completed" as const,dateKey:link.scheduledDateKey,dayNumber:link.dayNumber,day:{type:"workout" as const,routineId:link.routineId,title:link.title},workoutId}};
- const next={...run,marks};return {...next,cursor:currentProgramOrdinal(program,next,today)};
+ const marks={...run.marks,[String(link.ordinal)]:{...previous,status:"completed" as const,completionDateVersion:1 as const,dateKey:link.scheduledDateKey,dayNumber:link.dayNumber,day:{type:"workout" as const,routineId:link.routineId,title:link.title},workoutId}};
+ return completedProgramCalendar(program,{...run,marks},{[String(link.ordinal)]:completedDate},today);
 }
 export type ProgramScheduleAction = "skip"|"shift"|"move"|"swap";
 export function changeProgramSchedule(program:ProgramRecord,run:ProgramRun,ordinal:number,action:ProgramScheduleAction,target?:number,today=dateKey()):ProgramRun {
@@ -67,3 +67,45 @@ export function changeProgramSchedule(program:ProgramRecord,run:ProgramRun,ordin
  const next={...run,marks};return {...next,cursor:currentProgramOrdinal(program,next,today)};
 }
 export function sortPrograms(programs:ProgramRecord[],activeId:string|null){return [...programs].sort((a,b)=>(a.id===activeId?0:a.status==="draft"?1:2)-(b.id===activeId?0:b.status==="draft"?1:2)||a.name.localeCompare(b.name));}
+
+
+/** Dates supplied here must come from workouts with matching program/run/ordinal links. */
+function applyProgramCompletionDates(program: ProgramRecord, run: ProgramRun, dates: Record<string, string>): ProgramRun {
+  const marks = { ...run.marks };
+  const completed = Object.keys(dates).map(Number).filter(ordinal =>
+    Number.isSafeInteger(ordinal) && ordinal >= 0 && marks[String(ordinal)]?.status === "completed" &&
+    /^\d{4}-\d{2}-\d{2}$/.test(dates[String(ordinal)])
+  ).sort((a, b) => a - b);
+  for (const ordinal of completed) marks[String(ordinal)] = { ...marks[String(ordinal)], dateKey: dates[String(ordinal)] };
+  const latest = completed.at(-1);
+  if (latest == null) return run;
+  const actual = dates[String(latest)], scheduled = programOccurrence(program, run, latest).dateKey;
+  const lastMarkedCompletion = Math.max(...Object.keys(run.marks).filter(key => run.marks[key].status === "completed").map(Number));
+  // Resume/shift establishes a newer calendar anchor: never undo that choice.
+  if (latest !== lastMarkedCompletion || latest < run.anchorOrdinal || actual <= scheduled) return { ...run, marks };
+  // Finishing a future day out of order must not move an earlier unfinished workout.
+  for (let ordinal = run.cursor; ordinal < latest; ordinal++) {
+    const day = programOccurrence(program, run, ordinal);
+    if (day.type === "workout" && day.status === "pending") return { ...run, marks };
+  }
+  const offset = Math.round((Date.parse(actual) - Date.parse(scheduled)) / 86400000);
+  for (let ordinal = Math.max(0, latest - program.days.length * 2); ordinal < latest; ordinal++) {
+    if (!marks[String(ordinal)]) {
+      const day = programOccurrence(program, run, ordinal);
+      marks[String(ordinal)] = { dateKey: day.dateKey, dayNumber: day.dayNumber,
+        day: { type: day.type, routineId: day.routineId, title: day.title } };
+    }
+  }
+  for (const [key, mark] of Object.entries(marks)) {
+    if (mark.status) marks[key] = { ...mark, dateKey: mark.dateKey ?? programOccurrence(program, run, Number(key)).dateKey };
+    else if (Number(key) > latest && mark.dateKey) marks[key] = { ...mark, dateKey: addProgramDays(mark.dateKey, offset) };
+  }
+  const next = { ...run, marks, anchorOrdinal: latest, anchorDateKey: actual, cursor: Math.min(run.cursor, latest + 1) };
+  // Re-evaluate elapsed rest days using the corrected calendar, not the old cursor.
+  return next;
+}
+
+export function completedProgramCalendar(program: ProgramRecord, run: ProgramRun, dates: Record<string, string>, today: string) {
+  const next = applyProgramCompletionDates(program, run, dates);
+  return { ...next, cursor: currentProgramOrdinal(program, next, today) };
+}

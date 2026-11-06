@@ -34,6 +34,7 @@ export type BodyCompositionSyncResult =
   | { status: "success"; syncedAt: Timestamp }
   | { status: "permission_denied" }
   | { status: "no_data" }
+  | { status: "unchanged" }
   | { status: "provider_update_required" }
   | { status: "unavailable" }
   | { status: "unsupported" }
@@ -436,7 +437,7 @@ const recordBodyCheck = async (
   uid: string, provider: BodyProvider, now: Date, read: () => Promise<BodyCompositionSyncResult>
 ): Promise<BodyCompositionSyncResult> => {
   const result = await read();
-  if (result.status === "success" || result.status === "no_data") {
+  if (result.status === "success" || result.status === "no_data" || result.status === "unchanged") {
     await AsyncStorage.setItem(bodyCheckKey(uid, provider), now.toISOString()).catch(() => undefined);
   }
   return result;
@@ -552,7 +553,7 @@ const importBodyFromHealthConnect = async (
 
     const imported = await saveBodyCompositionImport(uid, syncedSnapshot, originAppPackage,
       typeof recordedAtMs === "number", fingerprint, syncedAt, historyEntry);
-    return imported ? { status: "success", syncedAt } : { status: "no_data" };
+    return imported ? { status: "success", syncedAt } : { status: "unchanged" };
   } catch (error) {
     const message = getErrorMessage(error) || "Failed to sync body composition.";
     return { status: "error", message };
@@ -632,7 +633,7 @@ const importBodyFromSamsungHealth = async (
 
     const imported = await saveBodyCompositionImport(uid, syncedSnapshot, originAppPackage,
       hasProviderTime, fingerprint, syncedAt, historyEntry);
-    return imported ? { status: "success", syncedAt } : { status: "no_data" };
+    return imported ? { status: "success", syncedAt } : { status: "unchanged" };
   } catch (error) {
     const message =
       getSamsungHealthAccessIssueMessage(error) ||

@@ -160,6 +160,15 @@ resolve current progress; do not rewrite history by assuming everything passed.
    Resolve unexpected Doctor failures and rerun affected checks before building;
    a previous Doctor result or green CI does not replace this preflight.
    Preserve the documented intentional native-config exception.
+   Submit EAS cloud builds with `--no-wait`. Once EAS accepts the build, save its
+   ID, URL, source commit, allocated version and remaining artifact checks in a
+   checkpoint. Give the user the build link, ask them to tell us when it finishes,
+   and end the turn. Do not spend the session repeatedly polling queue/build
+   status or sending unchanged progress updates unless the user explicitly asks
+   for monitoring. Continue independent authorized work if there is any; cloud
+   waiting alone is not work to keep the turn open for. When the user reports
+   completion, query the existing build once and resume artifact verification.
+   Never submit another build just because the original is queued.
 7. Use checkpoints at interruptions. Record completed versus unverified changes,
    branch, remaining work, commands and device caveats. Never claim a usage
    percentage reliably predicts how much work will fit.

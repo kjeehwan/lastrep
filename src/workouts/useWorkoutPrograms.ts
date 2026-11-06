@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { collection, doc, onSnapshot } from "firebase/firestore";
 import { db } from "../config/firebaseConfig";
 import { normalizeProgramRecord, sortPrograms, type ProgramRecord, type ProgramRun } from "./programFlow";
-import { migrateLegacyProgram, runRef } from "./programStore";
+import { migrateLegacyProgram, reconcileStoredProgramCalendar, runRef } from "./programStore";
 
 export function useWorkoutPrograms(uid: string | null) {
   const [snapshot,setSnapshot] = useState<{uid:string;programs:ProgramRecord[];loaded:boolean;activeId:string|null;error:string|null}|null>(null);
@@ -34,10 +34,23 @@ export function useWorkoutPrograms(uid: string | null) {
   const runKey=uid&&active?.runId?`${uid}:${active.id}:${active.runId}`:null;
   useEffect(()=>{
     if(!uid||!active?.runId||!runKey)return;
-    return onSnapshot(runRef(uid,active.id,active.runId),document=>setRunSnapshot({key:runKey,run:document.exists()?document.data() as ProgramRun:null}),()=>{
+    let alive=true,generation=0;
+    const stop=onSnapshot(runRef(uid,active.id,active.runId),document=>{
+      const request=++generation;
+      const run=document.exists()?document.data() as ProgramRun:null;
+      if(!run||Object.values(run.marks).every(mark=>mark.status!=="completed"||mark.completionDateVersion===1)){if(alive)setRunSnapshot({key:runKey,run});return;}
+      void reconcileStoredProgramCalendar(uid,active.id,active.runId!).then(corrected=>{
+        if(alive&&request===generation)setRunSnapshot({key:runKey,run:corrected});
+      }).catch(()=>{
+        if(!alive||request!==generation)return;
+        setRunSnapshot({key:runKey,run});
+        setSnapshot(previous=>previous?.uid===uid?{...previous,error:"Couldn't check the program dates. Reconnect and try again."}:previous);
+      });
+    },()=>{
       setSnapshot(previous=>previous?.uid===uid?{...previous,error:"Couldn't load the program schedule."}:previous);
     });
-  },[uid,active?.id,active?.runId,runKey]);
+    return()=>{alive=false;stop();};
+  },[uid,active?.id,active?.runId,runKey,attempt]);
   return {programs:sortPrograms(current?.programs??[],current?.activeId??null),activeId:current?.activeId??null,active,
     run:runSnapshot?.key===runKey?runSnapshot?.run??null:null,error:current?.error??null,loaded:current?.loaded??false,retry:()=>retry(value=>value+1)};
 }

@@ -70,6 +70,9 @@ Use these levels during planning and final PR review:
 - Commit/push, open/merge PRs, delete branches and release/deploy only within the
   user's authorized scope. Prefer PRs into `main`; stage only intended files and
   verify branch/working-tree status after cleanup.
+- Submit EAS cloud builds without waiting. Save the build ID and verification
+  checkpoint, give the user the build link and ask them to report completion.
+  Do not repeatedly poll or send queue updates unless explicitly asked to monitor.
 - Keep this file short and durable. Detailed design rules, audit findings,
   backlogs and temporary checkpoints belong in `docs/`; link instead of duplicating.
   Do not add credentials, personal identifiers or transient process details here.
