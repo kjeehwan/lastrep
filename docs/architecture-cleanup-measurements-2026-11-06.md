@@ -40,16 +40,16 @@ production performance incident.
 
 ## A7 — Root profile read inventory
 
-`loadWorkoutPlanContext` starts three root-document reads at the application-call
+Before the cleanup, `loadWorkoutPlanContext` started three root-document reads at the application-call
 level: its direct `getDoc`, `getNutritionProfile`, and `getSleepProfile`. Each reads
 `users/{uid}`. It additionally queries today's meals and up to 120 workouts, then
 loads nutrition trends. The repeated root reads can also yield different profile
 revisions during a concurrent update.
 
-A safe first optimization is to expose pure nutrition/sleep profile parsers,
-load the root once per context request and derive all three views from that
-snapshot. Keep public loaders for other callers. Verify equivalent defaults,
-journal-summary precedence, units/targets and account isolation. This reduces
+The first optimization is implemented: pure nutrition/sleep profile parsers are
+shared with the public loaders, and the context request derives its views from
+one root snapshot. Regression tests cover equivalent parsing, defaults,
+journal-summary precedence, targets and account isolation. This reduces
 application calls from three to one; actual billed-read savings are unmeasured
 because SDK caching/multiplexing can affect requests.
 

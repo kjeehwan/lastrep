@@ -111,7 +111,11 @@ export const buildSleepProfile = (
 
 export const getSleepProfile = async (uid: string): Promise<SleepProfile> => {
   const snapshot = await getDoc(doc(db, USERS_COLLECTION, uid));
-  const data = snapshot.data()?.[USER_SLEEP_PROFILE_FIELD] as Record<string, unknown> | undefined;
+  return parseSleepProfile(snapshot.data()?.[USER_SLEEP_PROFILE_FIELD]);
+};
+
+export const parseSleepProfile = (value: unknown): SleepProfile => {
+  const data = value as Record<string, unknown> | undefined;
   const summary = data?.journalSummary && typeof data.journalSummary === "object" ? data.journalSummary as Record<string, unknown> : data;
 
   return buildSleepProfile(

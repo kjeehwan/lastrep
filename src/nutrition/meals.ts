@@ -215,7 +215,11 @@ export async function getMealsForDate(uid: string, date = new Date()): Promise<N
 
 export async function getNutritionProfile(uid: string): Promise<NutritionProfile> {
   const snapshot = await getDoc(doc(db, USERS_COLLECTION, uid));
-  const data = snapshot.data()?.[USER_NUTRITION_PROFILE_FIELD] as
+  return parseNutritionProfile(snapshot.data()?.[USER_NUTRITION_PROFILE_FIELD]);
+}
+
+export function parseNutritionProfile(value: unknown): NutritionProfile {
+  const data = value as
     | {
         calorieTargetsByDietPhase?: unknown;
         proteinTargetGrams?: unknown;

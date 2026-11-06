@@ -1,7 +1,8 @@
 import { collection, doc, getDoc, getDocs, limit, orderBy, query } from "firebase/firestore";
 import { db } from "../../config/firebaseConfig";
-import { classifyCalorieTargetAdherence, getCalorieTargetForDietPhase, getMealsForDate, getNutritionProfile, getNutritionTrendReport } from "../../nutrition/meals";
-import { getSleepProfile, getSleepSampleAgeHours, isHealthSleepStale } from "../../sleep/sleep";
+import { classifyCalorieTargetAdherence, getCalorieTargetForDietPhase, getMealsForDate, parseNutritionProfile, getNutritionTrendReport } from "../../nutrition/meals";
+import { parseSleepProfile, getSleepSampleAgeHours, isHealthSleepStale } from "../../sleep/sleep";
+import { USER_NUTRITION_PROFILE_FIELD, USER_SLEEP_PROFILE_FIELD } from "../../contracts";
 import { resolveDecisionSleepInput } from "../../sleep/resolveDecisionSleepInput";
 import type { DecisionInputs, PlannedWorkoutSummary } from "../../types/decision";
 import type { WorkoutSummary } from "../../workouts/homeInsights";
@@ -19,12 +20,14 @@ const rating = (value: unknown, fallback: number) =>
 
 export async function loadWorkoutPlanContext(uid: string, plannedWorkout: PlannedWorkoutSummary, override?: RecoveryInputs) {
   const now = new Date();
-  const [userSnapshot, nutritionProfile, sleep, meals, history] = await Promise.all([
-    getDoc(doc(db, "users", uid)), getNutritionProfile(uid), getSleepProfile(uid), getMealsForDate(uid),
+  const [userSnapshot, meals, history] = await Promise.all([
+    getDoc(doc(db, "users", uid)), getMealsForDate(uid),
     getDocs(query(collection(db, "users", uid, "workouts"), orderBy("date", "desc"), limit(120))),
   ]);
   if (!userSnapshot.exists()) throw new Error("User profile is unavailable");
   const user = userSnapshot.data();
+  const nutritionProfile = parseNutritionProfile(user[USER_NUTRITION_PROFILE_FIELD]);
+  const sleep = parseSleepProfile(user[USER_SLEEP_PROFILE_FIELD]);
   const checkIn = readRecoveryCheckIn(user?.recoveryCheckIn);
   const recovery: RecoveryInputs = override ?? {
     soreness: rating(checkIn?.ratings.soreness, 4), fatigue: rating(checkIn?.ratings.fatigue, 4), motivation: rating(checkIn?.ratings.motivation, 6),
