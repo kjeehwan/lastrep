@@ -1,10 +1,11 @@
 # Sleep history: scoped reads and safe edits
 
-Status: approved; first increment implemented, checked and approved for delivery.
+Status: approved; first increment merged in PR #86; second implemented, checked and approved for delivery.
 Date: November 6, 2026. Source reviewed: `b5ddf8a`.
 Related: [audit measurements](architecture-cleanup-measurements-2026-11-06.md)
 and [cleanup backlog](architecture-cleanup-backlog.md).
 Implementation evidence: [first-increment verification](sleep-history-scoped-read-verification.md).
+Second increment: [scoped mutation verification](sleep-scoped-mutation-verification.md).
 
 ## Recommended direction
 
@@ -235,7 +236,7 @@ must cover loading an older date, editing, overlap confirmation, cancellation,
 failed-save retry and restoring selection. No user data migration, new retention
 policy or background job is proposed.
 
-## Review decision
+## Original design review decision
 
 Recommend approving the two-increment direction, with the first PR focused on
 windowed display reads and explicit commands. Keep the verified full calculation
