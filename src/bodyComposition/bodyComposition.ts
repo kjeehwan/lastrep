@@ -1,7 +1,7 @@
 import { BODY_COMPOSITION_HISTORY_LIMIT, compareHistoryEntries, normalizeBodyCompositionHistory } from "./normalizeBodyCompositionHistory";
 import { Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { doc, getDoc, runTransaction, setDoc, Timestamp } from "firebase/firestore";
+import { doc, getDoc, runTransaction, Timestamp } from "firebase/firestore";
 import { deleteMeasurementHistory, editMeasurementHistory, snapshotAfterMeasurementDeletion } from "./measurementEditing";
 import type { Permission } from "react-native-health-connect";
 import { db } from "../config/firebaseConfig";
@@ -249,7 +249,10 @@ export const getBodyCompositionProfile = async (
   uid: string
 ): Promise<BodyCompositionProfile> => {
   const snapshot = await getDoc(doc(db, USERS_COLLECTION, uid));
-  const data = snapshot.data()?.[USER_BODY_COMPOSITION_FIELD] as Record<string, unknown> | undefined;
+  return bodyCompositionProfileFromData(snapshot.data()?.[USER_BODY_COMPOSITION_FIELD]);
+};
+
+const bodyCompositionProfileFromData = (data: Record<string, unknown> | undefined): BodyCompositionProfile => {
   return buildBodyCompositionProfile(
     normalizeMetricSnapshot(data?.[BODY_COMPOSITION_FIELDS.manual], "manual", "skeletal"),
     normalizeMetricSnapshot(data?.[BODY_COMPOSITION_FIELDS.synced], "health", "unknown"),
@@ -273,48 +276,51 @@ export const saveManualBodyCompositionEntry = async (
   input: BodyCompositionInput,
   now = new Date()
 ): Promise<void> => {
-  const profile = await getBodyCompositionProfile(uid);
-  const recordedAt = Timestamp.fromDate(now);
-  const hasWeight = Object.prototype.hasOwnProperty.call(input, "weightKg");
-  const hasBodyFat = Object.prototype.hasOwnProperty.call(input, "bodyFatPercent");
-  const hasLeanBodyMass = Object.prototype.hasOwnProperty.call(input, "leanBodyMassKg");
-  const hasSkeletalMuscle = Object.prototype.hasOwnProperty.call(input, "skeletalMuscleMassKg");
-  const nextManual: BodyCompositionMetricSnapshot = {
-    weightKg: hasWeight ? normalizeNullableNumber(input.weightKg, 500, true) : profile.manual.weightKg,
-    bodyFatPercent: hasBodyFat
-      ? normalizeNullableNumber(input.bodyFatPercent, 100)
-      : profile.manual.bodyFatPercent,
-    leanBodyMassKg: hasLeanBodyMass ? normalizeNullableNumber(input.leanBodyMassKg, 500) : profile.manual.leanBodyMassKg,
-    skeletalMuscleMassKg: hasSkeletalMuscle
-      ? normalizeNullableNumber(input.skeletalMuscleMassKg, 500)
-      : profile.manual.skeletalMuscleMassKg,
-    legacyMuscleMassKg: profile.manual.legacyMuscleMassKg,
-    recordedAt,
-    source: "manual",
-    originLabel: null,
-  };
-  const historyEntry: BodyCompositionHistoryEntry = {
-    recordedAt,
-    source: "manual",
-    originLabel: null,
-    weightKg: hasWeight ? nextManual.weightKg : null,
-    bodyFatPercent: hasBodyFat ? nextManual.bodyFatPercent : null,
-    leanBodyMassKg: hasLeanBodyMass ? nextManual.leanBodyMassKg : null,
-    skeletalMuscleMassKg: hasSkeletalMuscle ? nextManual.skeletalMuscleMassKg : null,
-    legacyMuscleMassKg: null,
-  };
+  await runTransaction(db, async (transaction) => {
+    const ref = doc(db, USERS_COLLECTION, uid);
+    const profile = bodyCompositionProfileFromData((await transaction.get(ref)).data()?.[USER_BODY_COMPOSITION_FIELD]);
+    const recordedAt = Timestamp.fromDate(now);
+    const hasWeight = Object.prototype.hasOwnProperty.call(input, "weightKg");
+    const hasBodyFat = Object.prototype.hasOwnProperty.call(input, "bodyFatPercent");
+    const hasLeanBodyMass = Object.prototype.hasOwnProperty.call(input, "leanBodyMassKg");
+    const hasSkeletalMuscle = Object.prototype.hasOwnProperty.call(input, "skeletalMuscleMassKg");
+    const nextManual: BodyCompositionMetricSnapshot = {
+      weightKg: hasWeight ? normalizeNullableNumber(input.weightKg, 500, true) : profile.manual.weightKg,
+      bodyFatPercent: hasBodyFat
+        ? normalizeNullableNumber(input.bodyFatPercent, 100)
+        : profile.manual.bodyFatPercent,
+      leanBodyMassKg: hasLeanBodyMass ? normalizeNullableNumber(input.leanBodyMassKg, 500) : profile.manual.leanBodyMassKg,
+      skeletalMuscleMassKg: hasSkeletalMuscle
+        ? normalizeNullableNumber(input.skeletalMuscleMassKg, 500)
+        : profile.manual.skeletalMuscleMassKg,
+      legacyMuscleMassKg: profile.manual.legacyMuscleMassKg,
+      recordedAt,
+      source: "manual",
+      originLabel: null,
+    };
+    const historyEntry: BodyCompositionHistoryEntry = {
+      recordedAt,
+      source: "manual",
+      originLabel: null,
+      weightKg: hasWeight ? nextManual.weightKg : null,
+      bodyFatPercent: hasBodyFat ? nextManual.bodyFatPercent : null,
+      leanBodyMassKg: hasLeanBodyMass ? nextManual.leanBodyMassKg : null,
+      skeletalMuscleMassKg: hasSkeletalMuscle ? nextManual.skeletalMuscleMassKg : null,
+      legacyMuscleMassKg: null,
+    };
 
-  await setDoc(
-    doc(db, USERS_COLLECTION, uid),
-    {
-      [USER_BODY_COMPOSITION_FIELD]: {
-        [BODY_COMPOSITION_FIELDS.schemaVersion]: BODY_COMPOSITION_SCHEMA_VERSION,
-        [BODY_COMPOSITION_FIELDS.manual]: nextManual,
-        [BODY_COMPOSITION_FIELDS.history]: pushHistoryEntry(profile.history, historyEntry),
+    transaction.set(
+      ref,
+      {
+        [USER_BODY_COMPOSITION_FIELD]: {
+          [BODY_COMPOSITION_FIELDS.schemaVersion]: BODY_COMPOSITION_SCHEMA_VERSION,
+          [BODY_COMPOSITION_FIELDS.manual]: nextManual,
+          [BODY_COMPOSITION_FIELDS.history]: pushHistoryEntry(profile.history, historyEntry),
+        },
       },
-    },
-    { merge: true }
-  );
+      { merge: true }
+    );
+  });
 };
 
 export const editBodyCompositionEntry = async (uid: string, original: BodyCompositionHistoryEntry, changes: Record<string, number>) => {
@@ -450,18 +456,33 @@ const unchangedBodySnapshot = (
     previous.legacyMuscleMassKg === next.legacyMuscleMassKg;
 };
 
-const unchangedBodyImport = async (
-  uid: string, profile: BodyCompositionProfile, next: BodyCompositionMetricSnapshot,
-  origin: string | null, hasProviderTime: boolean, fingerprint: string
-) => {
-  if (profile.importFingerprint != null) return profile.importFingerprint === fingerprint;
-  if (!unchangedBodySnapshot(profile, next, origin, hasProviderTime)) return false;
-  // Seed old profiles without reporting an import or advancing its timestamp.
-  await setDoc(doc(db, USERS_COLLECTION, uid), {
-    [USER_BODY_COMPOSITION_FIELD]: { [BODY_COMPOSITION_FIELDS.importFingerprint]: fingerprint },
-  }, { merge: true });
+// Provider I/O finishes before this transaction. Retries always merge with current
+// history and check the current fingerprint, including legacy baseline writes.
+const saveBodyCompositionImport = async (
+  uid: string, next: BodyCompositionMetricSnapshot, origin: string | null,
+  hasProviderTime: boolean, fingerprint: string, syncedAt: Timestamp,
+  entry: BodyCompositionHistoryEntry
+): Promise<boolean> => runTransaction(db, async (transaction) => {
+  const ref = doc(db, USERS_COLLECTION, uid);
+  const profile = bodyCompositionProfileFromData((await transaction.get(ref)).data()?.[USER_BODY_COMPOSITION_FIELD]);
+  if (profile.importFingerprint === fingerprint) return false;
+  if (profile.importFingerprint == null && unchangedBodySnapshot(profile, next, origin, hasProviderTime)) {
+    transaction.set(ref, { [USER_BODY_COMPOSITION_FIELD]: {
+      [BODY_COMPOSITION_FIELDS.importFingerprint]: fingerprint,
+    } }, { merge: true });
+    return false;
+  }
+  transaction.set(ref, { [USER_BODY_COMPOSITION_FIELD]: {
+    [BODY_COMPOSITION_FIELDS.schemaVersion]: BODY_COMPOSITION_SCHEMA_VERSION,
+    [BODY_COMPOSITION_FIELDS.synced]: next,
+    [BODY_COMPOSITION_FIELDS.importFingerprint]: fingerprint,
+    [BODY_COMPOSITION_FIELDS.lastSyncedAt]: syncedAt,
+    [BODY_COMPOSITION_FIELDS.originAppPackage]: origin,
+    [BODY_COMPOSITION_FIELDS.originLabel]: next.originLabel,
+    [BODY_COMPOSITION_FIELDS.history]: pushHistoryEntry(profile.history, entry),
+  } }, { merge: true });
   return true;
-};
+});
 
 export const syncBodyCompositionFromHealthConnect = async (
   uid: string,
@@ -499,7 +520,6 @@ const importBodyFromHealthConnect = async (
       typeof leanBodyMass.value === "number";
     if (!hasAnyData) return { status: "no_data" };
 
-    const profile = await getBodyCompositionProfile(uid);
     const syncedAt = Timestamp.fromDate(now);
     const recordedAtMs = [weight.recordedAtMs, bodyFat.recordedAtMs, leanBodyMass.recordedAtMs]
       .filter((value): value is number => typeof value === "number" && Number.isFinite(value))
@@ -519,9 +539,6 @@ const importBodyFromHealthConnect = async (
     };
     const fingerprint = JSON.stringify(["health-connect",
       ...[weight, bodyFat, leanBodyMass].map(metric => metric.value == null ? null : metric)]);
-    if (await unchangedBodyImport(uid, profile, syncedSnapshot, originAppPackage, typeof recordedAtMs === "number", fingerprint)) {
-      return { status: "no_data" };
-    }
     const historyEntry: BodyCompositionHistoryEntry = {
       recordedAt: syncedSnapshot.recordedAt,
       source: "health",
@@ -533,22 +550,9 @@ const importBodyFromHealthConnect = async (
       legacyMuscleMassKg: null,
     };
 
-    await setDoc(
-      doc(db, USERS_COLLECTION, uid),
-      {
-        [USER_BODY_COMPOSITION_FIELD]: {
-          [BODY_COMPOSITION_FIELDS.schemaVersion]: BODY_COMPOSITION_SCHEMA_VERSION,
-          [BODY_COMPOSITION_FIELDS.synced]: syncedSnapshot,
-          [BODY_COMPOSITION_FIELDS.importFingerprint]: fingerprint,
-          [BODY_COMPOSITION_FIELDS.lastSyncedAt]: syncedAt,
-          [BODY_COMPOSITION_FIELDS.originAppPackage]: originAppPackage,
-          [BODY_COMPOSITION_FIELDS.originLabel]: originLabel,
-          [BODY_COMPOSITION_FIELDS.history]: pushHistoryEntry(profile.history, historyEntry),
-        },
-      },
-      { merge: true }
-    );
-    return { status: "success", syncedAt };
+    const imported = await saveBodyCompositionImport(uid, syncedSnapshot, originAppPackage,
+      typeof recordedAtMs === "number", fingerprint, syncedAt, historyEntry);
+    return imported ? { status: "success", syncedAt } : { status: "no_data" };
   } catch (error) {
     const message = getErrorMessage(error) || "Failed to sync body composition.";
     return { status: "error", message };
@@ -593,7 +597,6 @@ const importBodyFromSamsungHealth = async (
       typeof legacyMuscleMassKg === "number";
     if (!hasAnyData) return { status: "no_data" };
 
-    const profile = await getBodyCompositionProfile(uid);
     const syncedAt = Timestamp.fromDate(now);
     const originAppPackage = normalizeString(latest.sourceAppId) ?? "com.sec.android.app.shealth";
     const originLabel = inferOriginLabel(originAppPackage) ?? "Samsung Health";
@@ -616,9 +619,6 @@ const importBodyFromSamsungHealth = async (
     const fingerprint = JSON.stringify(["samsung-health", originAppPackage,
       hasProviderTime ? latest.recordedAtMs : null, weightKg, bodyFatPercent,
       leanBodyMassKg, skeletalMuscleMassKg, legacyMuscleMassKg]);
-    if (await unchangedBodyImport(uid, profile, syncedSnapshot, originAppPackage, hasProviderTime, fingerprint)) {
-      return { status: "no_data" };
-    }
     const historyEntry: BodyCompositionHistoryEntry = {
       recordedAt,
       source: "health",
@@ -630,22 +630,9 @@ const importBodyFromSamsungHealth = async (
       legacyMuscleMassKg,
     };
 
-    await setDoc(
-      doc(db, USERS_COLLECTION, uid),
-      {
-        [USER_BODY_COMPOSITION_FIELD]: {
-          [BODY_COMPOSITION_FIELDS.schemaVersion]: BODY_COMPOSITION_SCHEMA_VERSION,
-          [BODY_COMPOSITION_FIELDS.synced]: syncedSnapshot,
-          [BODY_COMPOSITION_FIELDS.importFingerprint]: fingerprint,
-          [BODY_COMPOSITION_FIELDS.lastSyncedAt]: syncedAt,
-          [BODY_COMPOSITION_FIELDS.originAppPackage]: originAppPackage,
-          [BODY_COMPOSITION_FIELDS.originLabel]: originLabel,
-          [BODY_COMPOSITION_FIELDS.history]: pushHistoryEntry(profile.history, historyEntry),
-        },
-      },
-      { merge: true }
-    );
-    return { status: "success", syncedAt };
+    const imported = await saveBodyCompositionImport(uid, syncedSnapshot, originAppPackage,
+      hasProviderTime, fingerprint, syncedAt, historyEntry);
+    return imported ? { status: "success", syncedAt } : { status: "no_data" };
   } catch (error) {
     const message =
       getSamsungHealthAccessIssueMessage(error) ||

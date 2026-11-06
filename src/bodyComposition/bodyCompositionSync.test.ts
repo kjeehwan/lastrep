@@ -20,6 +20,15 @@ vi.mock("firebase/firestore", async (original) => ({
   ...await original<typeof import("firebase/firestore")>(),
   doc: () => ({}), getDoc: async () => ({ data: () => ({ bodyCompositionProfile: fake.body }) }),
   setDoc: (...args: unknown[]) => fake.write(...args),
+  runTransaction: async (_db: unknown, update: (transaction: unknown) => Promise<unknown>) => {
+    const writes: (() => Promise<void>)[] = [];
+    const result = await update({
+      get: async () => ({ data: () => ({ bodyCompositionProfile: fake.body }) }),
+      set: (...args: unknown[]) => { writes.push(() => fake.write(...args)); },
+    });
+    for (const write of writes) await write();
+    return result;
+  },
 }));
 vi.mock("react-native-health-connect", () => ({ initialize: async () => true,
   getGrantedPermissions: async () => ["Weight", "BodyFat", "LeanBodyMass"].map(recordType => ({ accessType: "read", recordType })),

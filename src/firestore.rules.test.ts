@@ -23,7 +23,7 @@ const describeIfFirestoreEmulator = emulatorHost ? describe : describe.skip;
 
 const [host, portValue] = (emulatorHost ?? "127.0.0.1:8080").split(":");
 const port = Number(portValue ?? 8080);
-const projectId = "lastrep-firestore-rules";
+const projectId = "demo-lastrep-firestore-rules";
 const rules = readFileSync(join(process.cwd(), "firestore.rules"), "utf8");
 
 const buildCanonicalEntitlement = () => ({

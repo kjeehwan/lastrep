@@ -60,6 +60,9 @@ jobs:
       - name: Run lint
         run: npm run lint
 
+      - name: Check application TypeScript
+        run: npx tsc --noEmit --pretty false
+
       - name: Verify tracked Android configuration
         run: npm run verify:android-native
 
@@ -68,3 +71,27 @@ jobs:
 
       - name: Verify Expo web export
         run: npm run check:web-export
+
+  firebase-boundaries:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            functions/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Install project and backend dependencies
+        run: |
+          npm ci --ignore-scripts
+          npm run postinstall
+          npm ci --prefix functions --ignore-scripts
+      - name: Run Firebase boundary tests without skipped suites
+        run: npx --yes firebase-tools@15.13.0 emulators:exec --project demo-lastrep-ci --config firebase.test.json --only firestore,storage "node scripts/run-firebase-integration-tests.js"
