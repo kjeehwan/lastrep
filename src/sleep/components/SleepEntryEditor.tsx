@@ -7,8 +7,8 @@ import { db } from "../../config/firebaseConfig";
 import { useNotebook } from "../../ui/notebook/Notebook";
 import { notebookFonts } from "../../ui/notebook/tokens";
 import { useOfflineStatus } from "../../hooks/useOfflineStatus";
-import { mutateSleepJournal } from "../sleepJournal";
-import { commitManualSleep, emptySleepEntry, parseSleepDate, shiftSleepDate, sleepDateKey, sleepDurationText, sleepEntrySignature, sleepTimeMinutes, timedSleepEntry, validateSleepHours, SleepOverlapError, type SleepEntry } from "../sleepSessionModel";
+import { executeSleepCommand } from "../sleepJournal";
+import { emptySleepEntry, parseSleepDate, shiftSleepDate, sleepDateKey, sleepDurationText, sleepTimeMinutes, timedSleepEntry, validateSleepHours, SleepOverlapError, type SleepEntry } from "../sleepSessionModel";
 import { SleepSheet, SleepButton } from "./SleepSheet";
 import { SleepCalendar } from "./SleepCalendar";
 import { SleepDial } from "./SleepDial";
@@ -58,11 +58,7 @@ export function SleepEntryEditor({ uid, selected, entry: initialEntry, onClose, 
     } catch (err) { setError((err as Error).message); return; }
     setSaving(true); setError("");
     try {
-      await mutateSleepJournal(uid, (entries) => {
-        if (entry && entries.some((current) => current.id === entry.id && sleepEntrySignature(current) !== sleepEntrySignature(entry))) throw Error("This entry changed on another device. Close it and reopen before editing.");
-        if (replace.some((old) => { const current = entries.find((row) => row.id === old.id); return !current || sleepEntrySignature(current) !== sleepEntrySignature(old); })) throw Error("An entry changed since your review. Go back and save again to review the latest data.");
-        return commitManualSleep(entries, candidate, entry?.id ?? null, replace.map((row) => row.id));
-      });
+      await executeSleepCommand(uid, { kind: "manual", candidate, expected: entry, replacements: replace });
       Keyboard.dismiss(); onSaved(candidate.dateKey);
     } catch (err) {
       if (err instanceof SleepOverlapError) setConflicts(err.conflicts);

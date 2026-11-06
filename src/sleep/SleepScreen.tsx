@@ -1,5 +1,5 @@
 import { NotebookTextInput } from "../ui/notebook/NotebookTextInput";
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { BackHandler, Linking, Platform, Pressable, ScrollView, Text, View, useWindowDimensions } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect, useRouter, Redirect } from "expo-router";
@@ -12,9 +12,11 @@ import { NotebookHeader } from "../ui/notebook/NotebookHeader";
 import { notebookFonts } from "../ui/notebook/tokens";
 import { useNotebookStatusBar } from "../ui/notebook/useNotebookStatusBar";
 import { useOfflineStatus } from "../hooks/useOfflineStatus";
+import { sleepDisplayRange } from "./sleepJournalWindow";
+import { containsSleepRange } from "./sleepWindowScope";
 import { useSleepJournal } from "./useSleepJournal";
-import { deriveSleepDays, isSupersededSleepTotal, removeSleepEntry, shiftSleepDate, sleepDateKey, sleepDurationText, sleepEntryAsleepHours, weeklySleepSummary, validateSleepHours, type SleepEntry } from "./sleepSessionModel";
-import { mutateSleepJournal } from "./sleepJournal";
+import { deriveSleepDays, isSupersededSleepTotal, shiftSleepDate, sleepDateKey, sleepDurationText, sleepEntryAsleepHours, weeklySleepSummary, validateSleepHours, type SleepEntry } from "./sleepSessionModel";
+import { executeSleepCommand } from "./sleepJournal";
 import { syncSleepFromHealthConnect } from "./sleep";
 import { SleepSheet, SleepButton } from "./components/SleepSheet";
 import { SleepEntryEditor, sleepDisplayDate } from "./components/SleepEntryEditor";
@@ -67,17 +69,23 @@ function SleepJournalView({ data }: { data: ReturnType<typeof useSleepJournal> }
   const { days, entries: counted } = useMemo(() => deriveSleepDays(data.entries, data.origin), [data.entries, data.origin]);
   const today = sleepDateKey(new Date());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const selected = selectedDate ?? days[0]?.dateKey ?? today;
+  const selected = selectedDate ?? data.initialDate ?? today;
   const [chartDate, setChartDate] = useState<string | null>(null);
   const chartSelected = chartDate ?? selected;
   const [anchor, setAnchor] = useState<string | null>(null);
   const chartAnchor = anchor ?? (selected < shiftSleepDate(today, -13) ? selected : today);
+  const range = sleepDisplayRange(selected, chartSelected, chartAnchor);
+  const ready = containsSleepRange(data.window, range);
+  const requestWindow = data.requestWindow;
+  useEffect(() => {
+    if (data.initialDate) requestWindow({ start: range.start, end: range.end });
+  }, [data.initialDate, requestWindow, range.start, range.end]);
   const [sheet, setSheet] = useState<"calendar" | "entry" | "target" | "setup" | "sync" | "detail" | "totalHelp" | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null), [detailId, setDetailId] = useState<string | null>(null);
   const [excludeConfirm, setExcludeConfirm] = useState(false);
   const [syncing, setSyncing] = useState(false), [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null), [entryError, setEntryError] = useState("");
-  const row = days.find((day) => day.dateKey === selected);
+  const row = ready ? days.find((day) => day.dateKey === selected) : undefined;
   const sessions = counted.filter((entry) => entry.dateKey === selected && !isSupersededSleepTotal(entry, counted));
   const visibleSessions = sessions.filter((entry) => !entry.excluded && !entry.providerDeleted);
   const detail = counted.find((entry) => entry.id === detailId);
@@ -125,7 +133,7 @@ function SleepJournalView({ data }: { data: ReturnType<typeof useSleepJournal> }
       if (isOffline) throw Error("Reconnect to update this entry. Saved data is unchanged.");
       const expected = data.entries.find((entry) => entry.id === detail.id);
       if (!expected) throw Error("This entry is no longer available.");
-      await mutateSleepJournal(data.account.uid, (entries) => removeSleepEntry(entries, expected));
+      await executeSleepCommand(data.account.uid, { kind: "remove", expected });
       await data.refresh(); setSheet(null); setExcludeConfirm(false);
     } catch (err) { setEntryError((err as Error).message || "Could not update. Try again."); }
     finally { setSaving(false); }
@@ -144,7 +152,7 @@ function SleepJournalView({ data }: { data: ReturnType<typeof useSleepJournal> }
       {feedback ? <Text accessibilityLiveRegion="polite" style={muted}>{feedback}</Text> : null}
       {data.entries.filter((entry) => entry.dateKey === "undated" && !entry.excluded).map((entry) => <View key={entry.id} style={{ gap: 8 }}><Text style={muted}>Older saved total: {sleepDurationText(entry.hours)}. Its diary date is unavailable. Choose the correct date above before assigning it.</Text><SleepButton label={`Assign to ${sleepDisplayDate(selected)}`} onPress={() => { setEditingId(entry.id); setSheet("entry"); }} /></View>)}
       <View style={{ gap: 12 }}>
-        <Text accessibilityLabel={data.loading && !data.entries.length ? "Loading saved sleep" : sleepDurationText(row?.hours ?? null)} style={{ color: colors.ink, fontFamily: notebookFonts.editorial, fontSize: row && fontScale < 1.5 ? 42 : 32 }}>{data.loading && !data.entries.length ? "Loading saved sleep..." : row ? <>{Math.floor(Math.round(row.hours * 60) / 60)}<Text style={muted}> h </Text>{String(Math.round(row.hours * 60) % 60).padStart(2, "0")}<Text style={muted}> min</Text></> : "Not recorded"}</Text>
+        <Text accessibilityLabel={!ready ? "Loading saved sleep" : sleepDurationText(row?.hours ?? null)} style={{ color: colors.ink, fontFamily: notebookFonts.editorial, fontSize: row && fontScale < 1.5 ? 42 : 32 }}>{!ready ? (data.error ? "Sleep history unavailable" : "Loading saved sleep...") : row ? <>{Math.floor(Math.round(row.hours * 60) / 60)}<Text style={muted}> h </Text>{String(Math.round(row.hours * 60) % 60).padStart(2, "0")}<Text style={muted}> min</Text></> : "Not recorded"}</Text>
         {row ? <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
           <Text style={{ ...muted, flexShrink: 1 }}>{row.mayIncludeAwakeTime ? "May include awake time" : "Time asleep"}</Text>
           <Pressable accessibilityRole="button" accessibilityLabel="About sleep totals" onPress={() => setSheet("totalHelp")} style={{ width: 44, minHeight: 44, alignItems: "center", justifyContent: "center" }}><Info size={18} strokeWidth={1.5} color={colors.muted} /></Pressable>
@@ -155,9 +163,9 @@ function SleepJournalView({ data }: { data: ReturnType<typeof useSleepJournal> }
           {row.recordedAtMs != null ? <Text style={muted}>{row.source === "health" && !row.mixed ? "Recorded" : "Saved"} {new Date(row.recordedAtMs).toLocaleString()}</Text> : null}
         </View> : null}
         <Pressable accessibilityRole="button" accessibilityLabel="Edit sleep target" onPress={() => setSheet("target")} style={{ minHeight: 44, justifyContent: "center", alignSelf: "flex-start" }}><Text style={{ ...text, color: colors.accent, textDecorationLine: "underline" }}>Your target / {sleepDurationText(data.target)}</Text></Pressable>
-        <View style={{ alignSelf: "flex-start" }}><SleepButton align="left" label={row ? "Add sleep session" : "Record sleep"} primary={!row} disabled={data.loading && !data.entries.length} onPress={() => { setEditingId(null); setSheet("entry"); }} /></View>
+        <View style={{ alignSelf: "flex-start" }}><SleepButton align="left" label={row ? "Add sleep session" : "Record sleep"} primary={!row} disabled={!ready} onPress={() => { setEditingId(null); setSheet("entry"); }} /></View>
       </View>
-      {visibleSessions.length ? <View style={section}>
+      {ready && visibleSessions.length ? <View style={section}>
         <Text accessibilityRole="header" style={title}>Sleep entries</Text>
         {row?.needsReview ? <Text style={{ ...text, color: colors.warning }}>Some entries may describe the same sleep. Overlapping time counts once. Unknown-time totals need review before timed entries can be added.</Text> : null}
         {visibleSessions.map((entry, index) => <Pressable key={entry.id} accessibilityRole="button" accessibilityLabel={`Review sleep entry: ${sleepDurationText(sleepEntryAsleepHours(entry) ?? entry.hours)}`} onPress={() => { setDetailId(entry.id); setExcludeConfirm(false); setEntryError(""); setSheet("detail"); }} style={{ gap: 6, paddingVertical: 12, borderBottomWidth: index < visibleSessions.length - 1 ? 1 : 0, borderBottomColor: colors.rule }}>
@@ -166,12 +174,12 @@ function SleepJournalView({ data }: { data: ReturnType<typeof useSleepJournal> }
       </View> : null}
       <View style={section}>
         <Text accessibilityRole="header" style={title}>Daily sleep</Text>
-        <SleepHistoryChart days={days} selected={chartSelected} anchor={chartAnchor} target={data.target} onSelect={setChartDate} />
+        <SleepHistoryChart ready={ready} days={days} selected={chartSelected} anchor={chartAnchor} target={data.target} onSelect={setChartDate} />
         <View style={{ flexDirection: fontScale >= 1.5 ? "column" : "row", gap: 24 }}>
-          <View style={{ flex: 1, gap: 4 }}><Text style={{ ...text, fontFamily: notebookFonts.semibold }}>{sleepDurationText(week.average)}</Text><Text style={muted}>Average / {sleepDisplayDate(shiftSleepDate(chartSelected, -6))} - {sleepDisplayDate(chartSelected)}</Text></View>
-          <View style={{ flex: 1, gap: 4 }}><Text style={{ ...text, fontFamily: notebookFonts.semibold }}>{week.count} of 7</Text><Text style={muted}>Days recorded</Text></View>
+          <View style={{ flex: 1, gap: 4 }}><Text style={{ ...text, fontFamily: notebookFonts.semibold }}>{ready ? sleepDurationText(week.average) : "—"}</Text><Text style={muted}>Average / {sleepDisplayDate(shiftSleepDate(chartSelected, -6))} - {sleepDisplayDate(chartSelected)}</Text></View>
+          <View style={{ flex: 1, gap: 4 }}><Text style={{ ...text, fontFamily: notebookFonts.semibold }}>{ready ? `${week.count} of 7` : "—"}</Text><Text style={muted}>Days recorded</Text></View>
         </View>
-        <Text style={muted}>{week.count ? `${week.met} of ${week.count} recorded days met your target. ${7 - week.count} ${7 - week.count === 1 ? "day has" : "days have"} no entry.` : "Record sleep to start a weekly comparison."}</Text>
+        <Text style={muted}>{!ready ? "Load this history to see the weekly comparison." : week.count ? `${week.met} of ${week.count} recorded days met your target. ${7 - week.count} ${7 - week.count === 1 ? "day has" : "days have"} no entry.` : "Record sleep to start a weekly comparison."}</Text>
       </View>
       <View style={section}>
         <Text accessibilityRole="header" style={title}>Health sync</Text>

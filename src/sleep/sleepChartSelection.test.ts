@@ -25,7 +25,7 @@ it("separates summary metadata rows and draws entry rules only between entries",
 it("hides excluded sessions without offering a restore list on the Sleep screen", () => {
   const source = readFileSync("src/sleep/SleepScreen.tsx", "utf8");
   expect(source).toContain("visibleSessions = sessions.filter((entry) => !entry.excluded && !entry.providerDeleted)");
-  expect(source).toContain("{visibleSessions.length ?");
+  expect(source).toContain("{ready && visibleSessions.length ?");
   expect(source).not.toContain("View excluded entries");
   expect(source).not.toContain("Restore entry");
   expect(source).not.toContain("showExcluded");

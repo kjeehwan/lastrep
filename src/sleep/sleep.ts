@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { mutateSleepJournal } from "./sleepJournal";
-import { commitManualSleep, deriveSleepDays, emptySleepEntry, sleepDateKey, validateSleepHours } from "./sleepSessionModel";
-import { providerSleepEntry, readAllSleepPages, reconcileHealthSleep, type ProviderSleepRecord } from "./healthSleepImport";
+import { executeSleepCommand } from "./sleepJournal";
+import { emptySleepEntry, sleepDateKey, validateSleepHours } from "./sleepSessionModel";
+import { providerSleepEntry, readAllSleepPages, type ProviderSleepRecord } from "./healthSleepImport";
 import { Linking, Platform } from "react-native";
 import { applicationId } from "expo-application";
 import { collection, doc, getDoc, Timestamp } from "firebase/firestore";
@@ -288,13 +288,13 @@ async function importHealthSleep(uid: string, now: Date): Promise<SleepSyncResul
     const imported = incoming.filter((entry) => !deleted.includes(entry.providerId!));
     const previous = await getSleepProfile(uid);
     const origin = previous.originAppPackage ?? imported[0]?.origin ?? null;
-    const next = await mutateSleepJournal(uid, (entries) => reconcileHealthSleep(entries, imported, deleted, device!, fullRead ? { start: start.getTime(), end: now.getTime() } : undefined), { syncedAt: now, origin, authorize });
+    const committed = await executeSleepCommand(uid, { kind: "health", incoming: imported, deletedIds: deleted, device: device!, fullWindow: fullRead ? { start: start.getTime(), end: now.getTime() } : undefined }, { syncedAt: now, origin, authorize });
     await AsyncStorage.setItem(tokenKey, token!);
     await AsyncStorage.setItem(`sleep-last-check:${uid}`, now.toISOString());
-    const latest = deriveSleepDays(next, origin).days[0];
+    const latest = committed.summary;
     if (!incoming.length && !deleted.length) return { status: "no_data" };
-    if (!latest) return { status: "no_data" };
-    return { status: "success", sleepHours: latest.hours, sampleRecordedAt: Timestamp.fromMillis(latest.recordedAtMs ?? now.getTime()) };
+    if (latest.latestSleepHours == null) return { status: "no_data" };
+    return { status: "success", sleepHours: latest.latestSleepHours, sampleRecordedAt: latest.sampleRecordedAt ?? Timestamp.fromDate(now) };
   } catch (error) {
     return { status: "error", message: (error as Error)?.message ?? "Could not sync sleep. Saved records are unchanged." };
   }
@@ -336,7 +336,7 @@ export const saveManualSleepSample = async (uid: string, hours: number, now = ne
 export const saveManualSleepForDateKey = async (uid: string, hours: number, dateKey: string, now = new Date()): Promise<void> => {
   validateSleepHours(String(hours));
   const entry = emptySleepEntry(doc(collection(db, "_ids")).id, dateKey, hours, now);
-  await mutateSleepJournal(uid, (entries) => commitManualSleep(entries, entry, null));
+  await executeSleepCommand(uid, { kind: "manual", candidate: entry });
 };
 
 export const getSleepSampleAgeHours = (

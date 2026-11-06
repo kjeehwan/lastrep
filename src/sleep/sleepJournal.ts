@@ -1,6 +1,7 @@
 import { collection, doc, getDoc, getDocs, getDocsFromServer, runTransaction, Timestamp, type DocumentData, type Firestore } from "firebase/firestore";
 import { db } from "../config/firebaseConfig";
 import { deriveSleepDays, emptySleepEntry, sleepEntrySignature, type SleepEntry } from "./sleepSessionModel";
+import { applySleepCommand, type SleepCommand } from "./sleepCommands";
 
 const userRef = (uid: string, database: Firestore) => doc(database, "users", uid);
 const entriesRef = (uid: string, database: Firestore) => collection(database, "users", uid, "sleepSessions");
@@ -21,7 +22,7 @@ export function legacySleepEntries(data: DocumentData | undefined): SleepEntry[]
   }
   return entries;
 }
-function readEntry(id: string, data: DocumentData): SleepEntry {
+export function readSleepEntry(id: string, data: DocumentData): SleepEntry {
   // Documents are owned by the user; reject malformed saved records rather than inventing a total.
   const validDate = /^\d{4}-\d{2}-\d{2}$/.test(data.dateKey) || (data.dateKey === "undated" && data.kind === "legacy");
   if (data.id !== id || !validDate || !Number.isFinite(data.hours) || data.hours < 0 || data.hours > 24 || !["manual", "health"].includes(data.source) || !["legacy", "duration", "session"].includes(data.kind)) throw Error("A saved sleep entry could not be read.");
@@ -30,17 +31,26 @@ function readEntry(id: string, data: DocumentData): SleepEntry {
 export async function getSleepJournal(uid: string, database: Firestore = db) {
   const root = await getDoc(userRef(uid, database));
   const records = await getDocs(entriesRef(uid, database));
-  const entries = records.docs.map((row) => readEntry(row.id, row.data()));
+  const entries = records.docs.map((row) => readSleepEntry(row.id, row.data()));
   return { entries: entries.length || revision(root.data()) ? entries : legacySleepEntries(root.data()), profile: root.data()?.sleepProfile, target: root.data()?.sleepSettings?.targetHours };
 }
 
 /** A root revision serializes session writes plus their derived compatibility summary. */
 export async function mutateSleepJournal(uid: string, change: (entries: SleepEntry[]) => SleepEntry[], options: { syncedAt?: Date; origin?: string | null; authorize?: () => Promise<void> } = {}, database: Firestore = db) {
+  return (await commitSleepMutation(uid, change, options, database)).entries;
+}
+
+export async function executeSleepCommand(uid: string, command: SleepCommand, options: { syncedAt?: Date; origin?: string | null; authorize?: () => Promise<void> } = {}, database: Firestore = db) {
+  const result = await commitSleepMutation(uid, entries => applySleepCommand(entries, command), options, database);
+  return { summary: result.summary, revision: result.revision, affectedDates: result.affectedDates };
+}
+
+async function commitSleepMutation(uid: string, change: (entries: SleepEntry[]) => SleepEntry[], options: { syncedAt?: Date; origin?: string | null; authorize?: () => Promise<void> }, database: Firestore) {
   for (let attempt = 0; attempt < 4; attempt++) {
     await options.authorize?.();
     const root = await getDoc(userRef(uid, database));
     const records = await getDocsFromServer(entriesRef(uid, database));
-    const stored = records.docs.map((row) => readEntry(row.id, row.data()));
+    const stored = records.docs.map((row) => readSleepEntry(row.id, row.data()));
     const entries = stored.length || revision(root.data()) ? stored : legacySleepEntries(root.data());
     const next = change(entries);
     const preferred = options.origin ?? root.data()?.sleepProfile?.originAppPackage ?? null;
@@ -52,15 +62,15 @@ export async function mutateSleepJournal(uid: string, change: (entries: SleepEnt
     const removed = stored.filter((entry) => !retainedIds.has(entry.id));
     if (removed.some((entry) => entry.source === "health")) throw Error("Imported sessions must be excluded, not deleted.");
     if (changed.length + removed.length > 450) throw Error("Too many sleep changes to save at once. Try a smaller import.");
+    const summaries = days.slice(0, 30).map((day) => ({ dateKey: day.dateKey, sleepHours: Math.round(day.hours * 1000) / 1000, source: day.source, recordedAt: day.recordedAtMs == null ? null : Timestamp.fromMillis(day.recordedAtMs) }));
+    const latest = summaries[0];
+    const summary = { latestSleepHours: latest?.sleepHours ?? null, source: latest?.source ?? "manual", sampleRecordedAt: latest?.recordedAt ?? null, recentNightlyHours: summaries };
     await options.authorize?.();
     const committed = await runTransaction(database, async (transaction) => {
       const current = await transaction.get(userRef(uid, database));
       if (revision(current.data()) !== revision(root.data())) return false;
       for (const entry of changed) transaction.set(doc(entriesRef(uid, database), entry.id), entry);
       for (const entry of removed) transaction.delete(doc(entriesRef(uid, database), entry.id));
-      const summaries = days.slice(0, 30).map((day) => ({ dateKey: day.dateKey, sleepHours: Math.round(day.hours * 1000) / 1000, source: day.source, recordedAt: day.recordedAtMs == null ? null : Timestamp.fromMillis(day.recordedAtMs) }));
-      const latest = summaries[0];
-      const summary = { latestSleepHours: latest?.sleepHours ?? null, source: latest?.source ?? "manual", sampleRecordedAt: latest?.recordedAt ?? null, recentNightlyHours: summaries };
       transaction.set(userRef(uid, database), { sleepProfile: {
         journalRevision: revision(current.data()) + 1,
         ...summary,
@@ -71,7 +81,8 @@ export async function mutateSleepJournal(uid: string, change: (entries: SleepEnt
       } }, { merge: true });
       return true;
     });
-    if (committed) return next;
+    if (committed) return { entries: next, summary, revision: revision(root.data()) + 1,
+      affectedDates: [...new Set([...changed, ...removed, ...changed.flatMap(row => byId.has(row.id) ? [byId.get(row.id)!] : [])].map(row => row.dateKey))] };
   }
   throw Error("Sleep data changed on another device. Please try again.");
 }
