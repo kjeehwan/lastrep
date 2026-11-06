@@ -59,6 +59,14 @@ into any of them.
 
 ## Measured and incremental maintenance
 
+A6's [approved design](sleep-history-read-design.md) is implemented through its
+first increment: windowed display reads and explicit commands, retaining the
+full-ledger write calculation. [Verification](sleep-history-scoped-read-verification.md)
+covers 990 passing tests and Android 16 local-account checks. User review is
+complete; index deployment and a future app release enable installed clients
+to benefit. Delivery history is tracked in Git/PRs. Scoped mutation reads
+and incremental summaries are a separately reviewed second increment.
+
 | Task | Starting point | Completion evidence / decision |
 | --- | --- | --- |
 | A5: Extract workout orchestration | Choose one responsibility such as program/draft transitions. Define input, output and command ownership before moving code. | Behavior unchanged; cancel, switching and hydration cases covered. Shared editor receives meaningful capabilities rather than new dummy callbacks. No arbitrary line-count target. |
