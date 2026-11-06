@@ -144,13 +144,9 @@ const ROLLING_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 const PREMIUM_ENTITLEMENT_ID = "premium";
 const DEV_OVERRIDE_ENABLED = process.env.FUNCTIONS_EMULATOR === "true";
 
-const ENABLE_OPENAI_DECISION = (() => {
-  if (typeof process.env.ENABLE_OPENAI_DECISION === "string") {
-    return process.env.ENABLE_OPENAI_DECISION.toLowerCase() === "true";
-  }
-  // Default off for emulator/local, on for deployed environments.
-  return process.env.FUNCTIONS_EMULATOR !== "true";
-})();
+// Provider use is opt-in. Preserve the compatibility fallback for older clients.
+// Re-enabling requires the review described in docs/legacy-ai-lifecycle-runbook.md.
+const ENABLE_OPENAI_DECISION = process.env.ENABLE_OPENAI_DECISION?.toLowerCase() === "true";
 
 let openaiClient: OpenAI | null = null;
 const getOpenAIClient = () => {
@@ -216,25 +212,6 @@ const callOpenAIWithTimeout = async (
             ...decisionOutputJsonSchema,
           },
         },
-      },
-      { signal: controller.signal }
-    );
-  } finally {
-    clearTimeout(timer);
-  }
-};
-
-const callOpenAIPingWithTimeout = async (timeoutMs: number) => {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    return await getOpenAIClient().responses.create(
-      {
-        model: OPENAI_DECISION_MODEL,
-        input: "Reply with exactly: OK",
-        store: false,
-        max_output_tokens: 8,
-        reasoning: { effort: "low" },
       },
       { signal: controller.signal }
     );
@@ -1123,81 +1100,6 @@ export const setDevEntitlementOverride = functions
       );
 
     return { ok: true };
-  });
-
-export const debugOpenAiPing = functions
-  .region("asia-northeast3")
-  .runWith({ secrets: [OPENAI_API_KEY, DEV_UID_ALLOWLIST_SECRET] })
-  .https.onCall(async (_data, context) => {
-    if (!context.auth) {
-      throw new functions.https.HttpsError("unauthenticated", "Authentication required.");
-    }
-    assertDevUidAllowed(context.auth.uid);
-
-    const startedAt = Date.now();
-    try {
-      const response = await callOpenAIPingWithTimeout(3000);
-      const outputText = extractOutputText(response);
-      return {
-        ok: true,
-        latencyMs: Date.now() - startedAt,
-        outputPreview: outputText.slice(0, 20),
-      };
-    } catch (error) {
-      return {
-        ok: false,
-        latencyMs: Date.now() - startedAt,
-        error: summarizeOpenAiError(error),
-      };
-    }
-  });
-
-export const debugOpenAiDecision = functions
-  .region("asia-northeast3")
-  .runWith({ secrets: [OPENAI_API_KEY, DEV_UID_ALLOWLIST_SECRET] })
-  .https.onCall(async (data, context) => {
-    if (!context.auth) {
-      throw new functions.https.HttpsError("unauthenticated", "Authentication required.");
-    }
-    assertDevUidAllowed(context.auth.uid);
-
-    const schema = z
-      .object({
-        prompt: z.string().min(1).max(8000).optional(),
-        timeoutMs: z.number().int().min(1000).max(20000).optional(),
-        maxOutputTokens: z.number().int().min(32).max(1200).optional(),
-      })
-      .strict();
-    const parsed = schema.safeParse(data ?? {});
-    if (!parsed.success) {
-      throw new functions.https.HttpsError(
-        "invalid-argument",
-        `Invalid debug payload: ${formatZodError(parsed.error)}`
-      );
-    }
-
-    const prompt =
-      parsed.data.prompt ??
-      "Return a JSON object with keys decision, explanation, adjustments using allowed values.";
-    const timeoutMs = parsed.data.timeoutMs ?? 5000;
-    const maxOutputTokens = parsed.data.maxOutputTokens ?? 260;
-    const startedAt = Date.now();
-    try {
-      const response = await callOpenAIWithTimeout(prompt, timeoutMs, maxOutputTokens);
-      const debug = buildOpenAiResponseDebug(response);
-      return {
-        ok: true,
-        latencyMs: Date.now() - startedAt,
-        debug,
-        outputPreview: extractOutputText(response).slice(0, 300),
-      };
-    } catch (error) {
-      return {
-        ok: false,
-        latencyMs: Date.now() - startedAt,
-        error: summarizeOpenAiError(error),
-      };
-    }
   });
 
 export const resetDailyLimit = functions
