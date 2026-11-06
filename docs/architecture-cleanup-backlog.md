@@ -29,6 +29,13 @@ are proposals; they are not authorization for a production deployment or broad r
 See [measurements and next-stage decisions](architecture-cleanup-measurements-2026-11-06.md)
 for A6–A8. A5 remains incremental work when a relevant screen responsibility changes.
 
+A7 first step now reuses one root profile snapshot within each Today's Plan
+context load (three application-level profile reads reduced to one). Existing
+nutrition/sleep loaders share the same parsers. Four regression tests cover the
+single read, summary precedence, defaults, account isolation and missing profiles.
+Combined emulator-enabled suite: **136 files, 971 tests passed, zero skipped**.
+Broader document splitting and history-retention changes remain deferred.
+
 ## First changes
 
 | Order | Task | Scope and completion evidence |
