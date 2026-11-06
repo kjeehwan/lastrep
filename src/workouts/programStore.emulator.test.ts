@@ -3,7 +3,7 @@ import { initializeTestEnvironment, type RulesTestEnvironment } from "@firebase/
 import { doc, getDoc, getDocs, collection, setDoc, Timestamp } from "firebase/firestore";
 import { afterAll,beforeAll,beforeEach,describe,it,expect,vi } from "vitest";
 import { newProgramRun, programDayLink, type ProgramRecord } from "./programFlow";
-import { activateStoredProgram, deleteStoredProgram, saveLinkedWorkout, saveProgram } from "./programStore";
+import { activateStoredProgram, deleteStoredProgram, reconcileStoredProgramCalendar, saveLinkedWorkout, saveProgram } from "./programStore";
 const harness = vi.hoisted(() => ({db:null as any,auth:{currentUser:{uid:"alice"} as {uid:string}|null}}));
 vi.mock("../config/firebaseConfig",()=>({get db(){return harness.db;},auth:harness.auth}));
 const enabled = Boolean(process.env.FIRESTORE_EMULATOR_HOST);
@@ -13,6 +13,34 @@ describe.skipIf(!enabled)("program persistence",()=>{
  beforeAll(async()=>{const [host,port]=process.env.FIRESTORE_EMULATOR_HOST!.split(":");environment=await initializeTestEnvironment({projectId:"demo-lastrep-program-tests",firestore:{host,port:Number(port),rules:readFileSync("firestore.rules","utf-8")}});});
  beforeEach(async()=>{await environment.clearFirestore();harness.db=environment.authenticatedContext("alice").firestore();harness.auth.currentUser={uid:"alice"};await setDoc(doc(harness.db,"users","alice"),{nickname:"Local test"});});
  afterAll(async()=>environment?.cleanup());
+ it("repairs stale program dates only from matching workout identities and is idempotent",async()=>{
+  const p={...program,days:[program.days[0],{...program.days[0],routineId:"legs",title:"Legs"},program.days[1],program.days[0]]};
+  await saveProgram("alice",p);
+  const run={...newProgramRun(p,"run","2026-11-04"),cursor:3,marks:{
+   "0":{status:"completed" as const,dateKey:"2026-11-04",workoutId:"chest"},
+   "1":{status:"completed" as const,dateKey:"2026-11-05",workoutId:"legs"},
+  }};
+  const ref=doc(harness.db,"users","alice","workoutPrograms","p","runs","run");
+  await setDoc(ref,run);
+  for(const [ordinal,id,date] of [[0,"chest","2026-11-05"],[1,"legs","2026-11-06"]] as const){
+   await setDoc(doc(harness.db,"users","alice","workouts",id),{date:Timestamp.fromDate(new Date(date+"T12:00:00")),programLink:programDayLink(p,{...run,marks:{}},ordinal)});
+  }
+  const [next,concurrent]=await Promise.all([reconcileStoredProgramCalendar("alice","p","run"),reconcileStoredProgramCalendar("alice","p","run")]);
+  expect(concurrent).toEqual(next);
+  expect(next?.revision).toBe(1);
+  expect(next?.anchorDateKey).toBe("2026-11-06");
+  expect(next?.marks["0"].dateKey).toBe("2026-11-05");
+  expect(next?.marks["1"].dateKey).toBe("2026-11-06");
+  expect(await reconcileStoredProgramCalendar("alice","p","run")).toEqual(next);
+  expect((await getDoc(doc(harness.db,"users","alice","workouts","legs"))).data()?.date.toDate()).toEqual(new Date("2026-11-06T12:00:00"));
+ });
+ it("never infers a date correction from a same-named standalone workout",async()=>{
+  await saveProgram("alice",program);
+  const ref=doc(harness.db,"users","alice","workoutPrograms","p","runs","run");
+  await setDoc(ref,{...newProgramRun(program,"run","2026-11-04"),marks:{"0":{status:"completed",dateKey:"2026-11-04",workoutId:"standalone"}}});
+  await setDoc(doc(harness.db,"users","alice","workouts","standalone"),{title:"Chest",date:Timestamp.now(),programLink:null});
+  expect((await reconcileStoredProgramCalendar("alice","p","run"))?.anchorDateKey).toBe("2026-11-04");
+ });
  it("saves workout and completion atomically, and retry creates no duplicate",async()=>{
   await saveProgram("alice",program);const run=newProgramRun(program,"run","2026-11-02");await setDoc(doc(harness.db,"users","alice","workoutPrograms","p","runs","run"),run);
   const payload={title:"Chest",date:Timestamp.now(),exercises:[]},link=programDayLink(program,run,0)!;

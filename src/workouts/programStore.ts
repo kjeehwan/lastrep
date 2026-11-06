@@ -1,7 +1,7 @@
 import { collection,doc,getDocs,runTransaction,writeBatch,Timestamp } from "firebase/firestore";
 import { auth,db } from "../config/firebaseConfig";
 import { normalizeProgram } from "./program";
-import { completeProgramOccurrence,dateKey,newProgramRun,normalizeProgramRecord,programOccurrence,programSetupError,resumeProgramRun,type ProgramRecord,type ProgramRun,type ProgramLink } from "./programFlow";
+import { completedProgramCalendar,completeProgramOccurrence,dateKey,newProgramRun,normalizeProgramLink,normalizeProgramRecord,programOccurrence,programSetupError,resumeProgramRun,type ProgramRecord,type ProgramRun,type ProgramLink } from "./programFlow";
 const owner=(uid:string)=>{if(auth.currentUser?.uid!==uid)throw new Error("Your account changed. Reopen Workout.");};
 export const programRef=(uid:string,id:string)=>doc(db,"users",uid,"workoutPrograms",id);
 export const runRef=(uid:string,programId:string,runId:string)=>doc(programRef(uid,programId),"runs",runId);
@@ -46,12 +46,38 @@ export async function saveLinkedWorkout(uid:string,workoutId:string,payload:Reco
   if(link&&pSnap?.exists()&&rSnap?.exists()){
    const p=normalizeProgramRecord(link.programId,pSnap.data())!,run=rSnap.data() as ProgramRun;
    if(occurrence?.data()?.status==="completed")return;
-   const next=completeProgramOccurrence(p,run,link,workoutId,dateKey());
+   const savedDate=payload.date instanceof Timestamp?dateKey(payload.date.toDate()):dateKey();
+   const next=completeProgramOccurrence(p,run,link,workoutId,dateKey(),savedDate);
    tx.set(doc(rSnap.ref,"occurrences",String(link.ordinal)),{...programOccurrence(p,next,link.ordinal),completedAt:Date.now(),workoutId},{merge:true});
    // Older completed occurrences live in their own documents, keeping the current run small.
    next.marks=Object.fromEntries(Object.entries(next.marks).filter(([key])=>Number(key)>=next.cursor-p.days.length*2));
    tx.set(rSnap.ref,{...next,revision:(run.revision??0)+1});
   }
+ });
+}
+/** Bounded, one-time repair using only explicitly linked completed workouts. */
+export async function reconcileStoredProgramCalendar(uid:string,programId:string,runId:string){
+ owner(uid);return runTransaction(db,async tx=>{
+  const ref=runRef(uid,programId,runId),[pSnap,rSnap]=await Promise.all([tx.get(programRef(uid,programId)),tx.get(ref)]);
+  const program=normalizeProgramRecord(programId,pSnap.data());
+  if(!program||pSnap.data()?.deleting||!rSnap.exists())return null;
+  const run=rSnap.data() as ProgramRun;
+  if(Object.values(run.marks).every(mark=>mark.status!=="completed"||mark.completionDateVersion===1))return run;
+  const dates:Record<string,string>={};
+  for(const [key,mark] of Object.entries(run.marks)){
+   if(mark.status!=="completed"||!mark.workoutId)continue;
+   const workout=(await tx.get(doc(db,"users",uid,"workouts",mark.workoutId))).data();
+   const link=normalizeProgramLink(workout?.programLink);
+   if(link?.programId===programId&&link.runId===runId&&link.ordinal===Number(key)&&workout?.date instanceof Timestamp)dates[key]=dateKey(workout.date.toDate());
+  }
+  owner(uid);
+  const next={...completedProgramCalendar(program,run,dates,dateKey()),revision:(run.revision??0)+1};
+  for(const [key,mark] of Object.entries(next.marks))if(mark.status==="completed")next.marks[key]={...mark,completionDateVersion:1};
+  tx.set(ref,next);
+  for(const [key,mark] of Object.entries(next.marks))if(JSON.stringify(mark)!==JSON.stringify(run.marks[key])){
+   tx.set(doc(ref,"occurrences",key),programOccurrence(program,next,Number(key)),{merge:true});
+  }
+  return next;
  });
 }
 export async function deleteStoredProgram(uid:string,id:string){
