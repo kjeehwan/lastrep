@@ -14,10 +14,13 @@ are proposals; they are not authorization for a production deployment or broad r
 - A2 merged in [PR #81](https://github.com/kjeehwan/lastrep/pull/81): billing cannot
   provision a deleted/missing profile. Deleted/deleting accounts are acknowledged
   without writes; live Auth accounts awaiting profile creation and transient Auth
-  errors receive retryable HTTP failures. **Backend deployment remains pending.**
+  errors receive retryable HTTP failures. Deployed November 6 to
+  `revenuecatWebhook` only; the function is ACTIVE and live authentication/method
+  guards returned the expected 401/405 responses.
 - A3 merged in [PR #82](https://github.com/kjeehwan/lastrep/pull/82): each UID owns
-  a fresh entitlement store and disposed callbacks are ignored. Native account-switch
-  interaction/Play billing checks remain unperformed; verify before release.
+  a fresh entitlement store and disposed callbacks are ignored. Android 16 native
+  premium-to-free account switching and sign-out passed with local demo accounts.
+  Real Play purchase/restore flows were not exercised; this change does not alter them.
 - A4 merged in [PR #80](https://github.com/kjeehwan/lastrep/pull/80): application
   typecheck and a separate disposable Firebase boundary job. The job discovers
   new integration suites and rejects skipped/unexecuted files.
@@ -35,6 +38,10 @@ nutrition/sleep loaders share the same parsers. Four regression tests cover the
 single read, summary precedence, defaults, account isolation and missing profiles.
 Combined emulator-enabled suite: **136 files, 971 tests passed, zero skipped**.
 Broader document splitting and history-retention changes remain deferred.
+
+[Native and deployment verification](architecture-cleanup-native-verification.md)
+also covers manual body-entry persistence, failed-connection retry without losing
+input, and native Today's Plan context/review. No new AAB has been built.
 
 ## First changes
 
