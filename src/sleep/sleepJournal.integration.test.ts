@@ -24,7 +24,7 @@ describe.skipIf(!emulator)("sleep journal persistence", () => {
   const manual = (id: string, from: string, to: string): SleepEntry => ({ ...emptySleepEntry(id, "2026-10-17", (Date.parse(to) - Date.parse(from)) / HOUR_MS, now), kind: "session", startMs: Date.parse(from), endMs: Date.parse(to) });
   beforeAll(async () => {
     const [host, port] = emulator!.split(":");
-    env = await initializeTestEnvironment({ projectId: "lastrep-sleep-journal-tests", firestore: { host, port: Number(port), rules: readFileSync(join(process.cwd(), "firestore.rules"), "utf8") } });
+    env = await initializeTestEnvironment({ projectId: "demo-lastrep-sleep-journal-tests", firestore: { host, port: Number(port), rules: readFileSync(join(process.cwd(), "firestore.rules"), "utf8") } });
     database = env.authenticatedContext("alice").firestore() as unknown as Firestore;
   });
   beforeEach(async () => { await env.clearFirestore(); });
