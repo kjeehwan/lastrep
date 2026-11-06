@@ -16,6 +16,13 @@ export type SleepScopeReader = {
 /** Close all date, interval and identity dependencies before publishing totals. */
 export async function readSleepWindowScope(reader: SleepScopeReader, range: SleepDateRange,
   budget = { records: 500, rounds: 8 }) {
+  const initial = (await Promise.all([reader.range(range), reader.undated()])).flat();
+  return closeSleepScope(reader, initial, date => date === "undated" || date >= range.start && date <= range.end, budget);
+}
+
+/** Expand saved records to a closed calculation component; new command intervals are seeded by the caller. */
+export async function closeSleepScope(reader: SleepScopeReader, initial: SleepEntry[], completeDate: (date: string) => boolean = () => false,
+  budget = { records: 500, rounds: 8 }) {
   const entries = new Map<string, SleepEntry>(), expanded = new Set<string>(), dates = new Set<string>();
   let fetched = 0, coveredStart = Infinity, coveredEnd = -Infinity;
   const add = (rows: SleepEntry[]) => {
@@ -23,13 +30,13 @@ export async function readSleepWindowScope(reader: SleepScopeReader, range: Slee
     if (fetched > budget.records) throw new SleepScopeFallback("scope-budget");
     for (const row of rows) entries.set(row.id, row);
   };
-  (await Promise.all([reader.range(range), reader.undated()])).forEach(add);
+  add(initial);
   for (let round = 0; round < budget.rounds; round++) {
     const fresh = [...entries.values()].filter(row => !expanded.has(row.id));
     if (!fresh.length) return { entries: [...entries.values()], fetched };
     fresh.forEach(row => expanded.add(row.id));
     const missingDates = [...new Set(fresh.map(row => row.dateKey))].filter(date =>
-      date !== "undated" && !(date >= range.start && date <= range.end) && !dates.has(date));
+      !completeDate(date) && !dates.has(date));
     missingDates.forEach(date => dates.add(date));
     const active = fresh.filter(row => !row.excluded && !row.providerDeleted);
     if (active.some(row => (row.startMs == null) !== (row.endMs == null))) throw new SleepScopeFallback("unprovable-interval");

@@ -15,8 +15,10 @@ import { SleepDial } from "./SleepDial";
 
 export const sleepDisplayDate = (key: string) => parseSleepDate(key).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 const timeText = (ms: number) => { const date = new Date(ms); return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`; };
-export function SleepEntryEditor({ uid, selected, entry: initialEntry, onClose, onSaved }: { uid: string; selected: string; entry: SleepEntry | null; onClose: () => void; onSaved: (date: string) => void }) {
+export function SleepEntryEditor({ uid, selected: initialSelected, entry: initialEntry, onClose, onSaved }: { uid: string; selected: string; entry: SleepEntry | null; onClose: () => void; onSaved: (date: string) => void }) {
   const [entry] = useState(initialEntry);
+  // A background refresh may select a newer recorded day; the open draft keeps its own date.
+  const [selected] = useState(initialSelected);
   const { colors } = useNotebook();
   const { fontScale } = useWindowDimensions();
   const { isOffline } = useOfflineStatus();

@@ -59,13 +59,14 @@ into any of them.
 
 ## Measured and incremental maintenance
 
-A6's [approved design](sleep-history-read-design.md) is implemented through its
-first increment: windowed display reads and explicit commands, retaining the
-full-ledger write calculation. [Verification](sleep-history-scoped-read-verification.md)
-covers 990 passing tests and Android 16 local-account checks. User review is
-complete; index deployment and a future app release enable installed clients
-to benefit. Delivery history is tracked in Git/PRs. Scoped mutation reads
-and incremental summaries are a separately reviewed second increment.
+A6's [approved design](sleep-history-read-design.md) first increment merged in
+[PR #86](https://github.com/kjeehwan/lastrep/pull/86); its interval index was deployed
+and verified READY. [Second-increment verification](sleep-scoped-mutation-verification.md)
+now covers scoped commands, incremental 30-recorded-day summaries and safe full
+fallback: 1,022 passing tests and Android 16 local-account checks. This second
+increment is approved for delivery; the additional contained-window index deploys
+after merge. Delivery/deployment outcomes are recorded in the PR. Installed users
+need a future app release.
 
 | Task | Starting point | Completion evidence / decision |
 | --- | --- | --- |
