@@ -2,7 +2,32 @@
 
 Created November 6, 2026 from the
 [architecture audit](architecture-audit-2026-11-06.md), baseline `71ef49f`.
-These are proposals, not completed fixes or authorization to refactor/deploy.
+Implementation and release status are tracked separately below. Remaining items
+are proposals; they are not authorization for a production deployment or broad rewrite.
+
+## Status — November 6, 2026
+
+- Working rules, PR template and audit merged in [PR #78](https://github.com/kjeehwan/lastrep/pull/78).
+- A1 merged in [PR #79](https://github.com/kjeehwan/lastrep/pull/79): transactional
+  additions/imports, including atomic fingerprint checks and legacy baselines.
+  Manual saves require a connection; existing failure UI keeps input for retry.
+- A2 merged in [PR #81](https://github.com/kjeehwan/lastrep/pull/81): billing cannot
+  provision a deleted/missing profile. Deleted/deleting accounts are acknowledged
+  without writes; live Auth accounts awaiting profile creation and transient Auth
+  errors receive retryable HTTP failures. **Backend deployment remains pending.**
+- A3 merged in [PR #82](https://github.com/kjeehwan/lastrep/pull/82): each UID owns
+  a fresh entitlement store and disposed callbacks are ignored. Native account-switch
+  interaction/Play billing checks remain unperformed; verify before release.
+- A4 merged in [PR #80](https://github.com/kjeehwan/lastrep/pull/80): application
+  typecheck and a separate disposable Firebase boundary job. The job discovers
+  new integration suites and rejects skipped/unexecuted files.
+- Combined source verification: **135 test files, 967 tests passed, zero skipped**
+  with local Firestore/Storage emulators. Individual PR quality/boundary gates passed.
+  No production records, purchases or permissions changed. A1/A3 need a future
+  app build to reach installed users; no AAB was built for this work.
+
+See [measurements and next-stage decisions](architecture-cleanup-measurements-2026-11-06.md)
+for A6–A8. A5 remains incremental work when a relevant screen responsibility changes.
 
 ## First changes
 
