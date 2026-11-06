@@ -1,6 +1,7 @@
 import { getApps, initializeApp } from "firebase-admin/app";
 import { FieldValue, getFirestore, Timestamp } from "firebase-admin/firestore";
 import { getAuth } from "firebase-admin/auth";
+import { withBillingAccount } from "./billingAccountLifecycle";
 import { deleteProfilePhotosForAccount } from "./profilePhotos";
 import { deleteWorkoutSharingForAccount } from "./workoutSharing";
 export { workoutSharing, syncSharingNickname } from "./workoutSharing";
@@ -1356,8 +1357,7 @@ export const revenuecatWebhook = functions
         : null;
 
     const userRef = db.doc(`users/${appUserId}`);
-    const result = await db.runTransaction(async (tx) => {
-      const snap = await tx.get(userRef);
+    const result = await withBillingAccount(appUserId, async (tx, snap) => {
       const entitlement = snap.data()?.entitlement ?? {};
       const lastEventId =
         typeof entitlement.lastEventId === "string" ? entitlement.lastEventId : "";
@@ -1435,7 +1435,7 @@ export const revenuecatWebhook = functions
         previousIsSubscribed: currentIsSubscribed,
         nextIsSubscribed: mapped.isSubscribed,
       };
-    });
+    }, db);
 
     if (result.skipped && result.reason === "duplicate_event_id") {
       logRevenueCatLifecycleEvent("duplicate_event_skipped", {
