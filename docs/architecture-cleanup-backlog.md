@@ -1,0 +1,41 @@
+# Architecture cleanup backlog
+
+Created November 6, 2026 from the
+[architecture audit](architecture-audit-2026-11-06.md), baseline `71ef49f`.
+These are proposals, not completed fixes or authorization to refactor/deploy.
+
+## First changes
+
+| Order | Task | Scope and completion evidence |
+| --- | --- | --- |
+| 1 | A1: Atomic body-history additions/imports | Share a transaction-safe merge path across manual and provider additions. Keep provider calls outside transaction callbacks. Verify concurrent additions, addition vs edit/delete, duplicate import and partial metrics against a disposable Firestore emulator. Existing normalization/UI stays unchanged. |
+| 2 | A2: Account lifecycle gate for billing | Define handling for missing/deleting owners and legitimate first events. Test late events after deletion, deletion in progress, duplicate/stale events and permanent grants. Do not use personal subscriptions or delete real accounts for testing. |
+| 3 | A3: UID-owned entitlement state | Reset/key results and suppress old callbacks. Test account switch before new snapshot, sign-out, error and loading presentation. Preserve server authority and restore behavior. |
+| Alongside 1–3 | A4: CI boundary coverage | Add root typecheck and disposable emulator job for rules plus program/sharing/sleep and new regression suites. Assert expected integration suites actually execute. No production project credentials or record mutations. |
+
+Keep these as focused changes with independent review. A2 requires backend
+deployment after validation; A3 requires native/account-switch review. A1 does
+not require a schema migration by default. Do not bundle a large screen rewrite
+into any of them.
+
+## Measured and incremental maintenance
+
+| Task | Starting point | Completion evidence / decision |
+| --- | --- | --- |
+| A5: Extract workout orchestration | Choose one responsibility such as program/draft transitions. Define input, output and command ownership before moving code. | Behavior unchanged; cancel, switching and hydration cases covered. Shared editor receives meaningful capabilities rather than new dummy callbacks. No arbitrary line-count target. |
+| A6: Bound sleep work | Benchmark synthetic 30-, 365- and multi-year ledgers including excluded imports. | Document read/latency growth; design affected-window writes and paged history while retaining revision protection and overlap rules. Implement only after reviewing the design. |
+| A7: Reduce root-document coupling | Reuse one snapshot within a context load; inventory reads/writes and the body-history retention cap. | Equivalent guidance/context and account isolation; measured operations before/after. Decide retention with the user before changing it. Split documents only with evidence and a compatibility plan. |
+| A8: Resolve legacy AI lifecycle | Read-only inventory of live endpoint configuration and traffic, then check older-client dependence. | Written retain/disable/retire decision, current product/privacy documentation aligned, and explicit rollout/backward-compatibility checks. Source presence alone is not proof of usage. |
+
+## Continuing practice
+
+- Apply the review level in `AGENTS.md` to each PR; avoid making every cosmetic
+  change a full audit.
+- Add small behavioral tests at the boundary being changed. Source-string tests
+  can supplement but should not replace the relevant runtime test.
+- Preserve user drafts, units, imported provenance, completed sets and independent
+  recipient copies during any refactor or migration.
+- Keep architecture/source-map documentation current when ownership changes;
+  leave historical checkpoints dated rather than treating them as current specs.
+- A release still needs its normal native/Play checks. Documentation-only work
+  does not require another AAB.
