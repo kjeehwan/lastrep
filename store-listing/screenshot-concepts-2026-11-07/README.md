@@ -80,3 +80,30 @@ fonts/images, centered single-line headlines, layout clearance, source aspect
 ratio, dimensions, opacity and byte size. `asset-manifest.json` records hashes
 for every upload PNG and its native source. Visual browser review additionally
 checks content and device framing.
+
+## Final app polish and tablet framing refresh
+
+The user approved these refreshed scenes after PR #91 (app source b3b1d55):
+
+- Scene 04 at all three native device sizes: Review context is expanded to show
+  the final grouped recovery information, 12 dp muted details and consistent
+  18 dp right/down chevrons.
+- Scene 01 on both tablets: Home is scrolled so Body composition starts below
+  the fixed header, with Connect steps outside the viewport. Phone scene 01
+  remains unchanged.
+
+The other scenes were compared with the changed components. Scene 03 shows
+My programs, not the Sent/Received preview whose day numbers changed; scene 05
+shows the Sharing list, not Sender options. Their visible UI remains current.
+No app content was painted over and no app code changed during this refresh.
+
+All 24 image/source hashes, RGB dimensions and size limits pass. Exactly five
+upload images differ from PR #91. The renderer rechecked fonts, headline fit,
+spacing and source aspect ratios; native captures and composed images were
+visually reviewed. The phone capture was cold-started after display resizing
+to avoid an Android text-rendering artifact.
+
+Cleanup verified: disposable local accounts deleted and signed out, account
+caches cleared, original branding and emulator display/density/demo settings
+restored, and temporary capture Metro 8083 stopped. No Play Console upload or
+AAB build is included; listing upload remains a separate user action.
