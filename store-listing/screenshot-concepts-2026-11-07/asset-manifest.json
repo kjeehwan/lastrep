@@ -1,0 +1,221 @@
+{
+  "status": "For review; not uploaded",
+  "assets": [
+    {
+      "file": "phone/phone-01-home-progress.png",
+      "width": 1080,
+      "height": 1920,
+      "bytes": 174272,
+      "sha256": "b85b11d4ffa21c64d6869e88ac508d2145e52255f0f9f07284d326d42db2bc25",
+      "source": "captures/phone/01-home-progress.png",
+      "sourceSha256": "d619549d7e7e879fc4f7ae6ef0fc9f9071719ee80422a6c8834b7300c7947d8c"
+    },
+    {
+      "file": "phone/phone-02-workout.png",
+      "width": 1080,
+      "height": 1920,
+      "bytes": 151212,
+      "sha256": "962cc8288946ca54dad4c68acef69d0e3dc3bc9e679c952871b1803ea74dd8b6",
+      "source": "captures/phone/02-workout.png",
+      "sourceSha256": "7ca8e56f679cd6dad95d71105ca9c3086c05f74d82a5b793ee2b2227a7d82f33"
+    },
+    {
+      "file": "phone/phone-03-programs.png",
+      "width": 1080,
+      "height": 1920,
+      "bytes": 146619,
+      "sha256": "0803223a8c89cb79ef9af1b8c4c819a02e5b6b46cdb739a7bd0cac5b001643c3",
+      "source": "captures/phone/03-programs.png",
+      "sourceSha256": "05b4004fc18e3a4d91f6ddc1beaba2f95f9472737b3b5cdfb37c1e6b3c20d24b"
+    },
+    {
+      "file": "phone/phone-04-todays-plan.png",
+      "width": 1080,
+      "height": 1920,
+      "bytes": 182279,
+      "sha256": "d56b1e59ddfdc72625c24e44f083193d45bc68c15c4af54b3bb28ed228a0ead6",
+      "source": "captures/phone/04-todays-plan.png",
+      "sourceSha256": "ea83b4c122f8ebcaba0c73842c07fb84f71b1755770fab1adf87bab0e19e8887"
+    },
+    {
+      "file": "phone/phone-05-sharing.png",
+      "width": 1080,
+      "height": 1920,
+      "bytes": 168350,
+      "sha256": "c1d4ff6addbe194ccf3ad76da0eba693d959ce65dfe5a62a7f3c79d67dacd0a8",
+      "source": "captures/phone/05-sharing.png",
+      "sourceSha256": "e0d539767175002f990e45f84eebd7e7f88dc90104cc42abbdf69c0d0dc0ef28"
+    },
+    {
+      "file": "phone/phone-06-nutrition.png",
+      "width": 1080,
+      "height": 1920,
+      "bytes": 144827,
+      "sha256": "d67819d94f2b8e210ebdad925ede84cc4e7ca3943dbc3f44a57528353a83e2c3",
+      "source": "captures/phone/06-nutrition.png",
+      "sourceSha256": "bce2d7f339baf68760eb972c99c9d977b2e98783bfec9836f67f9e1eaced593c"
+    },
+    {
+      "file": "phone/phone-07-sleep.png",
+      "width": 1080,
+      "height": 1920,
+      "bytes": 148376,
+      "sha256": "f1273a992ada4f393877f1340dfc8596d9272b9f56814327de5b5eb90fc5e599",
+      "source": "captures/phone/07-sleep.png",
+      "sourceSha256": "b0de4c43f7cb1d16d01d94a7730cbe5eda4bd62861ce320d06ef23519d894b97"
+    },
+    {
+      "file": "phone/phone-08-health-sync.png",
+      "width": 1080,
+      "height": 1920,
+      "bytes": 178935,
+      "sha256": "4b38a133dcd4bb08d54fc25d6cc762b076859a8482f294bdecf37a085d78c3cb",
+      "source": "captures/phone/08-health-sync.png",
+      "sourceSha256": "d95fd91b6eafe6a666ac7431f2d9cfe5eae8004e67e93716ecc0296ff85adce6"
+    },
+    {
+      "file": "tablet-7-inch/tablet-7-inch-01-home-progress.png",
+      "width": 1080,
+      "height": 1920,
+      "bytes": 170533,
+      "sha256": "e219ef56f23666235d50eeb0d1bcb562ea2bb7d5f7c929b689aef956d8a1129e",
+      "source": "captures/tablet-7-inch/01-home-progress.png",
+      "sourceSha256": "8e5fbe465591db72a4d55326e9dd5c4ec408628957180b5a417a341e7a2f4d75"
+    },
+    {
+      "file": "tablet-7-inch/tablet-7-inch-02-workout.png",
+      "width": 1080,
+      "height": 1920,
+      "bytes": 135460,
+      "sha256": "d017eaa752e90b8705bf1bde0052109d5b8156c7d9215fdc11bc2ec536c5e33f",
+      "source": "captures/tablet-7-inch/02-workout.png",
+      "sourceSha256": "347fc7a8a3d787fca9e140cebf3436a67602413484a9fabd79e1efa648d7e4bc"
+    },
+    {
+      "file": "tablet-7-inch/tablet-7-inch-03-programs.png",
+      "width": 1080,
+      "height": 1920,
+      "bytes": 147240,
+      "sha256": "941fc68b2361f55025310a0c2804fd43ecf7874038bd5c3ccf534f922f31d501",
+      "source": "captures/tablet-7-inch/03-programs.png",
+      "sourceSha256": "2767662db9f072c6085b36743587084ca394e6b2464c565676136877bf27a148"
+    },
+    {
+      "file": "tablet-7-inch/tablet-7-inch-04-todays-plan.png",
+      "width": 1080,
+      "height": 1920,
+      "bytes": 152287,
+      "sha256": "f73a7b6597a51e921c1cbbcc3834c0535973dbce63b76bc20c2074395cb7c44c",
+      "source": "captures/tablet-7-inch/04-todays-plan.png",
+      "sourceSha256": "38e983ac1cfa3d1aeeea6071aa96c154cf8b358370faecde2e67d3221b43b1b7"
+    },
+    {
+      "file": "tablet-7-inch/tablet-7-inch-05-sharing.png",
+      "width": 1080,
+      "height": 1920,
+      "bytes": 154800,
+      "sha256": "7e66761744430f1c71d00a258a87a9bb14f0decd4a9810507325247290529803",
+      "source": "captures/tablet-7-inch/05-sharing.png",
+      "sourceSha256": "6d9411ab2e72f9c6e1a2bbb6e2b7576447458b013fb94908495c96f1264f86cb"
+    },
+    {
+      "file": "tablet-7-inch/tablet-7-inch-06-nutrition.png",
+      "width": 1080,
+      "height": 1920,
+      "bytes": 143302,
+      "sha256": "b1c096d48b61523daf292ea750ad15a91f39d730abc7a5e9f8ab67abb6ddebb1",
+      "source": "captures/tablet-7-inch/06-nutrition.png",
+      "sourceSha256": "05376454e572f547325dbb3c423e249ac509288f348fef3209c0c0112a40b470"
+    },
+    {
+      "file": "tablet-7-inch/tablet-7-inch-07-sleep.png",
+      "width": 1080,
+      "height": 1920,
+      "bytes": 154267,
+      "sha256": "75c4a1535f4df6ffab4560df38dbd9673f02ecae0148094df0aa40ac757dba5f",
+      "source": "captures/tablet-7-inch/07-sleep.png",
+      "sourceSha256": "13a13295fe20dae7b6719c8e558f70cdd8774c4ba44d2054722c486a106db851"
+    },
+    {
+      "file": "tablet-7-inch/tablet-7-inch-08-health-sync.png",
+      "width": 1080,
+      "height": 1920,
+      "bytes": 166844,
+      "sha256": "be74ca16b456e802cfa2e93fdcc13b385b9ddc66d0a3fb065dba02871302d0e8",
+      "source": "captures/tablet-7-inch/08-health-sync.png",
+      "sourceSha256": "990c6a020c7e6b5f684dc3977419257be0712de21a7c7287448706f1e13bfbc1"
+    },
+    {
+      "file": "tablet-10-inch/tablet-10-inch-01-home-progress.png",
+      "width": 1440,
+      "height": 2560,
+      "bytes": 230865,
+      "sha256": "eabe7dfca2d62371566ebf4bf5f477a7fc90dfebeda5b39d06b91a0a81e56dc1",
+      "source": "captures/tablet-10-inch/01-home-progress.png",
+      "sourceSha256": "5d07c2f1dd119698c9c975f2b0dfb20e906fc36daaead92ebe024097a2f8bb4d"
+    },
+    {
+      "file": "tablet-10-inch/tablet-10-inch-02-workout.png",
+      "width": 1440,
+      "height": 2560,
+      "bytes": 203085,
+      "sha256": "768e7dbc54bc5ddc8682ccbb09a49f8954453ca22fa099b4cd291181c35e9441",
+      "source": "captures/tablet-10-inch/02-workout.png",
+      "sourceSha256": "e6270dd8e1b52dc8868a797fadc50f77d0d20feabf87edece0154bc175830980"
+    },
+    {
+      "file": "tablet-10-inch/tablet-10-inch-03-programs.png",
+      "width": 1440,
+      "height": 2560,
+      "bytes": 207249,
+      "sha256": "24448d5f04e7f467d74179004808a4ef21b43bc1be21bef734d025a393ce2b1b",
+      "source": "captures/tablet-10-inch/03-programs.png",
+      "sourceSha256": "7346e7bf123cf3a1b553e0005dde5908622a9214507d73f33ff6a1f93ae5ab80"
+    },
+    {
+      "file": "tablet-10-inch/tablet-10-inch-04-todays-plan.png",
+      "width": 1440,
+      "height": 2560,
+      "bytes": 223068,
+      "sha256": "69cd6a3bf94a29cb6c6c33c49bbe5636c00a17c47f3e96cadd8eb4ced48f1cf2",
+      "source": "captures/tablet-10-inch/04-todays-plan.png",
+      "sourceSha256": "93ec9a8235cb8e0f60554e2a8a15b7de5ad560921b605eadda123bb6e7ef0fd2"
+    },
+    {
+      "file": "tablet-10-inch/tablet-10-inch-05-sharing.png",
+      "width": 1440,
+      "height": 2560,
+      "bytes": 224080,
+      "sha256": "2777f7855013e770b47173bde7c33756aac62d15d70b798a911f7c10acdb4a11",
+      "source": "captures/tablet-10-inch/05-sharing.png",
+      "sourceSha256": "007a1b0b5fca015e222cc5c578174386eef5bfd84d6daa509523304363074153"
+    },
+    {
+      "file": "tablet-10-inch/tablet-10-inch-06-nutrition.png",
+      "width": 1440,
+      "height": 2560,
+      "bytes": 181509,
+      "sha256": "f305159975a3869e328b7953abee67df47b41e55e26ec1d5cf9a9395dc341a72",
+      "source": "captures/tablet-10-inch/06-nutrition.png",
+      "sourceSha256": "1e334e1256fde04d82ebdee0282576bdada87026652f42a5f48604c468fdeb70"
+    },
+    {
+      "file": "tablet-10-inch/tablet-10-inch-07-sleep.png",
+      "width": 1440,
+      "height": 2560,
+      "bytes": 227270,
+      "sha256": "b00d9d47d58be95f09416d7521f46bab4256eb079f8ffb767deeac78c9447893",
+      "source": "captures/tablet-10-inch/07-sleep.png",
+      "sourceSha256": "16d352a951c267f033c83f8b136071ee6341e463ab15ef120ca84f2e38397c0a"
+    },
+    {
+      "file": "tablet-10-inch/tablet-10-inch-08-health-sync.png",
+      "width": 1440,
+      "height": 2560,
+      "bytes": 211067,
+      "sha256": "80d7abc0456a96ee3c867aa6c7ab05755c1fcd47133b43c2d835cca120fd74e6",
+      "source": "captures/tablet-10-inch/08-health-sync.png",
+      "sourceSha256": "7eb88ee86290e005036caed722ecb6b30298de8915305fa6eafcc852442f122b"
+    }
+  ]
+}

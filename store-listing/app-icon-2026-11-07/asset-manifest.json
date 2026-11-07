@@ -1,0 +1,12 @@
+{
+  "file": "lastrep-play-icon-opaque-white.png",
+  "source": "assets/images/logo-splash-512.png",
+  "sourceSha256": "11e16dae5f276baa4b2fa0f8db0fc16e1325148e44f1f4941d5dd082e1ea95c1",
+  "width": 512,
+  "height": 512,
+  "format": "32-bit RGBA PNG",
+  "allPixelsOpaque": true,
+  "background": "#ffffff",
+  "bytes": 41620,
+  "sha256": "c1708693da7f5a60d7942c3af7194ae9ff8bd16e68eeb4dddf40f41e970bb3cc"
+}
