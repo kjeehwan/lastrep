@@ -32,10 +32,10 @@
       "file": "phone/phone-04-todays-plan.png",
       "width": 1080,
       "height": 1920,
-      "bytes": 182279,
-      "sha256": "d56b1e59ddfdc72625c24e44f083193d45bc68c15c4af54b3bb28ed228a0ead6",
+      "bytes": 196416,
+      "sha256": "a128e8d6508e37144cbe74d5e91b5a231485f6fbcbf151a0e21bc2d955354220",
       "source": "captures/phone/04-todays-plan.png",
-      "sourceSha256": "ea83b4c122f8ebcaba0c73842c07fb84f71b1755770fab1adf87bab0e19e8887"
+      "sourceSha256": "cd627d1cc78e5381b2d47a1245df3c5b5c5b502ccf894b377bf7fd617f3dffba"
     },
     {
       "file": "phone/phone-05-sharing.png",
@@ -77,10 +77,10 @@
       "file": "tablet-7-inch/tablet-7-inch-01-home-progress.png",
       "width": 1080,
       "height": 1920,
-      "bytes": 170533,
-      "sha256": "e219ef56f23666235d50eeb0d1bcb562ea2bb7d5f7c929b689aef956d8a1129e",
+      "bytes": 171691,
+      "sha256": "393fbdad41dc6aeb5c62d85c3f4516d8a42b6c6569f98f407d0d9b2399297d6b",
       "source": "captures/tablet-7-inch/01-home-progress.png",
-      "sourceSha256": "8e5fbe465591db72a4d55326e9dd5c4ec408628957180b5a417a341e7a2f4d75"
+      "sourceSha256": "12f63a5099c30c488e9ae03d16236db50c5dde630d37e081182a593cfee717c3"
     },
     {
       "file": "tablet-7-inch/tablet-7-inch-02-workout.png",
@@ -104,10 +104,10 @@
       "file": "tablet-7-inch/tablet-7-inch-04-todays-plan.png",
       "width": 1080,
       "height": 1920,
-      "bytes": 152287,
-      "sha256": "f73a7b6597a51e921c1cbbcc3834c0535973dbce63b76bc20c2074395cb7c44c",
+      "bytes": 178496,
+      "sha256": "9536cdcfd652a1cfab6fea89c7e93fb10511e4e8287c08a76ee97a4a9da88053",
       "source": "captures/tablet-7-inch/04-todays-plan.png",
-      "sourceSha256": "38e983ac1cfa3d1aeeea6071aa96c154cf8b358370faecde2e67d3221b43b1b7"
+      "sourceSha256": "f2033e607d8c217f9f2f58528b767734b95e96305ef66d359948847a272f7503"
     },
     {
       "file": "tablet-7-inch/tablet-7-inch-05-sharing.png",
@@ -149,10 +149,10 @@
       "file": "tablet-10-inch/tablet-10-inch-01-home-progress.png",
       "width": 1440,
       "height": 2560,
-      "bytes": 230865,
-      "sha256": "eabe7dfca2d62371566ebf4bf5f477a7fc90dfebeda5b39d06b91a0a81e56dc1",
+      "bytes": 226313,
+      "sha256": "92489ab1d6b12660b444bc6752646d55fde35083d2cf88bd36a417e55332c930",
       "source": "captures/tablet-10-inch/01-home-progress.png",
-      "sourceSha256": "5d07c2f1dd119698c9c975f2b0dfb20e906fc36daaead92ebe024097a2f8bb4d"
+      "sourceSha256": "b7385bba2c169e1bde900dc13cb556bee8ee94d1ad1c254767f22cf991860855"
     },
     {
       "file": "tablet-10-inch/tablet-10-inch-02-workout.png",
@@ -176,10 +176,10 @@
       "file": "tablet-10-inch/tablet-10-inch-04-todays-plan.png",
       "width": 1440,
       "height": 2560,
-      "bytes": 223068,
-      "sha256": "69cd6a3bf94a29cb6c6c33c49bbe5636c00a17c47f3e96cadd8eb4ced48f1cf2",
+      "bytes": 240488,
+      "sha256": "519037b5163546cc61aff569d6913ba0f5e0e90642dba6972bb2cd951b27e8ef",
       "source": "captures/tablet-10-inch/04-todays-plan.png",
-      "sourceSha256": "93ec9a8235cb8e0f60554e2a8a15b7de5ad560921b605eadda123bb6e7ef0fd2"
+      "sourceSha256": "88ce4a9fdc799b2b6fe22c969cd8659d0eac9bea46d16aee77515576dad99448"
     },
     {
       "file": "tablet-10-inch/tablet-10-inch-05-sharing.png",
