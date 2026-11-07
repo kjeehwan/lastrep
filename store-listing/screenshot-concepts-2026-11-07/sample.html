@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Lastrep — Google Play screenshot concept</title>
+  <style>
+    @font-face { font-family: Serif; src: url('../../assets/fonts/source-serif-4.ttf'); font-weight: 200 900; }
+    @font-face { font-family: Sans; src: url('../../assets/fonts/source-sans-3.ttf'); font-weight: 200 900; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; width: 1080px; height: 1920px; overflow: hidden; }
+    body { background: #f6f2e9; color: #242720; font-family: Sans, sans-serif; }
+    header { position: absolute; left: 84px; right: 84px; top: 92px; text-align: center; }
+    h1 { margin: 0; font: 500 84px/1.1 Serif, serif; letter-spacing: -2.7px; white-space: nowrap; }
+    .device { position: absolute; top: 252px; left: 130px; width: 820px; padding: 10px; border: 2px solid #625f55; border-radius: 42px; background: #242720; box-shadow: 0 12px 26px #2427201a; }
+    .device::before, .device::after { content: ''; position: absolute; right: -6px; width: 4px; background: #625f55; border-radius: 0 2px 2px 0; }
+    .device::before { top: 190px; height: 112px; }
+    .device::after { top: 350px; height: 64px; }
+    .screen { overflow: hidden; border-radius: 30px; width: 796px; height: calc(796px * 20 / 9); background: #f6f2e9; }
+    .screen img { display: block; width: 100%; height: 100%; }
+    body.tablet .device { left: 90px; width: 900px; border-radius: 30px; }
+    body.tablet .screen { width: 876px; height: calc(876px * 16 / 9); border-radius: 18px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1 id="headline"></h1>
+  </header>
+  <div class="device" aria-label="Minimal Android-style frame">
+    <div class="screen"><img id="capture" alt=""></div>
+  </div>
+  <script src="catalog.js"></script>
+  <script>
+    const params = new URLSearchParams(location.search);
+    const sample = listingScreens.find(item => item.key === params.get('screen')) || listingScreens[0];
+    const device = listingDevices.find(item => item.key === params.get('device')) || listingDevices[0];
+    document.body.classList.toggle('tablet', device.key !== 'phone');
+    document.getElementById('headline').textContent = sample.headline;
+    document.getElementById('capture').src = `captures/${device.key}/${sample.stem}.png`;
+    document.getElementById('capture').alt = sample.alt;
+  </script>
+</body>
+</html>
