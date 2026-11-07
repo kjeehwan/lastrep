@@ -450,6 +450,12 @@ approved. Keep keyboard focus and accessible labels on the actual controls.
   decline from blocking, meaningful accessible names and at least 44 dp targets.
   At larger text or narrow widths, move that same group below the entry so the
   sender and workout remain readable.
+- Accepted Inbox entries open their preview by tapping the entry; show a right
+  caret beside the title. Keep Block sender in the received preview's three-dot
+  Sender options menu, not as the dominant action below an Inbox entry. Cancel
+  keeps the preview intact; a failed block stays retryable and a successful
+  block returns to the sharing list. Sent and external-link previews do not
+  expose recipient-only sender controls.
 - Long names wrap; do not shrink every label to fit. Units use their own space.
 - Numeric fields retain existing decimal rules and intermediate input such as
   `20.`; do not rewrite text or move focus during each keystroke.
@@ -2512,6 +2518,14 @@ Notebook sheets meet the top of the bottom tab bar without an extra gap. Reserve
 the tab bar or system bottom inset once in NotebookModal; nested sheet frames
 must not add another SafeAreaView bottom inset. Keep keyboard-aware protection.
 
+Today's Plan review fits its content up to 85% of the available modal height.
+Collapsing explanations or Review context removes their unused space; expanding
+them grows the sheet until that limit, then scrolls the body with the action
+button still visible. Use the normal content-to-action gap, retain scroll
+position where possible, and animate disclosure changes unless reduced motion
+is enabled. This is specific to the review sheet; Sharing keeps its approved
+stable geometry across Inbox, Requests and Sent.
+
 
 ### Body-composition chart periods (October 28 approval)
 
@@ -2758,3 +2772,23 @@ and phone behavior before claiming native acceptance.
   Never show a partial list or choose a single draft before loading completes.
   A delayed load shows a loading message; a failed load offers retry and preserves
   the existing drafts. Scope each picker request to the account; ignore superseded requests.
+
+### Review disclosures and sharing sender controls
+
+- Same-level Today's Plan disclosures use normal ink, 16 dp, medium weight.
+  Inset expanded Review context content so the recovery summary and Edit recovery
+  check-in action clearly belong to it; do not use rust to distinguish disclosures.
+  Inside that group, Edit recovery check-in, Recent performance and Training
+  context use the same normal-ink, 14 dp medium text. All values and supporting
+  details use muted-ink, 12/18 dp regular text. The caret distinguishes the edit
+  action. Apply the approved detail size after notebookSheet so its minimum-size
+  normalization does not alter the hierarchy. Preserve system text scaling and
+  readable contrast in both themes.
+- Shared-program previews use semibold day numbers for both workout and rest days.
+- Sender options uses the notebook modal shell with sender identity, a simple
+  destructive Block sender row and the standard close icon. Closing or Android
+  Back returns to the received preview; errors remain retryable in the options.
+
+- Today's Plan uses 18 dp chevrons consistently: right for collapsed disclosures
+  and navigation actions, down for expanded disclosures. Navigation chevrons stay
+  right-facing; expanded accessibility state follows disclosure visibility.

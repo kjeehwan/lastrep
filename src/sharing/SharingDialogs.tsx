@@ -15,7 +15,7 @@ import {
   orderBy,
   where,
 } from "firebase/firestore";
-import { Ban, Check, CheckCheck, CheckCircle2, CircleAlert, Clock3, Copy, Mail, MessageCircle, X } from "lucide-react-native";
+import { Ban, Check, CheckCheck, CheckCircle2, ChevronRight, CircleAlert, Clock3, Copy, Mail, MessageCircle, MoreHorizontal, X } from "lucide-react-native";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, Share, Switch, Text, View, useWindowDimensions } from "react-native";
 import { db } from "../config/firebaseConfig";
@@ -59,6 +59,7 @@ type Props = {
 };
 type Step =
   | "center"
+  | "sender-options"
   | "preview"
   | "edit"
   | "people"
@@ -249,7 +250,7 @@ export function SharingDialogs({
   }, [query, step, sharingCall]);
   const close = () => {
     if (busy) return;
-    if (step === "edit") {
+    if (step === "edit" || step === "sender-options") {
       setStep("preview");
       return;
     }
@@ -290,6 +291,13 @@ export function SharingDialogs({
   const respond = (item: SharingDelivery, action: string) =>
     void run(async () => {
       await sharingCall("respond", { deliveryId: item.id, action });
+      if (!mounted.current) return;
+      if (action === "block" && (step === "preview" || step === "sender-options")) {
+        setSelectedItem(null);
+        setPlan(null);
+        setSnapshot(null);
+        setStep("center");
+      }
       setFeedback(
         action === "accept"
           ? "Request accepted. Open the plan from Inbox."
@@ -424,6 +432,34 @@ export function SharingDialogs({
                     : screen === "center" || screen === "link"
                       ? programPlan ? "Received program" : "Shared workout"
                       : programPlan ? "Review program" : "Review workout";
+  if (step === "sender-options" && selectedItem && "sender" in selectedItem) {
+    return (
+      <WorkoutModalShell visible onRequestClose={close} dismissOnBackdropPress={!busy}
+        backdropStyle={styles.modalBackdrop} cardStyle={{ ...styles.modalCard, maxWidth: 600 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+          <Text accessibilityRole="header" style={[styles.modalTitle, { flex: 1, marginBottom: 0 }]}>Sender options</Text>
+          <Pressable accessibilityRole="button" accessibilityLabel="Close sender options" disabled={busy} onPress={close}
+            style={{ width: 44, height: 44, alignItems: "center", justifyContent: "center" }}>
+            <X color={colors.ink} size={22} />
+          </Pressable>
+        </View>
+        <View style={{ flexDirection: inlineRequestActions ? "row" : "column", alignItems: inlineRequestActions ? "center" : "stretch", gap: 16, paddingVertical: 16 }}>
+          <View style={{ flex: inlineRequestActions ? 1 : undefined, minWidth: 0, gap: 6 }}>
+            <Text style={{ color: colors.ink, fontSize: 16, fontWeight: "500" }}>{selectedItem.sender.nickname}</Text>
+            <Text style={styles.muted}>@{selectedItem.sender.username}</Text>
+          </View>
+          <Pressable accessibilityRole="button" accessibilityLabel={`Block sender ${selectedItem.sender.nickname}`}
+            disabled={busy} accessibilityState={{ disabled: busy }} onPress={() => respond(selectedItem, "block")}
+            style={{ minWidth: 64, minHeight: 56, paddingVertical: 4, alignItems: "center", justifyContent: "center", gap: 6, opacity: busy ? 0.5 : 1 }}>
+            <Ban color={colors.danger} size={22} strokeWidth={1.7} />
+            <Text style={{ color: colors.danger, fontSize: 12, textAlign: "center" }}>Block</Text>
+          </Pressable>
+        </View>
+        {!!error && <Text accessibilityRole="alert" style={{ color: colors.danger, marginTop: 12 }}>{error}</Text>}
+        {busy && <Text accessibilityLiveRegion="polite" style={styles.muted}>Please wait...</Text>}
+      </WorkoutModalShell>
+    );
+  }
   return (
     <WorkoutModalShell
       visible
@@ -465,6 +501,17 @@ export function SharingDialogs({
               />
             )}
             </View>
+            {step === "preview" && snapshot && selectedItem && "sender" in selectedItem && (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Sender options"
+                disabled={busy}
+                onPress={() => setStep("sender-options")}
+                style={{ width: 44, height: 44, alignItems: "center", justifyContent: "center" }}
+              >
+                <MoreHorizontal color={colors.ink} size={22} />
+              </Pressable>
+            )}
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Close sharing"
@@ -590,13 +637,16 @@ export function SharingDialogs({
                       }
                       accessibilityRole="button"
                       accessibilityLabel={`Open ${item.title}`}
-                      accessibilityHint="View this shared workout"
+                      accessibilityHint={`View this shared ${item.kind === "program" ? "program" : "workout"}`}
                       accessibilityState={{ disabled: busy }}
                       onPress={() => openItem(item)}
                       style={{ minHeight: 48, gap: 8, paddingVertical: 4, ...("sender" in item && item.status === "request" && inlineRequestActions ? { flex: 1, minWidth: 0 } : {}) }}
                     >
                       <Text style={styles.muted}>{item.kind === "program" ? "Program" : "Workout"}</Text>
-                      <Text style={[styles.sectionTitle, "sender" in item && item.status === "request" && { marginBottom: 0 }]}>{item.title}</Text>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                        <Text style={[styles.sectionTitle, { flex: 1, marginBottom: 0 }]}>{item.title}</Text>
+                        {!("sender" in item && item.status === "request") && <ChevronRight size={20} color={colors.muted} strokeWidth={1.5} />}
+                      </View>
                       {"sender" in item && item.status === "request" ? (
                         <View style={{ gap: 2 }}>
                           <Text style={styles.muted}>{item.sender.nickname}</Text>
@@ -647,17 +697,7 @@ export function SharingDialogs({
                           </Pressable>
                         ))}
                       </View>
-                    ) : (
-                      <>
-                        {"sender" in item && (
-                          <SharingButton
-                            label={"Block sender"}
-                            onPress={() => respond(item, "block")}
-                            busy={busy}
-                          />
-                        )}
-                      </>
-                    )}
+                    ) : null}
                   </View>
                 ))}
                 {!loadingList && cursor && (
