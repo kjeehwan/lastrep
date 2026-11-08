@@ -33,3 +33,18 @@ The user submitted these listing changes for Google Play review on November 6, 2
 The final feature graphic uses the existing gradient wordmark and the tagline "Build on your last rep." on the app's warm paper background. Individual files are versioned; duplicate ZIP bundles are not retained.
 
 Screenshot filenames include their device group: `phone-01-home-progress.png`, `tablet-7-inch-01-home-progress.png`, and `tablet-10-inch-01-home-progress.png`.
+
+## Feature graphic typography refresh - November 9, 2026
+
+The tagline now uses the same bundled Source Serif 4 font and 400 weight as
+the developer-profile header. The HTML uses a distinct registered font-family
+name and relative asset paths so the font actually loads when opened locally.
+The centered layout, wordmark, tagline and paper background are retained.
+
+Regenerate with `node store-listing/en-US-2026-11-05/render-feature-graphic.cjs`.
+It uses the local Playwright/Edge setup documented for the screenshot gallery
+(or CHROME_PATH), verifies the loaded font, weight and headline fit, writes an
+opaque 1024 x 500 RGB PNG under 15 MB, and updates only the feature-graphic
+entry in the manifest. The result was visually compared with the developer
+header. The user approved and uploaded this refresh, and submitted the listing
+changes for Google Play review on November 9, 2026. Publication remains pending.
