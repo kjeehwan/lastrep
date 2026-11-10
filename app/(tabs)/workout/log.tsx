@@ -1,3 +1,7 @@
+import { exerciseDisplayUnit, resolveDistanceUnit, resolveExerciseMode, type DistanceUnit } from "../../../src/workouts/workoutLog/exercisePresentation";
+import { annotateCompletedProgramDrafts, resumableProgramDrafts } from "../../../src/workouts/workoutLog/programDraftCompletion";
+import { useProgramDraftCompletion } from "../../../src/workouts/workoutLog/useProgramDraftCompletion";
+import { copySetPrescription, duplicateSetPrescription } from "../../../src/workouts/workoutLog/copySetPrescription";
 import { restoreDeloadExercises } from "../../../src/workouts/deload";
 import { ProgressionSettingsSheet } from "../../../src/workouts/workoutLog/ProgressionSettingsSheet";
 import { useProgressionPreferences } from "../../../src/workouts/workoutLog/useProgressionPreferences";
@@ -38,6 +42,7 @@ Keyboard,
 KeyboardAvoidingView,
 Platform,
 ScrollView,
+Switch,
 StyleSheet,
 Text,
 TextInput,
@@ -150,6 +155,7 @@ export default function WorkoutLog() {
   const isTabletLayout = Math.min(width, height) >= 600;
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [warmupTarget, setWarmupTarget] = useState<{ uid: string; exercise: Exercise; unit: WarmupUnit; barbell: boolean } | null>(null);
+  const [distanceUnit, setDistanceUnit] = useState<DistanceUnit>("km");
   const [effortScale, setEffortScale] = useState<EffortScale>("rpe");
   const [exerciseUnits, setExerciseUnits] = useState<Record<string, Unit>>({});
   const [favoriteExercises, setFavoriteExercises] = useState<string[]>([]);
@@ -301,6 +307,8 @@ export default function WorkoutLog() {
   const [programManagerRequest,setProgramManagerRequest] = useState<{programId?:string;action?:"library"|"create"|"start";token:number}|null>(null);
   const [workoutView, setWorkoutView] = useState<"choices" | "editor">("choices");
   const [programLink, setProgramLink] = useState<ProgramLink | null>(null);
+  const [completedProgramWorkoutId, setCompletedProgramWorkoutId] = useState<string | null>(null);
+  const programCompletion = useProgramDraftCompletion(activeUid, programLink);
   const [workoutSlot, setWorkoutSlot] = useState("single");
   const [deloadBackup,setDeloadBackup]=useState<{id:string;before:Exercise[];after:Exercise[]}|null>(null);
   const [workoutSaveId, setWorkoutSaveId] = useState<string | null>(null);
@@ -308,7 +316,7 @@ export default function WorkoutLog() {
   const [programRoutineAssignment, setProgramRoutineAssignment] = useState<{ programId: string; day: number; returnSlot: string; routineId: string } | null>(null);
   const [draftReload, setDraftReload] = useState(0);
   const programs = useWorkoutPrograms(activeUid);
-  const savedDrafts={...(parkedDraftSnapshot?.uid===activeUid?parkedDraftSnapshot.slots:{}),...(exercises.length||routineBuilderMode?{[workoutSlot]:{sessionTitle,workoutSlot,routineBuilderMode,programLink}}:{})};
+  const savedDrafts=resumableProgramDrafts({...(parkedDraftSnapshot?.uid===activeUid?parkedDraftSnapshot.slots:{}),...(exercises.length||routineBuilderMode?{[workoutSlot]:{sessionTitle,workoutSlot,routineBuilderMode,programLink,completedProgramWorkoutId:completedProgramWorkoutId??programCompletion.workoutId}}:{})});
   const draftHydratedRef = useRef(false);
   const [draftReadyUid, setDraftReadyUid] = useState<string | null>(null);
   const scrollNativeGesture = useMemo(() => Gesture.Native(), []);
@@ -338,9 +346,9 @@ export default function WorkoutLog() {
       restTimerByExercise,
       recommendationUsage,
       lastAppliedRoutineId,
-      lastAppliedRoutineName, programLink, workoutSlot, workoutSaveId, routineBuilderMode, programRoutineAssignment, deloadBackup,
+      lastAppliedRoutineName, programLink, completedProgramWorkoutId, workoutSlot, workoutSaveId, routineBuilderMode, programRoutineAssignment, deloadBackup,
     }),
-    [exercises, exerciseUnits, sessionTitle, sessionDateText, elapsedSeconds, workoutTimerRunning, workoutTimerStartedAtMs, workoutTimerHasStarted, restTimerByExercise, recommendationUsage, lastAppliedRoutineId, lastAppliedRoutineName, programLink, workoutSlot, workoutSaveId, routineBuilderMode, programRoutineAssignment, deloadBackup]
+    [exercises, exerciseUnits, sessionTitle, sessionDateText, elapsedSeconds, workoutTimerRunning, workoutTimerStartedAtMs, workoutTimerHasStarted, restTimerByExercise, recommendationUsage, lastAppliedRoutineId, lastAppliedRoutineName, programLink, completedProgramWorkoutId, workoutSlot, workoutSaveId, routineBuilderMode, programRoutineAssignment, deloadBackup]
   );
   const availableWeightsPreferences = useAvailableWeights(activeUid);
   const progressionPreferences = useProgressionPreferences(activeUid);
@@ -399,9 +407,9 @@ export default function WorkoutLog() {
       draftHydratedRef.current = false;
       restTimerSnapshotRef.current = {};
       setActiveUid(user?.uid ?? null);
-      setWorkoutView("choices"); setProgramLink(null); setDeloadBackup(null); setRoutineBuilderMode(false); setWorkoutSlot("single");
+      setWorkoutView("choices"); setProgramLink(null); setCompletedProgramWorkoutId(null); setDeloadBackup(null); setRoutineBuilderMode(false); setWorkoutSlot("single");
       setWorkoutSaveId(null); workoutSaveIdRef.current = null; setProgramRoutineAssignment(null);
-      setEffortScale("rpe");
+      setEffortScale("rpe"); setDistanceUnit("km");
       setSessionPhase("Hypertrophy");
       setLastAppliedRoutineId(null); setLastAppliedRoutineName(null);
       appliedRestPreferencesRef.current = {};
@@ -419,7 +427,7 @@ export default function WorkoutLog() {
     return onSnapshot(doc(db, "users", activeUid), (snapshot) => {
       const data = snapshot.data();
       if (!data) return;
-      setEffortScale(resolveEffortScale(data.effortScale));
+      setEffortScale(resolveEffortScale(data.effortScale)); setDistanceUnit(resolveDistanceUnit(data.distanceUnit));
       setSessionPhase(data.trainingPhase === "Strength" || data.trainingPhase === "Power" ? data.trainingPhase : "Hypertrophy");
       setPhaseData(data);
     }, (error) => {
@@ -617,13 +625,13 @@ export default function WorkoutLog() {
         if (exists) return prev;
         return [...prev, buildExerciseDraft(trimmed, id)];
       });
-      // default to kg for resistance and km for cardio
-      setExerciseUnits((prev) => ({ ...prev, [id]: mode === "cardio" ? "km" : "kg" }));
+      // Cardio follows the Profile distance preference unless overridden per exercise.
+      setExerciseUnits((prev) => ({ ...prev, [id]: mode === "cardio" ? distanceUnit : "kg" }));
       setRestPreferenceByExercise((prev) => ({ ...prev, [id]: restSeconds }));
       setRestCustomInputByExercise((prev) => ({ ...prev, [id]: "" }));
       setRestTimerByExercise((prev) => ({ ...prev, [id]: { remainingSec: restSeconds, running: false } }));
     },
-    [buildExerciseDraft, getExerciseModeByName, getSavedRestPreference]
+    [buildExerciseDraft, getExerciseModeByName, getSavedRestPreference, distanceUnit]
   );
 
   const openAddExercise = useCallback(() => {
@@ -657,7 +665,7 @@ export default function WorkoutLog() {
   );
   const getExerciseMode = useCallback(
     (exerciseName: string): ExerciseMode =>
-      exercises.find(e => e.name === exerciseName)?.mode ?? (findCatalogExercise(exerciseName)?.group === "cardio" ? "cardio" : "resistance"),
+      resolveExerciseMode(exercises.find(e => e.name === exerciseName)?.mode, findCatalogExercise(exerciseName)?.group),
     [findCatalogExercise, exercises]
   );
   const getExerciseZone = useCallback((exercise: Exercise) => {
@@ -671,13 +679,14 @@ export default function WorkoutLog() {
       distanceKm?: number | null;
       durationSec?: number | null;
       zone?: string;
-    }) => {
+    }, displayUnit: Unit = distanceUnit) => {
       const unit: Unit = "kg";
-      const distance = formatDistanceInput(set.distanceKm ?? null, unit);
+      const cardioUnit = resolveDistanceUnit(displayUnit);
+      const distance = formatDistanceInput(set.distanceKm ?? null, cardioUnit);
       const duration = formatDurationInput(set.durationSec ?? null);
       const zone = String(set.zone || "").trim();
       if (distance || duration || zone) {
-        const distText = distance ? `${distance} km` : "-";
+        const distText = distance ? `${distance} ${cardioUnit}` : "-";
         const timeText = formatDurationHoursMinutes(set.durationSec ?? null) || duration || "-";
         if (zone) {
           return `${distText} in ${timeText} · Z${zone}`;
@@ -692,7 +701,7 @@ export default function WorkoutLog() {
       }
       return `${weight} kg x ${reps}${effort}`;
     },
-    [effortScale]
+    [effortScale, distanceUnit]
   );
 
   const exerciseSearchIndex = useMemo(() => indexExerciseSearch(mergedCatalog), [mergedCatalog]);
@@ -753,7 +762,7 @@ export default function WorkoutLog() {
               notes: typeof ex?.notes === "string" ? ex.notes : "",
               tempo: typeof ex?.tempo === "string" ? ex.tempo : "",
               zone: typeof ex?.zone === "string" ? ex.zone : "",
-              mode: ex?.mode === "cardio" ? "cardio" : "resistance",
+              mode: resolveExerciseMode(ex?.mode, EXERCISE_CATALOG.find(item => normalizeExerciseName(item.name) === normalizeExerciseName(ex?.name || ""))?.group),
               cardioSessionType:
                 ex?.cardioSessionType === "steady" ||
                 ex?.cardioSessionType === "intervals" ||
@@ -817,7 +826,7 @@ export default function WorkoutLog() {
             notes: typeof exercise?.notes === "string" ? exercise.notes : "",
             tempo: typeof exercise?.tempo === "string" ? exercise.tempo : "",
             zone: typeof exercise?.zone === "string" ? exercise.zone : "",
-            mode: exercise?.mode === "cardio" ? "cardio" : "resistance",
+            mode: resolveExerciseMode(exercise?.mode, EXERCISE_CATALOG.find(item => normalizeExerciseName(item.name) === normalizeExerciseName(exercise?.name || ""))?.group),
             unit: ["kg", "lbs", "km", "mi"].includes(exercise?.unit) ? exercise.unit : undefined,
             restSec: typeof exercise?.restSec === "number" ? exercise.restSec : undefined,
             cardioSessionType:
@@ -883,6 +892,7 @@ export default function WorkoutLog() {
     let active = true;
     const requestedUid = auth.currentUser?.uid;
     const loadDraft = async () => {
+      setDraftReadyUid(null);
       let loadedSuccessfully = false;
       try {
         const user = auth.currentUser;
@@ -890,8 +900,14 @@ export default function WorkoutLog() {
         const {raw,slots} = await loadWorkoutDraftCache(AsyncStorage,getDraftKey(user.uid),`workout-draft-slots-v1:${user.uid}`);
         if (!active || auth.currentUser?.uid !== user.uid) return;
         setParkedDraftSnapshot({uid:user.uid,slots});
+        // Refresh parked completion evidence without delaying offline draft hydration.
+        void annotateCompletedProgramDrafts(user.uid, slots).then(checked => {
+          if (!active || auth.currentUser?.uid !== user.uid) return;
+          setParkedDraftSnapshot(previous => previous?.uid === user.uid && previous.slots === slots ? {uid:user.uid,slots:checked} : previous);
+        }).catch(() => { /* Keep all local drafts when completion cannot be checked. */ });
         if (!raw) {
           loadedSuccessfully = true;
+          setProgramLink(null); setCompletedProgramWorkoutId(null);
           // No draft for this account: clear any in-memory state from previous account/session.
           setExercises([]);
           setLastAppliedRoutineId(null); setLastAppliedRoutineName(null);
@@ -908,6 +924,7 @@ export default function WorkoutLog() {
         if (raw) {
           const parsed = JSON.parse(raw);
           setProgramLink(normalizeProgramLink(parsed.programLink));
+          setCompletedProgramWorkoutId(typeof parsed.completedProgramWorkoutId === "string" ? parsed.completedProgramWorkoutId : null);
           setDeloadBackup(parsed.deloadBackup&&typeof parsed.deloadBackup.id==="string"&&Array.isArray(parsed.deloadBackup.before)&&Array.isArray(parsed.deloadBackup.after)?parsed.deloadBackup:null);
           setWorkoutSlot(normalizeProgramLink(parsed.programLink)?programDraftSlot(parsed.programLink.runId,parsed.programLink.ordinal):typeof parsed.workoutSlot === "string"?parsed.workoutSlot:"single");
           setWorkoutSaveId(typeof parsed.workoutSaveId === "string" ? parsed.workoutSaveId : null);
@@ -1111,7 +1128,7 @@ export default function WorkoutLog() {
             setExercises(old => append ? [...old, ...imported.exercises] : imported.exercises);
             setExerciseUnits(old => append ? { ...old, ...imported.units } : imported.units);
             setRestPreferenceByExercise(old => append ? { ...old, ...imported.rest } : imported.rest);
-            if (!append) { setProgramLink(null); setWorkoutSlot("single"); setWorkoutSaveId(null); workoutSaveIdRef.current = null; setWorkoutView("editor"); setSessionTitle(sharedPlan.title); setSessionDateText(toLocalDateKey(new Date())); resetElapsedTimer(); setRestTimerByExercise({}); setLastAppliedRoutineId(null); setLastAppliedRoutineName(null); setRoutineBuilderMode(false); }
+            if (!append) { setProgramLink(null); setCompletedProgramWorkoutId(null); setWorkoutSlot("single"); setWorkoutSaveId(null); workoutSaveIdRef.current = null; setWorkoutView("editor"); setSessionTitle(sharedPlan.title); setSessionDateText(toLocalDateKey(new Date())); resetElapsedTimer(); setRestTimerByExercise({}); setLastAppliedRoutineId(null); setLastAppliedRoutineName(null); setRoutineBuilderMode(false); }
             setUiFeedback(append ? "Shared exercises added." : "Shared workout is ready to edit.");
           };
           if (exercises.length) showAppDialog({ title: "A workout is already open", message: "Keep your workout, add the shared exercises, or replace the current draft. Replacing discards the current unsaved workout.", buttonLayout: "vertical", buttons: [{ text: "Keep current workout", role: "cancel", variant: "secondary" }, { text: "Add shared exercises", variant: "primary", onPress: () => apply(true) }, { text: "Replace current workout", role: "destructive", variant: "secondary", onPress: () => apply(false) }] });
@@ -1315,6 +1332,15 @@ export default function WorkoutLog() {
   }, [restTimerByExercise]);
 
   const restAlerts = useRestAlerts(activeUid, draftReadyUid === activeUid, restTimerByExercise, exercises, playGong);
+  const { reconcileProgramCompletion } = useEventCallbacks({ reconcileProgramCompletion: () => {
+    if (!activeUid || auth.currentUser?.uid !== activeUid || draftReadyUid !== activeUid || !draftHydratedRef.current || !programCompletion.workoutId || saving) return;
+    setCompletedProgramWorkoutId(programCompletion.workoutId);
+    pauseElapsedTimer();
+    setRestTimerByExercise(previous => Object.fromEntries(Object.entries(previous).map(([id, clock]) => [id, { ...clock, running: false, endsAtMs: undefined }])));
+    restAlerts.clear();
+    setWorkoutView("choices");
+  } });
+  useEffect(() => { reconcileProgramCompletion(); }, [reconcileProgramCompletion, programCompletion.key, programCompletion.workoutId, draftReadyUid, draftReload, saving]);
   const completeRestAlert = restAlerts.complete;
   useEffect(() => {
     const previous = restTimerSnapshotRef.current;
@@ -1539,24 +1565,11 @@ export default function WorkoutLog() {
               sets: item.sets.map((set, index) =>
                 index !== setIndex
                   ? set
-                  : {
-                      ...set,
-                      weightKg: mode === "cardio" ? null : previous.weightKg ?? null,
-                      weightText: undefined,
-                      reps: mode === "cardio" ? "" : String(previous.reps ?? ""),
-                      rpe: mode === "cardio" ? "" : String(previous.rpe ?? ""),
-                      effortInput: undefined,
-                      distanceKm: mode === "cardio" ? previous.distanceKm ?? null : null,
-                      durationSec: mode === "cardio" ? previous.durationSec ?? null : null,
-                      zone: mode === "cardio" ? String(previous.zone ?? "") : "",
-                      baselineWeightKg: mode === "cardio" ? null : previous.weightKg ?? null,
-                      baselineReps: mode === "cardio" ? "" : String(previous.reps ?? ""),
-                    }
+                  : copySetPrescription(set, previous, mode)
               ),
             }
       )
     );
-    setUiFeedback("Copied the previous set.");
   };
 
   const moveExercise = (exerciseId: string, direction: -1 | 1) => {
@@ -1949,7 +1962,7 @@ export default function WorkoutLog() {
       );
       const mode = getExerciseModeByName(trimmed);
       const restSeconds = getSavedRestPreference(trimmed);
-      setExerciseUnits((prev) => ({ ...prev, [exerciseId]: mode === "cardio" ? "km" : "kg" }));
+      setExerciseUnits((prev) => ({ ...prev, [exerciseId]: mode === "cardio" ? distanceUnit : "kg" }));
       setRestPreferenceByExercise((prev) => ({ ...prev, [exerciseId]: restSeconds }));
       setRestCustomInputByExercise((prev) => ({ ...prev, [exerciseId]: "" }));
       setRestTimerByExercise((prev) => ({ ...prev, [exerciseId]: { remainingSec: restSeconds, running: false } }));
@@ -2022,6 +2035,7 @@ export default function WorkoutLog() {
       const nextExercises: Exercise[] = workout.exercises.map((ex) => ({
         id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
         name: ex.name,
+        mode: resolveExerciseMode(ex.mode, findCatalogExercise(ex.name)?.group),
         targets: normalizeExerciseTargets(ex.targets),
         notes: ex.notes ?? "",
         tempo: (ex.mode === "cardio" ? ex.zone : ex.tempo) ?? "",
@@ -2057,7 +2071,7 @@ export default function WorkoutLog() {
     setExerciseUnits(() => {
       const next: Record<string, Unit> = {};
       nextExercises.forEach((ex) => {
-        next[ex.id] = getExerciseMode(ex.name) === "cardio" ? "km" : "kg";
+        next[ex.id] = resolveExerciseMode(ex.mode, findCatalogExercise(ex.name)?.group) === "cardio" ? distanceUnit : "kg";
       });
       return next;
     });
@@ -2100,7 +2114,7 @@ export default function WorkoutLog() {
       try { await removeParkedDraft(uid,workoutSlot); }
       catch { setUiFeedback("Couldn't discard the workout. Please try again."); return; }
     }
-    setProgramLink(null);setDeloadBackup(null);setWorkoutSaveId(null);workoutSaveIdRef.current=null;setWorkoutSlot("single");setWorkoutView("choices");
+    setProgramLink(null);setCompletedProgramWorkoutId(null);setDeloadBackup(null);setWorkoutSaveId(null);workoutSaveIdRef.current=null;setWorkoutSlot("single");setWorkoutView("choices");
     restAlerts.clear();
     setRecommendationUsage(parseRecommendationUsage());
     resetGuidance();
@@ -2245,7 +2259,7 @@ export default function WorkoutLog() {
       await AsyncStorage.setItem(getDraftKey(user.uid), serializeWorkoutDraft({ ...workoutDraftPayload, workoutSaveId: saveId }));
       await saveLinkedWorkout(user.uid, saveId, payload, programLink);
       await removeParkedDraft(user.uid, workoutSlot);
-      setProgramLink(null); setDeloadBackup(null); setWorkoutSaveId(null); workoutSaveIdRef.current = null; setWorkoutSlot("single");
+      setProgramLink(null); setCompletedProgramWorkoutId(null); setDeloadBackup(null); setWorkoutSaveId(null); workoutSaveIdRef.current = null; setWorkoutSlot("single");
       setWorkoutView("choices");
       restAlerts.clear();
       setRecommendationUsage(parseRecommendationUsage());
@@ -2304,7 +2318,7 @@ export default function WorkoutLog() {
         const last = ex.sets[ex.sets.length - 1];
         return {
           ...ex,
-          sets: [...ex.sets, { ...last, done: false, setType: "normal" }],
+          sets: [...ex.sets, duplicateSetPrescription(last)],
         };
       })
     );
@@ -2318,7 +2332,7 @@ export default function WorkoutLog() {
       tempo: getExerciseMode(exercise.name) === "cardio" ? "" : String(exercise.tempo || "").trim(),
       zone: getExerciseMode(exercise.name) === "cardio" ? String(getExerciseZone(exercise) || "").trim() : "",
       mode: getExerciseMode(exercise.name),
-      unit: exerciseUnits[exercise.id] ?? (getExerciseMode(exercise.name) === "cardio" ? "km" : "kg"),
+      unit: exerciseDisplayUnit(getExerciseMode(exercise.name), exerciseUnits[exercise.id], distanceUnit),
       restSec: restPreferenceByExercise[exercise.id] ?? 90,
       cardioSessionType:
         getExerciseMode(exercise.name) === "cardio" ? exercise.cardioSessionType ?? null : null,
@@ -2913,7 +2927,7 @@ export default function WorkoutLog() {
   const activeActionMode =
     activeActionExercise && getExerciseMode(activeActionExercise.name) === "cardio" ? "cardio" : "resistance";
   const activeActionUnit = activeExerciseActionId
-    ? exerciseUnits[activeExerciseActionId] || (activeActionMode === "cardio" ? "km" : "kg")
+    ? exerciseDisplayUnit(activeActionMode, exerciseUnits[activeExerciseActionId], distanceUnit)
     : "kg";
   const activeActionIndex = activeExerciseActionId
     ? exercises.findIndex((exercise) => exercise.id === activeExerciseActionId)
@@ -2989,7 +3003,7 @@ export default function WorkoutLog() {
   const targetsExercise = exerciseTargetsEditor?.uid === activeUid ? exercises.find(exercise => exercise.id === exerciseTargetsEditor.id) : null;
   const cardActions = useEventCallbacks({ openExerciseTargets, openWarmup, revealNote: revealNote, openExerciseDemo, openExerciseHistory, openExerciseActions, setReplaceSearch, setReplaceGroup, closeReplacement: () => setReplaceTarget(null), replaceExercise, updateExerciseNotes, openTempoEditor, openRestTimerModal, updateSetWeight, updateSetReps, updateSetRpe, toggleSetDone, removeSetWithUndo, openSetMenu, copyLastSetToCurrent, openCardioTimeModal, openCardioDistanceModal, setExercises, updateCardioSessionType, updateCardioEffortLevel, addEmptySet, duplicateLastSet, undoRemoveSet });
   // Cache unchanged card JSX so navigation and background context updates don't rebuild every row.
-  const exerciseCards = useWorkoutExerciseCards({ targetsEditorOpen: !!targetsExercise, exercises, exerciseUnits, getExerciseMode, effortScale, previousExerciseSetsByName, findCatalogExercise, restTimerByExercise, replaceTarget, replaceSearch, replaceGroup, replacementOptions, replacementLimit, replacementPageKey, isTabletLayout, formatLastSetSummary, scrollNativeGesture, getExerciseZone, undoDeletedSet, cardActions, styles, colors, fontScale, editingSet, warmupTarget, cardioTimeTarget, cardioDistanceTarget, showCardioTimeModal, showCardioDistanceModal, setEditingSet, setReplacementPage });
+  const exerciseCards = useWorkoutExerciseCards({ targetsEditorOpen: !!targetsExercise, exercises, exerciseUnits, getExerciseMode, distanceUnit, effortScale, previousExerciseSetsByName, findCatalogExercise, restTimerByExercise, replaceTarget, replaceSearch, replaceGroup, replacementOptions, replacementLimit, replacementPageKey, isTabletLayout, formatLastSetSummary, scrollNativeGesture, getExerciseZone, undoDeletedSet, cardActions, styles, colors, fontScale, editingSet, warmupTarget, cardioTimeTarget, cardioDistanceTarget, showCardioTimeModal, showCardioDistanceModal, setEditingSet, setReplacementPage });
 
   const { cancelProgramRoutine, switchWorkoutPath, removeParkedDraft, openSavedDrafts } = useEventCallbacks({
   openSavedDrafts: async () => {
@@ -3005,7 +3019,8 @@ export default function WorkoutLog() {
         all[link?programDraftSlot(link.runId,link.ordinal):current.workoutSlot??"single"]=current;
       }
       if(draftHydratedRef.current&&(workoutDraftPayload.exercises.length||workoutDraftPayload.routineBuilderMode))all[workoutSlot]=workoutDraftPayload;
-      if(auth.currentUser?.uid===uid&&savedDraftPickerRequest.current===request)setSavedDraftPicker({uid,slots:all,error:null});
+      const checked = await annotateCompletedProgramDrafts(uid, all);
+      if(auth.currentUser?.uid===uid&&savedDraftPickerRequest.current===request){setParkedDraftSnapshot({uid,slots:checked});setSavedDraftPicker({uid,slots:resumableProgramDrafts(checked),error:null});}
     }catch {
       if(auth.currentUser?.uid===uid&&savedDraftPickerRequest.current===request)setSavedDraftPicker({uid,slots:null,error:"Couldn't load saved workouts. Your drafts are preserved."});
     }
@@ -3028,6 +3043,8 @@ export default function WorkoutLog() {
       const key = `workout-draft-slots-v1:${uid}`;
       const slots = readDraftSlots(await AsyncStorage.getItem(key));
       const result = switchDraftSlot(slots, workoutDraftPayload, destination, seed);
+      const checked = await annotateCompletedProgramDrafts(uid, { [destination]: result.draft });
+      if (checked[destination].completedProgramWorkoutId) throw new Error("This program workout is already finished. Open it from workout history instead.");
       // Park first: failure must never replace the only copy of an unfinished workout.
       await AsyncStorage.setItem(key, JSON.stringify(result.slots));
       await AsyncStorage.setItem(getDraftKey(uid), serializeDraftSlot(refreshResumedWorkoutDate(result.draft, toLocalDateKey(new Date()))));
@@ -3082,7 +3099,7 @@ export default function WorkoutLog() {
           await switchWorkoutPath(`builder:${program.id}:${day}`, { exercises: [], exerciseUnits: {}, sessionTitle: "", sessionDateText: toLocalDateKey(new Date()), elapsedSeconds: 0,
             routineBuilderMode: true, programLink: null, programRoutineAssignment: { programId: program.id, day, returnSlot: workoutSlot, routineId: doc(collection(db, "users", activeUid, "routines")).id } });
         }} /> : null}
-      {workoutView === "editor" ? <>
+      {workoutView === "editor" && !completedProgramWorkoutId && !programCompletion.workoutId ? <>
       {exercises.length > 0 || routineBuilderMode ? <WorkoutSessionCard
         title={sessionTitle}
         dateLabel={
@@ -3213,8 +3230,8 @@ export default function WorkoutLog() {
         {savedDraftPicker?.uid!==activeUid||!savedDraftPicker.slots ? <View style={{paddingVertical:16,gap:12}}>
           <Text style={styles.muted}>{savedDraftPicker?.error??"Loading saved workouts..."}</Text>
           {savedDraftPicker?.error?<TouchableOpacity style={styles.textAction} onPress={()=>void openSavedDrafts()}><Text style={styles.linkText}>Try again</Text></TouchableOpacity>:null}
-        </View> : Object.entries(savedDraftPicker.slots).map(([slot,draft])=><TouchableOpacity key={slot} style={[styles.exerciseOptionRow,{paddingVertical:16}]} onPress={()=>{
-          void switchWorkoutPath(slot,{}).then(()=>setShowSavedDrafts(false)).catch(()=>setUiFeedback("Couldn't restore your workout. Try again."));
+        </View> : !Object.keys(savedDraftPicker.slots).length ? <Text style={[styles.muted,{paddingVertical:16}]}>No unfinished workouts.</Text> : Object.entries(savedDraftPicker.slots).map(([slot,draft])=><TouchableOpacity key={slot} style={[styles.exerciseOptionRow,{paddingVertical:16}]} onPress={()=>{
+          void switchWorkoutPath(slot,{}).then(()=>setShowSavedDrafts(false)).catch(error=>showAppAlert("Couldn't resume workout",error instanceof Error?error.message:"Your draft is preserved. Try again."));
         }}><View style={{flex:1,gap:6}}><Text style={styles.exerciseOptionText}>{String(draft.sessionTitle || (draft.routineBuilderMode?"Routine draft":"Untitled workout"))}</Text><Text style={styles.muted}>{workoutDraftContext(draft,programs.programs)}</Text></View><Ionicons name="chevron-forward" size={20} color={colors.muted}/></TouchableOpacity>)}
         <TouchableOpacity style={styles.textAction} onPress={()=>setShowSavedDrafts(false)}><Text style={styles.linkText}>Cancel</Text></TouchableOpacity>
       </WorkoutModalShell>
@@ -3383,6 +3400,15 @@ export default function WorkoutLog() {
                 <Text style={styles.secondaryText}>Set</Text>
               </TouchableOpacity>
             </View>
+            {restAlerts.soundSettingAvailable ? <View style={{ gap: 8, paddingVertical: 16 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
+                <Text style={[styles.modalText, { flex: 1, marginBottom: 0 }]}>Play rest sound in Vibrate/Silent mode</Text>
+                <Switch accessibilityLabel="Play rest sound in Vibrate or Silent mode" value={restAlerts.alarmSound} disabled={restAlerts.soundSaving} onValueChange={value => void restAlerts.setAlarmSound(value)} trackColor={{ false: colors.border, true: colors.accent }} thumbColor={colors.surface} />
+              </View>
+              <Text style={styles.muted}>{restAlerts.alarmSound ? "Uses alarm volume and may sound through the speaker. Do Not Disturb follows your Android alarm settings." : "Off follows notification volume and Vibrate/Silent mode. When on, uses alarm volume and may sound through the speaker; Do Not Disturb follows Android alarm settings."}</Text>
+              <TouchableOpacity accessibilityRole="button" style={{minHeight: 44, justifyContent: "center"}} onPress={() => void restAlerts.openSettings()}><Text style={styles.linkText}>Android alert settings</Text></TouchableOpacity>
+              {restAlerts.soundError ? <Text accessibilityRole="alert" style={{color: colors.danger}}>{restAlerts.soundError}</Text> : null}
+            </View> : null}
             {restAlerts.available && !restAlerts.ready ? <TouchableOpacity accessibilityRole="button" style={{ minHeight: 44, justifyContent: "center", marginTop: 12 }} onPress={() => void restAlerts.request(true)}><Text style={styles.linkText}>Enable background alerts</Text></TouchableOpacity> : null}
             <View style={styles.modalActions}>
               <TouchableOpacity
@@ -3940,7 +3966,7 @@ export default function WorkoutLog() {
                 style={styles.durationFieldInput}
               />
               <Text style={styles.distanceUnitSuffix}>
-                {cardioDistanceTarget ? String(exerciseUnits[cardioDistanceTarget.exerciseId] || "km") : "km"}
+                {cardioDistanceTarget ? String(exerciseDisplayUnit("cardio", exerciseUnits[cardioDistanceTarget.exerciseId], distanceUnit)) : "km"}
               </Text>
             </View>
             <View style={styles.durationFieldLabelRow}>
@@ -3967,7 +3993,7 @@ export default function WorkoutLog() {
                 style={[styles.primaryButton, styles.modalActionButton, styles.modalPrimaryButton]}
                 onPress={() => {
                   if (!cardioDistanceTarget) return;
-                  const exerciseUnit = exerciseUnits[cardioDistanceTarget.exerciseId] || "km";
+                  const exerciseUnit = exerciseDisplayUnit("cardio", exerciseUnits[cardioDistanceTarget.exerciseId], distanceUnit);
                   applyCardioDistanceModal(exerciseUnit);
                 }}
               >

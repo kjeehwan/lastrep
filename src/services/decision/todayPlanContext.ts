@@ -95,6 +95,7 @@ export const parseWorkoutDraftPlan = (raw: string | null, today = new Date()): P
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw) as Record<string, unknown>;
+    if (typeof parsed.completedProgramWorkoutId === "string" && parsed.completedProgramWorkoutId) return null;
     const sessionDateText = typeof parsed.sessionDateText === "string" ? parsed.sessionDateText : "";
     const savedAt = typeof parsed.draftSavedAt === "number" ? new Date(parsed.draftSavedAt) : null;
     if (sessionDateText !== toLocalDateKey(today) && (!savedAt || toLocalDateKey(savedAt) !== toLocalDateKey(today))) {

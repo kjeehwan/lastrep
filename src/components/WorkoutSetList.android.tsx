@@ -12,6 +12,7 @@ export type WorkoutSetUi = {
   reps: string;
   rpe: string;
   rpeHint?: string;
+  copyRevision?: number;
   done: boolean;
 };
 

@@ -1508,7 +1508,7 @@ function Home() {
             <Text style={styles.noticeSub}>{selectedDateKey}</Text>
             <Text style={styles.cardText}>{selectedDaySummary ? `${selectedDaySummary.workoutCount} workout(s), ${selectedDaySummary.totalSets} sets, ${Math.round(convertKgToUnit(selectedDaySummary.totalVolumeKg, weightUnit))} ${weightUnit}` : "No workouts logged"}</Text>
             {selectedTrainingPhase || selectedDietPhase ? <Text style={styles.noticeSub}>{[selectedTrainingPhase && `Training: ${selectedTrainingPhase}`, selectedDietPhase && `Diet: ${selectedDietPhase}`].filter(Boolean).join(" | ")}</Text> : null}
-            {selectedProgramEntry ? <Text style={styles.noticeSub}>Program: {selectedProgramEntry.type === "rest" ? "Rest" : `Day ${selectedProgramEntry.dayNumber} (${selectedProgramEntry.title})`}</Text> : null}
+            {selectedProgramEntry ? <Text style={styles.noticeSub}>Program: {`Day ${selectedProgramEntry.dayNumber} (${selectedProgramEntry.title})`}</Text> : null}
 
             <ScrollView style={styles.dayModalScroll} contentContainerStyle={{ gap: 10 }}>
               {selectedDayWorkouts.length === 0 ? null : (

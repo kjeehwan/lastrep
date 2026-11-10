@@ -1,5 +1,5 @@
 import { describe,it,expect } from "vitest";
-import { completedProgramCalendar,emptyProgramDays,newProgramRun,programOccurrence,currentProgramOrdinal,resumeProgramRun,completeProgramOccurrence,programDayLink,changeProgramSchedule,sortPrograms,type ProgramRecord } from "./programFlow";
+import { programContinueOrdinal,programDayDisplayStatus,completedProgramCalendar,emptyProgramDays,newProgramRun,programOccurrence,currentProgramOrdinal,resumeProgramRun,completeProgramOccurrence,programDayLink,changeProgramSchedule,sortPrograms,type ProgramRecord } from "./programFlow";
 const program:ProgramRecord={id:"program",name:"Seven days",status:"saved",runId:"run",updatedAt:0,days:emptyProgramDays().map((d,i)=>i===2||i===6?{...d,type:"rest",title:"Rest"}:{type:"workout",title:"Same name",routineId:`routine-${i}`})};
 describe("explicit program occurrence identity",()=>{
  it("dates late completions by the saved workout and keeps the following rest day",()=>{
@@ -45,4 +45,57 @@ describe("explicit program occurrence identity",()=>{
  it("moves/swaps only named occurrences and shift offsets subsequent dates",()=>{const run=newProgramRun(program,"run","2026-11-02"),moved=changeProgramSchedule(program,run,0,"move",2,"2026-11-02");expect(programOccurrence(program,moved,0).type).toBe("rest");expect(programOccurrence(program,moved,2).routineId).toBe("routine-0");expect(programOccurrence(program,moved,1)).toEqual(programOccurrence(program,run,1));const shifted=changeProgramSchedule(program,run,0,"shift",undefined,"2026-11-02");expect(programOccurrence(program,shifted,0).dateKey).toBe("2026-11-03");expect(programOccurrence(program,shifted,7).dateKey).toBe("2026-11-10");});
  it("starts the next cycle after completion and keeps stable routine IDs",()=>{let run=newProgramRun(program,"run","2026-10-01");for(const ordinal of [0,1,3,4,5])run=completeProgramOccurrence(program,run,programDayLink(program,run,ordinal)!,`w-${ordinal}`,"2026-10-08",`2026-10-${String(ordinal+1).padStart(2,"0")}`);expect(run.cursor).toBe(7);expect(programOccurrence(program,run,7).routineId).toBe("routine-0");expect(run.marks["0"].status).toBe("completed");});
  it("orders active, drafts, then other programs",()=>{expect(sortPrograms([{...program,id:"other",name:"A"},{...program,id:"draft",status:"draft",name:"Z"},program],program.id).map(p=>p.id)).toEqual(["program","draft","other"]);});
+});
+
+describe("elapsed rest-day presentation", () => {
+ it("keeps today's completed workout separate from tomorrow's pending day, then rolls over by date", () => {
+  const run = {...newProgramRun(program,"run","2026-11-05"),cursor:6,marks:{"5":{status:"completed" as const,dateKey:"2026-11-10",workoutId:"posterior"}}};
+  const before = JSON.stringify(run);
+  expect(currentProgramOrdinal(program,run,"2026-11-10")).toBe(6);
+  expect(programContinueOrdinal(program,run,"2026-11-10")).toBe(5);
+  expect(programOccurrence(program,run,programContinueOrdinal(program,run,"2026-11-10"))).toMatchObject({dayNumber:6,status:"completed",workoutId:"posterior"});
+  expect(programContinueOrdinal(program,run,"2026-11-11")).toBe(6);
+  expect(programContinueOrdinal(program,run,"2026-11-12")).toBe(7);
+  expect(JSON.stringify(run)).toBe(before);
+ });
+ it("retains overdue workouts instead of jumping to a later calendar routine", () => {
+  const run = newProgramRun(program,"run","2026-11-05");
+  expect(programContinueOrdinal(program,run,"2026-11-10")).toBe(0);
+ });
+ it("uses actual completion dates and respects explicit shifts without inventing a day for today", () => {
+  const run = {...newProgramRun(program,"run","2026-11-05"),anchorOrdinal:6,anchorDateKey:"2026-11-13",cursor:6,marks:{"5":{status:"completed" as const,dateKey:"2026-11-10",workoutId:"posterior"}}};
+  expect(programContinueOrdinal(program,run,"2026-11-10")).toBe(5);
+  const shifted = {...run,anchorOrdinal:6,anchorDateKey:"2026-11-14"};
+  // Nov 13 has no scheduled occurrence: fall back to the explicitly pending day.
+  expect(programContinueOrdinal(program,shifted,"2026-11-13")).toBe(6);
+ });
+ it("keeps the final completed day visible across a cycle boundary", () => {
+  const run = {...newProgramRun(program,"run","2026-11-05"),cursor:7,marks:{"6":{status:"completed" as const,dateKey:"2026-11-11",workoutId:"extra"}}};
+  expect(programContinueOrdinal(program,run,"2026-11-11")).toBe(6);
+  expect(programContinueOrdinal(program,run,"2026-11-12")).toBe(7);
+ });
+ it("checks past rest dates without marking a workout complete or changing the run", () => {
+  const run = {...newProgramRun(program, "run", "2026-11-05"), cursor: 2};
+  const before = JSON.stringify(run), rest = programOccurrence(program, run, 2);
+  expect(programDayDisplayStatus(rest, "2026-11-07")).toBe("pending");
+  expect(programDayDisplayStatus(rest, "2026-11-10")).toBe("elapsed");
+  expect(currentProgramOrdinal(program, run, "2026-11-10")).toBe(3);
+  expect(programDayDisplayStatus(programOccurrence(program, run, 3), "2026-11-10")).toBe("pending");
+  expect(JSON.stringify(run)).toBe(before);
+ });
+ it("preserves elapsed rest history when tomorrow shifts the next workout", () => {
+  const run = {...newProgramRun(program, "run", "2026-11-05"), cursor: 2};
+  const shifted = changeProgramSchedule(program, run, 3, "shift", undefined, "2026-11-10");
+  expect(programOccurrence(program, shifted, 2)).toMatchObject({dateKey: "2026-11-07", type: "rest", status: "pending"});
+  expect(programDayDisplayStatus(programOccurrence(program, shifted, 2), "2026-11-10")).toBe("elapsed");
+  expect(programOccurrence(program, shifted, 3).dateKey).toBe("2026-11-11");
+  expect(shifted.marks["2"].workoutId).toBeUndefined();
+ });
+ it("respects explicit skip/completion and blocks changing elapsed rests", () => {
+  const run = {...newProgramRun(program, "run", "2026-11-05"), cursor: 2};
+  const rest = programOccurrence(program, run, 2);
+  expect(programDayDisplayStatus({...rest, status: "skipped"}, "2026-11-10")).toBe("skipped");
+  expect(programDayDisplayStatus({...rest, status: "completed"}, "2026-11-10")).toBe("completed");
+  expect(() => changeProgramSchedule(program, run, 2, "shift", undefined, "2026-11-10")).toThrow();
+ });
 });

@@ -1,19 +1,20 @@
 import { useSharing } from "../sharing/SharingProvider";
 import { programToSharingPlan } from "../sharing/programSharingPlan";
-import React, { useEffect, useState } from "react";
-import { ActivityIndicator, TouchableOpacity as Pressable, Text, View, useWindowDimensions } from "react-native";
-import { Play, Pencil, Square, RotateCcw, Share2, Trash2 } from "lucide-react-native";
+import React, { useEffect, useRef, useState } from "react";
+import { ActivityIndicator, TouchableOpacity as Pressable, ScrollView, Text, View, useWindowDimensions } from "react-native";
+import { Play, Pencil, Square, RotateCcw, Share2, Trash2, SkipForward, CalendarArrowUp, ArrowLeftRight, CalendarClock } from "lucide-react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { collection, doc, getDoc, getDocs, limit, orderBy, query, startAfter, type QueryDocumentSnapshot } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, getDocsFromServer, limit, orderBy, query, startAfter, where, Timestamp, type QueryDocumentSnapshot } from "firebase/firestore";
 import { db } from "../config/firebaseConfig";
 import { useNotebook, useNotebookStyles, notebookSheet } from "../ui/notebook/Notebook";
 import type { NotebookColors } from "../ui/notebook/tokens";
 import { NotebookTextInput } from "../ui/notebook/NotebookTextInput";
 import { WorkoutModalShell } from "./workoutLog/WorkoutModalShell";
+import { NotebookInfoButton } from "../ui/notebook/NotebookInfoButton";
 import { showAppDialog } from "../ui/appDialog";
 import type { Routine } from "./workoutLog/workoutLogModel";
 import { runRef, activateStoredProgram, deleteStoredProgram, saveProgram, stopStoredProgram, updateProgramRun } from "./programStore";
-import { changeProgramSchedule, currentProgramOrdinal, dateKey, emptyProgramDays, programDateLabel, programDayLink, programOccurrence, programSetupError,
+import { addProgramDays, changeProgramSchedule, currentProgramOrdinal, programContinueOrdinal, dateKey, programDayDisplayStatus, emptyProgramDays, programDateLabel, programDayLink, programOccurrence, programSetupError,
   type ProgramLink, type ProgramRecord, type ProgramRun, type ProgramScheduleAction } from "./programFlow";
 import type { useWorkoutPrograms } from "./useWorkoutPrograms";
 import { useEventCallbacks } from "../hooks/useEventCallbacks";
@@ -33,9 +34,10 @@ export function WorkoutProgramPanel(props: Props) {
   const sharing = useSharing();
   const [pendingSharedStart,setPendingSharedStart] = useState<string|null>(null);
   const styles = useNotebookStyles(createStyles);
-  const { fontScale } = useWindowDimensions();
+  const { fontScale, width } = useWindowDimensions();
+  const scheduleStripRef = useRef<ScrollView>(null);
   const actionColumns = fontScale >= 1.5 ? 2 : 3;
-  const [page, setPage] = useState<"library" | "edit" | "details" | "assign" | "schedule" | "resume" | "history" | null>(null);
+  const [page, setPage] = useState<"library" | "edit" | "details" | "assign" | "schedule" | "schedule-help" | "resume" | "history" | null>(null);
   const [draft, setDraft] = useState<ProgramRecord | null>(null);
   const [selectedDay, setSelectedDay] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -46,13 +48,28 @@ export function WorkoutProgramPanel(props: Props) {
   const [historyCursor,setHistoryCursor] = useState<QueryDocumentSnapshot|null>(null);
   const [scheduleAction, setScheduleAction] = useState<ProgramScheduleAction | null>(null);
   const now = useNow(60_000);
+  const selectedOccurrence = draft && selectedRun ? programOccurrence(draft, selectedRun, selectedDay) : null;
+  const restDate = page === "schedule" && selectedOccurrence?.type === "rest" ? selectedOccurrence.dateKey : null;
+  const restKey = `${props.uid}:${restDate}`;
+  const [restWorkouts, setRestWorkouts] = useState<{ key: string; titles: string[]; failed: boolean } | null>(null);
+  const [restAttempt, setRestAttempt] = useState(0);
+  useEffect(() => {
+    if (!restDate) return;
+    let alive = true;
+    const start = Timestamp.fromDate(new Date(restDate + "T00:00:00"));
+    const end = Timestamp.fromDate(new Date(addProgramDays(restDate, 1) + "T00:00:00"));
+    void getDocsFromServer(query(collection(db, "users", props.uid, "workouts"), where("date", ">=", start), where("date", "<", end), limit(50)))
+      .then(result => { if (alive) setRestWorkouts({ key: restKey, titles: result.docs.map(item => item.data().title || "Untitled workout"), failed: false }); })
+      .catch(() => { if (alive) setRestWorkouts({ key: restKey, titles: [], failed: true }); });
+    return () => { alive = false; };
+  }, [props.uid, restDate, restKey, restAttempt]);
   const execute = async (action: () => Promise<void>) => {
     if (busy) return;
     setBusy(true); setError(null);
     try { await action(); } catch (failure) { setError(failure instanceof Error ? failure.message : "Couldn't save. Try again."); }
     finally { setBusy(false); }
   };
-  const close = () => { if (!busy) { setPage(null); setError(null); } };
+  const close = () => { if (!busy) { setPage(page === "schedule-help" ? "schedule" : null); setError(null); } };
   const open = (program: ProgramRecord, next: "edit" | "details") => { setDraft({ ...program, days: program.days.map(day => ({ ...day })) }); setPage(next); setError(null); };
   const { newProgram } = useEventCallbacks({ newProgram: () => open({ id: doc(collection(db, "users", props.uid, "workoutPrograms")).id, name: "", days: emptyProgramDays(), status: "draft", runId: null, updatedAt: Date.now() }, "edit") });
   const { openManager } = useEventCallbacks({openManager:()=>{
@@ -76,9 +93,9 @@ export function WorkoutProgramPanel(props: Props) {
     const active = props.data.active ?? props.data.programs.find(item=>item.id===props.data.activeId);
     const run = props.data.run ?? (active?.runId ? (await getDoc(runRef(props.uid,active.id,active.runId))).data() as ProgramRun | undefined : undefined);
     if (!active || !run) throw new Error("The program schedule is still loading.");
-    const ordinal = currentProgramOrdinal(active, run);
+    const ordinal = programContinueOrdinal(active, run, dateKey(new Date(now)));
     const occurrence = programOccurrence(active, run, ordinal);
-    if (occurrence.type === "rest") { setDraft(active); setSelectedRun(run); setSelectedDay(ordinal); setPage("schedule"); return; }
+    if (occurrence.type === "rest" || occurrence.status !== "pending") { props.onRestDay(); setDraft(active); setSelectedRun(run); setSelectedDay(ordinal); setScheduleAction(null); setPage("schedule"); return; }
     const link = programDayLink(active, run, ordinal);
     const routine = props.routines.find(item => item.id === link?.routineId);
     if (!link || !routine) { open(active, "edit"); setError("Choose an existing routine for this day."); return; }
@@ -126,11 +143,35 @@ export function WorkoutProgramPanel(props: Props) {
     setSelectedRun({ ...next, revision: (selectedRun.revision ?? 0) + 1 }); setScheduleAction(null); setPage(null);
   };
   const { active, run } = props.data;
-  const ordinal = active && run ? currentProgramOrdinal(active, run) : 0;
+  const ordinal = active && run ? programContinueOrdinal(active, run, dateKey(new Date(now))) : 0;
+  const continueDay = active && run ? programOccurrence(active, run, ordinal) : null;
+  const dayStrip = (program: ProgramRecord, programRun: ProgramRun, selected: number, dates = false) => {
+    const cycleStart = Math.floor(programContinueOrdinal(program, programRun, dateKey(new Date(now))) / program.days.length) * program.days.length;
+    const pendingOrdinal = currentProgramOrdinal(program, programRun);
+    // Keep the next pending day directly tappable even when it begins a new cycle.
+    const count = dates ? Math.max(program.days.length, pendingOrdinal - cycleStart + 1) : program.days.length;
+    return <ScrollView ref={dates ? scheduleStripRef : undefined} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 4, paddingVertical: 8 }} onContentSizeChange={dates ? () => scheduleStripRef.current?.scrollTo({x:Math.max(0,(selected-cycleStart)*48-Math.min(width-40,520)/2+22),animated:false}) : undefined}>
+    {Array.from({length:count}, (_, index) => {
+      const occurrenceOrdinal = cycleStart + index;
+      const item = programOccurrence(program, programRun, occurrenceOrdinal);
+      const status = programDayDisplayStatus(item);
+      const today = item.dateKey === dateKey(new Date(now));
+      const pending = occurrenceOrdinal === currentProgramOrdinal(program, programRun);
+      return <View key={index} style={{ alignItems: "center", gap: 4, minWidth: dates ? 44 : 36 }}>
+        <Pressable accessibilityRole="button" accessibilityState={{selected:occurrenceOrdinal === selected,disabled:busy}} disabled={busy}
+          accessibilityLabel={`Day ${item.dayNumber}, ${item.title}, ${programDateLabel(item.dateKey)}, ${status}${today ? ", today" : ""}${pending ? ", next pending day" : ""}`}
+          style={[styles.day, dates && {width:44,minHeight:44}, occurrenceOrdinal === selected && styles.selected, today && styles.today]} onPress={() => { setDraft(program); setSelectedRun(programRun); setSelectedDay(occurrenceOrdinal); setScheduleAction(null); setPage("schedule"); }}>
+          <Text style={styles.buttonText}>{status === "completed" || status === "elapsed" ? "✓" : item.dayNumber}</Text>
+        </Pressable>
+        {dates ? <><Text style={[styles.muted,{fontSize:12,lineHeight:16}]}>{item.dateKey.slice(5).replace("-","/")}</Text><Text style={[styles.muted,{fontSize:12,lineHeight:16,color:today?colors.accent:colors.muted}]}>{today ? "Today" : status === "skipped" ? "Skipped" : ""}</Text></> : null}
+      </View>;
+    })}
+  </ScrollView>;
+  };
   return <>
     {props.choices ? <View>
-      {props.hasDraft ? row("Resume workout", "Continue your unfinished workout", props.onResume, true) : null}
-      {active ? row("Continue program", `${active.name} · Day ${ordinal % active.days.length + 1}`, () => void execute(continueProgram), !props.hasDraft) : null}
+      {props.hasDraft ? row("Resume workout", "Open saved workout drafts", props.onResume, true) : null}
+      {active ? row("Continue program", `${active.name} · Day ${continueDay?.dayNumber ?? ordinal % active.days.length + 1}${continueDay?.status === "completed" ? " · Completed" : continueDay?.status === "skipped" ? " · Skipped" : ""}`, () => void execute(continueProgram), !props.hasDraft) : null}
       {row("Create program", "Assign your routines to workout and rest days", newProgram)}
       {row("Start workout", "Choose a routine or build today's workout", () => void execute(props.onStandalone), !props.hasDraft && !active)}
       {row("My programs", props.data.programs.length ? `${props.data.programs.length} saved` : "Your saved programs", () => setPage("library"))}
@@ -138,17 +179,20 @@ export function WorkoutProgramPanel(props: Props) {
       {props.data.error ? <><Text style={styles.error}>{props.data.error}</Text>{button("Try again", props.data.retry)}</> : null}
     </View> : active && run ? <View style={styles.strip}>
       <View style={styles.heading}><Pressable accessibilityRole="button" accessibilityLabel="Edit program title" style={styles.titleAction} onPress={() => open(active, "edit")}><Text style={[styles.rowTitle, styles.programName]}>{active.name}</Text><View style={styles.titlePencil}><Pencil size={18} strokeWidth={1.5} color={colors.muted} /></View></Pressable><Text style={styles.muted}>Week {Math.max(1, Math.floor((Date.parse(dateKey()) - Date.parse(run.startedDateKey)) / 604800000) + 1)}</Text></View>
-      <View style={styles.days}>{active.days.map((_, index) => {
-        const occurrenceOrdinal = Math.floor(ordinal / active.days.length) * active.days.length + index;
-        const item = programOccurrence(active, run, occurrenceOrdinal);
-        return <Pressable key={index} accessibilityRole="button" accessibilityLabel={`Day ${index + 1}, ${item.title}, ${item.status}`} style={[styles.day, occurrenceOrdinal === ordinal && styles.selected]} onPress={() => { setDraft(active); setSelectedRun(run); setSelectedDay(occurrenceOrdinal); setPage("schedule"); }}>
-          <Text style={styles.buttonText}>{item.status === "completed" ? "✓" : index + 1}</Text>
-        </Pressable>;
-      })}</View>
+      {dayStrip(active, run, ordinal)}
     </View> : null}
     {error && !page ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
     <WorkoutModalShell compactLandscape androidBehavior="padding" visible={page !== null} onRequestClose={close} backdropStyle={styles.overlay} cardStyle={styles.card}>
-      <View style={styles.heading}><Text style={styles.title}>{page === "library" ? "My programs" : page === "assign" ? `Routine for Day ${selectedDay + 1}` : page === "edit" ? "Program" : page === "schedule" ? "Change schedule" : page === "resume" ? "Resume program" : page === "history" ? "Previous runs" : draft?.name}</Text><Pressable accessibilityLabel="Close" hitSlop={12} onPress={close} disabled={busy}><Ionicons name="close" size={24} color={colors.ink} /></Pressable></View>
+      <View style={styles.heading}><View style={{ flex: 1, flexDirection: "row", alignItems: "center" }}><Text style={[styles.title, page === "schedule" && { flex: 0, flexShrink: 1 }]}>{page === "library" ? "My programs" : page === "assign" ? `Routine for Day ${selectedDay + 1}` : page === "edit" ? "Program" : page === "schedule" ? "Change schedule" : page === "schedule-help" ? "Schedule changes" : page === "resume" ? "Resume program" : page === "history" ? "Previous runs" : draft?.name}</Text>{page === "schedule" ? <NotebookInfoButton label="About schedule changes" onPress={() => setPage("schedule-help")} /> : null}</View><Pressable accessibilityLabel="Close" hitSlop={12} onPress={close} disabled={busy}><Ionicons name="close" size={24} color={colors.ink} /></Pressable></View>
+      {page === "schedule-help" ? <View style={{ gap: 16 }}>
+        <Text style={styles.muted}>Change your next pending day.</Text>
+        <View>{[
+          {label:"Skip",detail:"Leave this day in history as skipped.",Icon:SkipForward},
+          {label:"Move",detail:"Exchange it with a future rest day.",Icon:CalendarArrowUp},
+          {label:"Swap",detail:"Exchange it with another future day.",Icon:ArrowLeftRight},
+          {label:"Tomorrow",detail:"Start this day tomorrow. Shift following days too.",Icon:CalendarClock},
+        ].map(({label,detail,Icon},index)=><View key={label} style={{flexDirection:"row",alignItems:"center",gap:16,paddingVertical:14,borderBottomWidth:index===3?0:1,borderBottomColor:colors.rule}}><Icon size={22} strokeWidth={1.5} color={colors.ink}/><View style={{flex:1,gap:4}}><Text style={styles.rowTitle}>{label}</Text><Text style={styles.muted}>{detail}</Text></View></View>)}</View>
+      </View> : null}
       {page === "library" ? <>{props.data.programs.map(program => row(program.name || "Untitled program", `${program.days.length} days${program.deleting ? " - Deletion unfinished" : program.id === props.data.activeId ? " · Active" : program.status === "draft" ? " · Draft" : ""}`, () => void execute(() => showDetails(program)),false,true,program.id))}{button("Create program", newProgram)}</> : null}
       {page === "edit" && draft ? <>
         <NotebookTextInput disableFullscreenUI accessibilityLabel="Program name" placeholder="Program name" value={draft.name} onChangeText={name => setDraft({ ...draft, name })} style={styles.input} maxLength={100} />
@@ -196,13 +240,31 @@ export function WorkoutProgramPanel(props: Props) {
         {historyEntries.map((item,index)=><View key={index} style={styles.detailRow}><Text style={styles.rowTitle}>Day {item.dayNumber} · {item.title}</Text><Text style={styles.muted}>{programDateLabel(item.dateKey)} · {item.status}</Text></View>)}
         {historyCursor&&selectedRun?button("Earlier days",()=>void execute(()=>loadRunHistory(selectedRun,true))):null}</> : null}
       {page === "schedule" && draft && selectedRun ? <>
-        <Text style={styles.rowTitle}>Day {programOccurrence(draft, selectedRun, selectedDay).dayNumber} · {programOccurrence(draft, selectedRun, selectedDay).title}</Text>
+        {dayStrip(draft, selectedRun, selectedDay, true)}
+        <Text style={styles.rowTitle}>Day {selectedOccurrence?.dayNumber} · {selectedOccurrence?.type === "rest" && selectedOccurrence.title === "Rest" ? "Rest day" : selectedOccurrence?.title}</Text>
         <Text style={styles.muted}>{programDateLabel(programOccurrence(draft, selectedRun, selectedDay).dateKey)}</Text>
+        {selectedOccurrence?.status === "completed" ? <Text style={styles.muted}>Completed</Text> : null}
         {selectedDay === currentProgramOrdinal(draft, selectedRun) ? <>
-          <View style={styles.days}>{(["skip", "move", "swap", "shift"] as const).map(action => button(action === "shift" ? "Tomorrow" : action[0].toUpperCase() + action.slice(1), () => setScheduleAction(action)))}</View>
+          <View style={styles.scheduleActions}>{([
+            { action: "skip", label: "Skip", Icon: SkipForward },
+            { action: "move", label: "Move", Icon: CalendarArrowUp },
+            { action: "swap", label: "Swap", Icon: ArrowLeftRight },
+            { action: "shift", label: "Tomorrow", Icon: CalendarClock },
+          ] as const).map(({ action, label, Icon }) => <Pressable key={action} accessibilityRole="button" accessibilityState={{ selected: scheduleAction === action, disabled: busy }} disabled={busy} onPress={() => setScheduleAction(action)} style={[styles.scheduleAction, scheduleAction === action && { backgroundColor: colors.subtle }]}>
+            <Icon size={22} strokeWidth={1.5} color={colors.ink} />
+            <Text style={styles.scheduleLabel}>{label}</Text>
+          </Pressable>)}</View>
           {scheduleAction === "skip" || scheduleAction === "shift" ? <>{<Text style={styles.muted}>{scheduleAction === "shift" ? "Move the pending day and all following days to start tomorrow." : "Skip this day without marking a workout complete."}</Text>}{button("Confirm change", () => void execute(() => schedule(scheduleAction)), "primary")}</> : null}
           {scheduleAction === "move" || scheduleAction === "swap" ? Array.from({ length: draft.days.length - 1 }, (_,index) => currentProgramOrdinal(draft, selectedRun) + index + 1).filter(target => scheduleAction !== "move" || programOccurrence(draft, selectedRun, target).type === "rest").map(target => { const item = programOccurrence(draft, selectedRun, target); return row(`Day ${item.dayNumber} · ${item.title}`, programDateLabel(item.dateKey), () => showAppDialog({ title: "Change schedule?", message: `${scheduleAction === "move" ? "Move" : "Swap"} with Day ${item.dayNumber} on ${programDateLabel(item.dateKey)}. Other days keep their dates.`, buttons: [{ text: "Cancel", role: "cancel" }, { text: "Confirm", onPress: () => void execute(() => schedule(scheduleAction, target)) }] })); }) : null}
-        </> : <Text style={styles.muted}>Change the first pending day to preserve the program order.</Text>}
+        </> : <>
+          <Text style={styles.muted}>{selectedOccurrence && programDayDisplayStatus(selectedOccurrence) === "elapsed" ? "This rest day has passed. Your next unfinished workout stays pending." : selectedOccurrence?.status !== "pending" ? "This day is saved in your program history." : "An earlier day is still pending. Change that day first to keep your program in order."}</Text>
+        </>}
+        {restDate ? restWorkouts?.key !== restKey ? <ActivityIndicator accessibilityLabel="Checking for additional workouts" color={colors.ink} /> : restWorkouts.failed ? <View>
+          <Text style={styles.error}>Couldn&apos;t check for additional workouts.</Text>{button("Try again", () => setRestAttempt(value => value + 1))}
+        </View> : restWorkouts.titles.length ? <View style={[styles.detailRow,{borderBottomWidth:0}]}>
+          <Text style={styles.rowTitle}>Additional workouts</Text>
+          {restWorkouts.titles.map((title, index) => <Text key={index} style={styles.muted}>{title}</Text>)}
+        </View> : null : null}
       </> : null}
       {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
       {busy ? <ActivityIndicator color={colors.ink} /> : null}
@@ -228,7 +290,11 @@ const createStyles = (colors: NotebookColors) => notebookSheet({
   actionRow: { flexDirection:"row", alignItems:"stretch", gap:12 },
   iconAction: { flex:1, minWidth:0, minHeight:52, alignItems:"center", justifyContent:"flex-start", gap:8, paddingHorizontal:4 },
   actionLabel: { fontSize:14, lineHeight:20, textAlign:"center" },
+  scheduleActions: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", gap: 8, paddingVertical: 16 },
+  scheduleAction: { flexGrow: 1, flexBasis: 64, minHeight: 64, alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 8, paddingHorizontal: 4, borderRadius: 8 },
+  scheduleLabel: { color: colors.ink, fontSize: 14, lineHeight: 20, textAlign: "center" },
   days: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 8 },
   day: { width: 36, height: 40, borderWidth: 1, borderColor: colors.rule, borderRadius: 8, justifyContent: "center", alignItems: "center" },
-  selected: { borderColor: colors.accent, backgroundColor: colors.accentSoft }, strip: { paddingVertical: 16, gap: 8 },
+  selected: { borderColor: colors.ink, backgroundColor: colors.subtle },
+  today: { borderColor: colors.accent, backgroundColor: colors.accentSoft }, strip: { paddingVertical: 16, gap: 8 },
 });

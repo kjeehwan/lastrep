@@ -43,6 +43,7 @@ data class WorkoutSetItem(
   val reps: String,
   val rpe: String,
   val targetHint: String = "",
+  val copyRevision: Int = -1,
   val done: Boolean
 )
 
@@ -75,10 +76,21 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
     style = Paint.Style.STROKE
     strokeWidth = dp(1f).toFloat()
   }
-  private val deleteTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+  private val deleteIconPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
     color = Color.WHITE
-    textSize = sp(12f)
-    textAlign = Paint.Align.CENTER
+    style = Paint.Style.STROKE
+    strokeWidth = 1.5f
+    strokeCap = Paint.Cap.ROUND
+    strokeJoin = Paint.Join.ROUND
+  }
+  private val trashPath = Path().apply {
+    moveTo(3f, 6f); lineTo(21f, 6f)
+    moveTo(19f, 6f); lineTo(19f, 20f); quadTo(19f, 22f, 17f, 22f)
+    lineTo(7f, 22f); quadTo(5f, 22f, 5f, 20f); lineTo(5f, 6f)
+    moveTo(8f, 6f); lineTo(8f, 4f); quadTo(8f, 2f, 10f, 2f)
+    lineTo(14f, 2f); quadTo(16f, 2f, 16f, 4f); lineTo(16f, 6f)
+    moveTo(10f, 10f); lineTo(10f, 18f)
+    moveTo(14f, 10f); lineTo(14f, 18f)
   }
 
   private var ink = Color.parseColor("#242720")
@@ -130,6 +142,9 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
   fun setNotebookColors(colors: ReadableMap?) {
     if (colors == null) return
     fun color(key: String, fallback: Int) = if (colors.hasKey(key)) Color.parseColor(colors.getString(key)) else fallback
+    deletePaint.color = color("danger", deletePaint.color)
+    deleteStrokePaint.color = deletePaint.color
+    deleteIconPaint.color = color("canvas", Color.WHITE)
     val next = listOf(color("ink", ink), color("muted", muted), color("input", color("surface", surface)), color("border", border), color("primary", primary), color("onPrimary", onPrimary), color("accent", accent), color("accentSoft", accentSoft))
     if (next == listOf(ink, muted, surface, border, primary, onPrimary, accent, accentSoft)) return
     ink = next[0]; muted = next[1]; surface = next[2]; border = next[3]; primary = next[4]; onPrimary = next[5]
@@ -177,6 +192,8 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
     viewTreeObserver.addOnGlobalLayoutListener { if (hasFocus()) post { keepEditorVisible() } }
     recyclerView.layoutManager = LinearLayoutManager(context, RecyclerView.VERTICAL, false)
     recyclerView.adapter = adapter
+    // Value edits should never fade rows or temporarily detach their editors.
+    recyclerView.itemAnimator = null
     // Exact-field focus is owned here. RecyclerView's layout recovery otherwise
     // chooses the first focusable child (Weight) after a confirmed Reps/RPE tap.
     recyclerView.preserveFocusAfterLayout = false
@@ -225,9 +242,12 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
             c.drawRoundRect(buttonRect, radius, radius, deletePaint)
             c.drawRoundRect(buttonRect, radius, radius, deleteStrokePaint)
 
-            val centerX = buttonRect.centerX()
-            val centerY = buttonRect.centerY() - (deleteTextPaint.descent() + deleteTextPaint.ascent()) / 2f
-            c.drawText("Delete", centerX, centerY, deleteTextPaint)
+            val iconSize = dp(20f).toFloat()
+            c.save()
+            c.translate(buttonRect.centerX() - iconSize / 2f, buttonRect.centerY() - iconSize / 2f)
+            c.scale(iconSize / 24f, iconSize / 24f)
+            c.drawPath(trashPath, deleteIconPaint)
+            c.restore()
           }
           super.onChildDraw(c, recyclerView, viewHolder, dX, dY, actionState, isCurrentlyActive)
         }
@@ -353,16 +373,18 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
     fun setItems(next: List<WorkoutSetItem>) {
       if (items.size == next.size) {
         val changedIndices = mutableListOf<Int>()
+        val copiedRows = mutableSetOf<Int>()
         for (i in next.indices) {
           val current = items[i]
           val incoming = next[i]
+          if (current.copyRevision != incoming.copyRevision) copiedRows.add(i)
           if (
             current.marker != incoming.marker ||
             current.last != incoming.last ||
             current.weight != incoming.weight ||
             current.reps != incoming.reps ||
             current.rpe != incoming.rpe ||
-            current.done != incoming.done
+            current.done != incoming.done || current.copyRevision != incoming.copyRevision
           ) {
             changedIndices.add(i)
           }
@@ -372,10 +394,13 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
         // The actively edited cell already contains the new text. Rebinding it after each
         // JS state update can make RecyclerView transfer focus to the first input in the row.
         val activePosition = activeEditor?.position
-        val indicesToRebind = changedIndices.filter { it != activePosition }
+        val indicesToRebind = changedIndices.filter { it != activePosition || it in copiedRows }
         if (indicesToRebind.isEmpty()) return
         if (activePosition != null || indicesToRebind.size <= 3) {
-          indicesToRebind.forEach { idx -> notifyItemChanged(idx) }
+          indicesToRebind.forEach { idx ->
+            val holder = recyclerView.findViewHolderForAdapterPosition(idx) as? WorkoutSetViewHolder
+            if (holder != null) holder.bind(idx, items[idx]) else notifyItemChanged(idx)
+          }
         } else {
           notifyDataSetChanged()
         }
@@ -568,6 +593,9 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
           }
         }
         binding.last.setOnClickListener {
+          // New JS commits a copy revision with its new values, keeping focus and
+          // avoiding confusion with an earlier input echo. Retain older-JS support.
+          if (item.copyRevision < 0) activeEditor = null
           if (boundIndex >= 0) onLastPress(boundIndex)
         }
         localDone = item.done

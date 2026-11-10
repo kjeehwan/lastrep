@@ -55,6 +55,7 @@ class WorkoutSetListManager : SimpleViewManager<WorkoutSetListView>() {
             reps = set.getStringOrEmpty("reps"),
             rpe = set.getStringOrEmpty("rpe"),
             targetHint = set.getStringOrEmpty("rpeHint"),
+            copyRevision = if (set.hasKey("copyRevision") && !set.isNull("copyRevision")) set.getInt("copyRevision") else -1,
             done = if (set.hasKey("done") && !set.isNull("done")) set.getBoolean("done") else false
           )
         )

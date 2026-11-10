@@ -1,3 +1,5 @@
+import { exerciseDisplayUnit, type DistanceUnit } from "./exercisePresentation";
+import { AndroidSetDeleteAction } from "./AndroidSetDeleteAction";
 import { CardioZoneControl } from "./CardioZoneControl";
 import { Ionicons } from "@expo/vector-icons";
 import { Check, Clock3, Gauge, Play, X } from "lucide-react-native";
@@ -8,6 +10,7 @@ import {
   Text,
   TouchableOpacity,
   View,
+  useWindowDimensions,
 } from "react-native";
 import { Gesture } from "react-native-gesture-handler";
 import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
@@ -17,14 +20,13 @@ import { notebookRowHeight, notebookFonts } from "../../ui/notebook/tokens";
 import {
   effortInputValue,
   effortLabel,
-  rpeToEffort,
   type EffortScale,
 } from "../effortScale";
 import { EXERCISE_GROUPS, type ExerciseCatalogItem } from "../exerciseCatalog";
 import { clockLabel, RestTimerText } from "./TimerText";
 import { WorkoutNativeSetRows } from "./WorkoutNativeSetRows";
 import { applyCardioZone } from "./cardioZone";
-import { effectiveTargetRpe, exerciseTargetsText } from "../exerciseTargets";
+import { exerciseTargetsText } from "../exerciseTargets";
 import { lastResistanceSet, setRowPresentation } from "./setPresentation";
 import type { RestClock } from "./timerClock";
 import type { WarmupUnit } from "./warmupSets";
@@ -50,6 +52,7 @@ export type WorkoutExerciseCardsProps = {
   exerciseUnits: Record<string, Unit>;
   getExerciseMode: (exerciseName: string) => ExerciseMode;
   effortScale: EffortScale;
+  distanceUnit?: DistanceUnit;
   previousExerciseSetsByName: Map<
     string,
     {
@@ -78,7 +81,7 @@ export type WorkoutExerciseCardsProps = {
     distanceKm?: number | null;
     durationSec?: number | null;
     zone?: string;
-  }) => string;
+  }, displayUnit?: Unit) => string;
   scrollNativeGesture: ReturnType<typeof Gesture.Native>;
   getExerciseZone: (exercise: Exercise) => string;
   undoDeletedSet: {
@@ -183,6 +186,7 @@ export function useWorkoutExerciseCards({
   exerciseUnits,
   getExerciseMode,
   effortScale,
+  distanceUnit = "km",
   previousExerciseSetsByName,
   findCatalogExercise,
   restTimerByExercise,
@@ -210,11 +214,12 @@ export function useWorkoutExerciseCards({
   setEditingSet,
   setReplacementPage,
 }: WorkoutExerciseCardsProps) {
+  const { width: viewportWidth } = useWindowDimensions();
   return useMemo(
     () =>
       exercises.map((ex, exerciseIndex) => {
-        const unit = exerciseUnits[ex.id] || "kg";
         const mode = getExerciseMode(ex.name);
+        const unit = exerciseDisplayUnit(mode, exerciseUnits[ex.id], distanceUnit);
         const isCardio = mode === "cardio";
         const largeText = fontScale >= 1.5;
         const usesNativeSetRows = Platform.OS === "android" && !isCardio;
@@ -440,7 +445,7 @@ export function useWorkoutExerciseCards({
               {!planMode && <Text style={styles.noteLabel}>Note</Text>}
               <NotebookTextInput
                 disableFullscreenUI
-                placeholder="Keep the last rep controlled"
+                placeholder={isCardio ? "Keep a steady, comfortable pace" : "Keep the last rep controlled"}
                 placeholderTextColor={colors.muted}
                 accessibilityLabel={`${ex.name} ${planMode ? "instructions" : "note"}`}
                 onFocus={cardActions.revealNote}
@@ -588,10 +593,6 @@ export function useWorkoutExerciseCards({
                     set.weightText ?? formatWeightInput(set.weightKg, unit),
                   reps: set.reps,
                   rpe: effortInputValue(set, effortScale),
-                  rpeHint:
-                    !planMode && effectiveTargetRpe(ex, set) != null
-                      ? String(rpeToEffort(effectiveTargetRpe(ex, set), effortScale))
-                      : undefined,
                   done: set.done,
                 }))}
                 onChange={(index, field, value) => {
@@ -623,12 +624,13 @@ export function useWorkoutExerciseCards({
                 <ReanimatedSwipeable
                   key={`${ex.id}-set-${idx}`}
                   simultaneousWithExternalGesture={scrollNativeGesture}
-                  friction={1.2}
-                  rightThreshold={12}
+                  friction={isCardio && Platform.OS === "android" ? 1 : 1.2}
+                  rightThreshold={isCardio && Platform.OS === "android" ? (Math.min(viewportWidth, 760) - 40) * 0.5 : 12}
+                  onSwipeableOpen={() => { if (isCardio && Platform.OS === "android") cardActions.removeSetWithUndo(ex.id, idx); }}
                   overshootRight={false}
                   dragOffsetFromLeftEdge={24}
                   dragOffsetFromRightEdge={24}
-                  renderRightActions={() => (
+                  renderRightActions={(_progress, translation) => isCardio && Platform.OS === "android" ? <AndroidSetDeleteAction translation={translation} width={(Math.min(viewportWidth, 760) - 40)} colors={colors} onDelete={() => cardActions.removeSetWithUndo(ex.id, idx)} /> : (
                     <View style={styles.swipeDeleteContainer}>
                       <TouchableOpacity
                         style={styles.swipeDeleteButton}
@@ -695,6 +697,7 @@ export function useWorkoutExerciseCards({
                               : setDisplays[idx].previous
                                 ? formatLastSetSummary(
                                     setDisplays[idx].previous!,
+                                    unit,
                                   )
                                 : "-"}
                           </Text>
@@ -798,15 +801,8 @@ export function useWorkoutExerciseCards({
                               ]}
                             />
                             <WorkoutGestureTextInput
-                              placeholder={
-                                !planMode && effectiveTargetRpe(ex, s) != null
-                                  ? String(rpeToEffort(effectiveTargetRpe(ex, s), effortScale))
-                                  : effortScale === "rir"
-                                    ? "0-4"
-                                    : "6-10"
-                              }
+                              placeholder={effortScale === "rir" ? "0-4" : "6-10"}
                               accessibilityLabel={`${ex.name}, set ${idx + 1}, ${effortScale === "rir" ? "RIR" : "RPE"}`}
-                              accessibilityHint={!planMode && effectiveTargetRpe(ex, s) != null ? `Target ${rpeToEffort(effectiveTargetRpe(ex, s), effortScale)}` : undefined}
                               placeholderTextColor={colors.muted}
                               keyboardType="decimal-pad"
                               value={effortInputValue(s, effortScale)}
@@ -974,6 +970,7 @@ export function useWorkoutExerciseCards({
       }),
     [
       targetsEditorOpen,
+      viewportWidth,
       planMode,
       setEditingSet,
       setReplacementPage,
@@ -981,6 +978,7 @@ export function useWorkoutExerciseCards({
       exerciseUnits,
       getExerciseMode,
       effortScale,
+      distanceUnit,
       previousExerciseSetsByName,
       findCatalogExercise,
       restTimerByExercise,

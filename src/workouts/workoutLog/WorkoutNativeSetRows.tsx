@@ -55,6 +55,7 @@ export function WorkoutNativeSetRows({
   onLastPress,
 }: WorkoutNativeSetRowsProps) {
   const [measurement, setMeasurement] = useState<{ signature: string; height: number } | null>(null);
+  const [copyRevisions, setCopyRevisions] = useState<Record<number, number>>({});
   const signature = `${listKey}:${rows.length}:${style.height}`;
   return (
     <WorkoutSetList
@@ -78,7 +79,7 @@ export function WorkoutNativeSetRows({
       weightLabel={weightLabel}
       repsLabel={repsLabel}
       rpeLabel={rpeLabel}
-      sets={rows}
+      sets={rows.map((row, index) => ({ ...row, copyRevision: copyRevisions[index] ?? 0 }))}
       onSetChange={({ nativeEvent }) => {
         const index = nativeEvent.index;
         const field = nativeEvent.field;
@@ -106,7 +107,10 @@ export function WorkoutNativeSetRows({
       }}
       onLastPress={({ nativeEvent }) => {
         const index = nativeEvent.index;
-        if (typeof index === "number" && index >= 0 && index < rows.length) onLastPress(index);
+        if (typeof index === "number" && index >= 0 && index < rows.length) {
+          setCopyRevisions(previous => ({ ...previous, [index]: (previous[index] ?? 0) + 1 }));
+          onLastPress(index);
+        }
       }}
     />
   );

@@ -1,3 +1,4 @@
+import { resolveDistanceUnit, type DistanceUnit } from "../../../src/workouts/workoutLog/exercisePresentation";
 import { useSharing } from "../../../src/sharing/SharingProvider";
 import { useDailySteps } from "../../../src/health/useDailySteps";
 import { hasStepsPermission } from "../../../src/health/dailySteps";
@@ -36,7 +37,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { auth, db } from "../../../src/config/firebaseConfig";
 import { PhaseEditor } from "../../../src/profile/PhaseEditor";
-import { currentPhaseWeek, phaseName, saveUserPhases, type PhaseEdit } from "../../../src/profile/phaseState";
+import { currentPhaseWeek, phaseWeekFromDate, phaseName, saveUserPhases, type PhaseEdit } from "../../../src/profile/phaseState";
 import { useNow } from "../../../src/hooks/useNow";
 import { useOfflineStatus } from "../../../src/hooks/useOfflineStatus";
 import {
@@ -133,6 +134,7 @@ type ProfileSnapshot = {
   availabilityDays: number;
   sleepTargetHours: string;
   weightUnit: WeightUnit;
+  distanceUnit: DistanceUnit;
   heightUnit: HeightUnit;
   energyUnit: EnergyUnit;
   effortScale: EffortScale;
@@ -276,6 +278,7 @@ function ProfileContent() {
   const [photoActionMenuVisible, setPhotoActionMenuVisible] = useState(false);
   const [bodyHistoryExpanded, setBodyHistoryExpanded] = useState(false);
 
+  const [distanceUnit, setDistanceUnit] = useState<DistanceUnit>("km");
   const [weightUnit, setWeightUnit] = useState<WeightUnit>("kg");
   const [heightUnit, setHeightUnit] = useState<HeightUnit>("cm");
   const [energyUnit, setEnergyUnit] = useState<EnergyUnit>("kcal");
@@ -345,6 +348,7 @@ function ProfileContent() {
         availabilityDays,
         sleepTargetHours: sleepTargetHours.trim(),
         weightUnit,
+        distanceUnit,
         heightUnit,
         energyUnit,
         effortScale,
@@ -374,6 +378,7 @@ function ProfileContent() {
       availabilityDays,
       sleepTargetHours,
       weightUnit,
+      distanceUnit,
       heightUnit,
       energyUnit,
       effortScale,
@@ -516,6 +521,7 @@ function ProfileContent() {
       if (isAvailabilityDays(parsed.availabilityDays)) setAvailabilityDays(parsed.availabilityDays);
       if (typeof parsed.sleepTargetHours === "string") setSleepTargetHours(parsed.sleepTargetHours);
       if (isWeightUnit(parsed.weightUnit)) setWeightUnit(parsed.weightUnit);
+      setDistanceUnit(resolveDistanceUnit(parsed.distanceUnit));
       if (isHeightUnit(parsed.heightUnit)) setHeightUnit(parsed.heightUnit);
       if (isEnergyUnit(parsed.energyUnit)) setEnergyUnit(parsed.energyUnit);
       setEffortScale(resolveEffortScale(parsed.effortScale));
@@ -673,6 +679,7 @@ function ProfileContent() {
         const resolvedWeightUnit = isWeightUnit(data?.weightUnit) ? data.weightUnit : "kg";
         if (isWeightUnit(data?.weightUnit)) setWeightUnit(data.weightUnit);
         setEffortScale(resolveEffortScale(data?.effortScale));
+        setDistanceUnit(resolveDistanceUnit(data?.distanceUnit));
         if (isHeightUnit(data?.heightUnit)) setHeightUnit(data.heightUnit);
         if (isEnergyUnit(data?.energyUnit)) setEnergyUnit(data.energyUnit);
         if (typeof data?.tdeeProfile?.age === "number" && Number.isFinite(data.tdeeProfile.age)) {
@@ -1234,6 +1241,7 @@ function ProfileContent() {
         nickname: nickname.trim(),
         description: profileDescription.trim(),
         weightUnit,
+        distanceUnit,
         heightUnit,
         energyUnit,
         effortScale,
@@ -1336,6 +1344,7 @@ function ProfileContent() {
     trainingPhaseEdit,
     dietPhaseEdit,
     weightUnit,
+    distanceUnit,
     effortScale,
     mealLabels,
     heightUnit,
@@ -1579,7 +1588,7 @@ function ProfileContent() {
     const key = kind === "training" ? "trainingPhase" : "dietPhase";
     const raw = kind === "training" ? trainingPhaseEdit : dietPhaseEdit;
     const draft: PhaseEdit | null = raw ? JSON.parse(raw) : null;
-    const week = draft?.week ?? currentPhaseWeek(phaseData, key, phaseNowMs);
+    const week = draft?.startDateKey ? phaseWeekFromDate(draft.startDateKey, new Date(phaseNowMs)) : draft?.week ?? currentPhaseWeek(phaseData, key, phaseNowMs);
     return `${draft ? draft.name || draft.phase : phaseName(phaseData, key)} / ${week == null ? "Week not recorded" : `Week ${week}`}${draft ? " on save" : ""}`;
   };
   const displayValue = (raw: string, unit: string) => raw.trim() ? `${raw} ${unit}` : "Not recorded";
@@ -1616,6 +1625,7 @@ function ProfileContent() {
       <ProfileSection title="Units">
         <ProfileRow label="Exercise effort" value={effortScale.toUpperCase()} onPress={() => openEditor("units")} />
         <ProfileRow label="Weight" value={weightUnit} onPress={() => openEditor("units")} />
+        <ProfileRow label="Distance" value={distanceUnit} onPress={() => openEditor("units")} />
         <ProfileRow label="Height" value={heightUnit} onPress={() => openEditor("units")} />
         <ProfileRow label="Food energy" value={energyUnit} onPress={() => openEditor("units")} />
       </ProfileSection>
@@ -1677,6 +1687,7 @@ function ProfileContent() {
         <ProfileChoices equalCells label="Exercise effort" values={["RPE", "RIR"]} selected={effortScale.toUpperCase()} onChange={(value) => setEffortScale(value.toLowerCase() as EffortScale)} />
         <ProfileText muted>Applies to all resistance exercises. RPE 8 is approximately 2 RIR. Your recorded history is unchanged.</ProfileText>
         <ProfileChoices equalCells label="Weight" values={["kg", "lbs"] as WeightUnit[]} selected={weightUnit} onChange={applyWeightUnit} />
+        <ProfileChoices equalCells label="Distance" values={["km", "mi"] as DistanceUnit[]} selected={distanceUnit} onChange={setDistanceUnit} />
         <ProfileChoices equalCells label="Height" values={["cm", "ft/in"] as HeightUnit[]} selected={heightUnit} onChange={setHeightUnit} />
         <ProfileChoices equalCells label="Food energy" values={["kcal", "kJ"] as EnergyUnit[]} selected={energyUnit} onChange={applyEnergyUnit} />
       </> : null}

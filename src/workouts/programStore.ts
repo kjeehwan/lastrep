@@ -42,6 +42,7 @@ export async function saveLinkedWorkout(uid:string,workoutId:string,payload:Reco
   const pSnap=link?await tx.get(programRef(uid,link.programId)):null;
   const rSnap=link&&pSnap?.exists()&&!pSnap.data()?.deleting?await tx.get(runRef(uid,link.programId,link.runId)):null;
   const occurrence=link&&rSnap?.exists()?await tx.get(doc(rSnap.ref,"occurrences",String(link.ordinal))):null;owner(uid);
+    if (link && (occurrence?.data()?.status === "completed" || rSnap?.data()?.marks?.[String(link.ordinal)]?.status === "completed")) throw new Error("This program workout is already finished. Open it from workout history instead.");
   tx.set(workout,cleanProgramWrite({...payload,programLink:link}));
   if(link&&pSnap?.exists()&&rSnap?.exists()){
    const p=normalizeProgramRecord(link.programId,pSnap.data())!,run=rSnap.data() as ProgramRun;

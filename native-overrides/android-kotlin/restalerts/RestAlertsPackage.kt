@@ -4,6 +4,10 @@ import android.Manifest
 import android.app.*
 import android.content.*
 import android.content.pm.PackageManager
+import android.media.MediaPlayer
+import android.os.Handler
+import android.os.Looper
+import android.os.PowerManager
 import android.media.AudioAttributes
 import android.net.Uri
 import android.os.Build
@@ -17,6 +21,14 @@ import org.json.JSONObject
 /** PendingIntent alarms survive JS suspension. A persisted deadline is consumed once. */
 object RestAlerts {
   const val CHANNEL = "workout-rest-v1"
+  private const val ALARM_CHANNEL = "workout-rest-alarm-v2"
+  fun alarmSound(c: Context) = prefs(c).getBoolean("alarmSound", false)
+  fun activeChannel(c: Context) = if (alarmSound(c)) ALARM_CHANNEL else CHANNEL
+  @Synchronized fun setAlarmSound(c: Context, owner: String, enabled: Boolean) {
+    if (owner.isEmpty() || prefs(c).getString("owner", "") != owner) throw IllegalStateException("Your account changed. Reopen the timer.")
+    if (!prefs(c).edit().putBoolean("alarmSound", enabled).commit()) throw IllegalStateException("Could not save rest sound setting")
+    channel(c)
+  }
   private fun prefs(c: Context) = c.getSharedPreferences("workout-rest-alerts", Context.MODE_PRIVATE)
   private fun manager(c: Context) = c.getSystemService(NotificationManager::class.java)
   private fun alarms(c: Context) = c.getSystemService(AlarmManager::class.java)
@@ -36,9 +48,9 @@ object RestAlerts {
   }
   fun channel(c: Context) {
     val sound = Uri.parse("android.resource://${c.packageName}/raw/rest_gong")
-    val channel = NotificationChannel(CHANNEL, "Workout rest timers", NotificationManager.IMPORTANCE_HIGH).apply {
+    val channel = NotificationChannel(activeChannel(c), if (alarmSound(c)) "Workout rest alarms" else "Workout rest timers", NotificationManager.IMPORTANCE_HIGH).apply {
       description = "Alerts when a workout rest timer finishes"
-      setSound(sound, AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION_EVENT).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build())
+      setSound(if (alarmSound(c)) null else sound, AudioAttributes.Builder().setUsage(if (alarmSound(c)) AudioAttributes.USAGE_ALARM else AudioAttributes.USAGE_NOTIFICATION_EVENT).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build())
       enableVibration(true)
       lockscreenVisibility = Notification.VISIBILITY_PRIVATE
     }
@@ -46,7 +58,7 @@ object RestAlerts {
   }
   fun notificationsAllowed(c: Context): Boolean {
     channel(c)
-    return manager(c).areNotificationsEnabled() && manager(c).getNotificationChannel(CHANNEL)?.importance != NotificationManager.IMPORTANCE_NONE &&
+    return manager(c).areNotificationsEnabled() && manager(c).getNotificationChannel(activeChannel(c))?.importance != NotificationManager.IMPORTANCE_NONE &&
       (Build.VERSION.SDK_INT < 33 || c.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED)
   }
   fun exactAllowed(c: Context) = Build.VERSION.SDK_INT < 31 || alarms(c).canScheduleExactAlarms()
@@ -57,12 +69,15 @@ object RestAlerts {
   @Synchronized fun setOwner(c: Context, owner: String) {
     val old = prefs(c).getString("owner", "") ?: ""
     if (old == owner) return
+    RestGong.stop()
     val all = records(c)
     all.keys().forEach { cancel(c, old, it) }
-    prefs(c).edit().putString("owner", owner).putString("records", "{}").commit()
+    prefs(c).edit().putString("owner", owner).putString("records", "{}").putBoolean("alarmSound", false).commit()
   }
   /** Receiver and foreground completion race through this same lock. */
-  @Synchronized fun finish(c: Context, owner: String, id: String, deadline: Long, fromAlarm: Boolean): Boolean {
+  @Synchronized fun finish(c: Context, owner: String, id: String, deadline: Long, fromAlarm: Boolean, finished: () -> Unit = {}): Boolean {
+    var playing = false
+    try {
     if (prefs(c).getString("owner", "") != owner) return false
     val all = records(c)
     val record = all.optJSONObject(id) ?: return false
@@ -74,14 +89,16 @@ object RestAlerts {
     // Never replay a missed timer when reopening a force-stopped app.
     if (!fromAlarm && System.currentTimeMillis() - deadline > 2000) return true
     if (!notificationsAllowed(c)) return true
-    val public = Notification.Builder(c, CHANNEL).setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
+    val public = Notification.Builder(c, activeChannel(c)).setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
       .setContentTitle("Rest finished").setContentText("Your next set is ready.").build()
-    val notification = Notification.Builder(c, CHANNEL).setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
+    val notification = Notification.Builder(c, activeChannel(c)).setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
       .setContentTitle("Rest finished").setContentText(record.optString("name", "Your next set is ready."))
       .setCategory(Notification.CATEGORY_ALARM).setVisibility(Notification.VISIBILITY_PRIVATE).setPublicVersion(public)
       .setContentIntent(openApp(c)).setAutoCancel(true).setOnlyAlertOnce(true).setTimeoutAfter(120000).build()
     manager(c).notify(notificationId(id), 6201, notification)
+    if (alarmSound(c)) { playing = true; RestGong.play(c.applicationContext, finished) }
     return true
+    } finally { if (!playing) finished() }
   }
   @Synchronized fun sync(c: Context, owner: String, incoming: JSONArray) {
     if (prefs(c).getString("owner", "") != owner || owner.isEmpty()) return
@@ -121,11 +138,12 @@ object RestAlerts {
     all.keys().asSequence().toList().filter { it !in active && all.getJSONObject(it).optLong("deadline") < System.currentTimeMillis() - 120000 }.forEach { all.remove(it) }
     save(c, all)
   }
-  @Synchronized fun receive(c: Context, intent: Intent) {
-    val owner = intent.getStringExtra("owner") ?: return
-    val id = intent.getStringExtra("id") ?: return
-    val record = records(c).optJSONObject(id) ?: return
-    finish(c, owner, id, record.optLong("deadline"), true)
+  @Synchronized fun receive(c: Context, intent: Intent, finished: () -> Unit) {
+    val owner = intent.getStringExtra("owner")
+    val id = intent.getStringExtra("id")
+    val record = if (id != null) records(c).optJSONObject(id) else null
+    if (owner == null || id == null || record == null) { finished(); return }
+    finish(c, owner, id, record.optLong("deadline"), true, finished)
   }
   @Synchronized fun start(c: Context, owner: String, id: String, deadline: Long, name: String) {
     if (prefs(c).getString("owner", "") != owner) return
@@ -154,17 +172,58 @@ object RestAlerts {
   }
 }
 
+/** Short alarm playback is independent of notification/ringer muting. Android still
+ * applies alarm volume and DND to USAGE_ALARM; no volume or policy is changed. */
+private object RestGong {
+  private val main = Handler(Looper.getMainLooper())
+  private var stopActive: (() -> Unit)? = null
+  fun stop() { main.post { stopActive?.invoke() } }
+  fun play(c: Context, finished: () -> Unit) {
+    main.post {
+      stopActive?.invoke()
+      val player = MediaPlayer()
+      var released = false
+      lateinit var timeout: Runnable
+      val cleanup = {
+        if (!released) {
+          released = true
+          main.removeCallbacks(timeout)
+          try { player.release() } catch (_: Exception) { }
+          stopActive = null
+          finished()
+        }
+      }
+      timeout = Runnable { cleanup() }
+      stopActive = cleanup
+      main.postDelayed(timeout, 8000)
+      try {
+        player.setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build())
+        player.setWakeMode(c, PowerManager.PARTIAL_WAKE_LOCK)
+        player.setDataSource(c, Uri.parse("android.resource://${c.packageName}/raw/rest_gong"))
+        player.setOnPreparedListener { if (!released) { try { it.start() } catch (_: Exception) { cleanup() } } }
+        player.setOnCompletionListener { cleanup() }
+        player.setOnErrorListener { _, _, _ -> cleanup(); true }
+        player.prepareAsync()
+      } catch (_: Exception) { cleanup() }
+    }
+  }
+}
+
 class RestAlertReceiver : BroadcastReceiver() {
-  override fun onReceive(context: Context, intent: Intent) { RestAlerts.receive(context, intent) }
+  override fun onReceive(context: Context, intent: Intent) {
+    val pending = goAsync()
+    RestAlerts.receive(context, intent) { pending.finish() }
+  }
 }
 
 class RestAlertsModule(private val context: ReactApplicationContext) : ReactContextBaseJavaModule(context) {
   override fun getName() = "WorkoutRestAlerts"
   @ReactMethod fun setOwner(owner: String, promise: Promise) { try { RestAlerts.setOwner(context, owner); promise.resolve(null) } catch (e: Exception) { promise.reject("REST_ALERTS", e) } }
   @ReactMethod fun status(promise: Promise) {
-    try { promise.resolve(Arguments.createMap().apply { putBoolean("notifications", RestAlerts.notificationsAllowed(context)); putBoolean("exact", RestAlerts.exactAllowed(context)) }) }
+    try { promise.resolve(Arguments.createMap().apply { putBoolean("notifications", RestAlerts.notificationsAllowed(context)); putBoolean("exact", RestAlerts.exactAllowed(context)); putBoolean("alarmSound", RestAlerts.alarmSound(context)) }) }
     catch (e: Exception) { promise.reject("REST_ALERTS", e) }
   }
+  @ReactMethod fun setAlarmSound(owner: String, enabled: Boolean, promise: Promise) { try { RestAlerts.setAlarmSound(context, owner, enabled); promise.resolve(null) } catch (e: Exception) { promise.reject("REST_ALERTS", e) } }
   @ReactMethod fun sync(owner: String, entries: String, promise: Promise) { try { RestAlerts.sync(context, owner, JSONArray(entries)); promise.resolve(null) } catch (e: Exception) { promise.reject("REST_ALERTS", e) } }
   @ReactMethod fun start(owner: String, id: String, deadline: Double, name: String, promise: Promise) { try { RestAlerts.start(context, owner, id, deadline.toLong(), name); promise.resolve(null) } catch (e: Exception) { promise.reject("REST_ALERTS", e) } }
   @ReactMethod fun cancel(owner: String, id: String, promise: Promise) { try { RestAlerts.cancelOne(context, owner, id); promise.resolve(null) } catch (e: Exception) { promise.reject("REST_ALERTS", e) } }
@@ -178,7 +237,7 @@ class RestAlertsModule(private val context: ReactApplicationContext) : ReactCont
   }
   @ReactMethod fun openNotificationSettings(promise: Promise) {
     try {
-      context.startActivity(Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName).putExtra(Settings.EXTRA_CHANNEL_ID, RestAlerts.CHANNEL).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+      context.startActivity(Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName).putExtra(Settings.EXTRA_CHANNEL_ID, RestAlerts.activeChannel(context)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
       promise.resolve(null)
     } catch (e: Exception) { promise.reject("REST_ALERTS", e) }
   }

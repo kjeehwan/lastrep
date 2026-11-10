@@ -16,6 +16,7 @@ export type WorkoutDraftSnapshot<TExercises, TUnits> = {
   restTimerByExercise?: Record<string, RestClock>;
   recommendationUsage?: RecommendationUsage;
   programLink?: ProgramLink | null;
+  completedProgramWorkoutId?: string | null;
   deloadBackup?: {id:string;before:TExercises;after:TExercises}|null;
   workoutSlot?: string;
   workoutSaveId?: string | null;

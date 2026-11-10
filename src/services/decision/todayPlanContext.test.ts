@@ -16,6 +16,11 @@ const chestPlan: PlannedWorkoutSummary = {
 };
 
 describe("today plan context", () => {
+  it("does not offer an already completed local program copy as today's planned workout", () => {
+    const now = new Date(2026, 10, 10, 18);
+    const draft = { sessionTitle: "Posterior Legs", sessionDateText: "2026-11-10", completedProgramWorkoutId: "finished-on-another-installation", exercises: [{ name: "Deadlift", sets: [{ reps: "8", rpe: "9" }] }] };
+    expect(parseWorkoutDraftPlan(JSON.stringify(draft), now)).toBeNull();
+  });
   it("produces the same prescriptions without timer and persistence-only fields", () => {
     const now = new Date(2026, 9, 7, 12);
     const prescriptions = {
