@@ -94,7 +94,7 @@ const stepsManifest = read(path.join(projectRoot, "android", "app", "src", "main
 if (!stepsManifest?.includes('android.permission.health.READ_STEPS')) fail("Missing Health Connect steps read permission");
 else ok("Health Connect steps read permission present");
 
-for (const permission of ["POST_NOTIFICATIONS", "SCHEDULE_EXACT_ALARM"]) {
+for (const permission of ["POST_NOTIFICATIONS", "SCHEDULE_EXACT_ALARM", "WAKE_LOCK"]) {
   if (!stepsManifest?.includes(`android.permission.${permission}`)) fail(`Missing rest alert permission: ${permission}`);
 }
 if (!/<receiver\b[^>]*android:name="\.restalerts\.RestAlertReceiver"[^>]*android:exported="false"/.test(stepsManifest ?? "")) fail("Rest alert receiver must be registered and non-exported");

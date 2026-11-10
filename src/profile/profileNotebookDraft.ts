@@ -1,7 +1,7 @@
 export const profileEditorFields = {
   identity: ["nickname", "description", "profilePhotoUri"],
   training: ["trainingPhase", "trainingPhaseEdit"], diet: ["dietPhase", "dietPhaseEdit"], availability: ["availabilityDays"],
-  units: ["weightUnit", "heightUnit", "energyUnit", "effortScale", "bodyWeight", "muscleMass", "leanMass", "cutCalories", "maintainCalories", "bulkCalories"],
+  units: ["weightUnit", "distanceUnit", "heightUnit", "energyUnit", "effortScale", "bodyWeight", "muscleMass", "leanMass", "cutCalories", "maintainCalories", "bulkCalories"],
   body: ["bodyWeight", "bodyFatPercent", "muscleMass", "leanMass"],
   tdee: ["tdeeAge", "tdeeHeightCm", "tdeeSex", "tdeeActivity", "cutCalories", "maintainCalories", "bulkCalories"],
   nutrition: ["cutCalories", "maintainCalories", "bulkCalories", "proteinTargetGrams"],

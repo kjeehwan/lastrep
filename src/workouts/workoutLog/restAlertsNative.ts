@@ -1,9 +1,10 @@
 import { NativeModules, Platform } from "react-native";
 
-export type RestAlertsStatus = { notifications: boolean; exact: boolean };
+export type RestAlertsStatus = { notifications: boolean; exact: boolean; alarmSound?: boolean };
 type NativeRestAlerts = {
   setOwner(owner: string): Promise<void>;
   status(): Promise<RestAlertsStatus>;
+  setAlarmSound?(owner: string, enabled: boolean): Promise<void>;
   sync(owner: string, entries: string): Promise<void>;
   start(owner: string, id: string, deadline: number, name: string): Promise<void>;
   cancel(owner: string, id: string): Promise<void>;

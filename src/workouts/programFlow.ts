@@ -30,6 +30,17 @@ export function currentProgramOrdinal(program:ProgramRecord,run:ProgramRun,today
  for(let i=0;i<program.days.length*3;i++){const day=programOccurrence(program,run,cursor);if(day.status!=="pending"||day.type==="rest"&&day.dateKey<today)cursor++;else break;}
  return cursor;
 }
+/** Continue describes today's calendar occurrence; progress still tracks the next unfinished day. */
+export function programContinueOrdinal(program: ProgramRecord, run: ProgramRun, today = dateKey()) {
+ const pending = currentProgramOrdinal(program, run, today);
+ // A missed workout stays pending: never jump ahead to an untouched later routine.
+ if (programOccurrence(program, run, pending).dateKey <= today) return pending;
+ const calendarOrdinal = run.anchorOrdinal + Math.round((Date.parse(today) - Date.parse(run.anchorDateKey)) / 86400000);
+ const candidates = new Set([calendarOrdinal, ...Object.keys(run.marks).map(Number)]);
+ const matches = [...candidates].filter(value => Number.isSafeInteger(value) && value >= 0 &&
+   programOccurrence(program, run, value).dateKey === today);
+ return matches.length ? Math.max(...matches) : pending;
+}
 export function programDayLink(program:ProgramRecord,run:ProgramRun,ordinal:number):ProgramLink|null {
  const day=programOccurrence(program,run,ordinal);return day.type!=="workout"||!day.routineId||day.status!=="pending"?null:{programId:program.id,runId:run.id,ordinal,dayNumber:day.dayNumber,scheduledDateKey:day.dateKey,routineId:day.routineId,title:day.title};
 }
@@ -38,6 +49,11 @@ export function normalizeProgramLink(raw:any):ProgramLink|null {
 }
 export function resumeProgramRun(program:ProgramRecord,run:ProgramRun,today=dateKey()):ProgramRun {
  const cursor=currentProgramOrdinal(program,run,today),marks={...run.marks};
+ // Freeze elapsed rest dates as schedule history, without inventing workout completions.
+ for (let ordinal = run.anchorOrdinal; ordinal < cursor; ordinal++) {
+  const day = programOccurrence(program, run, ordinal);
+  if (day.type === "rest" && !marks[String(ordinal)]) marks[String(ordinal)] = { dateKey: day.dateKey, dayNumber: day.dayNumber, day: { type: day.type, routineId: day.routineId, title: day.title } };
+ }
  // Freeze historical occurrence dates before changing the future calendar anchor.
  Object.entries(marks).forEach(([key,mark])=>{if(Number(key)<cursor||mark.status)marks[key]={...mark,dateKey:programOccurrence(program,run,Number(key)).dateKey};});
  return {...run,cursor,anchorOrdinal:cursor,anchorDateKey:today,marks};
@@ -108,4 +124,9 @@ function applyProgramCompletionDates(program: ProgramRecord, run: ProgramRun, da
 export function completedProgramCalendar(program: ProgramRecord, run: ProgramRun, dates: Record<string, string>, today: string) {
   const next = applyProgramCompletionDates(program, run, dates);
   return { ...next, cursor: currentProgramOrdinal(program, next, today) };
+}
+
+/** Display-only: an elapsed rest date is not a saved workout completion. */
+export function programDayDisplayStatus(day: ProgramOccurrence, today = dateKey()) {
+ return day.status === "pending" && day.type === "rest" && day.dateKey < today ? "elapsed" : day.status;
 }

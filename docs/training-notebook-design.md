@@ -2792,3 +2792,64 @@ and phone behavior before claiming native acceptance.
 - Today's Plan uses 18 dp chevrons consistently: right for collapsed disclosures
   and navigation actions, down for expanded disclosures. Navigation chevrons stay
   right-facing; expanded accessibility state follows disclosure visibility.
+
+### Phase dates, program rest days and rest sound (November 10)
+
+- Phase start dates use an explicit calendar date with a calculated, read-only
+  week. Week 1 includes that date and the following six days. Preserve legacy
+  manual weeks until the user confirms a start date; never silently reinterpret
+  an account's phase. Profile edits remain staged until Save.
+- Open a calendar when a phase date is tapped. Closing it preserves the staged
+  form; selecting a day does not save immediately. Phase history uses the same
+  calendar and stages date corrections together, preserving history order.
+- Past rest dates may display a check as elapsed, but must not create completed
+  workout records. Describe elapsed versus completed in accessibility labels and
+  help. Show workouts recorded on that date separately from program membership.
+  Label the program day Rest day. Hide a successfully loaded empty workout list;
+  show existing records under Additional workouts. Preserve loading/error/retry
+  states so an unavailable query is not presented as an empty result.
+- Schedule action labels sit below equal-size icons with symmetric vertical
+  spacing. Place the help control beside the sheet title; explain blocked actions
+  and provide a route to the pending day instead of unexplained inactivity.
+- Explain multi-action schedule help in short icon/title/description rows with
+  equal vertical padding, rather than a wall of bullets in an alert.
+- Past phase removal requires confirmation and remains staged until Save, with
+  Undo available. Protect the current phase and preserve workouts/health records.
+- Phase history includes the current phase, marked Current, alongside past phases.
+  Show date ranges derived from the next start date, ending with Present for the
+  current phase. Preserve separately started phases even when their types match;
+  never silently merge test entries or reinterpret their start dates.
+- Rest sound overriding Vibrate/Silent mode requires an explicit, default-off
+  switch. Explain alarm volume, possible speaker playback and Android DND rules
+  beside it. Never silently alter device volume, sound mode or DND policy.
+- Prescription targets and recorded effort stay visually and semantically
+  distinct. Copying Last or duplicating a prescription must not fabricate a new
+  recorded RPE/RIR. Empty effort fields use the scale range, not a target value.
+- Last must refresh copied fields even when another field in the row has focus.
+  Native input echo suppression must not suppress an explicit copy action.
+  Preserve keyboard focus and row geometry; do not insert temporary success
+  banners above the active row. Explicit copy revisions must remain distinct
+  from ordinary keystroke echoes.
+- Cardio and resistance set swipes share the full-row dismissal, half-row
+  threshold, growing delete reveal, centered trash icon, colors and Undo behavior.
+  Icon-only deletion retains an accessible Delete set label.
+- A program draft completed on another installation must stop its local clocks
+  and return to Workout choices after confirmed completion evidence. Preserve
+  local differences privately, but exclude finished copies from Resume workout
+  and remove recovery-as-separate-workout dialogs. Resume lists unfinished work.
+  Never infer completion from elapsed time or silently discard local sets/notes.
+- Change schedule reuses the program day strip with dates, selected state,
+  completion indicators and today's marker. Day taps change the detail being
+  inspected; schedule mutations still require explicit actions/confirmation.
+  Keep the selected day visible on narrow screens and longer programs.
+  Rust marks today's calendar date, including completed days; selection uses a
+  neutral ink border/subtle fill. A future pending selection must not look like today.
+  Keep Today as its explanation, but omit Next and View pending day. Use the
+  tappable strip for day navigation, including the next day across a cycle boundary.
+- Continue program describes today's scheduled occurrence even after completion,
+  with Completed in its subtitle, and opens that day's details instead of another
+  workout. Keep the next unfinished occurrence separate. Calendar display must not
+  advance progress, reopen finished drafts, or skip an overdue unfinished workout.
+- Do not ask users to confirm an already displayed phase start date below its week.
+  Show an add-date prompt only when the start date is missing. Preserve legacy
+  week semantics; copy changes must not silently migrate stored phase anchors.

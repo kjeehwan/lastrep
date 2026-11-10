@@ -22,7 +22,7 @@ it("saves only sections with staged changes", () => {
 });
 
 it("retains all identity, phase, unit, availability and TDEE persistence", () => {
-  for (const field of ["goal", "description", "trainingPhase", "dietPhase", "weightUnit", "heightUnit", "energyUnit", "effortScale", "availabilityDays", "tdeeAge", "tdeeHeightCm", "tdeeSex", "tdeeActivity"]) {
+  for (const field of ["goal", "description", "trainingPhase", "dietPhase", "weightUnit", "distanceUnit", "heightUnit", "energyUnit", "effortScale", "availabilityDays", "tdeeAge", "tdeeHeightCm", "tdeeSex", "tdeeActivity"]) {
     expect(plan({ [field]: "changed" }).profile, field).toBe(true);
   }
   for (const field of ["cutCalories", "maintainCalories", "bulkCalories", "proteinTargetGrams"]) {

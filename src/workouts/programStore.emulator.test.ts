@@ -48,6 +48,8 @@ describe.skipIf(!enabled)("program persistence",()=>{
   expect((await getDocs(collection(harness.db,"users","alice","workouts"))).size).toBe(1);
   expect((await getDoc(doc(harness.db,"users","alice","workoutPrograms","p","runs","run","occurrences","0"))).data()?.workoutId).toBe("w");
   expect((await getDoc(doc(harness.db,"users","alice","workouts","w"))).data()?.date).toBeInstanceOf(Timestamp);
+  await expect(saveLinkedWorkout("alice","stale-other-device",payload,link)).rejects.toThrow("already finished");
+  expect((await getDoc(doc(harness.db,"users","alice","workouts","stale-other-device"))).exists()).toBe(false);
  });
  it("a standalone workout cannot complete a same-named program day",async()=>{
   await saveProgram("alice",program);const run=newProgramRun(program,"run");await setDoc(doc(harness.db,"users","alice","workoutPrograms","p","runs","run"),run);

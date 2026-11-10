@@ -17,7 +17,7 @@ async function enableAlerts(force: boolean): Promise<boolean> {
   if (status.exact && status.notifications) return true;
   if (!force && await AsyncStorage.getItem(PROMPT_KEY)) return false;
   await AsyncStorage.setItem(PROMPT_KEY, "1");
-  const accepted = await confirmAppDialog("Rest timer alerts", "Allow notifications and Alarms & reminders so rest alerts can sound while another app is open or your phone is locked. Alerts follow your notification sound settings.", "Enable alerts");
+  const accepted = await confirmAppDialog("Rest timer alerts", "Allow notifications and Alarms & reminders so rest alerts can sound while another app is open or your phone is locked. Alerts follow your rest timer sound option and Android alert settings.", "Enable alerts");
   if (!accepted) return false;
   if (!status.notifications) {
     if (Number(Platform.Version) >= 33 && !await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS)) {
@@ -33,6 +33,9 @@ async function enableAlerts(force: boolean): Promise<boolean> {
 
 export function useRestAlerts(uid: string | null, hydrated: boolean, clocks: Record<string, RestClock>, exercises: { id: string; name: string }[], playGong: () => Promise<void>) {
   const [status, setStatus] = useState<RestAlertsStatus>({ exact: false, notifications: false });
+  const [soundSaving, setSoundSaving] = useState(false);
+  const [soundError, setSoundError] = useState<string | null>(null);
+  const [statusUid, setStatusUid] = useState<string | null>(null);
   const entries = JSON.stringify(restAlertsPlan(clocks, exercises));
   const alive = useRef(true);
   const revision = useRef(0);
@@ -45,7 +48,7 @@ export function useRestAlerts(uid: string | null, hydrated: boolean, clocks: Rec
       if (auth.currentUser?.uid !== uid || expectedRevision !== revision.current) return;
       await restAlertsNative.sync(uid, entries);
       const next = await restAlertsNative.status();
-      if (alive.current) setStatus(next);
+      if (alive.current && auth.currentUser?.uid === uid && expectedRevision === revision.current) { setStatus(next); setStatusUid(uid); }
     } catch { console.warn("Could not schedule rest alerts"); }
   }, [uid, hydrated, entries]);
   const latestSync = useRef(sync);
@@ -81,5 +84,17 @@ export function useRestAlerts(uid: string | null, hydrated: boolean, clocks: Rec
     if (uid) void restAlertsNative?.cancel?.(uid, id).catch(() => console.warn("Could not cancel rest alert"));
   };
   const clear = () => { revision.current += 1; if (uid) void restAlertsNative?.clear?.(uid).catch(() => console.warn("Could not clear rest alerts")); };
-  return { available: !!restAlertsNative, ready: status.exact && status.notifications, request, complete, start, cancel, clear };
+  const setAlarmSound = async (enabled: boolean) => {
+    if (!uid || soundSaving || !restAlertsNative?.setAlarmSound || auth.currentUser?.uid !== uid) return;
+    setSoundSaving(true); setSoundError(null);
+    try {
+      await restAlertsNative.setAlarmSound(uid, enabled);
+      const next = await restAlertsNative.status();
+      if (alive.current && auth.currentUser?.uid === uid) { setStatus(next); setStatusUid(uid); }
+    } catch { if (alive.current && auth.currentUser?.uid === uid) setSoundError("Couldn't save the sound setting. Try again."); }
+    finally { if (alive.current) setSoundSaving(false); }
+  };
+  return { alarmSound: statusUid === uid && status.alarmSound === true, soundSaving, soundError,
+    openSettings: async () => { try { await restAlertsNative?.openNotificationSettings(); } catch { if (alive.current) setSoundError("Couldn't open Android alert settings."); } },
+    soundSettingAvailable: !!restAlertsNative?.setAlarmSound, setAlarmSound, available: !!restAlertsNative, ready: statusUid === uid && status.exact && status.notifications, request, complete, start, cancel, clear };
 }

@@ -16,7 +16,7 @@ module.exports = function withWorkoutNativeOverrides(config) {
   config = withAndroidManifest(config, (cfg) => {
     const manifest = cfg.modResults.manifest;
     const permissions = manifest["uses-permission"] ?? [];
-    for (const name of ["android.permission.POST_NOTIFICATIONS", "android.permission.SCHEDULE_EXACT_ALARM"]) {
+    for (const name of ["android.permission.POST_NOTIFICATIONS", "android.permission.SCHEDULE_EXACT_ALARM", "android.permission.WAKE_LOCK"]) {
       if (!permissions.some((item) => item.$["android:name"] === name)) permissions.push({ $: { "android:name": name } });
     }
     manifest["uses-permission"] = permissions;
