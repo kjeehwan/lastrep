@@ -399,7 +399,7 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
         if (activePosition != null || indicesToRebind.size <= 3) {
           indicesToRebind.forEach { idx ->
             val holder = recyclerView.findViewHolderForAdapterPosition(idx) as? WorkoutSetViewHolder
-            if (holder != null) holder.bind(idx, items[idx]) else notifyItemChanged(idx)
+            if (holder != null) holder.bind(idx, items[idx], idx in copiedRows) else notifyItemChanged(idx)
           }
         } else {
           notifyDataSetChanged()
@@ -565,7 +565,7 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
       private val draggedTouches = mutableSetOf<String>()
       private val inputTouchStarts = mutableMapOf<String, Pair<Float, Float>>()
 
-      fun bind(position: Int, item: WorkoutSetItem) {
+      fun bind(position: Int, item: WorkoutSetItem, applyCopy: Boolean = false) {
         boundIndex = position
         applyPalette()
         binding.setLabel.text = item.marker.ifBlank { (position + 1).toString() }
@@ -613,15 +613,21 @@ class WorkoutSetListView(context: Context) : LinearLayout(context) {
         repsWatcher?.let { binding.reps.removeTextChangedListener(it) }
         rpeWatcher?.let { binding.rpe.removeTextChangedListener(it) }
 
-        if (!binding.weight.isFocused && (binding.weight.text?.toString() ?: "") != item.weight) {
-          binding.weight.setText(item.weight)
+        // Keystroke echoes leave the active editor alone; an explicit Last copy
+        // must replace its text too, without clearing focus or moving the row.
+        fun updateText(input: AppCompatEditText, value: String) {
+          if ((!input.isFocused || applyCopy) && (input.text?.toString() ?: "") != value) {
+            val start = input.selectionStart
+            val end = input.selectionEnd
+            input.setText(value)
+            if (input.isFocused) {
+              input.setSelection(start.coerceIn(0, value.length), end.coerceIn(0, value.length))
+            }
+          }
         }
-        if (!binding.reps.isFocused && (binding.reps.text?.toString() ?: "") != item.reps) {
-          binding.reps.setText(item.reps)
-        }
-        if (!binding.rpe.isFocused && (binding.rpe.text?.toString() ?: "") != item.rpe) {
-          binding.rpe.setText(item.rpe)
-        }
+        updateText(binding.weight, item.weight)
+        updateText(binding.reps, item.reps)
+        updateText(binding.rpe, item.rpe)
         binding.weight.hint = weightHint
         binding.reps.hint = repsHint
         binding.rpe.hint = item.targetHint.ifBlank { rpeHint }

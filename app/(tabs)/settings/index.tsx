@@ -1,4 +1,5 @@
 import { SharingSettingsSection } from "../../../src/sharing/SharingSettingsSection";
+import { RestNotificationsSection } from "../../../src/settings/RestNotificationsSection";
 import { UserRound, Mail, FileText, CreditCard, Crown, RotateCcw, LogOut, Trash2, Palette, Sun, Moon, Monitor, Check, X, CalendarDays, TimerReset, Bug, ShieldCheck } from "lucide-react-native";
 import { requireOptionalNativeModule } from "expo-modules-core";
 import { doc, onSnapshot } from "firebase/firestore";
@@ -263,7 +264,7 @@ function SettingsContent() {
 
   return <SafeAreaView style={{ flex: 1, backgroundColor: colors.canvas }} edges={["top", "left", "right"]}>
     <NotebookHeader title="Settings" onBack={handleGoBack} />
-    <ScrollView pointerEvents={busy ? "none" : "auto"} contentContainerStyle={{ width: "100%", maxWidth: 800, alignSelf: "center", padding: 20, paddingBottom: 56, gap: 28 }}>
+    <ScrollView pointerEvents={busy ? "none" : "auto"} contentContainerStyle={{ width: "100%", maxWidth: 800, alignSelf: "center", padding: 20, paddingBottom: 56, gap: 24 }}>
       {isOffline ? <SettingsText live>Offline. Store and account operations need a connection. Saved details remain visible.</SettingsText> : null}
       <SettingsSection first title="Account">
         <SettingsRow strong icon={<UserRound size={20} strokeWidth={1.5} color={colors.ink} />} label={nickname}>
@@ -277,6 +278,7 @@ function SettingsContent() {
         {!showAppearance && appearance.feedback ? <SettingsText live>{appearance.feedback}</SettingsText> : null}
       </SettingsSection>
       <SharingSettingsSection />
+      <RestNotificationsSection key={uid} uid={uid} />
       <SettingsSection title="Support">
         <SettingsRow icon={<Mail size={20} strokeWidth={1.5} color={colors.ink} />} label="Report a problem" onPress={() => void contactSupport()} />
         <SettingsRow icon={<SettingsVersionIcon />} label="App version" value={installedVersion} />

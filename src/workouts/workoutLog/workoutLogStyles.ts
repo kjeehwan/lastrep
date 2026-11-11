@@ -201,9 +201,6 @@ export const createStyles = (colors: NotebookColors) => {
       fontWeight: "700",
       textAlign: "right",
     },
-    restCustomRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-    restCustomInput: { flex: 1, marginBottom: 0, paddingVertical: 8 },
-    restCustomApply: { paddingVertical: 10, paddingHorizontal: 14 },
     metaInput: { marginBottom: 0, paddingVertical: 8 },
     sheetTitleRow: {
       flexDirection: "row",
@@ -958,7 +955,6 @@ export const createStyles = (colors: NotebookColors) => {
         borderLeftColor: colors.accent,
       },
       setHelp: { gap: 8, paddingVertical: 12 },
-      restCustomRow: { ...base.restCustomRow, marginTop: 20 },
       durationFieldInput: {
         ...base.durationFieldInput,
         width: 112,

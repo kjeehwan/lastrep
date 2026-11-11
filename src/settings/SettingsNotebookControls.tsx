@@ -7,7 +7,7 @@ import { notebookFonts } from "../ui/notebook/tokens";
 
 export function SettingsSection({ title, first = false, children }: { title: string; first?: boolean; children: ReactNode }) {
   const { colors } = useNotebook();
-  return <View style={{ gap: 16, borderTopWidth: first ? 0 : 1, borderTopColor: colors.rule, paddingTop: first ? 0 : 24 }}>
+  return <View style={{ gap: 8, borderTopWidth: first ? 0 : 1, borderTopColor: colors.rule, paddingTop: first ? 0 : 40 }}>
     <Text accessibilityRole="header" style={{ fontFamily: notebookFonts.editorial, fontSize: 24, color: colors.ink }}>{title}</Text>{children}
   </View>;
 }
@@ -27,7 +27,7 @@ export function SettingsRow({ icon, label, labelAccessory, control, children, va
     {!large && value ? <Text style={{ flexShrink: 1, textAlign: "right", color: colors.muted, fontFamily: notebookFonts.body, fontSize: 16 }}>{value}</Text> : null}
     {onPress ? <ChevronRight size={18} strokeWidth={1.5} color={destructive ? colors.danger : colors.muted} /> : null}
   </>;
-  const style = { flexDirection: "row" as const, alignItems: control ? "center" as const : "flex-start" as const, gap: 12, minHeight: 48, paddingVertical: 12, opacity: disabled ? 0.5 : 1 };
+  const style = { flexDirection: "row" as const, alignItems: children && !control ? "flex-start" as const : "center" as const, gap: 12, minHeight: 56, paddingVertical: 4, opacity: disabled ? 0.5 : 1 };
   return onPress ? <Pressable accessibilityRole="button" disabled={disabled} accessibilityState={{ disabled }} onPress={onPress} style={style}>{content}</Pressable> : <View style={style}>{content}</View>;
 }
 

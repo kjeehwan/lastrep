@@ -42,7 +42,6 @@ Keyboard,
 KeyboardAvoidingView,
 Platform,
 ScrollView,
-Switch,
 StyleSheet,
 Text,
 TextInput,
@@ -113,6 +112,7 @@ import { freshSetEffort } from "../../../src/workouts/workoutLog/freshSetEffort"
 import { parseRecommendationUsage,recommendationFeedback,recommendationQuestions,type FeedbackAnswers } from "../../../src/workouts/workoutLog/recommendationFeedback";
 import { setRowPresentation } from "../../../src/workouts/workoutLog/setPresentation";
 import { advanceRest,nextRestDeadlineDelay,pauseRest,startRest,type RestClock } from "../../../src/workouts/workoutLog/timerClock";
+import { RestTimerSheet } from "../../../src/workouts/workoutLog/RestTimerSheet";
 import { RestTimerText } from "../../../src/workouts/workoutLog/TimerText";
 import { useAvailableWeights } from "../../../src/workouts/workoutLog/useAvailableWeights";
 import { useWorkoutDraftPersistence } from "../../../src/workouts/workoutLog/useWorkoutDraftPersistence";
@@ -1331,7 +1331,8 @@ export default function WorkoutLog() {
     return () => { clearTimeout(deadline); subscription.remove(); };
   }, [restTimerByExercise]);
 
-  const restAlerts = useRestAlerts(activeUid, draftReadyUid === activeUid, restTimerByExercise, exercises, playGong);
+  const stopGong = useCallback(() => { gongPlayerRef.current?.pause(); }, []);
+  const restAlerts = useRestAlerts(activeUid, draftReadyUid === activeUid, restTimerByExercise, exercises, playGong, stopGong);
   const { reconcileProgramCompletion } = useEventCallbacks({ reconcileProgramCompletion: () => {
     if (!activeUid || auth.currentUser?.uid !== activeUid || draftReadyUid !== activeUid || !draftHydratedRef.current || !programCompletion.workoutId || saving) return;
     setCompletedProgramWorkoutId(programCompletion.workoutId);
@@ -3337,114 +3338,21 @@ export default function WorkoutLog() {
         </TouchableWithoutFeedback>
       </Modal>
 
-      <Modal visible={showRestTimerModal} transparent animationType="fade" onRequestClose={closeRestTimerModal}>
-        <KeyboardAwareModalFrame style={styles.modalBackdrop}>
-          <AdaptiveModalCard style={styles.modalCard}>
-            <Text style={styles.modalTitle}>
-              {activeRestExercise ? `${activeRestExercise.name} Rest Timer` : "Rest Timer"}
-            </Text>
-            <RestTimerText style={styles.modalText} clock={activeRestTimerState} prefix="Current: " />
-            <View style={styles.answerRow}>
-              {[60, 90, 120].map((seconds) => (
-                <TouchableOpacity
-                  key={`rest-modal-${seconds}`}
-                  style={[
-                    styles.answerChip,
-                    activeRestPreference === seconds && styles.answerChipActive,
-                  ]}
-                  onPress={() =>
-                    activeRestTimerExerciseId
-                      ? setRestPreference(activeRestTimerExerciseId, seconds)
-                      : undefined
-                  }
-                >
-                  <Text
-                    style={[
-                      styles.answerText,
-                      activeRestPreference === seconds && styles.answerTextActive,
-                    ]}
-                  >
-                    {seconds}s
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            <View style={styles.restCustomRow}>
-              <NotebookTextInput selectTextOnFocus disableFullscreenUI
-                placeholder="Custom (sec)"
-                placeholderTextColor={colors.muted}
-                keyboardType="numeric"
-                value={
-                  activeRestTimerExerciseId
-                    ? restCustomInputByExercise[activeRestTimerExerciseId] ?? ""
-                    : ""
-                }
-                onChangeText={(value) =>
-                  activeRestTimerExerciseId
-                    ? setRestCustomInputByExercise((prev) => ({
-                        ...prev,
-                        [activeRestTimerExerciseId]: value,
-                      }))
-                    : undefined
-                }
-                style={[styles.input, styles.restCustomInput]}
-              />
-              <TouchableOpacity
-                style={[styles.secondaryButton, styles.restCustomApply]}
-                onPress={() =>
-                  activeRestTimerExerciseId
-                    ? applyCustomRestPreference(activeRestTimerExerciseId)
-                    : undefined
-                }
-              >
-                <Text style={styles.secondaryText}>Set</Text>
-              </TouchableOpacity>
-            </View>
-            {restAlerts.soundSettingAvailable ? <View style={{ gap: 8, paddingVertical: 16 }}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
-                <Text style={[styles.modalText, { flex: 1, marginBottom: 0 }]}>Play rest sound in Vibrate/Silent mode</Text>
-                <Switch accessibilityLabel="Play rest sound in Vibrate or Silent mode" value={restAlerts.alarmSound} disabled={restAlerts.soundSaving} onValueChange={value => void restAlerts.setAlarmSound(value)} trackColor={{ false: colors.border, true: colors.accent }} thumbColor={colors.surface} />
-              </View>
-              <Text style={styles.muted}>{restAlerts.alarmSound ? "Uses alarm volume and may sound through the speaker. Do Not Disturb follows your Android alarm settings." : "Off follows notification volume and Vibrate/Silent mode. When on, uses alarm volume and may sound through the speaker; Do Not Disturb follows Android alarm settings."}</Text>
-              <TouchableOpacity accessibilityRole="button" style={{minHeight: 44, justifyContent: "center"}} onPress={() => void restAlerts.openSettings()}><Text style={styles.linkText}>Android alert settings</Text></TouchableOpacity>
-              {restAlerts.soundError ? <Text accessibilityRole="alert" style={{color: colors.danger}}>{restAlerts.soundError}</Text> : null}
-            </View> : null}
-            {restAlerts.available && !restAlerts.ready ? <TouchableOpacity accessibilityRole="button" style={{ minHeight: 44, justifyContent: "center", marginTop: 12 }} onPress={() => void restAlerts.request(true)}><Text style={styles.linkText}>Enable background alerts</Text></TouchableOpacity> : null}
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={[styles.secondaryButton, styles.modalActionButton]}
-                onPress={() =>
-                  activeRestTimerExerciseId
-                    ? resetRestTimer(activeRestTimerExerciseId)
-                    : undefined
-                }
-              >
-                <Text style={styles.secondaryText}>Reset</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.secondaryButton, styles.modalActionButton]}
-                onPress={closeRestTimerModal}
-              >
-                <Text style={styles.secondaryText}>Close</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.primaryButton, styles.modalActionButton, styles.modalPrimaryButton]}
-                onPress={() => {
-                  if (!activeRestTimerExerciseId) return;
-                  if (activeRestTimerState.running) {
-                    pauseRestTimer(activeRestTimerExerciseId);
-                    return;
-                  }
-                  startRestTimer(activeRestTimerExerciseId);
-                  closeRestTimerModal();
-                }}
-              >
-                <Text style={styles.primaryText}>{activeRestTimerState.running ? "Pause" : "Start"}</Text>
-              </TouchableOpacity>
-            </View>
-          </AdaptiveModalCard>
-        </KeyboardAwareModalFrame>
-      </Modal>
+      {showRestTimerModal && activeRestTimerExerciseId ? <RestTimerSheet
+        name={activeRestExercise?.name ?? "Exercise"} clock={activeRestTimerState} preference={activeRestPreference}
+        custom={restCustomInputByExercise[activeRestTimerExerciseId] ?? ""}
+        onCustomChange={value => setRestCustomInputByExercise(previous => ({ ...previous, [activeRestTimerExerciseId]: value }))}
+        onPreset={seconds => setRestPreference(activeRestTimerExerciseId, seconds)}
+        onCustomApply={() => applyCustomRestPreference(activeRestTimerExerciseId)}
+        onReset={() => resetRestTimer(activeRestTimerExerciseId)}
+        onToggle={() => {
+          if (activeRestTimerState.running) { pauseRestTimer(activeRestTimerExerciseId); return; }
+          startRestTimer(activeRestTimerExerciseId);
+          closeRestTimerModal();
+        }}
+        onClose={closeRestTimerModal} needsPermission={restAlerts.available && restAlerts.enabled && !restAlerts.ready}
+        onEnableAlerts={() => void restAlerts.request(true)}
+      /> : null}
 
       <Modal visible={showRoutineStartModal} transparent animationType="fade" onRequestClose={() => setShowRoutineStartModal(false)}>
         <View style={styles.modalBackdrop}>
