@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState, PermissionsAndroid, Platform } from "react-native";
 import { confirmAppDialog } from "../../ui/appDialog";
 import { auth } from "../../config/firebaseConfig";
-import { restAlertsNative, type RestAlertsStatus } from "./restAlertsNative";
+import { notifyRestAlertSettingsChanged, restAlertsNative, subscribeRestAlertSettings, type RestAlertsStatus } from "./restAlertsNative";
 import { restAlertsPlan, shouldPlayForegroundRest } from "./restAlertsPlan";
 import type { RestClock } from "./timerClock";
 
@@ -14,10 +14,11 @@ async function enableAlerts(force: boolean): Promise<boolean> {
   const native = restAlertsNative;
   if (!native) return false;
   let status = await native.status();
+  if (status.alertsEnabled === false) return false;
   if (status.exact && status.notifications) return true;
   if (!force && await AsyncStorage.getItem(PROMPT_KEY)) return false;
   await AsyncStorage.setItem(PROMPT_KEY, "1");
-  const accepted = await confirmAppDialog("Rest timer alerts", "Allow notifications and Alarms & reminders so rest alerts can sound while another app is open or your phone is locked. Alerts follow your rest timer sound option and Android alert settings.", "Enable alerts");
+  const accepted = await confirmAppDialog("Rest timer alerts", "Allow notifications and Alarms & reminders for rest alerts while another app is open or your phone is locked. The gong uses media volume and your selected audio output. Android controls notifications and Do Not Disturb.", "Enable alerts");
   if (!accepted) return false;
   if (!status.notifications) {
     if (Number(Platform.Version) >= 33 && !await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS)) {
@@ -31,10 +32,15 @@ async function enableAlerts(force: boolean): Promise<boolean> {
   return true;
 }
 
-export function useRestAlerts(uid: string | null, hydrated: boolean, clocks: Record<string, RestClock>, exercises: { id: string; name: string }[], playGong: () => Promise<void>) {
+export async function requestRestAlertPermissions(force = false) {
+  if (!permissionRequest) permissionRequest = enableAlerts(force).finally(() => { permissionRequest = null; });
+  const result = await permissionRequest;
+  notifyRestAlertSettingsChanged();
+  return result;
+}
+
+export function useRestAlerts(uid: string | null, hydrated: boolean, clocks: Record<string, RestClock>, exercises: { id: string; name: string }[], playGong: () => Promise<void>, stopGong: () => void) {
   const [status, setStatus] = useState<RestAlertsStatus>({ exact: false, notifications: false });
-  const [soundSaving, setSoundSaving] = useState(false);
-  const [soundError, setSoundError] = useState<string | null>(null);
   const [statusUid, setStatusUid] = useState<string | null>(null);
   const entries = JSON.stringify(restAlertsPlan(clocks, exercises));
   const alive = useRef(true);
@@ -53,6 +59,12 @@ export function useRestAlerts(uid: string | null, hydrated: boolean, clocks: Rec
   }, [uid, hydrated, entries]);
   const latestSync = useRef(sync);
   useEffect(() => { latestSync.current = sync; }, [sync]);
+  useEffect(() => subscribeRestAlertSettings(() => {
+    void latestSync.current();
+    void restAlertsNative?.status().then(next => {
+      if (alive.current && uid && auth.currentUser?.uid === uid && (next.alertsEnabled === false || next.soundEnabled === false)) stopGong();
+    }).catch(() => undefined);
+  }), [uid, stopGong]);
   useEffect(() => { void Promise.resolve().then(sync); }, [sync]);
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (state) => { if (state === "active") void sync(); });
@@ -62,9 +74,9 @@ export function useRestAlerts(uid: string | null, hydrated: boolean, clocks: Rec
     if (!restAlertsNative) return;
     try {
       const before = await restAlertsNative.status();
+      if (before.alertsEnabled === false) return;
       if (before.exact && before.notifications) return;
-      if (!permissionRequest) permissionRequest = enableAlerts(force).finally(() => { permissionRequest = null; });
-      await permissionRequest;
+      await requestRestAlertPermissions(force);
       await latestSync.current();
     } catch { console.warn("Could not enable rest alerts"); }
   };
@@ -73,7 +85,14 @@ export function useRestAlerts(uid: string | null, hydrated: boolean, clocks: Rec
     let managed = false;
     try { if (uid && deadline != null) managed = await restAlertsNative?.finish(uid, id, deadline) ?? false; }
     catch { /* Use the foreground sound only if this completion is still timely. */ }
-    if (!managed && shouldPlayForegroundRest(deadline, Date.now(), AppState.currentState === "active")) await playGong();
+    if (!managed && shouldPlayForegroundRest(deadline, Date.now(), AppState.currentState === "active")) {
+      // An unscheduled/failed native completion must not bypass a muted gong.
+      if (restAlertsNative) {
+        try { const current = await restAlertsNative.status(); if (current.alertsEnabled === false || current.soundEnabled === false) return; }
+        catch { return; }
+      }
+      if (auth.currentUser?.uid === uid) await playGong();
+    }
   }, [uid, playGong]);
   const start = (id: string, name: string, deadline: number | undefined) => {
     revision.current += 1;
@@ -84,17 +103,5 @@ export function useRestAlerts(uid: string | null, hydrated: boolean, clocks: Rec
     if (uid) void restAlertsNative?.cancel?.(uid, id).catch(() => console.warn("Could not cancel rest alert"));
   };
   const clear = () => { revision.current += 1; if (uid) void restAlertsNative?.clear?.(uid).catch(() => console.warn("Could not clear rest alerts")); };
-  const setAlarmSound = async (enabled: boolean) => {
-    if (!uid || soundSaving || !restAlertsNative?.setAlarmSound || auth.currentUser?.uid !== uid) return;
-    setSoundSaving(true); setSoundError(null);
-    try {
-      await restAlertsNative.setAlarmSound(uid, enabled);
-      const next = await restAlertsNative.status();
-      if (alive.current && auth.currentUser?.uid === uid) { setStatus(next); setStatusUid(uid); }
-    } catch { if (alive.current && auth.currentUser?.uid === uid) setSoundError("Couldn't save the sound setting. Try again."); }
-    finally { if (alive.current) setSoundSaving(false); }
-  };
-  return { alarmSound: statusUid === uid && status.alarmSound === true, soundSaving, soundError,
-    openSettings: async () => { try { await restAlertsNative?.openNotificationSettings(); } catch { if (alive.current) setSoundError("Couldn't open Android alert settings."); } },
-    soundSettingAvailable: !!restAlertsNative?.setAlarmSound, setAlarmSound, available: !!restAlertsNative, ready: statusUid === uid && status.exact && status.notifications, request, complete, start, cancel, clear };
+  return { available: !!restAlertsNative, enabled: statusUid !== uid || status.alertsEnabled !== false, ready: statusUid === uid && status.exact && status.notifications, request, complete, start, cancel, clear };
 }

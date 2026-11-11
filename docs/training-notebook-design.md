@@ -2247,6 +2247,16 @@ Keep loading and development-billing explanations within the same aligned text
 column. Development grant, reset and debug actions retain their existing guards
 and handlers. Reserve boxed action buttons for confirmations rather than mixing
 row and button formats across Settings sections.
+Use a compact shared 56 dp minimum row height with 4 dp vertical padding and
+8 dp between rows. Toggle controls retain their 48 dp touch area. Center ordinary
+row content, including labels, values and navigation controls; rows with supporting
+text may grow and retain top-aligned icons and trailing affordances.
+Use 24 dp between sections and 40 dp after each section divider. Account for the
+space inside rows when judging visible clearance: at ordinary text size, the
+label-to-divider gap should be close to the visible gap between adjacent labels.
+Verify the rendered result rather than increasing margins around padded rows.
+Do not add section-specific height overrides. Supporting text and enlarged labels
+may grow naturally; do not force identical label distances for different content.
 Sign out and deletion require confirmation. Deletion explains that
 Google Play subscriptions must be cancelled separately. Browser simulations must
 never imply that a real account was signed out or deleted.
@@ -2819,9 +2829,29 @@ and phone behavior before claiming native acceptance.
   Show date ranges derived from the next start date, ending with Present for the
   current phase. Preserve separately started phases even when their types match;
   never silently merge test entries or reinterpret their start dates.
-- Rest sound overriding Vibrate/Silent mode requires an explicit, default-off
-  switch. Explain alarm volume, possible speaker playback and Android DND rules
-  beside it. Never silently alter device volume, sound mode or DND policy.
+- Rest gongs use media volume and the selected media output: headphones when in
+  use, otherwise the speaker. Muted media means no gong; notifications/vibration
+  remain separate. Provide a default-on Rest timer sound switch that mutes only
+  Lastrep's gong, without muting music/podcasts or disabling notifications/vibration.
+  Provide a default-on Rest timer alerts master switch for countdown-only use.
+  Off suppresses gong, notification and vibration without resetting the countdown;
+  disable the sound control while retaining its choice. Preserve both choices on
+  app restart. Re-enabling alerts can resume future deadlines, never replay expired
+  timers. App alert preferences and Android permissions are separate controls.
+  Do not use alarm audio or a Vibrate/Silent override switch.
+  Never silently alter device volume, sound mode, output selection or DND policy.
+  Keep the short sound explanation and Android notification-settings link under
+  Settings > Notifications. Timer sheets keep duration/actions and, only while
+  alerts are enabled but permissions are missing, an Allow rest timer alerts shortcut. That shortcut
+  requests notifications and Alarms & reminders; it is not background health access.
+  Put the sound explanation in a help button beside Rest timer sound, rather than
+  a permanent paragraph under the setting. Notifications rows with switches/help
+  and navigation links share a minimum row height and centered alignment so their
+  spacing stays equal; longer text may expand rows. Rest-timer editors reuse the standard
+  sheet header/close control, show the exercise and countdown separately, group
+  duration presets with compact custom input, and pair Reset with Start/Pause.
+  Use the sheet's keyboard-safe footer, equal button geometry and symmetric
+  divider spacing; stack controls for enlarged text. Closing must not reset clocks.
 - Prescription targets and recorded effort stay visually and semantically
   distinct. Copying Last or duplicating a prescription must not fabricate a new
   recorded RPE/RIR. Empty effort fields use the scale range, not a target value.
@@ -2830,6 +2860,9 @@ and phone behavior before claiming native acceptance.
   Preserve keyboard focus and row geometry; do not insert temporary success
   banners above the active row. Explicit copy revisions must remain distinct
   from ordinary keystroke echoes.
+  Verify Last with Weight, Reps and recorded-effort fields focused separately,
+  including the same row. Copied inputs must visibly refresh without requiring
+  blur; existing recorded effort and subsequent typing must remain intact.
 - Cardio and resistance set swipes share the full-row dismissal, half-row
   threshold, growing delete reveal, centered trash icon, colors and Undo behavior.
   Icon-only deletion retains an accessible Delete set label.

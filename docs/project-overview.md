@@ -155,6 +155,10 @@ resolve current progress; do not rewrite history by assuming everything passed.
    Play Console review/promotion and policy forms unless access and execution
    are explicitly delegated. Verify current remote EAS version codes; do not
    infer them from filenames or old conversation messages.
+   As agreed November 10, use local Gradle builds for future Android production
+   releases, following `docs/local-production-builds.md`, unless the user chooses
+   Expo cloud again. Local builds must coordinate version codes with the EAS counter
+   and retain the same signing, production configuration and artifact checks.
    Before every new production AAB, run a fresh
    `npx.cmd --yes expo-doctor@latest` on the intended source/dependency state.
    Resolve unexpected Doctor failures and rerun affected checks before building;
