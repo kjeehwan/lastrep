@@ -1,6 +1,6 @@
 import { SharingSettingsSection } from "../../../src/sharing/SharingSettingsSection";
 import { RestNotificationsSection } from "../../../src/settings/RestNotificationsSection";
-import { UserRound, Mail, FileText, CreditCard, Crown, RotateCcw, LogOut, Trash2, Palette, Sun, Moon, Monitor, Check, X, CalendarDays, TimerReset, Bug, ShieldCheck } from "lucide-react-native";
+import { FlaskConical, UserRound, Mail, FileText, CreditCard, Crown, RotateCcw, LogOut, Trash2, Palette, Sun, Moon, Monitor, Check, X, CalendarDays, TimerReset, Bug, ShieldCheck } from "lucide-react-native";
 import { requireOptionalNativeModule } from "expo-modules-core";
 import { doc, onSnapshot } from "firebase/firestore";
 import { NotebookProvider, useNotebook } from "../../../src/ui/notebook/Notebook";
@@ -32,6 +32,7 @@ import { clearProfilePhotoCache } from "../../../src/profile/profilePhotos";
 import { clearDailySteps } from "../../../src/health/dailySteps";
 import { clearHealthSyncConsent } from "../../../src/health/healthSyncConsent";
 import { isDevBillingBuild } from "../../../src/billing/revenuecat";
+import { NEW_PURCHASES_ENABLED, BETA_ACCESS_TITLE, BETA_ACCESS_DESCRIPTION, BETA_PRICING_DESCRIPTION } from "../../../src/billing/accessPolicy";
 import { usePurchaseRestore } from "../../../src/billing/usePurchaseRestore";
 import { returnFromSettingsToHome } from "../../../src/navigation/settingsNavigation";
 
@@ -286,7 +287,20 @@ function SettingsContent() {
       <SettingsSection title="Legal">
         <SettingsRow icon={<FileText size={20} strokeWidth={1.5} color={colors.ink} />} label="Privacy policy" onPress={() => void openPrivacyPolicy()} />
       </SettingsSection>
-      <SettingsSection title="Subscription">
+      {!NEW_PURCHASES_ENABLED ? <SettingsSection title="Beta access">
+        <SettingsRow icon={<FlaskConical size={20} strokeWidth={1.5} color={colors.ink} />} label={BETA_ACCESS_TITLE}>
+          <SettingsText>{BETA_ACCESS_DESCRIPTION}</SettingsText>
+          <SettingsText>{BETA_PRICING_DESCRIPTION}</SettingsText>
+        </SettingsRow>
+        {!devBillingBuild ? <>
+          <SettingsRow icon={<CreditCard size={20} strokeWidth={1.5} color={colors.ink} />} label="Manage subscription" disabled={accountDisabled || restoring} onPress={() => void handleManageSubscription()}>
+            <SettingsText>For existing subscriptions. Cancel in Google Play to stop renewal.</SettingsText>
+          </SettingsRow>
+          {manageFallbackText ? <SettingsText live>{manageFallbackText}</SettingsText> : null}
+          <SettingsRow icon={<RotateCcw size={20} strokeWidth={1.5} color={colors.ink} />} label={restoring ? "Checking purchases..." : "Restore purchases"} disabled={accountDisabled || restoring} onPress={() => void handleRestorePurchases()} />
+          {restoreFeedback ? <SettingsText live>{restoreFeedback}</SettingsText> : null}
+        </> : null}
+      </SettingsSection> : <SettingsSection title="Subscription">
         {entitlement.state === "loading" || !accountLoaded ? <SettingsRow icon={<CreditCard size={20} strokeWidth={1.5} color={colors.ink} />} label="Subscription status"><SettingsText>Checking subscription status...</SettingsText></SettingsRow> : devBillingBuild ? <SettingsRow icon={<CreditCard size={20} strokeWidth={1.5} color={colors.ink} />} label="Billing unavailable">
           <SettingsText>Use the Play-installed app to test subscriptions.</SettingsText>
           {entitlement.state === "active" ? <SettingsText>Premium access does not necessarily mean you have a paid Google Play subscription.</SettingsText> : null}
@@ -303,7 +317,7 @@ function SettingsContent() {
           <SettingsRow icon={<RotateCcw size={20} strokeWidth={1.5} color={colors.ink} />} label={restoring ? "Checking purchases..." : "Restore purchases"} disabled={accountDisabled || restoring} onPress={() => void handleRestorePurchases()} />
         </>}
         {restoreFeedback ? <SettingsText live>{restoreFeedback}</SettingsText> : null}
-      </SettingsSection>
+      </SettingsSection>}
       <SettingsSection title="Session">
         <SettingsRow icon={<LogOut size={20} strokeWidth={1.5} color={colors.ink} />} label={signingOut ? "Signing out..." : "Sign out"} disabled={accountDisabled || restoring} onPress={handleSignOut} />
         {sessionFeedback ? <SettingsText live>{sessionFeedback}</SettingsText> : null}

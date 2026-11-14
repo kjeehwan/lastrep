@@ -2278,6 +2278,15 @@ Sign out and deletion use stacked confirmation actions with explicit safe choice
 if authentication changes while its confirmation is open. Support opens a draft
 only on a tap and never sends account information or logs automatically.
 
+During the public beta, replace subscription sales with a Beta access section,
+using the same Settings rows and spacing. Explain that all current features are
+available at no charge and that paid features and launch pricing are not finalized.
+Preserve real entitlement badges and existing purchase management/restore access.
+Hide upgrade offers, prices and sales labels while purchases are disabled; direct
+paywall links return to Settings without mounting the purchase screen. Keep a
+purchase-service guard as well as the UI policy. Existing subscriptions must remain
+manageable, with clear guidance that cancellation happens in Google Play.
+
 Separate Premium entitlement from a paid subscription, including manually granted
 Premium. Development builds explain billing is unavailable; no purchase/restore
 SDK calls are simulated as real. Do not invent prices in a design fixture.

@@ -6,6 +6,7 @@ import Purchases, {
   type PurchasesOfferings,
   type PurchasesPackage,
 } from "react-native-purchases";
+import { NEW_PURCHASES_ENABLED } from "./accessPolicy";
 import type { PurchaseResult, RestoreResult } from "../contracts";
 import { REVENUECAT_API_KEY_ANDROID } from "../config/billingConfig";
 import { isExpectedOfflineMessage } from "../utils/networkErrors";
@@ -424,6 +425,7 @@ export async function getOfferings(): Promise<PurchasesOfferings> {
 }
 
 export async function purchasePackage(aPackage: PurchasesPackage): Promise<PurchaseResult> {
+  if (!NEW_PURCHASES_ENABLED) return { status: "ERROR", errorCode: "purchases_disabled_during_beta" };
   await configureRevenueCat();
   const startedAt = Date.now();
   try {

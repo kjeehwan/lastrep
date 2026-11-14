@@ -7,6 +7,8 @@ const mocks = vi.hoisted(() => ({
   setLogHandler: vi.fn(),
   restore: vi.fn(),
   invalidate: vi.fn(),
+  purchase: vi.fn(),
+  policy: { NEW_PURCHASES_ENABLED: false },
 }));
 
 vi.mock("react-native", () => ({ Platform: { OS: "android" } }));
@@ -18,16 +20,38 @@ vi.mock("react-native-purchases", () => ({
     setLogHandler: mocks.setLogHandler,
     restorePurchases: mocks.restore,
     invalidateCustomerInfoCache: mocks.invalidate,
+    purchasePackage: mocks.purchase,
   },
   LOG_LEVEL: { INFO: "INFO", WARN: "WARN", ERROR: "ERROR" },
 }));
+vi.mock("./accessPolicy", () => mocks.policy);
 vi.mock("../config/billingConfig", () => ({ REVENUECAT_API_KEY_ANDROID: "test-key" }));
 
 describe("RevenueCat build isolation", () => {
   beforeEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
+    mocks.policy.NEW_PURCHASES_ENABLED = false;
     mocks.constants.expoConfig.android.package = "com.kjeehwan.lastrep.dev";
+  });
+
+  it("blocks beta purchases before configuring or calling the store SDK", async () => {
+    mocks.constants.expoConfig.android.package = "com.kjeehwan.lastrep";
+    const billing = await import("./revenuecat");
+    const result = await billing.purchasePackage({} as Parameters<typeof billing.purchasePackage>[0]);
+    expect(result).toEqual({ status: "ERROR", errorCode: "purchases_disabled_during_beta" });
+    expect(mocks.configure).not.toHaveBeenCalled();
+    expect(mocks.purchase).not.toHaveBeenCalled();
+  });
+
+  it("retains the purchase flow when a future reviewed policy enables it", async () => {
+    mocks.constants.expoConfig.android.package = "com.kjeehwan.lastrep";
+    mocks.policy.NEW_PURCHASES_ENABLED = true;
+    mocks.purchase.mockResolvedValue({});
+    const billing = await import("./revenuecat");
+    const selected = {} as Parameters<typeof billing.purchasePackage>[0];
+    expect(await billing.purchasePackage(selected)).toEqual({ status: "PURCHASED" });
+    expect(mocks.purchase).toHaveBeenCalledExactlyOnceWith(selected);
   });
 
   it("recognizes a standalone dev package without relying on __DEV__", async () => {
