@@ -1,4 +1,4 @@
-import { Href, useLocalSearchParams, useRouter } from "expo-router";
+import { Href, Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import { onAuthStateChanged } from "firebase/auth";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { GestureResponderEvent } from "react-native";
@@ -33,6 +33,7 @@ import {
   syncRevenueCatPurchases,
 } from "../src/billing/revenuecat";
 
+import { NEW_PURCHASES_ENABLED } from "../src/billing/accessPolicy";
 import { usePurchaseRestore } from "../src/billing/usePurchaseRestore";
 
 type ScreenState = "idle" | "loading" | "success" | "error";
@@ -124,7 +125,11 @@ function getDiagnosticErrorCode(error: unknown): string | undefined {
   return undefined;
 }
 
-export default function PaywallScreen() {
+export default function PaywallRoute() {
+  return NEW_PURCHASES_ENABLED ? <PaywallScreen /> : <Redirect href="/(tabs)/settings" />;
+}
+
+function PaywallScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<PaywallAnalyticsContext>();
   const sourceScreen = normalizePaywallSourceScreen(getFirstParam(params.sourceScreen));

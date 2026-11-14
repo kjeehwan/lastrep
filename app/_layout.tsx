@@ -1,3 +1,4 @@
+import { NEW_PURCHASES_ENABLED } from "../src/billing/accessPolicy";
 import { SharingProvider } from "../src/sharing/SharingProvider";
 import * as SplashScreen from 'expo-splash-screen';
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider, usePathname } from 'expo-router';
@@ -73,7 +74,7 @@ function RootContent() {
     <Stack.Screen key="shared-workout" name="shared-workout" options={{ headerShown: false }} />,
     <Stack.Screen key="short-shared-workout" name="w/[token]" options={{ headerShown: false }} />,
     <Stack.Screen key="onboarding" name="onboarding" options={{ headerShown: false }} />,
-    <Stack.Screen key="paywall" name="paywall" options={{ title: "Paywall" }} />,
+    <Stack.Screen key="paywall" name="paywall" options={{ title: "Paywall", headerShown: NEW_PURCHASES_ENABLED }} />,
     <Stack.Screen key="modal" name="modal" options={{ presentation: "modal", title: "Modal" }} />,
   ];
 
