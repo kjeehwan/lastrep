@@ -1,6 +1,6 @@
 # Lastrep beta demo - precise cues and historical RPE
 
-November 14, 2026. 66 seconds, 1080 x 1920 portrait, H.264 at 30 fps. Music and silent versions have identical pictures. No narration. Open preview.html or lastrep-beta-demo.mp4. Superseded delivery exports and previews were removed after approval; reusable capture and rendering scripts remain locally under .dev-tools.
+November 14, 2026. Approximately 71 seconds with music, 66 seconds silent; 1080 x 1920 portrait, H.264 at 30 fps. Music and silent versions share the same app footage. The music version has an eight-second closing card with full attribution; the silent version has a shorter closing card without a music credit. No narration. Open preview.html or lastrep-beta-demo.mp4. Superseded delivery exports and previews were removed after approval; reusable capture and rendering scripts remain locally under .dev-tools.
 
 ## Changes
 
@@ -17,6 +17,16 @@ Both exports passed complete FFmpeg decoding. Representative full-resolution fra
 
 Capture used disposable accounts and synthetic records in the local demo-lastrep-sharing Firebase emulators only. Both accounts/documents were removed. The temporary production-wordmark source override was restored exactly, original dark system theme restored, temporary forwarding removed, and task-created servers/emulator stopped. No personal phone/account used. No health permissions were changed in this revision. No product feature source changes, Git delivery, build, deployment or public posting performed; existing beta-billing changes are preserved.
 
-Music: Chill Wave by Kevin MacLeod, CC BY 4.0. Include MUSIC-CREDIT.txt in the public post/video description when publishing the version with music.
+Music: Chill Wave by Kevin MacLeod, CC BY 4.0. The music version includes the full MUSIC-CREDIT.txt attribution on its closing card. An external credit may additionally be included where permitted.
 
 Ignored sources: .dev-tools/demos/lastrep-beta-precise-2026-11-14. Recorder: .dev-tools/record-precise-main.py. Cue calibration: .dev-tools/calibrate-precise-cues.py. Renderer: .dev-tools/render-precise-demo.py. Cue frame check: .dev-tools/check-precise-cues.py. Delivery contains no credentials.
+
+## Silent export correction - November 17, 2026
+
+Removed the music credit from the silent export closing frame. The music export is unchanged. All pre-ending video packets are unchanged, and the complete silent export passes FFmpeg decoding. Closing frame visually checked. No audio is included in the silent export.
+
+## Full music attribution - November 17, 2026
+
+Added creator, track title, source URL, CC BY 4.0 license URL and editing notice to the music export closing card; held for eight seconds. Pre-ending footage and the original faded soundtrack are preserved byte-for-byte. The extra closing hold continues after the soundtrack ends. Silent export unchanged. Complete decoding and closing-frame visual inspection passed.
+
+The final credit layout is a compact four-line, left-aligned footer near the bottom (72 px side inset), with a semibold track/creator line and smaller muted source, license and editing details. Logo and tagline retain their original placement. Re-export passed full decoding and packet comparisons for unchanged footage/audio; silent export unchanged.
