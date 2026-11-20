@@ -20,7 +20,27 @@ export function AppThemeProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => onAuthStateChanged(auth, user => { void store.load(accountThemeKey(user?.uid ?? null)); }), [store]);
   const value = useMemo(() => ({ ...state, colorScheme, setPreference: store.setPreference }), [state, colorScheme, store]);
   const colors = colorScheme === "dark" ? notebookDark : notebookPaper;
-  return <AppThemeContext.Provider value={value}>{state.ready ? children : <View style={{ flex: 1, backgroundColor: colors.canvas, justifyContent: "center" }}><ActivityIndicator color={colors.ink} accessibilityLabel="Loading appearance" /></View>}</AppThemeContext.Provider>;
+  return (
+    <AppThemeContext.Provider value={value}>
+      <View style={{ flex: 1, backgroundColor: colors.canvas }}>
+        {/* Expo Router must mount its navigator on the first render. Mask the
+            content during appearance loading instead of removing the tree. */}
+        <View
+          style={{ flex: 1, opacity: state.ready ? 1 : 0 }}
+          pointerEvents={state.ready ? "auto" : "none"}
+          accessibilityElementsHidden={!state.ready}
+          importantForAccessibility={state.ready ? "auto" : "no-hide-descendants"}
+        >
+          {children}
+        </View>
+        {!state.ready && (
+          <View style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0, justifyContent: "center" }}>
+            <ActivityIndicator color={colors.ink} accessibilityLabel="Loading appearance" />
+          </View>
+        )}
+      </View>
+    </AppThemeContext.Provider>
+  );
 }
 
 export function useAppTheme(): AppTheme {

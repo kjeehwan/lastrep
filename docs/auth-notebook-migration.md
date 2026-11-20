@@ -92,3 +92,9 @@ Final release-preparation checks on October 19:
 These checks do not establish screen-reader coverage, native iOS/other-device
 behavior, production billing, or the separately deferred onboarding migration.
 The user's real credential submissions were performed by the user.
+
+## Startup navigation follow-up
+
+The November 20 appearance-loading investigation and navigator-mounting hardening
+are documented in [Startup navigation](startup-navigation.md), including the
+unconfirmed cause of the one-off Android 14 crash and current verification limits.
