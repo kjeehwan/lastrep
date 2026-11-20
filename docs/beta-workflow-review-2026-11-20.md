@@ -162,3 +162,9 @@ app, runtime fault wrapper, shell probe and port forwards; restored 1080 x 2436,
 Metro and Firebase services. The crash buffer contained one Android System UI
 subscription-ID exception at emulator boot, before the app checks; it contained
 no Lastrep crash. This is not a general crash/stress certification.
+
+During PR checks on November 21, the full suite exposed an existing Profile
+wiring assertion that forbade any `pathname` reference in the global banner.
+Updated it to reject route-dependent visibility guards while permitting the new
+route-dependent positioning. Connectivity/dismissal visibility checks remain.
+No application behavior changed in this test correction.
