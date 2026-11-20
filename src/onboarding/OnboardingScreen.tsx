@@ -54,7 +54,7 @@ export function OnboardingScreen({ step }: { step: OnboardingStep }) {
       </View> : null}
       {step === "health" ? <View style={styles.group}>
         <Text style={styles.body}>On supported Android devices, Lastrep can read sleep, weight, body-fat and lean-body-mass records that you permit.</Text>
-        <View style={styles.note}><Text style={styles.label}>Your choice, at any time.</Text><Text style={styles.body}>Imported summaries are stored in your Lastrep account for recovery, sleep and body-composition trends.</Text><Text style={styles.body}>Relevant summaries may support AI-assisted recommendations. A separate disclosure appears before sending context to OpenAI.</Text><Text style={styles.supporting}>Nothing is connected during setup. You can connect later in Profile, disconnect there, or revoke access in your health service.</Text></View>
+        <View style={styles.note}><Text style={styles.label}>Your choice, at any time.</Text><Text style={styles.body}>Imported summaries are stored in your Lastrep account for recovery, sleep and body-composition trends.</Text><Text style={styles.body}>Relevant summaries can help inform your training and recovery guidance, including Today’s Plan.</Text><Text style={styles.supporting}>Nothing is connected during setup. You can connect later in Profile, disconnect there, or revoke access in your health service.</Text></View>
       </View> : null}
     </>}
     {state.error ? <Text accessibilityRole="alert" accessibilityLiveRegion="polite" style={styles.error}>{state.error}</Text> : null}

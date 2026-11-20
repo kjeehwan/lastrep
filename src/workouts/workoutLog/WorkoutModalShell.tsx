@@ -13,6 +13,7 @@ type WorkoutModalShellProps = {
   dismissOnBackdropPress?: boolean;
   androidBehavior?: "height" | "padding" | "position";
   compactLandscape?: boolean;
+  footer?: ReactNode;
 };
 
 /** Shared modal frame so dismissal behavior is explicit for every Workout overlay. */
@@ -25,10 +26,11 @@ export function WorkoutModalShell({
   dismissOnBackdropPress = true,
   androidBehavior = "height",
   compactLandscape = false,
+  footer,
 }: WorkoutModalShellProps) {
   const {width,height}=useWindowDimensions();
   const compact=compactLandscape&&width>height;
-  const card = <AdaptiveModalCard viewportMargin={compact?8:32} style={[cardStyle,compact&&{paddingTop:8,paddingBottom:8}]}>{children}</AdaptiveModalCard>;
+  const card = <AdaptiveModalCard viewportMargin={compact?8:32} footer={footer} style={[cardStyle,compact&&{paddingTop:8,paddingBottom:8}]}>{children}</AdaptiveModalCard>;
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onRequestClose} dismissOnBackdropPress={dismissOnBackdropPress}>
       <KeyboardAwareModalFrame androidBehavior={androidBehavior}>

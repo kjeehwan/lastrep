@@ -407,6 +407,13 @@ export function SharingDialogs({
   const sentPreview = selectedItem && !("sender" in selectedItem);
   const programPlan = outgoing && isSharedProgram(outgoing) ? outgoing : null;
   const programRoutine = programPlan?.routines.find(r => r.key === programRoutineKey);
+  const status = error || feedback || busy ? (
+    <View style={{ gap: 14 }}>
+      {!!error && <Text accessibilityRole="alert" style={{ color: colors.danger }}>{error}</Text>}
+      {!!feedback && <Text accessibilityLiveRegion="polite" style={styles.modalText}>{feedback}</Text>}
+      {busy && <Text accessibilityLiveRegion="polite" style={styles.muted}>Please wait…</Text>}
+    </View>
+  ) : null;
   const planWord = programPlan ? "program" : "workout";
   const title = step === "program-routine" ? programRoutine?.plan.title ?? "Routine" : step === "program-saved" ? "Program saved" :
     screen === "username"
@@ -467,6 +474,8 @@ export function SharingDialogs({
       dismissOnBackdropPress={!busy}
       backdropStyle={styles.modalBackdrop}
       cardStyle={{ ...styles.modalCard, maxWidth: step === "edit" ? 760 : 600, ...(step === "center" ? { height: centerHeight } : {}) }}
+      // The shared card reserves footer space, or scrolls it on short displays.
+      footer={step === "center" ? status : undefined}
     >
       {step === "edit" && plan && !isSharedProgram(plan) ? (
         <SharingPlanEditor
@@ -481,7 +490,7 @@ export function SharingDialogs({
         />
       ) : (
         <>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flexShrink: 0 }}>
             <View style={{ flex: 1, flexDirection: "row", alignItems: "center" }}>
             <Text
               accessibilityRole="header"
@@ -602,19 +611,20 @@ export function SharingDialogs({
                 })}
               </View>
               <ScrollView
-                style={{ height: Math.max(120, centerHeight - 180), flexGrow: 0 }}
+                style={{ maxHeight: Math.max(72, centerHeight - 180), flexGrow: 0 }}
+                nestedScrollEnabled
                 keyboardShouldPersistTaps="handled"
               >
                 {loadingList && (
-                  <Text style={styles.muted}>Loading workouts…</Text>
+                  <Text style={styles.muted}>Loading shared plans…</Text>
                 )}
                 {visible.length === 0 && !busy && !loadingList && (
                   <Text style={styles.modalText}>
                     {tab === "Requests"
                       ? "No sharing requests."
                       : tab === "Sent"
-                        ? "No workouts sent yet."
-                        : "No shared workouts yet."}
+                        ? "No plans sent yet."
+                        : "No shared plans yet."}
                   </Text>
                 )}
                 {!loadingList && visible.map((item, itemIndex) => (
@@ -909,7 +919,7 @@ export function SharingDialogs({
           ) : step === "program-routine" && programRoutine ? (
             <><SharingPlanPreview plan={programRoutine.plan} showTitle={false}/><SharingButton label="Back to program" onPress={()=>setStep("preview")} busy={busy}/></>
           ) : step === "program-saved" && programPlan && savedProgram ? (
-            <><View style={{gap:8}}><Text style={styles.sessionTitle}>{programPlan.title}</Text><Text style={styles.muted}>{programPlan.days.length}-day cycle · {savedProgram.routineCount} routines saved</Text></View><View style={{gap:16,marginVertical:6}}><Text style={styles.modalText}>Saved to My programs and My routines. Changes by the sender will not change your copies.</Text><Text style={styles.muted}>Your current program and unfinished workout are unchanged.</Text></View><SharingButton label={savedProgram.hasRun ? "View program" : "Start program"} primary onPress={()=>openSavedProgram(!savedProgram.hasRun)} busy={busy}/><SharingButton label="View in My programs" onPress={()=>openSavedProgram()} busy={busy}/><SharingButton label="Done" onPress={onClose} busy={busy}/></>
+            <><View style={{gap:8}}><Text style={styles.sessionTitle}>{programPlan.title}</Text><Text style={styles.muted}>{programPlan.days.length}-day cycle · {savedProgram.routineCount} {savedProgram.routineCount === 1 ? "routine" : "routines"} saved</Text></View><View style={{gap:16,marginVertical:6}}><Text style={styles.modalText}>Saved to My programs and My routines. Changes by the sender will not change your copies.</Text><Text style={styles.muted}>Your current program and unfinished workout are unchanged.</Text></View><SharingButton label={savedProgram.hasRun ? "View program" : "Start program"} primary onPress={()=>openSavedProgram(!savedProgram.hasRun)} busy={busy}/><SharingButton label="View in My programs" onPress={()=>openSavedProgram()} busy={busy}/><SharingButton label="Done" onPress={onClose} busy={busy}/></>
           ) : plan ? (
             <>
               {snapshot && !sentPreview && !programPlan && (
@@ -1044,21 +1054,7 @@ export function SharingDialogs({
               </Text>
             )
           )}
-          {!!error && (
-            <Text accessibilityRole="alert" style={{ color: colors.danger }}>
-              {error}
-            </Text>
-          )}
-          {!!feedback && (
-            <Text accessibilityLiveRegion="polite" style={styles.modalText}>
-              {feedback}
-            </Text>
-          )}
-          {busy && (
-            <Text accessibilityLiveRegion="polite" style={styles.muted}>
-              Please wait…
-            </Text>
-          )}
+          {step !== "center" && status}
           </View>
         </>
       )}
