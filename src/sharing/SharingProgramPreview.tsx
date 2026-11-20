@@ -7,11 +7,12 @@ import type { SharedProgramPlan, SharingPerson } from "./sharingContract";
 
 export function SharingProgramPreview({plan,sender,onRoutine}:{plan:SharedProgramPlan;sender?:SharingPerson;onRoutine:(key:string)=>void}) {
   const {colors}=useNotebook(),styles=useNotebookStyles(createStyles);
+  const workoutDays = plan.days.filter(day => day.type === "workout").length;
   return <ScrollView style={{maxHeight:350}} keyboardShouldPersistTaps="handled">
     <View style={{gap:8,paddingBottom:16,borderBottomWidth:1,borderColor:colors.rule}}>
       <Text style={styles.sessionTitle}>{plan.title}</Text>
       {sender && <Text style={styles.muted}>From {sender.nickname}{sender.username ? ` · @${sender.username}` : ""}</Text>}
-      <Text style={styles.muted}>{plan.days.length}-day cycle · {plan.days.filter(d=>d.type==="workout").length} workout days · {plan.routines.length} routines</Text>
+      <Text style={styles.muted}>{plan.days.length}-day cycle · {workoutDays} workout {workoutDays === 1 ? "day" : "days"} · {plan.routines.length} {plan.routines.length === 1 ? "routine" : "routines"}</Text>
     </View>
     {plan.days.map((day,index)=>{
       const routine=plan.routines.find(r=>r.key===day.routineKey);

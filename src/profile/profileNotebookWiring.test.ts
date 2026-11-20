@@ -46,7 +46,8 @@ it("uses one connectivity-driven offline save notice without leaving stale save 
   expect(source).toContain('Offline. Your edits stay here; reconnect before saving.</Text> : saveFeedback && saveFeedback !== "Changes saved." && !savingProfile ?');
   const banner = readFileSync("components/OfflineBanner.tsx", "utf8");
   expect(banner).toContain('if (!ready || !isOffline || dismissed)');
-  expect(banner).not.toContain('pathname');
+  // Route-aware tab clearance must not suppress the notice on any screen.
+  expect(banner).not.toMatch(/if\s*\([^)]*pathname/);
   expect(banner).toContain('onPress={() => setDismissed(true)}');
 });
 
