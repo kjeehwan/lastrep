@@ -37,6 +37,14 @@
 .meal-ledger-row{display:grid;grid-template-columns:52px minmax(0,1fr) auto;gap:12px;align-items:center;border-bottom:1px solid var(--rule);padding:16px 0;min-height:76px}
 .meal-time{font-size:calc(13px * var(--scale));color:var(--secondary);font-variant-numeric:tabular-nums;text-align:left;min-height:44px}
 .meal-ledger-row .meal-open{text-align:left;min-height:44px;min-width:0}
+.meal-content{min-width:0}
+.meal-summary-line{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.meal-summary-line .meal-expand{display:flex;align-items:center;gap:6px;min-height:44px;font-size:calc(13px * var(--scale));color:var(--secondary)}
+.meal-expand svg{width:16px;height:16px}
+.meal-summary-line small{margin:0!important}
+.meal-expanded{padding:0 0 0 16px;margin:4px 0 0;color:var(--secondary)}
+.meal-expanded li{font-size:calc(13px * var(--scale));line-height:1.4}
+.meal-ledger-row .meal-energy{align-self:start;padding-top:4px}
 .meal-ledger-row strong{font-size:calc(18px * var(--scale));font-weight:600;display:block;line-height:1.35}
 .meal-ledger-row small{font-size:calc(13px * var(--scale));color:var(--secondary);display:block;margin-top:4px;line-height:1.4}
 .meal-energy{font-size:calc(16px * var(--scale));font-weight:600;text-align:right;white-space:nowrap}

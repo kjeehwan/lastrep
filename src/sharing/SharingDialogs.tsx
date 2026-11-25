@@ -1,3 +1,4 @@
+import { AppGuideTip } from "../onboarding/live/AppGuide";
 import { SharingPlanPreview } from "./SharingPlanPreview";
 import { SharingProgramPreview } from "./SharingProgramPreview";
 import { isSharedProgram, type SharedPlan } from "./sharingContract";
@@ -922,6 +923,7 @@ export function SharingDialogs({
             <><View style={{gap:8}}><Text style={styles.sessionTitle}>{programPlan.title}</Text><Text style={styles.muted}>{programPlan.days.length}-day cycle · {savedProgram.routineCount} {savedProgram.routineCount === 1 ? "routine" : "routines"} saved</Text></View><View style={{gap:16,marginVertical:6}}><Text style={styles.modalText}>Saved to My programs and My routines. Changes by the sender will not change your copies.</Text><Text style={styles.muted}>Your current program and unfinished workout are unchanged.</Text></View><SharingButton label={savedProgram.hasRun ? "View program" : "Start program"} primary onPress={()=>openSavedProgram(!savedProgram.hasRun)} busy={busy}/><SharingButton label="View in My programs" onPress={()=>openSavedProgram()} busy={busy}/><SharingButton label="Done" onPress={onClose} busy={busy}/></>
           ) : plan ? (
             <>
+              {screen === "send" || !snapshot ? <AppGuideTip inDialog topic="sharing" id={`share-${planWord}`} title={`Share your ${planWord}`}>Send it to someone in Lastrep, or create a link they can open.</AppGuideTip> : !sentPreview && programPlan ? <AppGuideTip inDialog topic="sharing" id="receive-program" title="Keep this program">Save to My programs adds your own copy. After saving, you can choose Start program when you are ready to use it.</AppGuideTip> : null}
               {snapshot && !sentPreview && !programPlan && (
                 <Text style={styles.muted}>
                   From {snapshot.sender.nickname}

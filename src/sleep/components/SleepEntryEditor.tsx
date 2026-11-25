@@ -1,3 +1,4 @@
+import { AppGuideTip } from "../../onboarding/live/AppGuide";
 import { NotebookTextInput } from "../../ui/notebook/NotebookTextInput";
 import React, { useState } from "react";
 import { Keyboard, Pressable, Text, View, useWindowDimensions } from "react-native";
@@ -69,6 +70,7 @@ export function SleepEntryEditor({ uid, selected: initialSelected, entry: initia
   };
   const footer = dateField ? <SleepButton label="Back to entry" onPress={() => setDateField(null)} /> : conflicts ? <><SleepButton label={saving ? "Saving..." : "Replace listed entries"} primary disabled={saving} onPress={() => void save(conflicts)} /><SleepButton label="Back to edit" disabled={saving} onPress={() => setConflicts(null)} /></> : <><SleepButton label={saving ? "Saving..." : "Save session"} primary disabled={saving} onPress={() => void save()} /><SleepButton label="Cancel" disabled={saving} onPress={onClose} /></>;
   return <SleepSheet title={dateField ? `${dateField === "bed" ? "Bedtime" : "Wake"} date` : conflicts ? "Review overlapping sleep" : entry ? "Edit sleep session" : "Record sleep"} onClose={close} footer={footer}>
+    <AppGuideTip inDialog topic="sleep" id="sleep-editor-real" title="Set the actual sleep times">Drag the bedtime and wake markers, or type your sleep times. Check the dates, then tap Save session.</AppGuideTip>
     {dateField ? <SleepCalendar selected={dateField === "bed" ? bedDate : wakeDate} onSelect={(date) => { if (dateField === "bed") setBedDate(date); else setWakeDate(date); setDatesExplicit(true); setDateField(null); setError(""); }} /> : conflicts ? <>
       <Text style={text}>These entries may describe the same sleep. Replacing excludes only the entries listed below from Lastrep totals. The original health-service records are unchanged.</Text>
       {conflicts.map((row) => <View key={row.id} style={{ borderBottomWidth: 1, borderBottomColor: colors.rule, paddingVertical: 12, gap: 4 }}><Text style={text}>{sleepDisplayDate(row.dateKey)} - {sleepDurationText(row.hours)}</Text><Text style={{ ...text, color: colors.muted }}>{row.source === "health" ? "Health Connect" : "Manual entry"}{row.startMs == null ? ", times unavailable" : `, ${timeText(row.startMs)} - ${timeText(row.endMs!)}`}</Text></View>)}

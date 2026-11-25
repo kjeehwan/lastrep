@@ -1,5 +1,5 @@
 export function usesNotebookDesign(pathname: string): boolean {
-  return pathname.startsWith("/w/") || ["/onboarding/experience", "/onboarding/availability", "/onboarding/nickname", "/onboarding/health"].includes(pathname) || pathname === "/shared-workout" || pathname === "/auth/sign-in" || pathname === "/auth/sign-up" || pathname === "/home" || ["/workout", "/nutrition", "/sleep", "/profile", "/settings"].some((root) => pathname === root || pathname.startsWith(`${root}/`));
+  return pathname.startsWith("/w/") || ["experience", "availability", "nickname", "health", "welcome", "practice"].some(step => pathname === `/onboarding/${step}`) || pathname === "/shared-workout" || pathname === "/auth/sign-in" || pathname === "/auth/sign-up" || pathname === "/home" || ["/workout", "/nutrition", "/sleep", "/profile", "/settings"].some((root) => pathname === root || pathname.startsWith(`${root}/`));
 }
 
 export function notebookTabBarHeight(bottomInset: number, fontScale: number): number {

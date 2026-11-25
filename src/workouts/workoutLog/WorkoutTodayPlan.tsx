@@ -1,3 +1,4 @@
+import { AppGuideTip } from "../../onboarding/live/AppGuide";
 import { useNotebook, useNotebookStyles, notebookSheet } from "../../ui/notebook/Notebook";
 import { notebookFonts, type NotebookColors } from "../../ui/notebook/tokens";
 import { Ionicons } from "@expo/vector-icons";
@@ -99,6 +100,7 @@ export function WorkoutTodayPlan(props: Props) {
               <Pressable onPress={props.onClose} hitSlop={12} accessibilityLabel="Close"><Ionicons name="close" size={24} color={colors.ink} /></Pressable>
             </View>
             <ScrollView style={styles.scroll} contentContainerStyle={styles.body}>
+              <AppGuideTip inDialog topic="plan" id={props.applied ? "review-applied" : !fresh ? "review-pending" : !applicable.length ? "review-no-changes" : showInputs ? "review-apply" : "review-context"} title={props.applied ? "Your changes are applied" : !fresh ? "Your workout review" : !applicable.length ? "No prescription changes to apply" : showInputs ? "Choose what to apply" : "Understand the review"}>{props.applied ? "Close this review to continue training. These changes are already in your workout; you do not need to apply them again." : !fresh ? "Wait for the review to finish, or use the retry/update action if shown. Your current workout stays unchanged." : !applicable.length ? "Review any cautions and explanations below. Review context shows the inputs used. Close the review to keep your plan; no Apply action is required." : showInputs ? "Edit recovery check-in if something has changed. Select the exercise changes you want, then Apply changes below, or close to keep your current plan." : "Expand an exercise for its reason. Why these suggestions explains the recommendation; Review context shows the inputs. You choose what to apply."}</AppGuideTip>
               <Text style={styles.summary}>{summary}</Text>
               {props.error ? <Text style={styles.reason}>{props.error}</Text> : null}
               {fresh && props.plan?.inputs.plannedWorkout?.source === "none" ? <Text style={styles.reason}>{props.plan.result.headline}</Text> : null}

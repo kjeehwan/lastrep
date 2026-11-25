@@ -1,3 +1,4 @@
+import { AppGuideNavigation, AppGuideTip } from "../../../src/onboarding/live/AppGuide";
 import { NotebookTextInput } from "../../../src/ui/notebook/NotebookTextInput";
 import { NotebookHeader } from "@/src/ui/notebook/NotebookHeader";
 import { ChevronLeft, ChevronRight, ChevronUp, ChevronDown } from "lucide-react-native";
@@ -601,7 +602,9 @@ export default function NutritionIndex() {
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
       <NotebookHeader title="Nutrition" onBack={handleGoBack} />
+      <AppGuideNavigation />
       <ScrollView ref={pageScrollRef} contentContainerStyle={styles.content} style={styles.container}>
+        <AppGuideTip topic="nutrition" id={`nutrition-diary:${selectedDateKey}:${meals.length ? "recorded" : "empty"}`} title={meals.length ? "Review your daily totals" : "Your daily food diary"}>{meals.length ? "Your logged foods contribute to the totals below. Expand a meal to see its foods, or open it to adjust a portion or add more. Use the guide bar to explore another topic." : "Open a meal to add food. Your daily calories and nutrients update as you log."}</AppGuideTip>
 
         <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
           <TouchableOpacity accessibilityLabel="Previous diary day" style={styles.backButton} onPress={() => handlePressTimelineDate(adjacentDiaryDate(selectedDateKey, -1))}><ChevronLeft size={20} color={colors.ink} /></TouchableOpacity>

@@ -2,7 +2,7 @@ export type RecommendationUsage = { recommendedWorkout: boolean; todayPlanReview
 export type FeedbackAnswers = {
   followedRecommendation: "yes" | "partial" | "no" | null;
   helpful: "yes" | "neutral" | "no" | null;
-  todayPlanHelpful: "yes" | "neutral" | "no" | null;
+  todayPlanHelpful: "yes" | "neutral" | "no" | "not_used" | null;
 };
 export function parseRecommendationUsage(value?: unknown): RecommendationUsage {
   const usage = value as Partial<RecommendationUsage> | null;
@@ -15,7 +15,7 @@ export function recommendationQuestions(usage: RecommendationUsage) {
     questions.push({ id: "followedRecommendation", label: "Followed the recommended workout?", options: [{ value: "yes", label: "Yes" }, { value: "partial", label: "Partial" }, { value: "no", label: "No" }] });
     questions.push({ id: "helpful", label: "Was the recommended workout helpful?", options: helpfulOptions });
   }
-  if (usage.todayPlanReviewed) questions.push({ id: "todayPlanHelpful", label: "Was Today's Plan review helpful?", options: helpfulOptions });
+  if (usage.todayPlanReviewed) questions.push({ id: "todayPlanHelpful", label: "Was Today's Plan review helpful?", options: [...helpfulOptions, { value: "not_used", label: "Didn't use it" }] });
   return questions;
 }
 export function recommendationFeedback(usage: RecommendationUsage, answers: FeedbackAnswers) {

@@ -1,3 +1,5 @@
+import { foodAddedEvent } from "../../../../src/onboarding/live/activityTips";
+import { useAppGuide, AppGuideTip } from "../../../../src/onboarding/live/AppGuide";
 import { NotebookTextInput } from "../../../../src/ui/notebook/NotebookTextInput";
 import { normalizeServingInfo } from "@/src/nutrition/servingLabel";
 import { ManualFoodEditor } from "@/src/nutrition/components/ManualFoodEditor";
@@ -107,6 +109,7 @@ export default function MealSearchScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ section?: string; date?: string }>();
   const section = decodeURIComponent(params.section ?? "Breakfast");
+  const appGuide = useAppGuide();
   const selectedDateKey = typeof params.date === "string" ? params.date : formatDateKey(new Date());
   const selectedDate = parseDateKey(selectedDateKey) ?? new Date();
   const goToSection = useCallback(
@@ -572,6 +575,7 @@ export default function MealSearchScreen() {
     setSavedMealPendingId(savedMeal.id);
     try {
       await addSavedMealToDate(uid, savedMeal, section, selectedDate);
+      appGuide?.event(foodAddedEvent(selectedDateKey, section));
       goToSection();
     } catch (error) {
       console.log("Failed to add saved meal", error);
@@ -609,6 +613,7 @@ export default function MealSearchScreen() {
     const now = new Date();
     await createMeal(uid, { ...food, source: null, mealSection: section,
       loggedAt: Timestamp.fromDate(new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate(), now.getHours(), now.getMinutes())), updatedAt: Timestamp.now() });
+    appGuide?.event(foodAddedEvent(selectedDateKey, section));
     if (stagedCount === 0) goToSection();
     else setManualFoodMessage(`Added ${food.name} to ${mealLabel(section, labels)}. Your other selections are kept until you tap Add.`);
   };
@@ -684,6 +689,7 @@ export default function MealSearchScreen() {
             updatedAt: now,
             source: baseSource,
           } as any, targetMeals);
+          appGuide?.event(foodAddedEvent(selectedDateKey, section));
           targetMeals.unshift({
             id: `local-${entry.food.id}-${now.seconds}`,
             mealTimeMinutes,
@@ -746,6 +752,7 @@ export default function MealSearchScreen() {
           },
         } as any);
 
+        appGuide?.event(foodAddedEvent(selectedDateKey, section));
         existing.calories = nextCalories;
         existing.proteinGrams = nextProtein;
         existing.carbGrams = nextCarbs;
@@ -770,6 +777,7 @@ export default function MealSearchScreen() {
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
       <NotebookHeader title={`Add to ${mealLabel(section, labels)}`} onBack={goToSection} action={submitting ? "Saving..." : `Add (${stagedCount})`} onAction={commitStaged} disabled={submitting || stagedCount === 0} />
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        <AppGuideTip inDialog topic="nutrition" id="nutrition-search" title="Find a food and set its portion">Search for a food and choose its portion. Tap Confirm to select it, then Add at the top to add your selected foods to the meal.</AppGuideTip>
         <View style={[styles.card, { borderTopWidth: 0, paddingTop: 0 }]}>
           <Text style={[styles.subText, { textAlign: "center" }]}>{(parseDateKey(selectedDateKey) ?? new Date()).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</Text>
           <View style={styles.searchInlineRow}>

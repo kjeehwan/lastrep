@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { programDraftSlot, readDraftSlots, switchDraftSlot, refreshResumedWorkoutDate, serializeDraftSlot, workoutDraftContext, loadWorkoutDraftCache } from "./workoutDraftSlots";
+import { hasResumableWorkoutDraft, programDraftSlot, readDraftSlots, switchDraftSlot, refreshResumedWorkoutDate, serializeDraftSlot, workoutDraftContext, loadWorkoutDraftCache } from "./workoutDraftSlots";
 import type { ProgramRecord } from "../programFlow";
 describe("workout path drafts", () => {
   it("waits for the complete current/parked cache instead of publishing a partial draft list", async () => {
@@ -58,7 +58,7 @@ describe("workout path drafts", () => {
     expect(program.programLink.runId).toBe("run");
   });
   it("keeps a routine builder draft and does not overwrite an existing destination", () => {
-    const builder = { workoutSlot: "builder:program", routineBuilderMode: true, exercises: [] };
+    const builder = { workoutSlot: "builder:program", routineBuilderMode: true, exercises: [{name:"Bench"}] };
     const existing = { workoutSlot: "program:run", exercises: [{ name: "Row" }] };
     const result = switchDraftSlot({ "program:run": existing }, builder, "program:run", { exercises: [] });
     expect(result.draft).toEqual(existing); expect(result.slots["builder:program"]).toEqual(builder);
@@ -67,4 +67,22 @@ describe("workout path drafts", () => {
     expect(() => readDraftSlots("broken")).toThrow(); expect(() => readDraftSlots("[]")).toThrow();
     expect(() => readDraftSlots(JSON.stringify({single:{exercises:[]},broken:{title:"Lost"}}))).toThrow();
   });
+});
+
+it("restores a workout unchanged after an independent routine builder round trip", () => {
+  const workout = {workoutSlot:"program:run:3",sessionTitle:"Back",programLink:{runId:"run",ordinal:3},exercises:[{sets:[{reps:"8",rpe:"9",done:true}]}]};
+  const opened = switchDraftSlot({}, workout, "builder:routine", {exercises:[{name:"Row"}],routineBuilderMode:true,routineBuilderReturnSlot:workout.workoutSlot});
+  const persisted = JSON.parse(serializeDraftSlot(opened.draft));
+  const returned = switchDraftSlot(opened.slots, persisted, persisted.routineBuilderReturnSlot, {exercises:[]});
+  expect(returned.draft).toEqual(workout);
+  expect(returned.slots["builder:routine"].routineBuilderReturnSlot).toBe(workout.workoutSlot);
+});
+
+it("does not offer or park an untouched routine builder but keeps user-entered content", () => {
+  const empty={workoutSlot:"builder:routine",routineBuilderMode:true,sessionTitle:"",exercises:[]};
+  expect(hasResumableWorkoutDraft(empty)).toBe(false);
+  expect(hasResumableWorkoutDraft({...empty,sessionTitle:"  "})).toBe(false);
+  expect(hasResumableWorkoutDraft({...empty,sessionTitle:"My routine"})).toBe(true);
+  expect(hasResumableWorkoutDraft({...empty,exercises:[{name:"Bench"}]})).toBe(true);
+  expect(switchDraftSlot({"builder:routine":empty},empty,"single",{exercises:[]}).slots).not.toHaveProperty("builder:routine");
 });

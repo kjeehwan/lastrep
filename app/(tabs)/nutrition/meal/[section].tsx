@@ -1,3 +1,5 @@
+import { mealGuideTip } from "../../../../src/onboarding/live/activityTips";
+import { useAppGuide, AppGuideTip } from "../../../../src/onboarding/live/AppGuide";
 import { NotebookTextInput } from "../../../../src/ui/notebook/NotebookTextInput";
 import { normalizeServingInfo } from "@/src/nutrition/servingLabel";
 import { Star, ArrowRightLeft, Trash2 } from "lucide-react-native";
@@ -63,6 +65,7 @@ function formatMealQuantity(meal: NutritionMeal): string | null {
 
 
 export default function MealSectionScreen() {
+  const appGuide = useAppGuide();
   const colors = useNutritionColors();
   const foodEditorStyles = useFoodEditorStyles();
   const styles = useNotebookStyles(createStyles);
@@ -170,6 +173,8 @@ export default function MealSectionScreen() {
     () => dayMeals.filter((meal) => (meal.mealSection?.trim() || "Breakfast") === section),
     [dayMeals, section]
   );
+
+  const guideTip = mealGuideTip(selectedDateKey, section, sectionMeals.length > 0, appGuide?.state.events ?? []);
 
   const sectionTotals = useMemo(() => {
     return sectionMeals.reduce(
@@ -404,6 +409,7 @@ export default function MealSectionScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        <AppGuideTip topic="nutrition" {...guideTip}>{guideTip.text}</AppGuideTip>
         <View style={[styles.card, { borderTopWidth: 0, paddingTop: 0 }]}>
           <View style={styles.quickActionRow}><Text style={[styles.sectionTitle, { flex: 1 }]}>{sectionName}</Text><TouchableOpacity accessibilityLabel="Rename meal" style={styles.quickActionBtn} onPress={() => setRenameVisible(true)}><Text style={styles.quickActionText}>Rename</Text></TouchableOpacity></View>
           {sectionMeals.length ? <TouchableOpacity style={{ minHeight: 44, justifyContent: "center" }} onPress={() => setTimeEditorVisible(true)}>

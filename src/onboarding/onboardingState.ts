@@ -28,12 +28,13 @@ export function parseCache(raw: string | null): OnboardingCache | null {
     return progress ? { progress, draft: parseDraft(data.draft) } : null;
   } catch { return null; }
 }
-export function onboardingDestination(data: Record<string, unknown> | null, cache: OnboardingCache | null): "/(tabs)/home" | `/onboarding/${OnboardingStep}` {
+export function onboardingDestination(data: Record<string, unknown> | null, cache: OnboardingCache | null): "/(tabs)/home" | "/onboarding/welcome" {
   const cloud = parseProgress(data?.onboarding);
   // Cloud completion wins over an older local draft from another session/device.
   if (cloud?.completed || cache?.progress.completed) return "/(tabs)/home";
   const pending = cloud ?? cache?.progress;
-  return pending ? `/onboarding/${pending.step}` : "/(tabs)/home";
+  // Any unfinished v1 questionnaire maps to the new welcome. Its answers stay intact.
+  return pending ? "/onboarding/welcome" : "/(tabs)/home";
   // Accounts predating explicit progress keep access, even with optional answers missing.
 }
 export function stepSubmission(step: OnboardingStep, draft: OnboardingDraft, skip: boolean) {

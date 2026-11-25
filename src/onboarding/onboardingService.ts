@@ -45,3 +45,19 @@ export async function saveOnboardingStep(uid: string, step: OnboardingStep, draf
   }, { maxAttempts: 3 });
   return alreadyComplete ? { ...submission, progress: { ...submission.progress, completed: true }, destination: "/(tabs)/home" as const } : submission;
 }
+
+/** Completing or skipping the introduction never overwrites profile answers. */
+export async function completeOnboardingIntroduction(uid: string) {
+  const progress = { ...initialProgress, step: "health" as const, completed: true };
+  const saved = await runTransaction(db, async transaction => {
+    if (auth.currentUser?.uid !== uid) throw Error("Account changed");
+    const ref = doc(db, "users", uid);
+    const snapshot = await transaction.get(ref);
+    if (auth.currentUser?.uid !== uid) throw Error("Account changed");
+    if (!snapshot.exists()) throw Error("Your account could not be loaded. Try again.");
+    if (!parseProgress(snapshot.data()?.onboarding)?.completed) transaction.set(ref, { onboarding: progress }, { merge: true });
+    return { progress, draft: parseDraft(snapshot.data()) };
+  }, { maxAttempts: 3 });
+  // Cloud success remains success if the optional device cache is unavailable.
+  await AsyncStorage.setItem(onboardingKey(uid), JSON.stringify(saved)).catch(() => undefined);
+}

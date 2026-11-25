@@ -1,3 +1,4 @@
+import { AppGuideProvider } from "../src/onboarding/live/AppGuide";
 import { NEW_PURCHASES_ENABLED } from "../src/billing/accessPolicy";
 import { SharingProvider } from "../src/sharing/SharingProvider";
 import * as SplashScreen from 'expo-splash-screen';
@@ -124,7 +125,7 @@ function RootContent() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-        <SharingProvider><Stack>{stackScreens}</Stack></SharingProvider>
+        <AppGuideProvider><SharingProvider><Stack>{stackScreens}</Stack></SharingProvider></AppGuideProvider>
         <OfflineBanner />
         <AppDialogHost />
         <StatusBar style={usesNotebookDesign(pathname) && colorScheme === 'light' ? 'dark' : 'light'} />

@@ -281,6 +281,7 @@ function SettingsContent() {
       <SharingSettingsSection />
       <RestNotificationsSection key={uid} uid={uid} />
       <SettingsSection title="Support">
+        <SettingsRow icon={<FileText size={20} strokeWidth={1.5} color={colors.ink} />} label="App guide" onPress={() => router.push({ pathname: "/onboarding/welcome", params: { replay: "1" } })} />
         <SettingsRow icon={<Mail size={20} strokeWidth={1.5} color={colors.ink} />} label="Report a problem" onPress={() => void contactSupport()} />
         <SettingsRow icon={<SettingsVersionIcon />} label="App version" value={installedVersion} />
       </SettingsSection>

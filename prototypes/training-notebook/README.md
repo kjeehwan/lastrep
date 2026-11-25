@@ -12,6 +12,109 @@ From the repository root, run `python prototypes/training-notebook/serve.py`.
 This loopback-only server disables caching and versions local module imports so
 an already-open browser does not mix older files with a newly edited mockup.
 
+### Historical guided onboarding practice (November 21; superseded)
+
+The native implementation now guides real use with optional contextual tips; see
+`../../docs/onboarding-native-guided-practice.md`. The study below preserves the
+rejected walkthrough for reference and is not the current app guide.
+
+Open **http://127.0.0.1:4317/onboarding.html**. Small guidance popups and a static
+outline highlight controls on the existing full screen studies, embedded without
+their review sidebars. The app screens have not been redrawn for onboarding.
+The previous introduction proposal is preserved at `onboarding-introduction.html`;
+the original questionnaire remains at `onboarding-setup.html`.
+
+Tap each highlighted control yourself. Show me briefly animates a tap indicator
+to the control; it never clicks automatically. Input steps allow typing before
+Continue. Show me is an outlined button; Skip is a separate text action. A progress
+bar replaces the visible step fraction. Back restores the previous practice step;
+at the first step it opens the previous section (or Welcome). A brief Welcome
+opens first and is also available in the sidebar. Exit tour and Restart remain available. Reduced
+motion uses a static indicator. Choose a section in the review sidebar:
+workout logging, routines, programs, recovery, Today's Plan, nutrition, sleep or
+optional Health Connect.
+
+Sections are independent synthetic scenarios, sometimes with example routines
+or history. Save reviews, example saved plans and simulated health disclosures
+illustrate the flow; this is not native account setup or permission handling.
+The existing studies can temporarily write synthetic check-in/preferences to
+session storage. The tour snapshots those keys and restores them on Exit or
+page departure. No real account, backend or health service is accessed.
+
+Guidance protects dialog contents and relevant adjacent controls, including Add
+exercise before saving a routine. When it cannot fit without obscuring these,
+it reserves space below the screen (beside it in short landscape) instead of
+overlaying the content. The short workout-save review may cover the optional
+feedback questions, while preserving the header, summary and save actions.
+Recovery retains the split arrangement. Highlights use rounded corners and
+checkbox highlights match the inner visual checkbox rather than its touch area.
+Confirmation messages appear inside guidance instead of covering app controls.
+Practice restricts unrelated navigation; Exit allows free browsing. Switching
+sections cancels pending transitions. Finish tour and Exit open fresh Home,
+closing any previous modal without enabling simulated health access.
+
+Program practice now completes every day of a three-day cycle, then starts it
+and asks the user to select a day and open Change schedule. Seven-day and longer
+cycles remain available in the app; the shorter example avoids an incomplete
+seven-day setup. Routine saving has a separate template review and simulated
+save rather than the workout-completion/feedback screen.
+
+Welcome overlays the full Home screen. Highlight geometry provides at least
+8 px between text and the inner stroke without changing row padding/alignment;
+checkbox emphasis is drawn directly on its existing border. Expanded bordered
+controls temporarily hide their original border, preserving a single boundary.
+Modal focus follows the guided action instead of adding an accent outline to
+Close. The schedule label is Tomorrow, matching the current native wording.
+Today's Plan's View changes and sleep history/session controls are actual tap
+steps with detail views, rather than read steps that block the indicated action.
+
+Back reconstructs only the synthetic section by replaying its prior actions,
+retaining entered field values. The app surface is inert during reconstruction;
+intermediate screen renders are concealed until the destination is ready.
+section changes/exit cancel stale replay jobs. This is not native account undo.
+Failed study loads retry once and then offer Restart/Exit instead of a blank view.
+
+Latest browser interaction checks completed all 66 steps and checked text
+clearance across 330 layouts: four viewports
+in light/default text, plus dark/enlarged text on the standard phone. No overlaps
+with protected controls/dialogs or popup boundary overflow were found. Pointer
+checks covered program assignment, Today's Plan explanations/context, unexpected
+taps and Finish tour; a pending-action/section-switch check also passed. Light
+explanation, context, routine-save, welcome, checkbox, program schedule and
+Nutrition/Sleep confirmation screenshots were inspected. Back checks covered an
+entered load, a saved-routine review and Today's Plan route changes. Existing
+study/geometry tests pass (11/11).
+The latest pointer checks opened applied-plan changes and a recorded sleep
+session, then confirmed Back restored the action with its surface interactive.
+Welcome, inset action and checkbox screenshots were visually inspected.
+
+November 23: routine saving takes one tap in the builder, followed by its saved
+confirmation. Routine practice then selects Chest + Triceps, previews it, loads
+the workout and reveals its exercise/set table rather than ending at a chooser.
+The applied Today's Plan review shows a snapshot of the selected exercise changes
+with before/after prescriptions. Schedule explanations define all four actions.
+The clearance audit measures all visible text nodes (and input text estimates),
+including headings and borderless rows; it does not rely only on target bounds.
+
+Navigation rows with carets now outline the caret instead of the entire row;
+the full row remains tappable, and Show me points to that same caret. Controls
+without carets retain their existing highlight treatment. The onboarding-only
+Nutrition fixture uses 08:30 for new breakfast entries (`practice=onboarding`);
+other study fixtures retain their existing clock. No native logging time changed.
+Pointer checks verified the caret advances the tour and adding breakfast shows
+08:30. Both screenshots were inspected; 19 Nutrition/geometry tests passed.
+
+The diary now mirrors native meal structure: the meal name opens its editor,
+item count/caret expands food names, and P/C/F remain visible. Practice teaches
+that expansion rather than presenting a simplified protein-only summary.
+Sleep Continue validity updates from clock mutations, pointer completion,
+keyboard changes and typing. Pointer drags set 21:50/07:30 and enabled Continue
+without typed edits; keyboard clock adjustments passed too. Invalid 99:99 stays
+disabled. These remain synthetic browser checks, not native-tour delivery.
+These checks do not establish native keyboard, accessibility or device behavior.
+Full proposal:
+[`docs/onboarding-flow-review-2026-11-21.md`](../../docs/onboarding-flow-review-2026-11-21.md).
+
 ### Unified Today's Plan (October 29; awaiting review)
 
 October 31 workout entry examples:

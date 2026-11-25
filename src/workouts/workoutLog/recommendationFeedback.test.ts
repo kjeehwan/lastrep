@@ -23,3 +23,10 @@ it("retains feature use in a reopened draft without inferring it from a title", 
   const raw = serializeWorkoutDraft({ exercises: [], exerciseUnits: {}, sessionTitle: "Custom", sessionDateText: "2026-10-22", elapsedSeconds: 0, workoutTimerRunning: false, recommendationUsage: usage });
   expect(parseRecommendationUsage(JSON.parse(raw).recommendationUsage)).toEqual(usage);
 });
+
+it("accepts unanswered feedback and distinguishes not used from unhelpful", () => {
+  const usage = {recommendedWorkout:true,todayPlanReviewed:true};
+  expect(recommendationFeedback(usage,{followedRecommendation:null,helpful:null,todayPlanHelpful:null})).toMatchObject({followedRecommendation:"unknown",helpful:"unknown",todayPlanHelpful:"unknown"});
+  expect(recommendationFeedback(usage,{followedRecommendation:null,helpful:null,todayPlanHelpful:"not_used"}).todayPlanHelpful).toBe("not_used");
+  expect(recommendationQuestions(usage).find(q=>q.id==="todayPlanHelpful")?.options).toContainEqual({value:"not_used",label:"Didn't use it"});
+});

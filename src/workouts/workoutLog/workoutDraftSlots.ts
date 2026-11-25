@@ -32,6 +32,13 @@ export function readDraftSlots(raw: string | null): DraftSlots {
 export function switchDraftSlot(slots: DraftSlots, source: Record<string, unknown>, destination: string, seed: Record<string, unknown>) {
   const sourceSlot = typeof source.workoutSlot === "string" ? source.workoutSlot : "single";
   const next = { ...slots };
-  if ((Array.isArray(source.exercises) && source.exercises.length) || source.routineBuilderMode) next[sourceSlot] = source;
+  if (hasResumableWorkoutDraft(source)) next[sourceSlot] = source;
+  else delete next[sourceSlot];
   return { slots: next, draft: next[destination] ?? { ...seed, workoutSlot: destination } };
+}
+
+/** Opening an untouched routine builder does not make it a resumable draft. */
+export function hasResumableWorkoutDraft(draft: Record<string, unknown>) {
+  return Boolean(Array.isArray(draft.exercises) && draft.exercises.length ||
+    draft.routineBuilderMode && typeof draft.sessionTitle === "string" && draft.sessionTitle.trim());
 }

@@ -21,6 +21,7 @@ export type WorkoutDraftSnapshot<TExercises, TUnits> = {
   workoutSlot?: string;
   workoutSaveId?: string | null;
   routineBuilderMode?: boolean;
+  routineBuilderReturnSlot?: string | null;
   programRoutineAssignment?: { programId: string; day: number; returnSlot: string; routineId: string } | null;
 };
 

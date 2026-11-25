@@ -1,3 +1,4 @@
+import { AppGuideNavigation, AppGuideTip } from "../../../src/onboarding/live/AppGuide";
 import { resolveDistanceUnit, type DistanceUnit } from "../../../src/workouts/workoutLog/exercisePresentation";
 import { useSharing } from "../../../src/sharing/SharingProvider";
 import { useDailySteps } from "../../../src/health/useDailySteps";
@@ -199,7 +200,7 @@ function ProfileContent() {
   const navigation = useNavigation();
 
   const { fontScale } = useWindowDimensions();
-  const params = useLocalSearchParams<{ from?: string; openHealth?: string; openTraining?: string }>();
+  const params = useLocalSearchParams<{ from?: string; openHealth?: string; openTraining?: string; guideHealth?: string; guideProfile?: string }>();
   const returnTo = typeof params.from === "string" && params.from.startsWith("/") ? params.from : null;
   const { isOffline, ready: networkReady } = useOfflineStatus();
   const loadedProfileUidRef = useRef<string | null>(null);
@@ -269,6 +270,7 @@ function ProfileContent() {
     };
   }, [healthFeedback, revealHealthFeedback]);
   const healthSyncYRef = useRef(0);
+  const [healthSectionY, setHealthSectionY] = useState<number | null>(null);
   const [trainingSectionY, setTrainingSectionY] = useState<number | null>(null);
   const openedTrainingFromRouteRef = useRef<string | null>(null);
   const [saveFeedback, setSaveFeedback] = useState<string | null>(null);
@@ -887,7 +889,7 @@ function ProfileContent() {
     if (
       loading ||
       !healthConsentLoaded ||
-      !params.openHealth || !!params.openTraining ||
+      !params.openHealth || !!params.openTraining || !!params.guideHealth ||
       openedHealthFromRouteRef.current === params.openHealth
     ) {
       return;
@@ -904,7 +906,17 @@ function ProfileContent() {
       }
     });
     return task.cancel;
-  }, [healthConsentAccepted, stepsConsentAccepted, healthConsentLoaded, loading, params.openHealth, params.openTraining]);
+  }, [healthConsentAccepted, stepsConsentAccepted, healthConsentLoaded, loading, params.openHealth, params.openTraining, params.guideHealth]);
+
+  // Guide selection reveals the real section without requesting access.
+  useEffect(() => {
+    if (loading || (!params.guideHealth && !params.guideProfile) || (params.guideHealth && healthSectionY == null)) return;
+    const task = scheduleAfterInteractions(() => {
+      profileScrollRef.current?.scrollTo({ y: params.guideHealth ? Math.max(0, (healthSectionY ?? 0) - 12) : 0, animated: true });
+      router.setParams({ guideHealth: undefined, guideProfile: undefined });
+    });
+    return task.cancel;
+  }, [loading, healthSectionY, params.guideHealth, params.guideProfile, router]);
 
   useEffect(() => {
     if (loading || trainingSectionY == null || !params.openTraining || openedTrainingFromRouteRef.current === params.openTraining) return;
@@ -1604,9 +1616,11 @@ function ProfileContent() {
   if (redirectTo) return <Redirect href={redirectTo} />;
   return <SafeAreaView style={{ flex: 1, backgroundColor: colors.canvas }} edges={["top", "left", "right"]}>
     <NotebookHeader title="Profile" onBack={() => { if (!savingProfile) handleGoBack(); }} action={savingProfile ? "Saving..." : hasUnsavedChanges ? "Save" : undefined} onAction={() => void save()} disabled={loading || savingProfile || !hasUnsavedChanges || initialSnapshot == null} />
+      <AppGuideNavigation />
     {savingProfile ? <View accessibilityLiveRegion="polite" style={{ paddingHorizontal: 20, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.rule }}><ProfileText>{saveFeedback ?? "Saving profile..."} Please keep Lastrep open.</ProfileText></View> : null}
     {!savingProfile && !hasUnsavedChanges && saveFeedback === "Changes saved." ? <View style={{ paddingHorizontal: 20, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.rule }}><Text accessibilityLiveRegion="polite" style={styles.helperText}>✓ Changes saved</Text></View> : null}
     {loading ? <ProfileText>Loading profile...</ProfileText> : profileLoadFailed ? <View style={{ padding: 20, gap: 12 }}><ProfileText muted>Your saved profile has not loaded. Reconnect to load it; no changes have been saved.</ProfileText><ProfileAction label="Retry" disabled={isOffline || !networkReady} onPress={() => setProfileLoadAttempt((attempt) => attempt + 1)} /></View> : <ScrollView ref={profileScrollRef} onContentSizeChange={revealHealthFeedback} pointerEvents={savingProfile ? "none" : "auto"} keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 20, paddingBottom: 56, gap: 28, width: "100%", maxWidth: 800, alignSelf: "center" }}>
+      <AppGuideTip topic="profile" id={saveFeedback === "Changes saved." && !hasUnsavedChanges ? "profile-saved" : "profile-overview"} title={saveFeedback === "Changes saved." && !hasUnsavedChanges ? "Profile changes saved" : "Make Lastrep fit your training"}>{saveFeedback === "Changes saved." && !hasUnsavedChanges ? "Your preferences are saved. Use the guide bar to explore another topic, or keep adjusting your Profile." : "Adjust your training phases, units and daily targets. Tap Save at the top when you are finished."}</AppGuideTip>
       {isOffline ? <Text accessibilityLiveRegion="polite" style={styles.helperText}>Offline. Your edits stay here; reconnect before saving.</Text> : saveFeedback && saveFeedback !== "Changes saved." && !savingProfile ? <Text accessibilityLiveRegion="polite" style={styles.helperText}>{saveFeedback}</Text> : null}
       <ProfileSection first title="Identity" action={<ProfileAction label="Edit" onPress={() => openEditor("identity")} />}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 20 }}>
@@ -1649,7 +1663,8 @@ function ProfileContent() {
         <ProfileRow label="Protein" value={displayValue(proteinTargetGrams, "g / day")} onPress={() => openEditor("nutrition")} />
       </ProfileSection>
       <ProfileSection title="Sleep target"><ProfileRow label="Daily target" value={`${sleepTargetHours} hours`} onPress={() => openEditor("sleep")} /></ProfileSection>
-      <View onLayout={(event) => { healthSyncYRef.current = event.nativeEvent.layout.y; }}>
+      <View onLayout={(event) => { healthSyncYRef.current = event.nativeEvent.layout.y; setHealthSectionY(event.nativeEvent.layout.y); }}>
+        <AppGuideTip topic="health" id="health-real" title="Optional health connection">{shouldShowConnectAction ? "Connect Health Connect to import sleep, body measurements and steps. You choose which data to allow." : "Use Sync now to import available sleep, body measurements and steps. Manage access with Health Connect permissions."}</AppGuideTip>
         <ProfileSection title="Health sync" action={<NotebookInfoButton label="About Health sync permissions" onPress={() => setHelp({ title: "Health sync", message: HEALTH_SYNC_HELP })} />}>
           {healthRows.map(([label, value]) => <View key={label} style={{ flexDirection: fontScale >= 1.5 ? "column" : "row", gap: 8, paddingVertical: 6 }}><View style={{ flex: 1 }}><ProfileText>{label}</ProfileText></View><View style={{ flex: 1.4 }}><ProfileText muted>{value}</ProfileText></View></View>)}
           {healthConnectMessage() ? <ProfileText muted>{healthConnectMessage()}</ProfileText> : null}
@@ -1676,6 +1691,7 @@ function ProfileContent() {
         setEditor(null);
       }} /> : null}
     {editor && editor.section !== "training" && editor.section !== "diet" ? <ProfileSheet title={titles[editor.section]} onClose={cancelEditor} footer={<><ProfileAction label="Done" primary onPress={acceptEditor} /><ProfileAction label="Cancel" onPress={cancelEditor} /></>}>
+      <AppGuideTip inDialog topic="profile" id={`profile-save-${editor.section}`} title="Keep your changes">Tap Done, then Save on Profile to keep your changes.</AppGuideTip>
       <ProfileText muted>Changes are staged until you tap Save on Profile.</ProfileText>
       {editor.section === "identity" ? <>
         <View style={{ alignItems: "center", gap: 8 }}><ProfilePhoto fallbackBackgroundColor={colors.subtle} fallbackTextColor={colors.ink} fallbackFontFamily={notebookFonts.semibold} uid={uid} reference={profilePhotoUri} initial={nickname.trim().charAt(0).toUpperCase() || "L"} style={{ width: 96, height: 96, borderRadius: 48, backgroundColor: colors.subtle }} contentFit="cover" /><ProfileAction label={profilePhotoUri ? "Change photo" : "Add photo"} onPress={() => setPhotoActionMenuVisible(true)} /></View>

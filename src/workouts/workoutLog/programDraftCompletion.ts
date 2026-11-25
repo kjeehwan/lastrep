@@ -1,3 +1,4 @@
+import { hasResumableWorkoutDraft } from "./workoutDraftSlots";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "../../config/firebaseConfig";
 import { normalizeProgramLink, type ProgramLink } from "../programFlow";
@@ -16,7 +17,7 @@ export function retireCompletedDraft(draft: Record<string, unknown>, workoutId: 
     workoutTimerStartedAtMs: null, restTimerByExercise: {} };
 }
 export function resumableProgramDrafts(slots: DraftSlots): DraftSlots {
-  return Object.fromEntries(Object.entries(slots).filter(([,draft]) => !draft.completedProgramWorkoutId));
+  return Object.fromEntries(Object.entries(slots).filter(([,draft]) => !draft.completedProgramWorkoutId && hasResumableWorkoutDraft(draft)));
 }
 export async function annotateCompletedProgramDrafts(uid: string, slots: DraftSlots): Promise<DraftSlots> {
   if (auth.currentUser?.uid !== uid) throw new Error("Your account changed.");
