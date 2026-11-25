@@ -35,7 +35,7 @@ export async function sharingCall<T>(
   const expectedUid = Object.prototype.hasOwnProperty.call(data, "expectedUid")
     ? data.expectedUid
     : (getAuth().currentUser?.uid ?? null);
-  return (await call({ supportedPlanVersion: 2, ...data, op, expectedUid })).data;
+  return (await call({ supportedPlanVersion: 2, supportsSetRoles: true, ...data, op, expectedUid })).data;
 }
 export function sharingError(error: unknown): string {
   const code = (error as { code?: string })?.code || "";

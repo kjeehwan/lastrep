@@ -140,7 +140,7 @@ describe("public sharing landing page", () => {
       });
     await loadSnapshot(token, fetcher);
     expect(JSON.parse(fetcher.mock.calls[0][1].body)).toEqual({
-      data: { op: "snapshot", token, expectedUid: null, supportedPlanVersion: 2 },
+      data: { op: "snapshot", token, expectedUid: null, supportedPlanVersion: 2, supportsSetRoles: true },
     });
     expect(fetcher.mock.calls[0][1]).toMatchObject({
       credentials: "omit",

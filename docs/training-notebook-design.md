@@ -142,6 +142,22 @@ The central metaphor is structural:
 
 Never use a more saturated surface or larger type for level 3 than level 1.
 
+### User-facing explanations and copy review
+
+- Use American English for current English-language user-facing copy, including
+  spelling such as "labeled" and "color". Keep official names unchanged.
+- State the user's situation and a useful next action in plain language. Keep
+  internal matching rules and implementation terms out of messages. Usually one
+  short reason and one action are enough for an unchanged recommendation.
+- Match the explanation to the actual cause. Missing labels, missing effort,
+  different prescriptions and duplicate entries need distinct messages. Do not
+  promise that one future action guarantees a recommendation.
+- Before calling a change ready, review the affected messages together in their
+  complete screen or popup context, including unchanged, empty and error states.
+  Check headings, repeated text and the available action, not just isolated
+  strings. Passing tests does not establish clarity; report native visual checks
+  separately when they have not been performed.
+
 ## 3. Measurement conventions and tokens
 
 All layout values are logical dp; font sizes are sp. Figma uses equivalent logical
@@ -3052,3 +3068,21 @@ counters are superseded; preserve their review history, not their presentation.
   Preserve at least 44 dp control heights. Keep the bar outside page scrolling.
 - Explore Lastrep keeps its close button and scrolling topics; do not repeat
   Finish there. Closing the chooser preserves the selected topic and session.
+
+#### Top and Back-off prescriptions (November 25)
+
+- Use Top, Back-off and Drop as set-menu labels; T/B/D remain compact row markers.
+  Top and Back-off belong to resistance exercises. Never infer a role from load.
+- Keep targets above the set table. Show only roles currently in the exercise.
+  Normal uses exercise defaults; Top and Back-off can override them through the
+  existing Targets editor. Hiding a role does not erase its saved override.
+- Keep one Today's Plan exercise heading, with separate group prescriptions,
+  reasons and selectable changes beneath it. Align group text whether or not a
+  checkbox is present. No additional per-exercise progression action is added.
+- Role edits retain entered values and invalidate the previous review. Matching
+  historical roles remain unchanged. Explain unsupported arrangements rather
+  than displaying an unchanged Top/Back-off proposal after switching to Normal.
+- Last shows previous working sets in order, excluding warm-ups. Changing today's
+  set roles must not hide or shift previous values. Copy Last uses the same
+  mapping. Showing history does not imply it qualifies for automatic progression;
+  explain missing matching roles separately from missing recorded effort.

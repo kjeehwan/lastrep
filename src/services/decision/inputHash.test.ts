@@ -53,6 +53,13 @@ describe("decision input freshness hash", () => {
     expect(hashDecisionInputs(refreshed)).toBe(hashDecisionInputs(baseInputs));
   });
 
+  it("includes group targets and group deload state in plan identity",()=>{
+    const plannedWorkout={source:"draft" as const,title:"Legs",exerciseNames:["Deadlift"],exercises:[{name:"Deadlift",mode:"resistance" as const,sets:[],groupTargets:{top:{minReps:6,maxReps:8,targetRpe:8}}}]};
+    const before=hashDecisionInputs({...baseInputs,plannedWorkout});
+    plannedWorkout.exercises[0].groupTargets.top.targetRpe=9;
+    expect(hashDecisionInputs({...baseInputs,plannedWorkout})).not.toBe(before);
+    expect(hashDecisionInputs({...baseInputs,plannedWorkout:{...plannedWorkout,exercises:plannedWorkout.exercises.map(exercise=>({...exercise,deloadAppliedGroups:{top:"d"}}))}})).not.toBe(hashDecisionInputs({...baseInputs,plannedWorkout}));
+  });
   it("changes when a meaningful plan input changes", () => {
     expect(hashDecisionInputs({ ...baseInputs, fatigue: 7 })).not.toBe(hashDecisionInputs(baseInputs));
   });

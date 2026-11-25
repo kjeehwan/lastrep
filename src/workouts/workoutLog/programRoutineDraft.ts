@@ -1,12 +1,12 @@
 import type { ProgramLink } from "../programFlow";
-import { normalizeExerciseTargets } from "../exerciseTargets";
+import { normalizeGroupTargets, normalizeExerciseTargets } from "../exerciseTargets";
 import type { Exercise, Routine } from "./workoutLogModel";
 import { toLocalDateKey, toSetType } from "./workoutLogModel";
 
 /** Routine prescriptions are plans; actual effort and completion never carry forward. */
 export function programRoutineDraft(routine: Routine, link: ProgramLink, id: () => string) {
   const exercises: Exercise[] = routine.exercises.map(exercise => ({
-    id: id(), name: exercise.name, mode: exercise.mode, targets: normalizeExerciseTargets(exercise.targets),
+    id: id(), name: exercise.name, mode: exercise.mode, targets: normalizeExerciseTargets(exercise.targets), groupTargets: normalizeGroupTargets(exercise.groupTargets),
     plannedRestSec: exercise.restSec, notes: exercise.notes ?? "", tempo: exercise.tempo ?? "",
     cardioSessionType: exercise.cardioSessionType, cardioEffortLevel: exercise.cardioEffortLevel,
     sets: exercise.sets.map(set => ({ weightKg: set.defaultWeightKg ?? null, reps: String(set.reps ?? ""),

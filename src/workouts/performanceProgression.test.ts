@@ -9,6 +9,22 @@ const plan = (reps=6): PlannedExerciseSummary => ({ name:"Bench Press",mode:"res
 const history = (weight=80,reps=6,rpe:number|null=8,days=7):WorkoutSummary => ({id:String(days),title:"Chest",date:new Date(now.getTime()-days*86400000),trainingPhase:"Hypertrophy",
   exercises:[{name:"Bench Press",mode:"resistance",sets:Array.from({length:3},()=>({weightKg:weight,reps:String(reps),rpe,setType:"normal"}))}]});
 describe("performance-led progression",()=>{
+  it("distinguishes missing effort from exceeding the target without borrowing older effort",()=>{
+    const missing=performanceProgression(plan(),[history(80,6,null,1),history()],now);
+    expect(missing).toMatchObject({candidate:null,reason:expect.stringContaining("effort ratings are missing")});
+    expect(missing.reason).not.toContain("exceeded");
+    const high=performanceProgression(plan(),[history(80,6,9)],now);
+    expect(high).toMatchObject({candidate:null,reason:expect.stringContaining("exceeded your effort target")});
+    expect(high.reason).not.toContain("missing");
+  });
+  it("distinguishes missing labels, duplicate entries and different set counts",()=>{
+    const missing=history();missing.exercises[0].sets=[];
+    expect(performanceProgression(plan(),[missing],now,"top").reason).toContain("No sets were labeled Top");
+    const duplicate=history();duplicate.exercises.push(structuredClone(duplicate.exercises[0]));
+    expect(performanceProgression(plan(),[duplicate],now,"top").reason).toContain("listed this exercise more than once");
+    const count=history();count.exercises[0].sets.pop();
+    expect(performanceProgression(plan(),[count],now,"backoff").reason).toContain("different number of Back-off sets");
+  });
   it("uses a custom rep sequence and graduates the full set count",()=>{
     const exercise={...plan(),targets:{minReps:6,maxReps:15,targetRpe:8},progression:{repSteps:[6,8,10,12,15,18],preferredIncreaseKg:5,maxIncreaseKg:10}};
     expect(performanceProgression(exercise,[history()],now).candidate?.reps).toBe(8);
@@ -42,10 +58,10 @@ describe("performance-led progression",()=>{
 
 it("explains recorded sets, special types and mixed loads separately without increasing", () => {
   const recorded=plan();recorded.sets[0].done=true;
-  expect(performanceProgression(recorded,[history()],now)).toMatchObject({candidate:null,reason:expect.stringContaining("already in progress")});
+  expect(performanceProgression(recorded,[history()],now)).toMatchObject({candidate:null,reason:expect.stringContaining("started recording")});
   const special=plan();special.sets[0].setType="drop";
-  expect(performanceProgression(special,[history()],now).reason).toContain("special set types");
+  expect(performanceProgression(special,[history()],now).reason).toContain("planned set types need separate review");
   const mixed=plan();mixed.sets[0].weightKg=70;
-  expect(performanceProgression(mixed,[history()],now).reason).toContain("currently planned working sets are mixed");
+  expect(performanceProgression(mixed,[history()],now).reason).toContain("planned sets use different weights or reps");
   expect(performanceProgression({...plan(),sets:[]},[history()],now).reason).toContain("Add working sets");
 });

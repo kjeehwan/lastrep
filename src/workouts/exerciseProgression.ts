@@ -7,7 +7,7 @@ export type PerformanceSet = {
   weightKg: number | null;
   reps: string | number | null;
   rpe?: string | number | null;
-  setType?: "warmup" | "normal" | "failure" | "drop";
+  setType?: "warmup" | "normal" | "failure" | "drop" | "top" | "backoff";
 };
 
 export type ExercisePerformanceSession = {

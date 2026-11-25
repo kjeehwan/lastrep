@@ -14,6 +14,7 @@ const nutritionSummarySchema = z
   })
   .strict();
 
+const targetSchema = z.object({minReps:z.number().int().min(1).max(100).nullable(),maxReps:z.number().int().min(1).max(100).nullable(),targetRpe:z.number().min(6).max(10).nullable()}).strict();
 const plannedWorkoutSchema = z
   .object({
     source: z.enum(["draft", "program", "rest_day", "none"]),
@@ -23,13 +24,16 @@ const plannedWorkoutSchema = z
       name: z.string().min(1).max(100),
       mode: z.enum(["resistance", "cardio"]),
       deloadAppliedId: z.string().nullable().optional(),
+      deloadAppliedGroups: z.object({top:z.string().optional(),backoff:z.string().optional()}).strict().nullable().optional(),
       availableWeights: availableWeightsSchema.optional(),
       targets: z.object({minReps:z.number().int().min(1).max(100).nullable(),maxReps:z.number().int().min(1).max(100).nullable(),targetRpe:z.number().min(6).max(10).nullable()}).strict().nullable().optional(),
+      groupTargets: z.object({top:targetSchema.nullable().optional(),backoff:targetSchema.nullable().optional()}).strict().nullable().optional(),
       progression: z.object({repSteps:z.array(z.number().int().min(1).max(100)).min(1).max(100),preferredIncreaseKg:z.number().positive().max(100),maxIncreaseKg:z.number().positive().max(100)}).strict().optional(),
       sets: z.array(z.object({
         weightKg: z.number().min(0).nullable(),
         reps: z.number().min(0).nullable(),
-        setType: z.enum(["warmup", "normal", "failure", "drop"]),
+        setType: z.enum(["warmup", "normal", "failure", "drop", "top", "backoff"]),
+        targetRpe: z.number().min(6).max(10).nullable().optional(),
         done: z.boolean(),
         rpe: z.number().min(0).max(10).nullable().optional(),
       }).strict()).max(20),
@@ -147,6 +151,8 @@ const exerciseAdjustmentSchema = z
   })
   .strict();
 
+const groupedAdjustmentSchema = exerciseAdjustmentSchema.extend({groupAdjustments:z.array(exerciseAdjustmentSchema.extend({role:z.enum(["top","backoff"])})).max(2).optional()});
+
 const completeExplanationSchema = z
   .string()
   .trim()
@@ -163,7 +169,7 @@ const decisionOutputSchema = z
     explanation: z.array(completeExplanationSchema).min(2).max(4),
     caution: z.string().trim().min(1).max(180).nullable().optional(),
     adjustments: adjustmentsSchema.nullable().optional(),
-    exerciseAdjustments: z.array(exerciseAdjustmentSchema).max(12).optional(),
+    exerciseAdjustments: z.array(groupedAdjustmentSchema).max(12).optional(),
   })
   .transform(({ caution, adjustments, ...output }): DecisionOutput => ({
     ...output,

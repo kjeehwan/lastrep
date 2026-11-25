@@ -15,11 +15,14 @@ export const workoutGuidanceSignature = (plan?: PlannedWorkoutSummary | null) =>
     name: exercise.name.trim().toLowerCase().replace(/\s+/g, " "),
     availableWeights: exercise.availableWeights ?? null,
     targets: exercise.targets ?? null,
+    groupTargets: exercise.groupTargets ?? null,
     progression: exercise.progression ?? null,
     deloadAppliedId:exercise.deloadAppliedId??null,
+    deloadAppliedGroups:exercise.deloadAppliedGroups??null,
     sets: exercise.sets.map((set) => ({
       weightKg: set.weightKg,
       reps: set.reps,
       setType: set.setType,
+      targetRpe: set.targetRpe ?? null,
     })),
   })) ?? plan?.exerciseNames.map((name) => name.trim().toLowerCase().replace(/\s+/g, " ")) ?? []);

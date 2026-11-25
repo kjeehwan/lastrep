@@ -1,3 +1,4 @@
+import { adjustmentSelectionKey } from "../../../src/services/decision/setGroupReview";
 import { hasResumableWorkoutDraft } from "../../../src/workouts/workoutLog/workoutDraftSlots";
 import { WorkoutGuideNotes } from "../../../src/onboarding/live/WorkoutGuideNotes";
 import { AppGuideNavigation, AppGuideTip, useAppGuide } from "../../../src/onboarding/live/AppGuide";
@@ -5,7 +6,7 @@ import { exerciseDisplayUnit, resolveDistanceUnit, resolveExerciseMode, type Dis
 import { annotateCompletedProgramDrafts, resumableProgramDrafts } from "../../../src/workouts/workoutLog/programDraftCompletion";
 import { useProgramDraftCompletion } from "../../../src/workouts/workoutLog/useProgramDraftCompletion";
 import { copySetPrescription, duplicateSetPrescription } from "../../../src/workouts/workoutLog/copySetPrescription";
-import { restoreDeloadExercises } from "../../../src/workouts/deload";
+import { restoreDeloadExercises, extendDeloadBackup } from "../../../src/workouts/deload";
 import { ProgressionSettingsSheet } from "../../../src/workouts/workoutLog/ProgressionSettingsSheet";
 import { useProgressionPreferences } from "../../../src/workouts/workoutLog/useProgressionPreferences";
 import { normalizeProgressionPreferences } from "../../../src/workouts/performanceProgression";
@@ -124,8 +125,8 @@ import { useWorkoutTodayPlan } from "../../../src/workouts/workoutLog/useWorkout
 import { insertWarmupSets,warmupKey,type WarmupPattern,type WarmupRow,type WarmupUnit } from "../../../src/workouts/workoutLog/warmupSets";
 import { WarmupSetsSheet } from "../../../src/workouts/workoutLog/WarmupSetsSheet";
 import { readWorkoutDraftRoutineId, serializeWorkoutDraft } from "../../../src/workouts/workoutLog/workoutDraft";
-import { ExerciseTargetsSheet } from "../../../src/workouts/workoutLog/ExerciseTargetsSheet";
-import { normalizeExerciseTargets, routineSetTargets } from "../../../src/workouts/exerciseTargets";
+import { GroupedTargetsSheet } from "../../../src/workouts/workoutLog/GroupedTargetsSheet";
+import { normalizeGroupTargets, normalizeExerciseTargets, comparableRoutineRoles, routineSetTargets } from "../../../src/workouts/exerciseTargets";
 import { WorkoutExerciseActions } from "../../../src/workouts/workoutLog/WorkoutExerciseActions";
 import { useWorkoutExerciseCards } from "../../../src/workouts/workoutLog/WorkoutExerciseCards";
 import { WorkoutExerciseDemo } from "../../../src/workouts/workoutLog/WorkoutExerciseDemo";
@@ -286,6 +287,7 @@ export default function WorkoutLog() {
     before: Exercise[];
     after: Exercise[];
     signature: string;
+    deloadBackupBefore: {id:string;before:Exercise[];after:Exercise[]}|null;
   } | null>(null);
   const [activeSetMenu, setActiveSetMenu] = useState<{
     exerciseId: string;
@@ -619,6 +621,7 @@ export default function WorkoutLog() {
         id,
         name: trimmed,
         targets: mode === "cardio" ? null : normalizeExerciseTargets(previousExercise?.targets),
+        groupTargets: normalizeGroupTargets(previousExercise?.groupTargets),
         notes: "",
         tempo: mode === "cardio" ? String(previousSets.find((set) => set.zone)?.zone || "") : undefined,
         cardioSessionType: undefined,
@@ -775,6 +778,7 @@ export default function WorkoutLog() {
             exercises: (data?.exercises || []).map((ex: any) => ({
               name: ex?.name || "Exercise",
               targets: normalizeExerciseTargets(ex?.targets),
+              groupTargets: normalizeGroupTargets(ex?.groupTargets),
               notes: typeof ex?.notes === "string" ? ex.notes : "",
               tempo: typeof ex?.tempo === "string" ? ex.tempo : "",
               zone: typeof ex?.zone === "string" ? ex.zone : "",
@@ -839,6 +843,7 @@ export default function WorkoutLog() {
           exercises: (data?.exercises || []).map((exercise: any) => ({
             name: typeof exercise?.name === "string" ? exercise.name : "Exercise",
               targets: normalizeExerciseTargets(exercise?.targets),
+              groupTargets: normalizeGroupTargets(exercise?.groupTargets),
             notes: typeof exercise?.notes === "string" ? exercise.notes : "",
             tempo: typeof exercise?.tempo === "string" ? exercise.tempo : "",
             zone: typeof exercise?.zone === "string" ? exercise.zone : "",
@@ -962,8 +967,10 @@ export default function WorkoutLog() {
             const hydratedExercises: Exercise[] = (parsed.exercises as any[]).map((exercise: any) => ({
               id: typeof exercise?.id === "string" ? exercise.id : `${Date.now()}-${Math.random().toString(16).slice(2)}`,
               name: typeof exercise?.name === "string" ? exercise.name : "Exercise",
+              deloadAppliedGroups: exercise?.deloadAppliedGroups ?? null,
               deloadAppliedId: typeof exercise?.deloadAppliedId === "string" ? exercise.deloadAppliedId : null,
               targets: normalizeExerciseTargets(exercise?.targets),
+              groupTargets: normalizeGroupTargets(exercise?.groupTargets),
               mode: exercise?.mode === "cardio" ? "cardio" : exercise?.mode === "resistance" ? "resistance" : undefined,
               plannedRestSec: typeof exercise?.plannedRestSec === "number" && exercise.plannedRestSec >= 0 && exercise.plannedRestSec <= 3600 ? exercise.plannedRestSec : undefined,
               notes: typeof exercise?.notes === "string" ? exercise.notes : "",
@@ -2056,6 +2063,7 @@ export default function WorkoutLog() {
         name: ex.name,
         mode: resolveExerciseMode(ex.mode, findCatalogExercise(ex.name)?.group),
         targets: normalizeExerciseTargets(ex.targets),
+        groupTargets: normalizeGroupTargets(ex.groupTargets),
         notes: ex.notes ?? "",
         tempo: (ex.mode === "cardio" ? ex.zone : ex.tempo) ?? "",
         cardioSessionType: ex.cardioSessionType,
@@ -2244,6 +2252,7 @@ export default function WorkoutLog() {
         exercises: sanitizedExercises.map((ex) => ({
           name: ex.name,
           targets: ex.mode === "cardio" ? null : normalizeExerciseTargets(ex.targets),
+          groupTargets: normalizeGroupTargets(ex.groupTargets),
           mode: ex.mode,
           notes: String(ex.notes || "").trim(),
           tempo: ex.mode === "cardio" ? "" : String(ex.tempo || "").trim(),
@@ -2344,6 +2353,7 @@ export default function WorkoutLog() {
     source.map((exercise) => ({
       name: exercise.name,
       targets: getExerciseMode(exercise.name) === "cardio" ? null : normalizeExerciseTargets(exercise.targets),
+      groupTargets: normalizeGroupTargets(exercise.groupTargets),
       notes: String(exercise.notes || "").trim(),
       tempo: getExerciseMode(exercise.name) === "cardio" ? "" : String(exercise.tempo || "").trim(),
       zone: getExerciseMode(exercise.name) === "cardio" ? String(getExerciseZone(exercise) || "").trim() : "",
@@ -2534,7 +2544,7 @@ export default function WorkoutLog() {
     const mapped: Exercise[] = routine.exercises.map((exercise) => {
       const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
       const latestSets = previousExerciseSetsByName.get(normalizeExerciseName(exercise.name)) ?? [];
-      const sets = latestSets.length && !routine.sharedSnapshotId
+      const sets = latestSets.length && !routine.sharedSnapshotId && comparableRoutineRoles(exercise.sets, latestSets)
         ? routineSetTargets(latestSets, exercise.sets).map((set) => ({
             weightKg: exercise.mode === "cardio" ? null : set.weightKg ?? null,
             reps: exercise.mode === "cardio" ? "" : String(set.reps ?? ""),
@@ -2565,6 +2575,7 @@ export default function WorkoutLog() {
         id,
         plannedRestSec: exercise.restSec,
         targets: normalizeExerciseTargets(exercise.targets),
+        groupTargets: normalizeGroupTargets(exercise.groupTargets),
         mode: exercise.mode,
         name: exercise.name,
         notes: exercise.notes ?? "",
@@ -2975,10 +2986,19 @@ export default function WorkoutLog() {
   const applyWorkoutGuidance = (selected: string[]) => {
     if (!auth.currentUser || !todayGuidance || todayPlan.busy || todayPlan.error || guidanceStale || guidanceApplied || saving) return;
     try {
-      const applied = applyTodayPlanToWorkoutDraft(serializeWorkoutDraft(workoutDraftPayload), (todayGuidance.result.exerciseAdjustments ?? []).filter(item => selected.includes(item.exerciseName)));
+      const applied = applyTodayPlanToWorkoutDraft(serializeWorkoutDraft(workoutDraftPayload), (todayGuidance.result.exerciseAdjustments ?? []).flatMap(item => {
+        if (!item.groupAdjustments) return selected.includes(item.exerciseName) ? [item] : [];
+        const groupAdjustments = item.groupAdjustments.filter(group => selected.includes(adjustmentSelectionKey(group)));
+        return groupAdjustments.length ? [{...item,groupAdjustments}] : [];
+      }));
       const deloadId=todayGuidance.inputs.deload?.id;
-      const next = (JSON.parse(applied.raw).exercises as Exercise[]).map(exercise=>deloadId&&selected.includes(exercise.name)?{...exercise,deloadAppliedId:deloadId}:exercise);
-      const backup=deloadId?{id:deloadId,before:exercises,after:next}:deloadBackup;
+      const next = (JSON.parse(applied.raw).exercises as Exercise[]).map(exercise => {
+        if (!deloadId) return exercise;
+        const groups = todayGuidance.result.exerciseAdjustments?.find(item => item.exerciseName === exercise.name)?.groupAdjustments;
+        if (groups) return {...exercise,deloadAppliedGroups:{...exercise.deloadAppliedGroups,...Object.fromEntries(groups.filter(group => selected.includes(adjustmentSelectionKey(group))).map(group => [group.role,deloadId]))}};
+        return selected.includes(exercise.name) ? {...exercise,deloadAppliedId:deloadId} : exercise;
+      });
+      const backup=deloadId?extendDeloadBackup(deloadId,exercises,next,deloadBackup):deloadBackup;
       const appliedRaw=JSON.stringify({...JSON.parse(applied.raw),exercises:next,deloadBackup:backup});
       if (!applied.changedExercises) {
         showAppAlert("No changes applied", "The suggested changes do not affect any unfinished working sets.");
@@ -2987,9 +3007,10 @@ export default function WorkoutLog() {
       setDeloadBackup(backup);
       setAppliedGuidance({
         plan: todayGuidance,
+        deloadBackupBefore: deloadBackup,
         before: exercises,
         after: next,
-        signature: workoutGuidanceSignature({ ...guidanceWorkout, exercises: guidanceWorkout.exercises?.map(exercise => { const after = parseWorkoutDraftPlan(appliedRaw)?.exercises?.find(item => item.name === exercise.name); return after ? { ...exercise, sets: after.sets,deloadAppliedId:after.deloadAppliedId??null } : exercise; }) }),
+        signature: workoutGuidanceSignature({ ...guidanceWorkout, exercises: guidanceWorkout.exercises?.map(exercise => { const after = parseWorkoutDraftPlan(appliedRaw)?.exercises?.find(item => item.name === exercise.name); return after ? { ...exercise, sets: after.sets,deloadAppliedId:after.deloadAppliedId??null,deloadAppliedGroups:after.deloadAppliedGroups??null } : exercise; }) }),
       });
       setExercises(next);
       void AsyncStorage.setItem(getDraftKey(auth.currentUser!.uid), appliedRaw)
@@ -3195,10 +3216,10 @@ export default function WorkoutLog() {
           onUndo={() => {
             if (appliedGuidance?.after !== exercises) return;
             setExercises(appliedGuidance.before);
-            setDeloadBackup(null);
+            setDeloadBackup(appliedGuidance.deloadBackupBefore);
             if (auth.currentUser) {
               void AsyncStorage.setItem(getDraftKey(auth.currentUser.uid), serializeWorkoutDraft({
-                ...workoutDraftPayload, exercises: appliedGuidance.before,deloadBackup:null,
+                ...workoutDraftPayload, exercises: appliedGuidance.before,deloadBackup:appliedGuidance.deloadBackupBefore,
               })).catch((error) => console.log("Failed to save guidance undo", error));
             }
             setAppliedGuidance(null);
@@ -3823,7 +3844,7 @@ export default function WorkoutLog() {
         </KeyboardAwareModalFrame>
       </Modal>
 
-      {targetsExercise && exerciseTargetsEditor ? <ExerciseTargetsSheet key={`${exerciseTargetsEditor.uid}:${targetsExercise.id}:${effortScale}`} name={targetsExercise.name} targets={targetsExercise.targets} effortScale={effortScale} onClose={() => setExerciseTargetsEditor(null)} onApply={targets => { if (auth.currentUser?.uid !== exerciseTargetsEditor.uid) return; setExercises(before => before.map(exercise => exercise.id === targetsExercise.id ? { ...exercise, targets } : exercise)); setExerciseTargetsEditor(null); }} /> : null}
+      {targetsExercise && exerciseTargetsEditor ? <GroupedTargetsSheet key={`${exerciseTargetsEditor.uid}:${targetsExercise.id}:${effortScale}`} name={targetsExercise.name} targets={targetsExercise.targets} groupTargets={targetsExercise.groupTargets} sets={targetsExercise.sets} effortScale={effortScale} onClose={() => setExerciseTargetsEditor(null)} onApply={values => { if (auth.currentUser?.uid !== exerciseTargetsEditor.uid) return; setExercises(before => before.map(exercise => exercise.id === targetsExercise.id ? { ...exercise, ...values } : exercise)); }} /> : null}
       {warmupTarget && activeUid === warmupTarget.uid ? <WarmupSetsSheet key={`${warmupTarget.uid}:${warmupTarget.exercise.id}`} uid={warmupTarget.uid} name={warmupTarget.exercise.name} sets={warmupTarget.exercise.sets} unit={warmupTarget.unit} barbell={warmupTarget.barbell} settings={availableWeightsPreferences.values[weightPreferenceKey(warmupTarget.exercise.name)]} onClose={() => { Keyboard.dismiss(); setWarmupTarget(null); }} onApply={applyWarmups} /> : null}
 
       <Modal visible={showCardioTimeModal} transparent animationType="fade" onRequestClose={() => { setShowCardioTimeModal(false); setCardioTimeTarget(null); }}>
@@ -4115,7 +4136,7 @@ export default function WorkoutLog() {
             </View>
             <Text style={styles.modalText}>Set type</Text>
             <View style={styles.answerRow}>
-              {SET_TYPE_LABELS.map((typeOption) => (
+              {SET_TYPE_LABELS.filter(option => activeSetExercise && getExerciseMode(activeSetExercise.name) === "cardio" ? option.value !== "top" && option.value !== "backoff" : true).map((typeOption) => (
                 <TouchableOpacity
                   key={`set-type-${typeOption.value}`}
                   style={[

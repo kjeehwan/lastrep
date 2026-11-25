@@ -1,3 +1,4 @@
+import { topBackoffStates, setupTopBackoff, topBackoffMain, topBackoffDialog, topBackoffInput, handleTopBackoff } from "./top-backoff.mjs";
 import { programSharingStates, setupProgramSharing, programSharingDialog, handleProgramSharing, programSharingInput } from './program-sharing.mjs';
 import { unifiedStates, setupUnified, unifiedHeader, unifiedDialog, unifiedInput, handleUnified, invalidateUnified, syncUnifiedRecovery } from './unified-plan.mjs';
 import { beginProgressOptions, saveProgressOptions, beginProgressWeights, renderProgressWeights, saveProgressWeights, changeProgressWeightChoice, refreshProgressWeightHint } from './progression-settings.mjs';
@@ -14,7 +15,7 @@ import { readNotebookPreferences } from './notebook-preferences.mjs';
 import { setReviewState } from './review-state-picker.mjs';
 import { readCheckIn, writeCheckIn, clearCheckIn, checkInFields, createCheckInDraft, painValidation } from './check-in.mjs';
 import { copy, fixture, catalog, exerciseFromCatalog, lastText, effortValue, guidanceChanges, moveExercise, summary, setUnit, states } from './model.mjs';
-states.unshift(...programSharingStates, ...unifiedStates, ...progressionStates, ['Exercise targets', 'layout-minimal-targets', 'Targets / configured', 'Exercise targets stay separate from the set log. Open the three-dot menu, then Targets.'], ['Exercise targets', 'layout-minimal-targets-empty', 'Targets / not set', 'No extra row appears until a rep range or target effort is configured.'], ['Minimal layout', 'layout-minimal', 'Compact header / icon actions', 'Combined phase and totals, six visible actions, no routine row.'], ['Minimal layout', 'layout-minimal-cardio', 'Compact header / cardio', 'The same icon actions and compact header with cardio controls.'], ['Layout review', 'layout', 'Workout header / resistance', 'Editable title, balanced spacing and planned session totals.'], ['Layout review', 'layout-tempo', 'Workout header / tempo set', 'The tool row keeps its spacing when a tempo is set.'], ['Layout review', 'layout-cardio', 'Workout header / cardio', 'Zone takes the place of resistance tempo.'], ...sharingStates, ...socialExamples);
+states.unshift(...topBackoffStates, ...programSharingStates, ...unifiedStates, ...progressionStates, ['Exercise targets', 'layout-minimal-targets', 'Targets / configured', 'Exercise targets stay separate from the set log. Open the three-dot menu, then Targets.'], ['Exercise targets', 'layout-minimal-targets-empty', 'Targets / not set', 'No extra row appears until a rep range or target effort is configured.'], ['Minimal layout', 'layout-minimal', 'Compact header / icon actions', 'Combined phase and totals, six visible actions, no routine row.'], ['Minimal layout', 'layout-minimal-cardio', 'Compact header / cardio', 'The same icon actions and compact header with cardio controls.'], ['Layout review', 'layout', 'Workout header / resistance', 'Editable title, balanced spacing and planned session totals.'], ['Layout review', 'layout-tempo', 'Workout header / tempo set', 'The tool row keeps its spacing when a tempo is set.'], ['Layout review', 'layout-cardio', 'Workout header / cardio', 'Zone takes the place of resistance tempo.'], ...sharingStates, ...socialExamples);
 
 const $ = (q, root = document) => root.querySelector(q);
 const escape = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -100,6 +101,7 @@ function makeState(id) {
     if (id === 'share-saved-routine') state.sharing.routineSaved = true;
   }
   if (id === 'history-empty') state.selectedId = 'fly';
+  if (id.startsWith("layout-minimal-top-backoff")) setupTopBackoff(state,id);
   return state;
 }
 
@@ -216,6 +218,7 @@ function warmupDialog(e) { return renderWarmupSheet(e,s.warmup,{shell:dialogShel
 function updateWarmupAction() { updateWarmupControls($('#stage'),getExercise(),s.warmup); }
 
 function modal() {
+  const tb = topBackoffDialog(s,scale,{shell:dialogShell,button}); if(tb)return tb;
   const programShare = programSharingDialog(s,{shell:dialogShell}); if(programShare)return programShare;
   if (s.unified) { const content = unifiedDialog(s,scale,{shell:dialogShell,button}); if(content) return content; }
   if (s.modal.startsWith('social-')) return socialDialog(s, { shell: dialogShell, escape, paragraph });
@@ -267,7 +270,7 @@ function frame(reference = false) {
   const key = reference || s.keyboard;
   const search = !reference && s.page === 'search', custom = !reference && s.page === 'custom';
   const title = search ? 'Add exercise' : custom ? 'Custom exercise' : s.builder ? 'Routine builder' : 'Workout';
-  const main = s.unified?.entryScreen ? unifiedHeader(s,{button},true) : search ? searchPage() : custom ? customPage() : s.exercises.length ? sessionHeader() + (s.unified?.routineEditor?'':workoutSetup()) + s.exercises.map(exercise).join('') + (s.builder?routineBuilderActions():`<div class="section-stack">${button(s.unified?'Add exercise':'+ Add exercise', 'search', s.unified?'native-add-exercise':'')}${!s.builder ? button('Finish workout', 'open', 'primary', { modal: 'finish' }) : ''}</div>`) : empty();
+  const main = s.topBackoff ? topBackoffMain(s,scale,{button}) : s.unified?.entryScreen ? unifiedHeader(s,{button},true) : search ? searchPage() : custom ? customPage() : s.exercises.length ? sessionHeader() + (s.unified?.routineEditor?'':workoutSetup()) + s.exercises.map(exercise).join('') + (s.builder?routineBuilderActions():`<div class="section-stack">${button(s.unified?'Add exercise':'+ Add exercise', 'search', s.unified?'native-add-exercise':'')}${!s.builder ? button('Finish workout', 'open', 'primary', { modal: 'finish' }) : ''}</div>`) : empty();
   return `<div class="frame-wrap"><h3>${reference ? 'Approved / Reps editing' : escape(states.find(v => v[1] === chosen)?.[2] ?? 'Workout')}</h3><section class="device ${chosen.startsWith('layout') ? 'layout-study' : ''} ${chosen.startsWith('layout-minimal') ? 'minimal-layout' : ''} ${theme ? 'dark' : ''} ${large ? 'large-text' : ''} ${reference ? 'reference' : 'interactive'}" style="--width:${size[0]}px;--height:${size[1]}px" ${reference ? 'inert' : ''} aria-label="${reference ? 'Approved static editing reference' : 'Interactive Workout prototype'}"><div class="system-bar" aria-hidden="true"><span>9:41</span><span>LTE&nbsp;&nbsp; 92%</span></div><header class="toolbar notebook-toolbar"><div><button class="icon-button" data-action="${search || custom ? 'back-search' : 'home'}" aria-label="${search || custom ? 'Close exercise picker' : s.unified?.routineEditor ? 'Back to program setup' : s.unified && !s.unified.entryScreen ? 'Back to workout choices' : 'Back to Home'}">${icon('left')}</button><h2 class="toolbar-title">${title}</h2>${!search && !custom ? s.builder ? '<span aria-hidden="true"></span>' : sharingInboxButton(s.social) : '<span aria-hidden="true"></span>'}</div></header><div class="viewport" tabindex="0" aria-label="Scrollable workout"><div class="page-content">${main}</div></div>${search ? `<footer class="search-footer"><span class="supporting">${s.selected.length} selected</span>${button(`Add (${s.selected.length})`, 'add-selected', 'primary', {}, !s.selected.length)}</footer>` : custom ? `<footer class="search-footer">${button('Cancel', 'back-search')}${button('Create exercise', 'save-custom', 'primary')}</footer>` : !key && s.rest ? restDock() : ''}${key ? keyboard(!reference && (search || custom || s.keyboardAlpha)) : tabs()}${!reference && s.modal ? modal() : ''}${!reference && s.toast ? `<div class="toast" role="status"><span>${escape(s.toast)}</span><button data-action="dismiss-toast" aria-label="Dismiss message">×</button></div>` : ''}</section><p class="frame-caption">${reference ? 'Approved editing reference. Interact with the screen on the left.' : `${size[0]} × ${size[1]} / ${theme ? 'Dark' : 'Paper'} / ${large ? '200%' : '100%'} text. Synthetic records only.`}</p></div>`;
 }
 
@@ -330,6 +333,7 @@ $('#stage').addEventListener('input', event => {
   if (programSharingInput(s, el, render)) return;
   if (socialInput(s, el, render)) return;
   if (!el.closest('.interactive')) return;
+  const tbInput=topBackoffInput(s,el);if(tbInput){if(tbInput!=="live")render();return;}
   const unifiedInputResult=unifiedInput(s,el);if (unifiedInputResult) { if(unifiedInputResult!=='live')render(); return; }
   if (el.dataset.targetField) { s.targetDraft[el.dataset.targetField] = el.value; s.targetDraft.error = ''; $('.interactive .exercise-target-editor .form-error')?.remove(); refreshTargetActions($('.interactive'), getExercise(), s.targetDraft); return; }
   if (el.hasAttribute('data-session-title')) { s.title = el.value; invalidateUnified(s); return; }
@@ -378,6 +382,7 @@ $('#stage').addEventListener('click', async event => {
   const d = b.dataset, action = d.action;
   if (action === 'outside' && event.target !== b) return;
   if (['close', 'outside'].includes(action) && s.modal.startsWith('social-copy-')) { handleSocialAction(s, 'social-copy-dismiss', d, name => { s.modal = name; }); render(); return; }
+  if(handleTopBackoff(s,action,d,scale)){render();return;}
   const e = getExercise(d.id || s.selectedId);
   if (handleProgramSharing(s, action, d)) { render(); return; }
   if (handleSocialAction(s, action, d, name => { s.modal = name; })) { render(); return; }

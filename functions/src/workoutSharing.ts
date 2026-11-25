@@ -19,6 +19,7 @@ import {
   sharingSearchKey,
   parseSharedPlan,
   isSharedProgram,
+  requiresSetRoles,
   type SharedPlan,
   SHARING_LIMITS,
   type SharingPerson,
@@ -552,6 +553,7 @@ async function authorizedSnapshot(
   if (!snapshot || !live((await profile(snapshot.ownerUid).get()).data()))
     fail("not-found", "This shared workout is unavailable.");
   if (snapshot.plan?.version === 2 && Number(input.supportedPlanVersion ?? 0) < 2) fail("failed-precondition", "Update Lastrep to open this shared program.");
+  if (requiresSetRoles(parseSharedPlan(snapshot.plan)) && input.supportsSetRoles !== true) fail("failed-precondition", "Update Lastrep to open this plan with Top/Back-off sets.");
   return {
     snapshotId,
     plan: parseSharedPlan(snapshot.plan),
@@ -719,7 +721,7 @@ async function reviewRecipients(uid: string, input: Record<string, unknown>) {
 }
 function routineExercises(plan: SharedWorkoutPlan) {
   return plan.exercises.map(e => ({
-    name: e.name, mode: e.mode, notes: e.instructions, targets: e.targets ?? null,
+    name: e.name, mode: e.mode, notes: e.instructions, targets: e.targets ?? null, groupTargets: e.groupTargets ?? null,
     tempo: e.tempo, restSec: e.restSec, unit: e.unit,
     cardioSessionType: e.cardioSessionType ?? null, cardioEffortLevel: e.cardioEffortLevel ?? null,
     sets: e.sets.map(s => ({ reps: s.reps, defaultWeightKg: s.weightKg,

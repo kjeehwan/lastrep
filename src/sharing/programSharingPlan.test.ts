@@ -8,6 +8,13 @@ import type { Routine } from "../workouts/workoutLog/workoutLogModel";
 const routine: Routine={id:"private-routine-id",name:"Chest",createdAt:null,updatedAt:null,exercises:[{name:"Bench press",notes:"private personal note",targets:{minReps:6,maxReps:8,targetRpe:8},tempo:"3-0-1-0",restSec:120,unit:"kg",sets:[{reps:"8",defaultWeightKg:80,targetRpe:8,setType:"normal"},{reps:"8",defaultWeightKg:80,targetRpe:8,setType:"normal"}]}]};
 const build=()=>programToSharingPlan({id:"private-program",name:"Cycle",runId:"private-run",status:"saved",updatedAt:123,days:[{type:"workout",routineId:routine.id,title:"Chest"},{type:"rest",routineId:null,title:"Rest"},{type:"workout",routineId:routine.id,title:"Chest again"}]},[routine],"rir");
 describe("program sharing boundary",()=>{
+  it("preserves role targets in program routines",()=>{
+    const copy=structuredClone(routine);copy.exercises[0].sets[0].setType="top";copy.exercises[0].sets[1].setType="backoff";
+    copy.exercises[0].groupTargets={backoff:{minReps:8,maxReps:10,targetRpe:9}};
+    const p=programToSharingPlan({id:"p",name:"Cycle",runId:"",status:"saved",updatedAt:0,days:[{type:"workout",routineId:copy.id,title:"Chest"}]},[copy],"rpe");
+    expect(p.routines[0].plan.exercises[0].groupTargets?.backoff?.targetRpe).toBe(9);
+    expect(p.routines[0].plan.exercises[0].sets.map(s=>s.setType)).toEqual(["top","backoff"]);
+  });
   it("shares one referenced routine without account identities, personal notes or run progress",()=>{
     const p=build(),json=JSON.stringify(p);expect(p.routines).toHaveLength(1);expect(p.days[0].routineKey).toBe(p.days[2].routineKey);expect(p.days[1].routineKey).toBeNull();expect(json).not.toMatch(/private-|personal note|runId|updatedAt/);expect(p.routines[0].plan.exercises[0].targets?.targetRpe).toBe(8);expect(p.routines[0].plan.effortScale).toBe("rir");
   });

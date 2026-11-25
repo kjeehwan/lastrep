@@ -1,0 +1,5 @@
+- Label Top and Back-off sets and give each group its own target reps and effort.
+- Review progression suggestions for Top and Back-off sets in Today's Plan.
+- Preserve set types and targets when sharing workouts and programs.
+- Keep previous workout values visible when changing set types.
+- Clearer training guidance and maintenance updates.

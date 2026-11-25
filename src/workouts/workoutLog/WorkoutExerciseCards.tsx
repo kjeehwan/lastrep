@@ -26,7 +26,7 @@ import { EXERCISE_GROUPS, type ExerciseCatalogItem } from "../exerciseCatalog";
 import { clockLabel, RestTimerText } from "./TimerText";
 import { WorkoutNativeSetRows } from "./WorkoutNativeSetRows";
 import { applyCardioZone } from "./cardioZone";
-import { exerciseTargetsText } from "../exerciseTargets";
+import { exerciseTargetSummaries } from "../exerciseTargets";
 import { lastResistanceSet, setRowPresentation } from "./setPresentation";
 import type { RestClock } from "./timerClock";
 import type { WarmupUnit } from "./warmupSets";
@@ -454,7 +454,7 @@ export function useWorkoutExerciseCards({
                 style={[styles.input, styles.metaInput]}
               />
             </View>
-            {!isCardio && exerciseTargetsText(ex.targets, effortScale) ? <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Edit ${ex.name} targets`} onPress={() => cardActions.openExerciseTargets?.(ex.id)} style={{ minHeight: 44, justifyContent: "center", marginTop: 4 }}><Text style={[styles.muted, { fontFamily: notebookFonts.body, fontSize: 14, lineHeight: 20, includeFontPadding: false }]}>Target: {exerciseTargetsText(ex.targets, effortScale)}</Text></TouchableOpacity> : null}
+            {!isCardio && exerciseTargetSummaries(ex, effortScale).join("\n") ? <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Edit ${ex.name} targets`} onPress={() => cardActions.openExerciseTargets?.(ex.id)} style={{ minHeight: 44, justifyContent: "center", marginTop: 4 }}><Text style={[styles.muted, { fontFamily: notebookFonts.body, fontSize: 14, lineHeight: 20, includeFontPadding: false }]}>{exerciseTargetSummaries(ex, effortScale).join("\n")}</Text></TouchableOpacity> : null}
             {!isCardio ? (
               <TouchableOpacity
                 accessibilityRole="button"

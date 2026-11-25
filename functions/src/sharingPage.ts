@@ -28,6 +28,6 @@ export const sharingPage = functions.region("asia-northeast3")
     res.set({"Cache-Control":"no-store", "Referrer-Policy":"no-referrer", "X-Robots-Tag":"noindex, nofollow, noarchive", "X-Content-Type-Options":"nosniff", "Content-Security-Policy":"default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'"});
     if (req.method !== "GET" && req.method !== "HEAD") { res.set("Allow", "GET, HEAD").status(405).send("Method not allowed"); return; }
     const result = await sharingPageResponse(req.originalUrl, async token =>
-      await handleWorkoutSharing({op:"snapshot",token,expectedUid:null,supportedPlanVersion:2},null) as {plan:{version:number}});
+      await handleWorkoutSharing({op:"snapshot",token,expectedUid:null,supportedPlanVersion:2,supportsSetRoles:true},null) as {plan:{version:number}});
     res.status(result.status).type("html").send(req.method === "HEAD" ? "" : result.html);
   });

@@ -9,7 +9,8 @@ import { showAppAlert } from "../../ui/appDialog";
 import { exerciseTargetsChanged, exerciseTargetsDraft, readExerciseTargetsDraft, type ExerciseTargets } from "../exerciseTargets";
 import type { EffortScale } from "../effortScale";
 
-export function ExerciseTargetsSheet({ name, targets, effortScale, onClose, onApply }: {
+export function ExerciseTargetsSheet({ name, targets, effortScale, onClose, onApply, clearLabel = "Clear targets", helpText }: {
+  clearLabel?: string; helpText?: string;
   name: string; targets?: ExerciseTargets | null; effortScale: EffortScale;
   onClose: () => void; onApply: (targets: ExerciseTargets | null) => void;
 }) {
@@ -26,9 +27,9 @@ export function ExerciseTargetsSheet({ name, targets, effortScale, onClose, onAp
       <Text style={[text, { flex: 1 }]}>{label}</Text><View style={{ flexDirection: "row", alignItems: "center", gap: 8, flexShrink: 1 }}><Text style={[text, { color: colors.muted }]}>{value}</Text><Icon size={18} color={colors.muted} strokeWidth={1.5} /></View>
     </Pressable>;
   };
-  return <ProfileSheet title="Targets" titleAccessory={<NotebookInfoButton label="About exercise targets" onPress={() => showAppAlert("Targets", "Set a rep range, target effort, or both for this exercise's normal working sets. Warm-ups are excluded.\n\nLog the reps and effort you actually perform in the set rows. They stay separate from your targets.\n\nTarget effort follows your RPE/RIR preference in Profile. Individual set targets in a shared plan are retained and take precedence over the exercise default.")} />} onClose={onClose} footer={changed || Object.values(draft).some(value => value.trim()) ? <>
+  return <ProfileSheet title="Targets" titleAccessory={<NotebookInfoButton label="About exercise targets" onPress={() => showAppAlert("Targets", helpText ?? "Set a rep range, target effort, or both for this exercise's normal working sets. Warm-ups are excluded.\n\nLog the reps and effort you actually perform in the set rows. They stay separate from your targets.\n\nTarget effort follows your RPE/RIR preference in Profile. Individual set targets in a shared plan are retained and take precedence over the exercise default.")} />} onClose={onClose} footer={changed || Object.values(draft).some(value => value.trim()) ? <>
     {changed ? <ProfileAction primary label="Done" onPress={() => { try { onApply(readExerciseTargetsDraft(draft, effortScale)); } catch (failure) { setError(failure instanceof Error ? failure.message : "Check the target values."); } }} /> : null}
-    {Object.values(draft).some(value => value.trim()) ? <ProfileAction label="Clear targets" onPress={() => { Keyboard.dismiss(); setDraft({ min: "", max: "", effort: "" }); setEditing(null); setError(""); }} /> : null}
+    {Object.values(draft).some(value => value.trim()) ? <ProfileAction label={clearLabel} onPress={() => { Keyboard.dismiss(); setDraft({ min: "", max: "", effort: "" }); setEditing(null); setError(""); }} /> : null}
   </> : undefined}>
     <Text style={[text, { fontFamily: notebookFonts.semibold, fontSize: 20 }]}>{name}</Text>
     <View style={{ gap: 8 }}>

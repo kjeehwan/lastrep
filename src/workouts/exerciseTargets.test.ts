@@ -1,10 +1,27 @@
 import { describe, expect, it } from "vitest";
-import { effectiveTargetRpe, exerciseTargetsChanged, exerciseTargetsDraft, exerciseTargetsText, normalizeExerciseTargets, readExerciseTargetsDraft, routineSetTargets } from "./exerciseTargets";
+import { effectiveTargetRpe, comparableRoutineRoles, effectiveGroupTargets, exerciseTargetSummaries, normalizeGroupTargets, exerciseTargetsChanged, exerciseTargetsDraft, exerciseTargetsText, normalizeExerciseTargets, readExerciseTargetsDraft, routineSetTargets } from "./exerciseTargets";
 import { parseExerciseTargets, parseSharedWorkoutPlan } from "../sharing/sharingContract";
 import { sharingPlanToExercises, workoutToSharingPlan } from "../sharing/sharingPlan";
 
 const targets = { minReps: 8, maxReps: 12, targetRpe: 8 };
 describe("optional exercise targets", () => {
+  it("uses group overrides only for active roles and preserves defaults and per-set effort",()=>{
+    const override={minReps:6,maxReps:8,targetRpe:9},exercise={targets,groupTargets:{backoff:override},sets:[{setType:"top"},{setType:"backoff"}]};
+    expect(effectiveGroupTargets(exercise,"top")).toEqual(targets);
+    expect(effectiveTargetRpe(exercise,{setType:"backoff"})).toBe(9);
+    expect(effectiveTargetRpe(exercise,{setType:"backoff",targetRpe:7})).toBe(7);
+    expect(exerciseTargetSummaries(exercise,"rir")).toEqual(["Top · Target 8–12 reps · RIR 2","Back-off · Target 6–8 reps · RIR 1"]);
+    expect(exerciseTargetSummaries({...exercise,sets:[{setType:"normal"}]},"rpe")).toEqual(["Target 8–12 reps · RPE 8"]);
+    expect(normalizeGroupTargets({top:{...override,targetRpe:20}})).toBeNull();
+    expect(effectiveGroupTargets({...exercise,groupTargets:{backoff:null}},"backoff")).toEqual(targets);
+  });
+  it("uses recent routine prescriptions only when explicit roles still match",()=>{
+    const planned=[{setType:"top"},{setType:"backoff"},{setType:"backoff"}];
+    expect(comparableRoutineRoles(planned,[{setType:"normal"},{setType:"normal"},{setType:"normal"}])).toBe(false);
+    expect(comparableRoutineRoles(planned,[{setType:"warmup"},...planned])).toBe(true);
+    expect(comparableRoutineRoles(planned,[{setType:"top"},{setType:"backoff"}])).toBe(false);
+    expect(comparableRoutineRoles([{setType:"normal"}],planned)).toBe(false);
+  });
   it("does not invent targets for legacy data or recorded effort", () => {
     expect(normalizeExerciseTargets(undefined)).toBeNull();
     expect(normalizeExerciseTargets({ rpe: 8, reps: "10" })).toBeNull();

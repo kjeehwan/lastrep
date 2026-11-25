@@ -1,5 +1,5 @@
 import { painEntries, primaryPain } from "./painContext";
-import { normalizeExerciseTargets } from "../../workouts/exerciseTargets";
+import { normalizeExerciseTargets, normalizeGroupTargets } from "../../workouts/exerciseTargets";
 import type {
   ActivityDuration,
   ActivityEffort,
@@ -119,15 +119,22 @@ export const parseWorkoutDraftPlan = (raw: string | null, today = new Date()): P
                     : typeof set?.reps === "string" && set.reps.trim() && Number.isFinite(Number(set.reps))
                       ? Number(set.reps)
                       : null,
-                  setType: set?.setType === "warmup" || set?.setType === "failure" || set?.setType === "drop"
+                  setType: set?.setType === "warmup" || set?.setType === "failure" || set?.setType === "drop" || set?.setType === "top" || set?.setType === "backoff"
                     ? set.setType
                     : "normal" as const,
+                  targetRpe: typeof set?.targetRpe === "number" ? set.targetRpe : null,
                   done: Boolean(set?.done),
                   rpe: set?.rpe != null && String(set.rpe).trim() !== "" && Number.isFinite(Number(set.rpe)) ? Number(set.rpe) : null,
                 }))
               : [];
             const targets = normalizeExerciseTargets(item.targets);
-            return { name: item.name.trim(), mode, ...(targets ? { targets } : {}), ...(typeof item.deloadAppliedId === "string" ? {deloadAppliedId:item.deloadAppliedId}:{}), sets };
+            const groupTargets = normalizeGroupTargets(item.groupTargets);
+            const rawDeload = item.deloadAppliedGroups;
+            const deloadAppliedGroups = rawDeload && typeof rawDeload === "object" ? {
+              ...(typeof rawDeload.top === "string" ? {top:rawDeload.top}:{}),
+              ...(typeof rawDeload.backoff === "string" ? {backoff:rawDeload.backoff}:{})
+            } : null;
+            return { name: item.name.trim(), mode, ...(groupTargets ? {groupTargets} : {}), ...(deloadAppliedGroups ? {deloadAppliedGroups}:{}), ...(targets ? {targets}:{}), ...(typeof item.deloadAppliedId === "string" ? {deloadAppliedId:item.deloadAppliedId}:{}), sets };
           })
           .filter((item): item is NonNullable<typeof item> => item != null)
       : [];

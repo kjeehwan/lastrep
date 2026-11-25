@@ -50,6 +50,8 @@ export const hashDecisionInputs = (inputs: DecisionInputs): string => {
             mode: exercise.mode,
             availableWeights: exercise.availableWeights ?? null,
             targets: exercise.targets ?? null,
+            groupTargets: exercise.groupTargets ?? null,
+            deloadAppliedGroups: exercise.deloadAppliedGroups ?? null,
             progression: exercise.progression ?? null,
             deloadAppliedId:exercise.deloadAppliedId??null,
             sets: exercise.sets.map((set) => ({
@@ -58,6 +60,7 @@ export const hashDecisionInputs = (inputs: DecisionInputs): string => {
               setType: set.setType,
               done: set.done,
               rpe: set.rpe ?? null,
+              targetRpe: set.targetRpe ?? null,
             })),
           })) ?? null,
         }

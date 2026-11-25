@@ -7,7 +7,7 @@ export function setDisplayRows(exercise) {
   return exercise.sets.map(row => {
     if (row.type === 'warmup') return { marker: 'W', previous: undefined };
     const index = workingIndex++;
-    return { marker: ({ failure: 'F', drop: 'D' })[row.type] ?? index + 1, previous: previous[index] };
+    return { marker: ({ failure: 'F', drop: 'D', top: 'T', backoff: 'B' })[row.type] ?? index + 1, previous: previous[index] };
   });
 }
 export function suggestWarmups(weight, pattern, step = 2.5) {
