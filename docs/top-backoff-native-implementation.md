@@ -123,7 +123,8 @@ under ignored `.dev-tools/`.
 - Final review traced account-scoped target editing, draft/history/routine/program
   mappings, independent Apply/Undo, deload restoration and old-client sharing
   capability checks. No new collection/provider/permission is introduced.
-- Fresh Expo Doctor found nine SDK-compatible patch updates. Resolve these as a
-  separate maintenance commit and repeat release checks before the local AAB.
+- Fresh Expo Doctor found nine SDK-compatible patch updates. Installed these
+  separately; the new Doctor run passes 20/20 with the documented native-config
+  exception unchanged. Repeat affected checks before the local AAB.
 - Deployment target: lastrep-ebac5, functions workoutSharing/sharingPage and
   hosting target sharing (lastrep.web.app). Firestore/storage rules are unchanged.
