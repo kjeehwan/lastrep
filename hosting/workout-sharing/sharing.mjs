@@ -29,14 +29,14 @@ export function setPrescription(set, exercise, scale) {
         `${scale.toUpperCase()} ${number(scale === "rir" ? 10 - set.targetRpe : set.targetRpe)}`,
       );
   }
-  return `${set.setType === "warmup" ? "W · " : set.setType === "drop" ? "Drop · " : set.setType === "failure" ? "Failure · " : ""}${parts.join(" · ")}`;
+  return `${set.setType === "top" ? "Top \u00b7 " : set.setType === "backoff" ? "Back-off \u00b7 " : set.setType === "warmup" ? "W · " : set.setType === "drop" ? "Drop · " : set.setType === "failure" ? "Failure · " : ""}${parts.join(" · ")}`;
 }
 export async function loadSnapshot(token, fetcher = fetch, signal) {
   const response = await fetcher(endpoint, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      data: { op: "snapshot", token, expectedUid: null, supportedPlanVersion: 2 },
+      data: { op: "snapshot", token, expectedUid: null, supportedPlanVersion: 2, supportsSetRoles: true },
     }),
     credentials: "omit",
     referrerPolicy: "no-referrer",
@@ -77,10 +77,15 @@ export function renderSnapshot(doc, snapshot) {
     const article = add(parent, "article", "");
     add(article, "h2", exercise.name);
     const targetsRow = add(article, "div", "", "guidance-row");
-    if (exercise.mode !== "cardio" && exercise.targets) {
-      const targets = exercise.targets;
-      if (targets.minReps != null) add(targetsRow, "span", `Target ${targets.minReps}\u2013${targets.maxReps} reps`, "guidance-badge");
-      if (targets.targetRpe != null) add(targetsRow, "span", `${plan.effortScale.toUpperCase()} ${number(plan.effortScale === "rir" ? 10 - targets.targetRpe : targets.targetRpe)}`, "guidance-badge");
+    if (exercise.mode !== "cardio") {
+      const roles = [...new Set(exercise.sets.map(set => set.setType || "normal"))].filter(role => ["normal","top","backoff"].includes(role));
+      for (const role of roles) {
+        const targets = exercise.groupTargets?.[role] ?? exercise.targets;
+        if (!targets) continue;
+        const label = roles.length === 1 && role === "normal" ? "" : `${role === "top" ? "Top" : role === "backoff" ? "Back-off" : "Normal"} \u00b7 `;
+        if (targets.minReps != null) add(targetsRow, "span", `${label}Target ${targets.minReps}\u2013${targets.maxReps} reps`, "guidance-badge");
+        if (targets.targetRpe != null) add(targetsRow, "span", `${label}${plan.effortScale.toUpperCase()} ${number(plan.effortScale === "rir" ? 10-targets.targetRpe : targets.targetRpe)}`, "guidance-badge");
+      }
     }
     const details = [
       exercise.restSec ? `Rest ${number(exercise.restSec)} sec` : "",

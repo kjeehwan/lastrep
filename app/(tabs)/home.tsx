@@ -1545,6 +1545,10 @@ function Home() {
                             Set{" "}
                             {set.setType === "warmup"
                               ? "W"
+                              : set.setType === "top"
+                              ? "T"
+                              : set.setType === "backoff"
+                              ? "B"
                               : set.setType === "failure"
                               ? "F"
                               : set.setType === "drop"

@@ -1,6 +1,6 @@
 import type { Timestamp } from "firebase/firestore";
 import type { AvailableWeights } from "../workouts/availableWeights";
-import type { ExerciseTargets } from "../workouts/exerciseTargets";
+import type { ExerciseTargets, GroupTargets } from "../workouts/exerciseTargets";
 import type { ProgressionPreferences } from "../workouts/performanceProgression";
 import type { DeloadPeriod } from "../workouts/deload";
 
@@ -54,7 +54,9 @@ export type PlannedWorkoutSummary = {
 
 export type PlannedExerciseSummary = {
   deloadAppliedId?: string | null;
+  deloadAppliedGroups?: { top?: string; backoff?: string } | null;
   targets?: ExerciseTargets | null;
+  groupTargets?: GroupTargets | null;
   progression?: ProgressionPreferences;
   name: string;
   mode: "resistance" | "cardio";
@@ -62,9 +64,10 @@ export type PlannedExerciseSummary = {
   sets: {
     weightKg: number | null;
     reps: number | null;
-    setType: "warmup" | "normal" | "failure" | "drop";
+    setType: "warmup" | "normal" | "failure" | "drop" | "top" | "backoff";
     done: boolean;
     rpe?: number | null;
+    targetRpe?: number | null;
   }[];
 };
 
@@ -152,7 +155,10 @@ export type DecisionOutput = {
 
 export type ExercisePlanAction = "as_planned" | "progress" | "reduce" | "avoid";
 
+export type SetGroupRole = "top" | "backoff";
+export type SetGroupAdjustment = Omit<ExercisePlanAdjustment, "groupAdjustments"> & { role: SetGroupRole };
 export type ExercisePlanAdjustment = {
+  groupAdjustments?: SetGroupAdjustment[];
   exerciseName: string;
   action: ExercisePlanAction;
   loadPct: number;

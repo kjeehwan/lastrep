@@ -1,3 +1,4 @@
+import { buildSetGroupReview, hasAdjustmentChanges } from "./setGroupReview";
 import { painEntries, primaryPain } from "./painContext";
 import { performanceProgression } from "../../workouts/performanceProgression";
 import { deloadSuggestion } from "../../workouts/deload";
@@ -10,6 +11,7 @@ import type {
   ExercisePrescription,
   PainContext,
   PlannedWorkoutSummary,
+  SetGroupRole,
 } from "../../types/decision";
 import type { ExerciseCatalogItem } from "../../workouts/exerciseCatalog";
 import type { WorkoutSummary } from "../../workouts/homeInsights";
@@ -185,9 +187,15 @@ const buildExerciseAdjustment = (
   workouts: WorkoutSummary[],
   score: number,
   now: Date,
-  catalog: ExerciseCatalogItem[]
+  catalog: ExerciseCatalogItem[],
+  scopedGroup?: SetGroupRole
 ): ExercisePlanAdjustment => {
   const exerciseName = parsePlannedExerciseName(name);
+  const groupExercise = inputs.plannedWorkout?.exercises?.find(item => normalize(item.name) === normalize(exerciseName));
+  if (!scopedGroup && groupExercise?.mode === "resistance" && groupExercise.sets.some(set => set.setType === "top" || set.setType === "backoff")) {
+    return buildSetGroupReview(groupExercise, inputs, workouts, now,
+      (scopedInputs, scopedHistory, role) => buildExerciseAdjustment(name, scopedInputs, scopedHistory, score, now, catalog, role));
+  }
   const catalogExercise = findCatalogExercise(catalog, exerciseName);
   const isCardio = catalogExercise?.group === "cardio" || catalogExercise?.movementPattern === "cardio";
   const toleratesFrequentTraining = isCardio || catalogExercise?.group === "core";
@@ -301,7 +309,7 @@ const buildExerciseAdjustment = (
     return finish({exerciseName,action:applied?"as_planned":"reduce",loadPct:applied?0:-10,setDelta:applied?0:Math.max(1,Math.ceil(plannedPrescription.sets*.6))-plannedPrescription.sets,repsDelta:0,targetRpe:7,
       reason:applied?"This workout already has the deload prescription. Keep the planned sets.":`Deload through ${inputs.deload.endsDateKey}: reduce load and volume while preserving your normal routine.`});
   }
-  if (recentMaxEffort) {
+  if (recentMaxEffort && !scopedGroup) {
     const supportedWeight = plannedPrescription?.weightKg != null && plannedPrescription.reps != null && performance?.estimated1RmKg
       ? roundLoad(performance.estimated1RmKg / (1 + (plannedPrescription.reps + 2) / 30))
       : null;
@@ -371,7 +379,7 @@ const buildExerciseAdjustment = (
     });
   }
   const plannedExercise = inputs.plannedWorkout?.exercises?.find(exercise => normalize(exercise.name) === normalize(exerciseName));
-  const progression = plannedExercise ? performanceProgression(plannedExercise, workouts, now) : null;
+  const progression = plannedExercise ? performanceProgression(plannedExercise, workouts, now, scopedGroup) : null;
   if (score >= 70 && !nutritionLimitsProgression && progression?.candidate && plannedPrescription?.weightKg && plannedPrescription.reps != null) {
     const candidate = progression.candidate;
     return finish({ exerciseName, action: "progress", loadPct: (candidate.weightKg / plannedPrescription.weightKg - 1) * 100,
@@ -444,7 +452,7 @@ export const buildDeterministicTodayPlan = (
         ? "PUSH"
         : "MAINTAIN";
   const changedCount = exerciseAdjustments.filter(
-    (item) => item.action !== "as_planned" || item.loadPct !== 0 || item.setDelta !== 0 || item.repsDelta !== 0
+    (item) => hasAdjustmentChanges(item)
   ).length;
   const painArea = pain ? formatPainArea(pain.area) : null;
   const headline = decision === "PUSH"

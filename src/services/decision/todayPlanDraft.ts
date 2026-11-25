@@ -42,6 +42,30 @@ export const applyTodayPlanToWorkoutDraft = (
     const name = typeof exercise.name === "string" ? exercise.name : "";
     const adjustment = byName.get(normalize(name));
     if (!adjustment) return exercise;
+    if (exercises.filter(item => normalize(String(item.name ?? "")) === normalize(name)).length !== 1) {
+      manualReviewExercises.push(name);
+      return exercise;
+    }
+    if (adjustment.groupAdjustments) {
+      let sets = Array.isArray(exercise.sets) ? exercise.sets : [];
+      const recording = sets.some(set => set.setType !== "warmup" && (set.done || (set.rpe != null && String(set.rpe).trim() !== "")));
+      for (const group of adjustment.groupAdjustments) {
+        const rows = sets.filter(set => set.setType === group.role), expected = group.plannedPrescription;
+        if (group.action === "avoid") { manualReviewExercises.push(name); continue; }
+        if (!expected || rows.length !== expected.sets || rows.some(set => set.weightKg !== expected.weightKg || Number(set.reps) !== expected.reps) ||
+          recording && (group.loadPct > 0 || group.repsDelta > 0 || group.setDelta > 0)) continue;
+        const scoped = applyTodayPlanToWorkoutDraft(JSON.stringify({exercises:[{name,sets:rows.map(set => ({...set,setType:"normal"}))}]}),[group],appliedAt);
+        const replacement = (JSON.parse(scoped.raw).exercises[0].sets as DraftSet[]).map(set => ({...set,setType:group.role}));
+        let at = 0;
+        sets = sets.flatMap(set => set.setType !== group.role ? [set] : at < replacement.length ? [replacement[at++]] : []);
+        if (replacement.length > rows.length) {
+          const last = sets.map(set => set.setType).lastIndexOf(group.role);
+          sets.splice(last+1,0,...replacement.slice(rows.length));
+        }
+      }
+      if (JSON.stringify(sets) !== JSON.stringify(exercise.sets)) changedExercises++;
+      return {...exercise,sets};
+    }
     if (adjustment.action === "avoid") {
       manualReviewExercises.push(name || adjustment.exerciseName);
       return exercise;

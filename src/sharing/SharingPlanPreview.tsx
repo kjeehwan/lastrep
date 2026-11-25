@@ -1,7 +1,7 @@
 import { Text, View, ScrollView } from "react-native";
 import { useNotebookStyles } from "../ui/notebook/Notebook";
 import { createStyles } from "../workouts/workoutLog/workoutLogStyles";
-import { exerciseTargetsText } from "../workouts/exerciseTargets";
+import { exerciseTargetSummaries } from "../workouts/exerciseTargets";
 import { sharingPrescriptionRows } from "./sharingPresentation";
 import type { SharedWorkoutPlan } from "./sharingContract";
 export function SharingPlanPreview({ plan, showTitle = true }: { plan: SharedWorkoutPlan; showTitle?: boolean }) {
@@ -16,7 +16,7 @@ export function SharingPlanPreview({ plan, showTitle = true }: { plan: SharedWor
             <Text style={styles.sectionTitle}>
               {String(i + 1).padStart(2, "0")} · {e.name}
             </Text>
-            {e.mode !== "cardio" && exerciseTargetsText(e.targets, plan.effortScale) ? <Text style={styles.muted}>Target: {exerciseTargetsText(e.targets, plan.effortScale)}</Text> : null}
+            {e.mode !== "cardio" && exerciseTargetSummaries(e, plan.effortScale).join("\n") ? <Text style={styles.muted}>{exerciseTargetSummaries(e, plan.effortScale).join("\n")}</Text> : null}
             <Text style={styles.muted}>
               Rest {e.restSec}s{e.tempo ? ` · Tempo ${e.tempo}` : ""}
             </Text>

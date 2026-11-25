@@ -1,7 +1,7 @@
 import type { EffortInput } from "../effortScale";
-import type { ExerciseTargets } from "../exerciseTargets";
+import type { ExerciseTargets, GroupTargets } from "../exerciseTargets";
 export type Unit = "kg" | "lbs" | "km" | "mi";
-export type SetType = "warmup" | "normal" | "failure" | "drop";
+export type SetType = "warmup" | "normal" | "failure" | "drop" | "top" | "backoff";
 export type ExerciseMode = "resistance" | "cardio";
 export type RecommendationFocusId =
   | "auto"
@@ -37,7 +37,9 @@ export type SetEntry = {
 };
 export type Exercise = {
   deloadAppliedId?: string | null;
+  deloadAppliedGroups?: { top?: string; backoff?: string } | null;
   targets?: ExerciseTargets | null;
+  groupTargets?: GroupTargets | null;
   plannedRestSec?: number;
   mode?: ExerciseMode;
   id: string;
@@ -58,6 +60,7 @@ export type PastWorkout = {
   exercises: {
     name: string;
     targets?: ExerciseTargets | null;
+    groupTargets?: GroupTargets | null;
     notes?: string;
     tempo?: string;
     zone?: string;
@@ -89,6 +92,7 @@ export type Routine = {
   exercises: {
     name: string;
     targets?: ExerciseTargets | null;
+    groupTargets?: GroupTargets | null;
     notes?: string;
     tempo?: string;
     zone?: string;
@@ -156,6 +160,8 @@ export const SET_TYPE_LABELS: {
     marker: "N",
     description: "Standard working set.",
   },
+  { value: "top", title: "Top", marker: "T", description: "Main working set, reviewed separately." },
+  { value: "backoff", title: "Back-off", marker: "B", description: "Working sets after the top set." },
   {
     value: "failure",
     title: "Failure",
@@ -334,7 +340,7 @@ export const isValidSetType = (value: string): value is SetType =>
   value === "warmup" ||
   value === "normal" ||
   value === "failure" ||
-  value === "drop";
+  value === "drop" || value === "top" || value === "backoff";
 export const toSetType = (value: unknown): SetType =>
   typeof value === "string" && isValidSetType(value) ? value : "normal";
 export const toLocalDateKey = (date: Date) =>
@@ -402,6 +408,8 @@ export const getSetTypeMarker = (
 ) => {
   const type = toSetType(set.setType);
   if (type === "warmup") return "W";
+  if (type === "top") return "T";
+  if (type === "backoff") return "B";
   if (type === "failure") return "F";
   if (type === "drop") return "D";
   return String(

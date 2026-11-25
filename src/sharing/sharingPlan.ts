@@ -1,4 +1,4 @@
-import { normalizeExerciseTargets } from "../workouts/exerciseTargets";
+import { normalizeGroupTargets, normalizeExerciseTargets } from "../workouts/exerciseTargets";
 import {
   parseSharedWorkoutPlan,
   isSharedProgram,
@@ -35,6 +35,7 @@ export function workoutToSharingPlan(
       return {
         name: e.name,
         ...(exerciseMode !== "cardio" && normalizeExerciseTargets(e.targets) ? { targets: normalizeExerciseTargets(e.targets) } : {}),
+        ...(exerciseMode !== "cardio" && normalizeGroupTargets(e.groupTargets) ? { groupTargets: normalizeGroupTargets(e.groupTargets) } : {}),
         mode: exerciseMode,
         unit,
         ...(exerciseMode === "cardio" && e.cardioSessionType
@@ -82,6 +83,7 @@ export function sharingPlanToExercises(plan: SharedWorkoutPlan, key: string) {
       id,
       plannedRestSec: e.restSec,
       targets: normalizeExerciseTargets(e.targets),
+      groupTargets: normalizeGroupTargets(e.groupTargets),
       mode: e.mode,
       cardioSessionType: e.cardioSessionType,
       cardioEffortLevel: e.cardioEffortLevel,

@@ -5,7 +5,7 @@ type WorkoutSet = {
   distanceKm?: number | null;
   durationSec?: number | null;
   zone?: string | null;
-  setType?: "warmup" | "normal" | "failure" | "drop" | null;
+  setType?: "warmup" | "normal" | "failure" | "drop" | "top" | "backoff" | null;
 };
 
 type WorkoutExercise = {

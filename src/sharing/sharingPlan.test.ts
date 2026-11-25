@@ -5,6 +5,15 @@ import {
   workoutToSharingPlan,
 } from "./sharingPlan";
 describe("sharing adapters", () => {
+  it("round-trips explicit roles and group targets without sharing actual effort", () => {
+    const groupTargets = {top:{minReps:6,maxReps:8,targetRpe:8},backoff:{minReps:8,maxReps:10,targetRpe:9}};
+    const plan=workoutToSharingPlan("Groups",[{id:"g",name:"Deadlift",mode:"resistance",groupTargets,sets:[{weightKg:130,reps:"8",rpe:"10",done:true,setType:"top"},{weightKg:110,reps:"8",done:false,setType:"backoff"}]}],{},()=>"resistance",{},"rir");
+    expect(plan.exercises[0].groupTargets).toEqual(groupTargets);
+    const imported=sharingPlanToExercises(plan,"g").exercises[0];
+    expect(imported.groupTargets).toEqual(groupTargets);expect(imported.sets.map(s=>s.setType)).toEqual(["top","backoff"]);
+    expect(imported.sets.every(s=>s.rpe===""&&!s.done)).toBe(true);
+    expect(omitSharingWeights(plan).exercises[0].groupTargets).toEqual(groupTargets);
+  });
   it("shares mixed resistance/cardio with stale unit preferences without changing canonical values", () => {
     const sets = [{ weightKg: 80, reps: "8", rpe: "9", done: true, durationSec: 600, distanceKm: 2 }];
     const plan = workoutToSharingPlan("Mixed", [

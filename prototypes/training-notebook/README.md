@@ -895,3 +895,12 @@ This is synthetic browser-only work, not native delivery or production link
 creation. See `../../docs/program-sharing-mockup.md` for scope and verification
 limits. The browser connector was unavailable during preparation, so visual
 layout review remains pending.
+
+
+## Top sets and back-off sets - November 25, 2026
+
+Use the usual page: `index.html#layout-minimal-top-backoff`. The Top / back-off
+sets group contains seven synthetic review states. Set markers open role choices;
+Targets offers exercise defaults and group overrides; Today's Plan reviews and
+applies selected groups separately. This is a new proposal, not current native
+progression behavior. Scope and verification: `../../docs/top-backoff-progression-proposal.md`.

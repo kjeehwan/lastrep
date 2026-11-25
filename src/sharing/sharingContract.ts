@@ -1,6 +1,7 @@
 /** Shared wire contract. Pure TypeScript: safe to import from the native client. */
-export type SharedSetType = "normal" | "warmup" | "failure" | "drop";
+export type SharedSetType = "normal" | "warmup" | "failure" | "drop" | "top" | "backoff";
 export type ExerciseTargets = { minReps: number | null; maxReps: number | null; targetRpe: number | null };
+export type GroupTargets = { top?: ExerciseTargets | null; backoff?: ExerciseTargets | null };
 export type SharedWorkoutSet = {
   weightKg: number | null;
   reps: string;
@@ -11,6 +12,7 @@ export type SharedWorkoutSet = {
 };
 export type SharedWorkoutExercise = {
   targets?: ExerciseTargets | null;
+  groupTargets?: GroupTargets | null;
   name: string;
   mode: "resistance" | "cardio";
   unit: "kg" | "lbs" | "km" | "mi";
@@ -131,6 +133,17 @@ export function parseExerciseTargets(input: unknown): ExerciseTargets | null {
   if ((minReps == null) !== (maxReps == null) || (minReps != null && maxReps != null && (!Number.isInteger(minReps) || !Number.isInteger(maxReps) || minReps > maxReps))) throw Error("Enter a valid whole rep range.");
   return minReps == null && targetRpe == null ? null : { minReps, maxReps, targetRpe };
 }
+export function parseGroupTargets(input: unknown): GroupTargets | null {
+  if (input == null) return null;
+  const value = object(input); keys(value, ["top", "backoff"]);
+  const top = parseExerciseTargets(value.top), backoff = parseExerciseTargets(value.backoff);
+  return top || backoff ? { top, backoff } : null;
+}
+/** A capability gate, independent of workout/program envelope versions. */
+export function requiresSetRoles(plan: SharedPlan): boolean {
+  const workouts = isSharedProgram(plan) ? plan.routines.map(r => r.plan) : [plan];
+  return workouts.some(workout => workout.exercises.some(e => Boolean(e.groupTargets) || e.sets.some(s => s.setType === "top" || s.setType === "backoff")));
+}
 export function parseSharedWorkoutPlan(input: unknown): SharedWorkoutPlan {
   const p = object(input);
   keys(p, ["version", "title", "effortScale", "exercises"]);
@@ -155,6 +168,7 @@ export function parseSharedWorkoutPlan(input: unknown): SharedWorkoutPlan {
       "cardioSessionType",
       "cardioEffortLevel",
       "targets",
+      "groupTargets",
     ]);
     if (
       !["resistance", "cardio"].includes(String(e.mode)) ||
@@ -193,7 +207,7 @@ export function parseSharedWorkoutPlan(input: unknown): SharedWorkoutPlan {
         "durationSec",
         "distanceKm",
       ]);
-      if (!["normal", "warmup", "failure", "drop"].includes(String(s.setType)))
+      if (!["normal", "warmup", "failure", "drop", "top", "backoff"].includes(String(s.setType)))
         throw Error("Invalid set type.");
       const reps = text(s.reps, 4);
       if (
@@ -214,6 +228,7 @@ export function parseSharedWorkoutPlan(input: unknown): SharedWorkoutPlan {
     return {
       name: text(e.name, 100, true),
       ...(e.targets !== undefined ? { targets: e.mode === "cardio" ? null : parseExerciseTargets(e.targets) } : {}),
+      ...(e.groupTargets !== undefined ? { groupTargets: e.mode === "cardio" ? null : parseGroupTargets(e.groupTargets) } : {}),
       mode: e.mode as SharedWorkoutExercise["mode"],
       unit: e.unit as SharedWorkoutExercise["unit"],
       restSec,

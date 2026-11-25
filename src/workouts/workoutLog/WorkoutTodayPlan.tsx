@@ -1,3 +1,4 @@
+import { adjustmentSelectionKey, groupRoleLabel, hasAdjustmentChanges } from "../../services/decision/setGroupReview";
 import { AppGuideTip } from "../../onboarding/live/AppGuide";
 import { useNotebook, useNotebookStyles, notebookSheet } from "../../ui/notebook/Notebook";
 import { notebookFonts, type NotebookColors } from "../../ui/notebook/tokens";
@@ -54,16 +55,16 @@ export function WorkoutTodayPlan(props: Props) {
   const [showInputs, setShowInputs] = useState(false);
   const [expanded, setExpanded] = useState<string[]>([]);
   const reviewKey=props.plan?.createdAt.toMillis()??null;
-  const defaults=props.plan?.result.exerciseAdjustments?.filter(item=>item.action!=="avoid"&&(item.loadPct||item.setDelta||item.repsDelta)).map(item=>item.exerciseName)??[];
+  const defaults=props.plan?.result.exerciseAdjustments?.flatMap(item=>item.groupAdjustments??[item]).filter(item=>item.action!=="avoid"&&hasAdjustmentChanges(item)).map(adjustmentSelectionKey)??[];
   const [selection,setSelection]=useState<{key:number|null;names:string[]}>({key:null,names:[]});
   const selected=selection.key===reviewKey?selection.names:defaults;
   const setSelected=(update:(previous:string[])=>string[])=>setSelection({key:reviewKey,names:update(selected)});
 
   const [showUnchanged, setShowUnchanged] = useState(false);
   const changes = useMemo(() => props.plan?.result.exerciseAdjustments?.filter(
-    (item) => item.action !== "as_planned" || item.loadPct !== 0 || item.setDelta !== 0 || item.repsDelta !== 0
+    (item) => hasAdjustmentChanges(item)
   ) ?? [], [props.plan]);
-  const applicable = changes.filter((item) => item.action !== "avoid" && (item.loadPct || item.setDelta || item.repsDelta));
+  const applicable = changes.flatMap(item=>item.groupAdjustments??[item]).filter((item) => item.action !== "avoid" && hasAdjustmentChanges(item));
   const groups = useMemo(() => {
     const grouped = new Map<string, ExercisePlanAdjustment[]>();
     changes.forEach((item) => grouped.set(item.reason, [...(grouped.get(item.reason) ?? []), item]));
@@ -104,19 +105,22 @@ export function WorkoutTodayPlan(props: Props) {
               <Text style={styles.summary}>{summary}</Text>
               {props.error ? <Text style={styles.reason}>{props.error}</Text> : null}
               {fresh && props.plan?.inputs.plannedWorkout?.source === "none" ? <Text style={styles.reason}>{props.plan.result.headline}</Text> : null}
-              {fresh && changes.map(item => <View key={item.exerciseName} style={[styles.exercise, { borderBottomWidth: 1, borderBottomColor: colors.rule, paddingVertical: 16 }]}>
+              {fresh && changes.map(parent => <View key={parent.exerciseName} style={[styles.exercise,{borderBottomWidth:1,borderBottomColor:colors.rule,paddingVertical:16}]}>
+                {parent.groupAdjustments ? <Text style={[styles.exerciseName,{marginBottom:12}]}>{parent.exerciseName}</Text> : null}
+                {(parent.groupAdjustments ?? [parent]).map(item => <View key={adjustmentSelectionKey(item)} style={{gap:8,paddingVertical:parent.groupAdjustments?8:0}}>
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-                  {item.action !== "avoid" ? <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: selected.includes(item.exerciseName) }} accessibilityLabel={`Apply ${item.exerciseName}`} hitSlop={8} onPress={() => setSelected(previous => previous.includes(item.exerciseName) ? previous.filter(name => name !== item.exerciseName) : [...previous, item.exerciseName])}><Ionicons name={selected.includes(item.exerciseName) ? "checkbox" : "square-outline"} size={24} color={colors.ink} /></Pressable> : <Ionicons name="alert-circle-outline" size={24} color={colors.warning} />}
-                  <Pressable style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 12 }} accessibilityRole="button" accessibilityState={{ expanded: expanded.includes(item.exerciseName) }} onPress={() => resizeDisclosure(() => setExpanded(previous => previous.includes(item.exerciseName) ? previous.filter(name => name !== item.exerciseName) : [...previous, item.exerciseName]))}>
-                    <View style={{ flex: 1, gap: 8 }}><Text style={styles.exerciseName}>{item.exerciseName}</Text><Text style={[styles.prescription, item.action === "avoid" && styles.warning]}>{exerciseAdjustmentText(item, props.unitForExercise(item.exerciseName), props.plan?.inputs.plannedWorkout?.exercises?.find(exercise => exercise.name.trim().toLowerCase() === item.exerciseName.trim().toLowerCase()), props.effortScale, true)}</Text></View>
-                    <Ionicons name={expanded.includes(item.exerciseName) ? "chevron-down" : "chevron-forward"} size={18} color={colors.muted} />
+                  {item.action !== "avoid" && hasAdjustmentChanges(item) ? <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: selected.includes(adjustmentSelectionKey(item)) }} accessibilityLabel={`Apply ${item.exerciseName}${"role" in item ? ` ${groupRoleLabel(item.role)}` : ""}`} hitSlop={8} onPress={() => setSelected(previous => previous.includes(adjustmentSelectionKey(item)) ? previous.filter(name => name !== adjustmentSelectionKey(item)) : [...previous, adjustmentSelectionKey(item)])}><Ionicons name={selected.includes(adjustmentSelectionKey(item)) ? "checkbox" : "square-outline"} size={24} color={colors.ink} /></Pressable> : item.action === "avoid" ? <Ionicons name="alert-circle-outline" size={24} color={colors.warning} /> : "role" in item ? <View style={{width:24}}/> : null}
+                  <Pressable style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 12 }} accessibilityRole="button" accessibilityState={{ expanded: expanded.includes(adjustmentSelectionKey(item)) }} onPress={() => resizeDisclosure(() => setExpanded(previous => previous.includes(adjustmentSelectionKey(item)) ? previous.filter(name => name !== adjustmentSelectionKey(item)) : [...previous, adjustmentSelectionKey(item)]))}>
+                    <View style={{ flex: 1, gap: 8 }}><Text style={styles.exerciseName}>{"role" in item ? groupRoleLabel(item.role) : item.exerciseName}</Text><Text style={[styles.prescription, item.action === "avoid" && styles.warning]}>{exerciseAdjustmentText(item, props.unitForExercise(item.exerciseName), props.plan?.inputs.plannedWorkout?.exercises?.find(exercise => exercise.name.trim().toLowerCase() === item.exerciseName.trim().toLowerCase()), props.effortScale, true)}</Text></View>
+                    <Ionicons name={expanded.includes(adjustmentSelectionKey(item)) ? "chevron-down" : "chevron-forward"} size={18} color={colors.muted} />
                   </Pressable>
                 </View>
-                {expanded.includes(item.exerciseName) ? <Text style={[styles.reason,{marginTop:12}]}>{item.reason}</Text> : null}
+                {expanded.includes(adjustmentSelectionKey(item)) ? <Text style={[styles.reason,{marginTop:12}]}>{item.reason}</Text> : null}
+                </View>)}
               </View>)}
               {fresh && (props.plan?.result.exerciseAdjustments?.length ?? 0) > changes.length ? <>
                 <Pressable accessibilityRole="button" accessibilityState={{ expanded: showUnchanged }} style={styles.expandRow} onPress={() => resizeDisclosure(() => setShowUnchanged(value => !value))}><Text style={styles.reason}>{showUnchanged ? "Hide" : "Show"} {(props.plan?.result.exerciseAdjustments?.length ?? 0) - changes.length} unchanged {(props.plan?.result.exerciseAdjustments?.length ?? 0) - changes.length === 1 ? "exercise" : "exercises"}</Text><Ionicons name={showUnchanged ? "chevron-down" : "chevron-forward"} size={18} color={colors.muted} /></Pressable>
-                {showUnchanged ? props.plan?.result.exerciseAdjustments?.filter(item => !changes.includes(item)).map(item => <View key={item.exerciseName} style={styles.exercise}><Text style={styles.exerciseName}>{item.exerciseName}</Text><Text style={styles.reason}>{item.reason}</Text></View>) : null}
+                {showUnchanged ? props.plan?.result.exerciseAdjustments?.filter(item => !changes.includes(item)).map(item => <View key={item.exerciseName} style={styles.exercise}><Text style={styles.exerciseName}>{item.exerciseName}</Text><Text style={styles.reason}>{item.groupAdjustments ? item.groupAdjustments.map(group => `${groupRoleLabel(group.role)}: ${group.reason}`).join("\n\n") : item.reason}</Text></View>) : null}
               </> : null}
               {fresh && caution ? <Text style={styles.warning}>{caution}</Text> : null}
               {fresh&&props.plan?.result.deloadSuggestion ? <View style={styles.group}><Text style={styles.reason}>{props.plan.result.deloadSuggestion}</Text><Pressable accessibilityRole="button" style={styles.expandRow} onPress={props.onStartDeload}><Text style={styles.link}>Plan a deload week</Text><Ionicons name="chevron-forward" size={18} color={colors.muted}/></Pressable></View>:null}

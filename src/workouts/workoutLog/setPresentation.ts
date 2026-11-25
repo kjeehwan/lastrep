@@ -5,7 +5,9 @@ export function setRowPresentation<T extends { setType?: string }>(sets: { setTy
   return sets.map(set => {
     if (set.setType === "warmup") return { marker: "W", previous: undefined as T | undefined };
     const index = working++;
-    return { marker: ({ failure: "F", drop: "D" } as Record<string, string>)[set.setType ?? "normal"] ?? String(index + 1), previous: previousWorking[index] };
+    // Last describes the previous workout in working-set order. Today's role
+    // edits must not hide or shift history; progression checks roles separately.
+    return { marker: ({ failure: "F", drop: "D", top: "T", backoff: "B" } as Record<string, string>)[set.setType ?? "normal"] ?? String(index + 1), previous: previousWorking[index] };
   });
 }
 export function lastResistanceSet(set: { weightKg: number | null; reps: string; rpe?: string }, unit: string, scale: EffortScale) {

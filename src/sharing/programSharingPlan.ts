@@ -1,5 +1,5 @@
 import { parseSharedPlan, type SharedProgramPlan, type SharedWorkoutPlan } from "./sharingContract";
-import { normalizeExerciseTargets } from "../workouts/exerciseTargets";
+import { normalizeGroupTargets, normalizeExerciseTargets } from "../workouts/exerciseTargets";
 import type { ProgramRecord } from "../workouts/programFlow";
 import type { Routine } from "../workouts/workoutLog/workoutLogModel";
 
@@ -16,6 +16,7 @@ export function programToSharingPlan(program: ProgramRecord, routines: Routine[]
         return { name: e.name, mode, unit: e.unit ?? (mode === "cardio" ? "km" : "kg"),
           restSec: e.restSec ?? 90, tempo: mode === "cardio" ? "" : e.tempo ?? "", instructions: "",
           ...(mode === "resistance" && normalizeExerciseTargets(e.targets) ? {targets: normalizeExerciseTargets(e.targets)} : {}),
+          ...(e.mode !== "cardio" && normalizeGroupTargets(e.groupTargets) ? { groupTargets: normalizeGroupTargets(e.groupTargets) } : {}),
           ...(e.cardioSessionType ? {cardioSessionType:e.cardioSessionType} : {}),
           ...(e.cardioEffortLevel ? {cardioEffortLevel:e.cardioEffortLevel} : {}),
           sets: e.sets.map(s => ({weightKg:s.defaultWeightKg ?? null,reps:s.reps,targetRpe:s.targetRpe ?? null,

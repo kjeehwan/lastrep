@@ -28,6 +28,11 @@ const groupedSetsText = (sets: PreviewSet[], unit: "kg" | "lbs", compact = false
 };
 
 export function exerciseAdjustmentText(item: ExercisePlanAdjustment, unit: "kg" | "lbs", exercise?: PlannedExerciseSummary, effortScale: EffortScale = "rpe", compact = false) {
+  if ("role" in item && item.action !== "avoid" && item.plannedPrescription && item.recommendedPrescription) {
+    const before = prescriptionText(item.plannedPrescription,unit,compact), after = prescriptionText(item.recommendedPrescription,unit,compact);
+    return before === after ? `${before} · Keep` : compact ? `${before} → ${after}` : `Current: ${before}\nSuggested: ${after}`;
+  }
+  if ("role" in item && exercise) exercise = {...exercise,sets:exercise.sets.filter(set => set.setType === item.role)};
   if (item.action === "avoid") return "Skip or replace";
   if (exercise?.mode === "resistance" && exercise.sets.some((set) => !set.done && set.setType !== "warmup")) {
     // Preview the exact Apply transformation, including varied loads and removed sets.

@@ -1,11 +1,21 @@
 import {describe,it,expect} from "vitest";
-import {activeDeload,newDeloadPeriod,deloadSuggestion,restoreDeloadExercises} from "./deload";
+import {activeDeload,newDeloadPeriod,deloadSuggestion,restoreDeloadExercises,extendDeloadBackup} from "./deload";
 import type {DecisionInputs} from "../types/decision";
 import type {WorkoutSummary} from "./homeInsights";
 const inputs:DecisionInputs={sleepHours:7,sleepSource:"manual",sleepSampleAgeHours:null,soreness:7,fatigue:8,motivation:5,trainingPhase:"Strength",trainingPhaseWeek:6,dietPhase:"Maintain"};
 const now=new Date("2026-11-02T12:00:00");
 const workouts:WorkoutSummary[]=[1,8].map(days=>({id:String(days),title:"Gym",date:new Date(now.getTime()-days*86400000),trainingPhase:"Strength",exercises:[{name:"Bench Press",mode:"resistance",sets:[1,2,3].map(()=>({weightKg:80,reps:"6",rpe:9,setType:"normal"}))}]}));
 describe("explicit deload week",()=>{
+ it("retains the original plan across successive group applications without erasing later edits",()=>{
+  const before=[{id:"a",name:"Deadlift",sets:[{weightKg:130,setType:"top"},{weightKg:110,setType:"backoff"}]}];
+  const first=[{...before[0],sets:[{weightKg:117,setType:"top"},{weightKg:110,setType:"backoff"}]}];
+  const after=[{...first[0],sets:[{weightKg:117,setType:"top"},{weightKg:99,setType:"backoff"}]}];
+  const previous=extendDeloadBackup("d",before,first,null),backup=extendDeloadBackup("d",first,after,previous);
+  expect(restoreDeloadExercises(after,backup).exercises[0].sets).toEqual(before[0].sets);
+  const edited=[{...first[0],sets:[{weightKg:120,setType:"top"},{weightKg:110,setType:"backoff"}]}];
+  const next=[{...edited[0],sets:[{weightKg:120,setType:"top"},{weightKg:99,setType:"backoff"}]}];
+  expect(restoreDeloadExercises(next,extendDeloadBackup("d",edited,next,previous)).exercises[0].sets).toEqual(edited[0].sets);
+ });
  it("restores an untouched prescription after native hydration without treating defaults as edits",()=>{
   const before=[{id:"a",name:"Bench",sets:[{weightKg:80,reps:"6"}]}];
   const after=[{...before[0],sets:[{weightKg:70,reps:"6"}]}];
