@@ -25,3 +25,10 @@ describe("completed program draft retirement", () => {
     expect(draft.workoutTimerRunning).toBe(true);
   });
 });
+
+it("hides legacy empty routine drafts while retaining named and populated builders", () => {
+  const empty={exercises:[],routineBuilderMode:true};
+  const named={...empty,sessionTitle:"Push"};
+  const populated={...empty,exercises:[{name:"Bench"}]};
+  expect(resumableProgramDrafts({empty,named,populated})).toEqual({named,populated});
+});

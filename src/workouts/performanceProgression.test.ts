@@ -39,3 +39,13 @@ describe("performance-led progression",()=>{
     expect(performanceProgression(exercise,[history(80,8,8,7),history(70,6,8,14),history(90,6,8,21)],now).candidate?.weightKg).toBe(82.5);
   });
 });
+
+it("explains recorded sets, special types and mixed loads separately without increasing", () => {
+  const recorded=plan();recorded.sets[0].done=true;
+  expect(performanceProgression(recorded,[history()],now)).toMatchObject({candidate:null,reason:expect.stringContaining("already in progress")});
+  const special=plan();special.sets[0].setType="drop";
+  expect(performanceProgression(special,[history()],now).reason).toContain("special set types");
+  const mixed=plan();mixed.sets[0].weightKg=70;
+  expect(performanceProgression(mixed,[history()],now).reason).toContain("currently planned working sets are mixed");
+  expect(performanceProgression({...plan(),sets:[]},[history()],now).reason).toContain("Add working sets");
+});

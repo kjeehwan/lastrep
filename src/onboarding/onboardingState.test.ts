@@ -2,13 +2,13 @@ import { expect, it } from "vitest";
 import { emptyDraft, initialProgress, onboardingDestination, onboardingKey, parseCache, parseDraft, stepSubmission } from "./onboardingState";
 it("does not infer onboarding requirements from optional legacy answers", () => {
   for (const data of [null, {}, { nickname: "", goal: "existing goal", availability: "4" }]) expect(onboardingDestination(data, null)).toBe("/(tabs)/home");
-  expect(onboardingDestination({ onboarding: initialProgress }, null)).toBe("/onboarding/experience");
+  expect(onboardingDestination({ onboarding: initialProgress }, null)).toBe("/onboarding/welcome");
 });
 it("resumes an explicit checkpoint and honors completion without a nickname", () => {
   const cache = { progress: { ...initialProgress, step: "nickname" as const }, draft: emptyDraft };
-  expect(onboardingDestination(null, cache)).toBe("/onboarding/nickname");
+  expect(onboardingDestination(null, cache)).toBe("/onboarding/welcome");
   expect(onboardingDestination({ onboarding: { ...initialProgress, completed: true } }, cache)).toBe("/(tabs)/home");
-  expect(onboardingDestination({ onboarding: { ...initialProgress, step: "health" } }, cache)).toBe("/onboarding/health");
+  expect(onboardingDestination({ onboarding: { ...initialProgress, step: "health" } }, cache)).toBe("/onboarding/welcome");
   expect(onboardingKey("fixture-a")).not.toBe(onboardingKey("fixture-b"));
 });
 it("skips without overwriting answers, goals, phases or completion prematurely", () => {

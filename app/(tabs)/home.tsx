@@ -1,3 +1,5 @@
+import { savedWorkoutTip } from "../../src/onboarding/live/workoutTips";
+import { AppGuideNavigation, AppGuideTip, useAppGuide } from "../../src/onboarding/live/AppGuide";
 import { useWorkoutPrograms } from "../../src/workouts/useWorkoutPrograms";
 import { programCalendarEntry } from "../../src/workouts/programCalendar";
 import { readRecoveryCheckIn, recoveryComplete } from "../../src/services/decision/recoveryCheckIn";
@@ -201,6 +203,7 @@ const convertKcalToUnit = (valueKcal: number, unit: EnergyUnit): number =>
 export default function HomeRoute() { return <NotebookProvider><Home /></NotebookProvider>; }
 
 function Home() {
+  const appGuide = useAppGuide();
   const insets = useSafeAreaInsets();
   const { colors } = useNotebook();
   const styles = useNotebookStyles(createStyles);
@@ -1158,7 +1161,9 @@ function Home() {
         </View>
       </View>
 
+      <AppGuideNavigation />
       <ScrollView contentContainerStyle={styles.scrollContent}>
+        {appGuide?.state.events.includes("workout-saved") ? <AppGuideTip topic={["home", "workout", "routines", "programs", "plan"]} {...savedWorkoutTip}>{savedWorkoutTip.text}</AppGuideTip> : <AppGuideTip topic="home" id="home-overview" title="Your daily overview">See your recent workouts, recovery and progress here. Use Edit recovery check-in to record how you feel today.</AppGuideTip>}
         <View style={styles.pageHeading}><Text style={styles.noticeSub}>{new Date(nowMs).toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}</Text><Text style={styles.pageTitle}>Your daily record.</Text></View>
         <View style={[styles.homePhaseRow, largeText && { flexDirection: "column" }]}>
           {(['trainingPhase', 'dietPhase'] as const).map((key) => {

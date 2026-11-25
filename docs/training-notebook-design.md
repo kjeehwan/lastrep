@@ -2895,3 +2895,160 @@ and phone behavior before claiming native acceptance.
 - Do not ask users to confirm an already displayed phase start date below its week.
   Show an add-date prompt only when the start date is missing. Preserve legacy
   week semantics; copy changes must not silently migrate stored phase anchors.
+
+
+### Approved guided onboarding replacement (November 23)
+
+The guided-practice study supersedes the four-question setup as the direction
+for the replacement implementation. Native review status is maintained in
+`docs/onboarding-native-guided-practice.md`; implementation is not phone approval.
+
+- Place a brief, skippable welcome over Home, without splitting Home for it.
+- Teach logging, routines, complete program cycles, recovery and Today's Plan,
+  Nutrition, Sleep and optional health access through optional guided sections.
+- Use native notebook components and clearly identified local examples. Do not
+  seed sample records into a real account or simulate granted health permissions.
+- Keep Back, Skip, Exit and section replay available. Back must not replay writes.
+  Existing users are not forced through the replacement introduction.
+- Give each section a progress bar under its heading. Show me identifies the
+  control without operating it; distinguish that outlined action from Skip.
+- Highlight navigation carets on rows, retaining the actual row hit target.
+  Emphasize existing button/input/checkbox boundaries rather than drawing two
+  boundaries. Other annotations need at least 8 dp of text clearance. Highlights
+  must not change row alignment or spacing.
+- Reserve guidance space around complex forms and protect adjacent controls,
+  explanations, review results and actions. Do not cover them with instruction
+  cards or confirmation toasts. Support scrolling, larger text and landscape.
+- Clock dragging and typed sleep times must update continuation validity equally.
+  Teach the current expandable Nutrition item count and P/C/F summary, not an
+  older simplified mockup.
+
+
+#### Native guide review requirements
+
+- Verify every instruction against the active app's labels, control placement and
+  transitions. A guide must not teach an alternate routine/program workflow.
+- Label section navigation explicitly. Keep the section label subordinate to the
+  instruction title, one clear primary action and a distinct outlined Show me.
+  Use a section chooser instead of a permanent sidebar on narrow phones.
+- Guide-only displays must not present inactive imitation tabs as navigation.
+  End with one Finish tour action and an optional section replay choice.
+- Reserve instruction space when the keyboard opens. Bound example dialogs to
+  the measured stage, with their own scrolling and reachable footer controls.
+  Test enlarged text and short landscape windows with actual native interaction.
+- Preserve local example continuity across steps: a saved routine's name and sets
+  must be the ones previewed and loaded. Separate routine, program and recorded
+  set examples so completed-set state cannot leak between lessons.
+- Record complete native sequence and visual checks before requesting user review.
+  Automated interaction success alone does not establish a satisfactory layout.
+
+- Highlights must move and clip with their native target during scrolling. Render
+  them in the target's content tree; do not poll screen coordinates to make an
+  independent outline chase a moving field. Measurement may reveal a target.
+- Local example data does not justify changing production control types, icon
+  placement, meal-time columns or screen structure. Automated completion is not
+  evidence of this visual/interaction fidelity.
+
+
+#### Task-based guide candidate (November 24; user review pending)
+
+- Guide progress measures task outcomes, not forced taps. Inputs and disclosures
+  remain usable in normal order without Continue after each field. Back/cancel
+  follow the user's screen path and preserve the editor's values.
+- Keep guidance separate from scene navigation. A hint must not gate unrelated
+  controls or turn off-sequence actions into a broken state.
+- Show me provides a brief, optional highlight. Avoid permanent instruction rings
+  around every example field. Keep highlights attached to native content.
+- Use real feature presentation components with local data. Profile editors retain
+  Done ? Profile ? Save; health sync is introduced within Profile's full structure.
+- State clearly when a sample action cannot perform an external operation. Never
+  imply that a local example connected health data, sent a share or changed account
+  records. Task-flow verification and user visual acceptance remain separate.
+
+#### Real-use guidance replacement (November 24)
+
+The user rejected the practice candidate above and chose guidance on the actual
+app with normal saves. Its separate example screens and compulsory outcome
+counters are superseded; preserve their review history, not their presentation.
+
+- Guide actual app use without redundant explanations that normal saves affect
+  the account. Guidance never saves, grants permissions or applies a plan for them. Existing validation, cancel, retry and completion flows remain authoritative.
+- Keep real headers, tabs, charts, forms and dialogs. Use optional notebook
+  annotations within their scrollable content, without a separate guide header,
+  split viewport, imitation success page or final tour page.
+- Tie copy to current feature state: naming completed, template loaded, review
+  already applied, no changes available, or connection already configured. Do not
+  keep asking for a completed action or demand an edit just to finish guidance.
+- Use a compact, visibly separate coaching panel with the existing surface, border,
+  radius and restrained shadow. X dismisses only the current tip; a labelled topics icon on
+  ordinary pages opens the chooser. Avoid repeated acknowledgment/navigation footers. Close a form/dialog normally before changing topics; respect
+  staged food and unsaved Profile edits rather than bypassing their leave guards.
+- Do not revive floating or clipped outlines. The current replacement has no
+  Show me/highlight interaction. Review any future anchoring proposal visually
+  against every actual target before exposing it to users.
+- Verify empty and existing-data states. Empty charts remain honest; health
+  connection and applying recommendations are optional. Test guide dismissal,
+  account changes, normal saves and cancellation separately from tip appearance.
+
+- First-use workout copy mentions Start workout, without referring to unavailable
+  drafts or programs. Resume and Continue guidance follows those controls' actual
+  availability. Update instructions from real recording/builder/review state.
+- Offer Create routine directly from Workout choices. Templates do not require a
+  workout session; preserve existing drafts and return to choices on save/cancel.
+
+- Finish is explicit in the persistent guide bar. The topic chooser has only
+  its close action and topic choices. Dismissing a tip must not end the session.
+- Name the actual saved-record path: Home calendar icon, workout date, workout.
+  Do not refer to a nonexistent History section or to Weekly Trends as the log.
+- Recommendation feedback at Finish is optional. A persisted review flag must not
+  imply the user must review/apply Today's Plan before recording or saving.
+- Routine builders use Your routine for an empty title; workout sessions retain
+  Workout session. Title measurement and pencil placement use the same placeholder.
+
+- Show me opens an explicit Explore Lastrep chooser without selecting a topic.
+  Choosing a workout topic opens Workout choices while preserving existing drafts.
+  A resumed template is introduced as a routine draft, not an obligatory first task.
+- Guide one explicitly selected topic. Ordinary tab navigation must not silently
+  enroll the user in another lesson. Keep the actual app navigation usable.
+- Introduce a goal and one next action. Move contextual Done/Save explanations into
+  editing sheets where those controls exist, rather than using terms like editor
+  in a screen introduction. Sharing guidance remains optional and contextual.
+
+- While the guide is active, keep labelled App guide and Finish guide controls outside scrolling
+  content on all five main screens. It survives dismissing a tip and visiting an
+  unselected feature. Finish guide removes both the control and contextual tips.
+- Opening an untouched routine builder does not create a resumable draft or require
+  discard confirmation. A name or exercise makes it meaningful. Discard routine
+  draft is an explicit destructive action; Back preserves meaningful drafts.
+- Completed program days and rest days need their own guide wording. Never keep
+  prompting Continue program as a training task after the scheduled day is done.
+
+
+#### Guide outcomes and topic boundaries (November 25)
+
+- App guide opens Explore Lastrep. Finish guide is available in the same compact
+  main-screen row and ends the whole session; a tip's X dismisses only that tip.
+  Keep touch targets around their visible actions, not the intervening empty row.
+- A confirmed save changes instructions into an acknowledgement and a practical
+  next action. Existing records receive review guidance, not a claim they were
+  just saved. Food and sleep acknowledgements are scoped to their date/meal and
+  require a currently visible record; cancellation and failed writes never count.
+- Set up your profile and Connect health data are separate topics on the actual
+  Profile screen. Health guidance reveals Health sync without opening consent or
+  requesting permissions. Normal Connect/Sync controls remain user initiated.
+- Guidance stays optional and account-bound. Do not introduce mandatory outcome
+  counters, a simulated success screen or automatic topic switching.
+
+
+#### Compact guide bar (November 25)
+
+- Replace the ruled full-width guide row with an inset rounded bar in the existing
+  subtle surface color. Use normal ink, no shadow or horizontal separator lines,
+  and equal space above and below it.
+- The left control shows an information icon, the selected topic (App guide before
+  selection) and a dropdown caret. Finish is on the right, with Finish guide as
+  its accessible label. Only those controls are tappable; the gap is inert.
+- Allow long topic labels and enlarged text to wrap without crowding Finish.
+  Preserve at least 44 dp control heights. Keep the bar outside page scrolling.
+- Explore Lastrep keeps its close button and scrolling topics; do not repeat
+  Finish there. Closing the chooser preserves the selected topic and session.

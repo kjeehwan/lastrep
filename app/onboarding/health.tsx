@@ -1,2 +1,2 @@
-import { OnboardingScreen } from "../../src/onboarding/OnboardingScreen";
-export default function Screen() { return <OnboardingScreen step="health" />; }
+import { Redirect } from "expo-router";
+export default function LegacyOnboardingRoute() { return <Redirect href="/onboarding/welcome" />; }

@@ -103,6 +103,7 @@
 .up-change-description .up-prescription-row{display:flex;align-items:center;gap:6px;font-size:calc(14px * var(--scale));line-height:1.4;color:var(--secondary)}
 .up-prescription-row>span{white-space:nowrap}
 .up-prescription-row>svg{width:16px;height:16px}
+.up-change>.up-prescription-row{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-top:8px;font-size:calc(14px * var(--scale));line-height:1.4}
 .up-change-reason{display:grid;gap:8px;padding-left:52px}
 .up-unchanged{display:grid;gap:12px}
 .up-unchanged>.up-text-row{border:0!important;padding:0!important;min-height:44px}

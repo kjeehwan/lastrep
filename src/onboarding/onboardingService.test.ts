@@ -1,5 +1,5 @@
 import { beforeEach, expect, it, vi } from "vitest";
-import { createOnboardingUser, loadOnboardingCache, resolveOnboardingDestination, saveOnboardingStep } from "./onboardingService";
+import { completeOnboardingIntroduction, createOnboardingUser, loadOnboardingCache, resolveOnboardingDestination, saveOnboardingStep } from "./onboardingService";
 import { emptyDraft, initialProgress } from "./onboardingState";
 const mocks = vi.hoisted(() => ({ uid: "fixture-a", exists: true, data: {} as Record<string, unknown>, set: vi.fn(), transaction: vi.fn(), getItem: vi.fn(), setItem: vi.fn() }));
 vi.mock("@react-native-async-storage/async-storage", () => ({ default: { getItem: mocks.getItem, setItem: mocks.setItem } }));
@@ -38,14 +38,34 @@ it("keeps an account-scoped pending draft usable without a cloud read", async ()
   const cache = { progress: { ...initialProgress, step: "nickname" }, draft: { ...emptyDraft, nickname: "Unsent" } };
   mocks.getItem.mockImplementation(async key => key.endsWith("fixture-a") ? JSON.stringify(cache) : null);
   expect(await loadOnboardingCache("fixture-a")).toEqual(cache);
-  expect(await resolveOnboardingDestination("fixture-a")).toBe("/onboarding/nickname");
+  expect(await resolveOnboardingDestination("fixture-a")).toBe("/onboarding/welcome");
   expect(await resolveOnboardingDestination("fixture-b", {})).toBe("/(tabs)/home");
 });
 it("creates an explicit checkpoint for a new account and surfaces registration write failure", async () => {
   mocks.exists = false;
-  await expect(createOnboardingUser("fixture-a", { name: "Fixture" })).resolves.toBe("/onboarding/experience");
+  await expect(createOnboardingUser("fixture-a", { name: "Fixture" })).resolves.toBe("/onboarding/welcome");
   expect(mocks.set).toHaveBeenCalledWith("fixture-a", { name: "Fixture", onboarding: initialProgress });
   mocks.setItem.mockClear(); mocks.transaction.mockRejectedValue(Error("write denied"));
   await expect(createOnboardingUser("fixture-a", {})).rejects.toThrow("write denied");
   expect(mocks.setItem).not.toHaveBeenCalled();
+});
+it("completes the replacement intro without changing profile answers or records", async () => {
+  mocks.data = { nickname: "Saved", experience: "advanced", availabilityDays: 2, onboarding: initialProgress };
+  await completeOnboardingIntroduction("fixture-a");
+  expect(mocks.set).toHaveBeenCalledWith("fixture-a", { onboarding: { version: 1, completed: true, step: "health" } }, { merge: true });
+  expect(JSON.parse(mocks.setItem.mock.calls[0][1]).draft).toMatchObject({ nickname: "Saved", experience: "advanced", availabilityDays: 2 });
+});
+it("does not record local completion after a failed intro save or changed account", async () => {
+  mocks.transaction.mockRejectedValueOnce(Error("offline"));
+  await expect(completeOnboardingIntroduction("fixture-a")).rejects.toThrow("offline");
+  expect(mocks.setItem).not.toHaveBeenCalled();
+  mocks.uid = "fixture-b";
+  await expect(completeOnboardingIntroduction("fixture-a")).rejects.toThrow("Account changed");
+  expect(mocks.set).not.toHaveBeenCalled();
+});
+it("does not rewrite completed accounts and treats a cache failure after cloud success as success", async () => {
+  mocks.data = { onboarding: { ...initialProgress, completed: true } };
+  mocks.setItem.mockRejectedValue(Error("disk full"));
+  await expect(completeOnboardingIntroduction("fixture-a")).resolves.toBeUndefined();
+  expect(mocks.set).not.toHaveBeenCalled();
 });

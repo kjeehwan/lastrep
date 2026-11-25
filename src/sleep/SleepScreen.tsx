@@ -1,3 +1,5 @@
+import { sleepGuideTip, sleepSavedEvent } from "../onboarding/live/activityTips";
+import { useAppGuide, AppGuideNavigation, AppGuideTip } from "../onboarding/live/AppGuide";
 import { NotebookTextInput } from "../ui/notebook/NotebookTextInput";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { BackHandler, Linking, Platform, Pressable, ScrollView, Text, View, useWindowDimensions } from "react-native";
@@ -61,6 +63,7 @@ export function SleepScreen() {
   return <SleepJournalView key={data.account?.uid ?? "signed-out"} data={data} />;
 }
 function SleepJournalView({ data }: { data: ReturnType<typeof useSleepJournal> }) {
+  const appGuide = useAppGuide();
   useNotebookStatusBar();
   const { colors } = useNotebook();
   const router = useRouter();
@@ -86,6 +89,7 @@ function SleepJournalView({ data }: { data: ReturnType<typeof useSleepJournal> }
   const [syncing, setSyncing] = useState(false), [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null), [entryError, setEntryError] = useState("");
   const row = ready ? days.find((day) => day.dateKey === selected) : undefined;
+  const guideTip = sleepGuideTip(selected, !!row, appGuide?.state.events ?? []);
   const sessions = counted.filter((entry) => entry.dateKey === selected && !isSupersededSleepTotal(entry, counted));
   const visibleSessions = sessions.filter((entry) => !entry.excluded && !entry.providerDeleted);
   const detail = counted.find((entry) => entry.id === detailId);
@@ -141,7 +145,9 @@ function SleepJournalView({ data }: { data: ReturnType<typeof useSleepJournal> }
   if (data.authLoaded && !data.account) return <Redirect href="/auth/sign-in" />;
   return <SafeAreaView style={{ flex: 1, backgroundColor: colors.canvas }} edges={["top", "left", "right"]}>
     <NotebookHeader title="Sleep" onBack={() => router.replace("/home")} />
+      <AppGuideNavigation />
     <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 36, gap: 28, width: "100%", maxWidth: 800, alignSelf: "center" }} keyboardShouldPersistTaps="handled">
+      <AppGuideTip topic="sleep" {...guideTip}>{guideTip.text}</AppGuideTip>
       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
         <Pressable accessibilityRole="button" accessibilityLabel="Previous sleep date" onPress={() => chooseDate(shiftSleepDate(selected, -1))} style={{ width: 44, minHeight: 44, justifyContent: "center" }}><ChevronLeft size={20} color={colors.ink} /></Pressable>
         <Pressable accessibilityRole="button" accessibilityLabel="Choose sleep date" onPress={() => setSheet("calendar")} style={{ flex: 1, minHeight: 44, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 }}><Text style={{ ...text, textAlign: "center", flexShrink: 1 }}>{selected === today ? "Today / " : ""}{sleepDisplayDate(selected)}</Text><ChevronDown size={16} color={colors.ink} /></Pressable>
@@ -193,7 +199,7 @@ function SleepJournalView({ data }: { data: ReturnType<typeof useSleepJournal> }
       <Text style={text}>Known awake time is excluded when complete sleep stages are available. Other entries use their recorded duration, which may include awake time.</Text>
     </SleepSheet> : null}
     {sheet === "calendar" ? <SleepSheet title="Sleep date" onClose={() => setSheet(null)}><SleepCalendar selected={selected} onSelect={(date) => { chooseDate(date); setSheet(null); }} /></SleepSheet> : null}
-    {sheet === "entry" && data.account ? <SleepEntryEditor uid={data.account.uid} selected={selected} entry={data.entries.find((entry) => entry.id === editingId) ?? null} onClose={() => setSheet(null)} onSaved={(date) => { chooseDate(date); setSheet(null); void data.refresh(); }} /> : null}
+    {sheet === "entry" && data.account ? <SleepEntryEditor uid={data.account.uid} selected={selected} entry={data.entries.find((entry) => entry.id === editingId) ?? null} onClose={() => setSheet(null)} onSaved={(date) => { appGuide?.event(sleepSavedEvent(date)); chooseDate(date); setSheet(null); void data.refresh(); }} /> : null}
     {sheet === "target" && data.account ? <SleepTargetEditor uid={data.account.uid} target={data.target} onClose={() => setSheet(null)} /> : null}
     {sheet === "sync" && data.account ? <SleepSheet title="Confirm account for sleep sync" onClose={() => setSheet(null)} footer={<><SleepButton label="Import sleep" primary onPress={() => { void AsyncStorage.setItem(`sleep-sync-confirmed-v1:${data.account!.uid}`, "true").then(performSync).catch(() => setFeedback("Could not save confirmation. Try again.")); }} /><SleepButton label="Cancel" onPress={() => setSheet(null)} /></>}><Text style={text}>Import this device Health Connect sleep into {data.account.label}?</Text><Text style={muted}>Existing manual entries and corrections are kept. Conflicting entries remain available for review.</Text></SleepSheet> : null}
     {sheet === "setup" ? <SleepSheet title="Set up Health Connect" onClose={() => setSheet(null)} footer={<><SleepButton label="Open Health Connect" primary onPress={() => { void (async () => {

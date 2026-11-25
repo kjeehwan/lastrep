@@ -1,6 +1,6 @@
 // Illustrative nutrition values, not a verified food database or dietary advice.
 export const NUTRITION_DAY = '2026-10-15';
-export const MOCK_LOG_TIME = '18:30';
+export const MOCK_LOG_TIME = new URLSearchParams(globalThis.location?.search ?? '').get('practice') === 'onboarding' ? '08:30' : '18:30';
 export const foods = [
   { id: 'oats', name: 'Oatmeal, rolled oats, dry', source: 'Reference food · Illustrative', serving: 40, servingLabel: '40 g dry oats', calories: 389, protein: 16.9, carbs: 66.3, fat: 6.9 },
   { id: 'oats-cooked', name: 'Oatmeal, cooked with water', source: 'Reference food · Illustrative', serving: 234, servingLabel: '1 bowl · 234 g', calories: 71, protein: 2.5, carbs: 12, fat: 1.5 },

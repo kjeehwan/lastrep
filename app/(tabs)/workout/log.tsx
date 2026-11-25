@@ -1,3 +1,6 @@
+import { hasResumableWorkoutDraft } from "../../../src/workouts/workoutLog/workoutDraftSlots";
+import { WorkoutGuideNotes } from "../../../src/onboarding/live/WorkoutGuideNotes";
+import { AppGuideNavigation, AppGuideTip, useAppGuide } from "../../../src/onboarding/live/AppGuide";
 import { exerciseDisplayUnit, resolveDistanceUnit, resolveExerciseMode, type DistanceUnit } from "../../../src/workouts/workoutLog/exercisePresentation";
 import { annotateCompletedProgramDrafts, resumableProgramDrafts } from "../../../src/workouts/workoutLog/programDraftCompletion";
 import { useProgramDraftCompletion } from "../../../src/workouts/workoutLog/useProgramDraftCompletion";
@@ -8,7 +11,7 @@ import { useProgressionPreferences } from "../../../src/workouts/workoutLog/useP
 import { normalizeProgressionPreferences } from "../../../src/workouts/performanceProgression";
 import { WorkoutProgramPanel } from "../../../src/workouts/WorkoutProgramPanel";
 import { useWorkoutPrograms } from "../../../src/workouts/useWorkoutPrograms";
-import { normalizeProgramLink, type ProgramLink, type ProgramRecord } from "../../../src/workouts/programFlow";
+import { programContinueOrdinal, programOccurrence, dateKey as programDateKey, normalizeProgramLink, type ProgramLink, type ProgramRecord } from "../../../src/workouts/programFlow";
 import { saveLinkedWorkout, saveProgram } from "../../../src/workouts/programStore";
 import { programRoutineDraft } from "../../../src/workouts/workoutLog/programRoutineDraft";
 import { readDraftSlots, switchDraftSlot, programDraftSlot, serializeDraftSlot, refreshResumedWorkoutDate, workoutDraftContext, loadWorkoutDraftCache, type DraftSlots } from "../../../src/workouts/workoutLog/workoutDraftSlots";
@@ -260,6 +263,7 @@ export default function WorkoutLog() {
   const [recommendationSummary, setRecommendationSummary] = useState<string[]>([]);
   const [showWorkoutLengthModal, setShowWorkoutLengthModal] = useState(false);
   const [recommendationLength, setRecommendationLength] = useState<RecommendationLengthId>("standard");
+  const appGuide = useAppGuide();
   const [showFinishModal, setShowFinishModal] = useState(false);
   const [showFinishTitleInput, setShowFinishTitleInput] = useState(false);
   const [showTempoEditorModal, setShowTempoEditorModal] = useState(false);
@@ -268,7 +272,7 @@ export default function WorkoutLog() {
   const [showDiscardConfirmModal, setShowDiscardConfirmModal] = useState(false);
   const [followedAnswer, setFollowedAnswer] = useState<FollowedAnswer | null>(null);
   const [helpfulAnswer, setHelpfulAnswer] = useState<HelpfulAnswer | null>(null);
-  const [todayPlanHelpful, setTodayPlanHelpful] = useState<HelpfulAnswer | null>(null);
+  const [todayPlanHelpful, setTodayPlanHelpful] = useState<FeedbackAnswers["todayPlanHelpful"]>(null);
   const [recommendationUsage, setRecommendationUsage] = useState(() => parseRecommendationUsage());
   const feedbackAnswers: FeedbackAnswers = { followedRecommendation: followedAnswer, helpful: helpfulAnswer, todayPlanHelpful };
   const feedbackQuestions = recommendationQuestions(recommendationUsage);
@@ -289,6 +293,7 @@ export default function WorkoutLog() {
   } | null>(null);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const routerParams = useLocalSearchParams<{
+    guideEntry?: string;
     sharedIntent?: string;
     showSharedRoutines?: string;
     trainingPhase?: string;
@@ -305,7 +310,16 @@ export default function WorkoutLog() {
   const [savedDraftPicker,setSavedDraftPicker]=useState<{uid:string;slots:DraftSlots|null;error:string|null}|null>(null);
   const savedDraftPickerRequest=useRef(0);
   const [programManagerRequest,setProgramManagerRequest] = useState<{programId?:string;action?:"library"|"create"|"start";token:number}|null>(null);
-  const [workoutView, setWorkoutView] = useState<"choices" | "editor">("choices");
+  const [workoutViewState, setWorkoutView] = useState<"choices" | "editor">("choices");
+  const workoutView = routerParams.guideEntry ? "choices" : workoutViewState;
+  useEffect(() => {
+    if (!routerParams.guideEntry) return;
+    const task = scheduleAfterInteractions(() => {
+      setWorkoutView("choices");
+      router.setParams({ guideEntry: "" });
+    });
+    return () => task.cancel();
+  }, [routerParams.guideEntry, router]);
   const [programLink, setProgramLink] = useState<ProgramLink | null>(null);
   const [completedProgramWorkoutId, setCompletedProgramWorkoutId] = useState<string | null>(null);
   const programCompletion = useProgramDraftCompletion(activeUid, programLink);
@@ -313,10 +327,11 @@ export default function WorkoutLog() {
   const [deloadBackup,setDeloadBackup]=useState<{id:string;before:Exercise[];after:Exercise[]}|null>(null);
   const [workoutSaveId, setWorkoutSaveId] = useState<string | null>(null);
   const workoutSaveIdRef = useRef<string | null>(null);
+  const [routineBuilderReturnSlot, setRoutineBuilderReturnSlot] = useState<string | null>(null);
   const [programRoutineAssignment, setProgramRoutineAssignment] = useState<{ programId: string; day: number; returnSlot: string; routineId: string } | null>(null);
   const [draftReload, setDraftReload] = useState(0);
   const programs = useWorkoutPrograms(activeUid);
-  const savedDrafts=resumableProgramDrafts({...(parkedDraftSnapshot?.uid===activeUid?parkedDraftSnapshot.slots:{}),...(exercises.length||routineBuilderMode?{[workoutSlot]:{sessionTitle,workoutSlot,routineBuilderMode,programLink,completedProgramWorkoutId:completedProgramWorkoutId??programCompletion.workoutId}}:{})});
+  const savedDrafts=resumableProgramDrafts({...(parkedDraftSnapshot?.uid===activeUid?parkedDraftSnapshot.slots:{}),...(hasResumableWorkoutDraft({exercises,routineBuilderMode,sessionTitle})?{[workoutSlot]:{exercises,sessionTitle,workoutSlot,routineBuilderMode,programLink,completedProgramWorkoutId:completedProgramWorkoutId??programCompletion.workoutId}}:{})});
   const draftHydratedRef = useRef(false);
   const [draftReadyUid, setDraftReadyUid] = useState<string | null>(null);
   const scrollNativeGesture = useMemo(() => Gesture.Native(), []);
@@ -346,9 +361,9 @@ export default function WorkoutLog() {
       restTimerByExercise,
       recommendationUsage,
       lastAppliedRoutineId,
-      lastAppliedRoutineName, programLink, completedProgramWorkoutId, workoutSlot, workoutSaveId, routineBuilderMode, programRoutineAssignment, deloadBackup,
+      lastAppliedRoutineName, programLink, completedProgramWorkoutId, workoutSlot, workoutSaveId, routineBuilderMode, routineBuilderReturnSlot, programRoutineAssignment, deloadBackup,
     }),
-    [exercises, exerciseUnits, sessionTitle, sessionDateText, elapsedSeconds, workoutTimerRunning, workoutTimerStartedAtMs, workoutTimerHasStarted, restTimerByExercise, recommendationUsage, lastAppliedRoutineId, lastAppliedRoutineName, programLink, completedProgramWorkoutId, workoutSlot, workoutSaveId, routineBuilderMode, programRoutineAssignment, deloadBackup]
+    [exercises, exerciseUnits, sessionTitle, sessionDateText, elapsedSeconds, workoutTimerRunning, workoutTimerStartedAtMs, workoutTimerHasStarted, restTimerByExercise, recommendationUsage, lastAppliedRoutineId, lastAppliedRoutineName, programLink, completedProgramWorkoutId, workoutSlot, workoutSaveId, routineBuilderMode, routineBuilderReturnSlot, programRoutineAssignment, deloadBackup]
   );
   const availableWeightsPreferences = useAvailableWeights(activeUid);
   const progressionPreferences = useProgressionPreferences(activeUid);
@@ -382,12 +397,13 @@ export default function WorkoutLog() {
     onSaved: markWorkoutDraftSaved,
     serialize: serializeWorkoutDraft,
   });
+  const displayedProgramDay = programs.active && programs.run ? programOccurrence(programs.active, programs.run, programContinueOrdinal(programs.active, programs.run, programDateKey(new Date(guidanceNowMs)))) : null;
   const routineBackRef=useRef<(()=>void)|null>(null);
   const handleGoBack = useCallback(() => {
-    if(routineBuilderMode&&programRoutineAssignment&&workoutView==="editor"){routineBackRef.current?.();return;}
+    if(routineBuilderMode&&(programRoutineAssignment || (routineBuilderReturnSlot && !hasResumableWorkoutDraft(workoutDraftPayload)))&&workoutView==="editor"){routineBackRef.current?.();return;}
     if (workoutView === "editor") setWorkoutView("choices");
     else router.replace("/home");
-  }, [router, workoutView, setWorkoutView,routineBuilderMode,programRoutineAssignment]);
+  }, [router, workoutView, setWorkoutView,routineBuilderMode,programRoutineAssignment,routineBuilderReturnSlot,workoutDraftPayload]);
 
 
   const playGong = useCallback(async () => {
@@ -407,7 +423,7 @@ export default function WorkoutLog() {
       draftHydratedRef.current = false;
       restTimerSnapshotRef.current = {};
       setActiveUid(user?.uid ?? null);
-      setWorkoutView("choices"); setProgramLink(null); setCompletedProgramWorkoutId(null); setDeloadBackup(null); setRoutineBuilderMode(false); setWorkoutSlot("single");
+      setWorkoutView("choices"); setProgramLink(null); setCompletedProgramWorkoutId(null); setDeloadBackup(null); setRoutineBuilderMode(false); setRoutineBuilderReturnSlot(null); setWorkoutSlot("single");
       setWorkoutSaveId(null); workoutSaveIdRef.current = null; setProgramRoutineAssignment(null);
       setEffortScale("rpe"); setDistanceUnit("km");
       setSessionPhase("Hypertrophy");
@@ -907,6 +923,7 @@ export default function WorkoutLog() {
         }).catch(() => { /* Keep all local drafts when completion cannot be checked. */ });
         if (!raw) {
           loadedSuccessfully = true;
+          setRoutineBuilderReturnSlot(null);
           setProgramLink(null); setCompletedProgramWorkoutId(null);
           // No draft for this account: clear any in-memory state from previous account/session.
           setExercises([]);
@@ -931,6 +948,7 @@ export default function WorkoutLog() {
           workoutSaveIdRef.current = typeof parsed.workoutSaveId === "string" ? parsed.workoutSaveId : null;
           setRoutineBuilderMode(parsed.routineBuilderMode === true);
           setProgramRoutineAssignment(parsed.programRoutineAssignment ?? null);
+          setRoutineBuilderReturnSlot(typeof parsed.routineBuilderReturnSlot === "string" ? parsed.routineBuilderReturnSlot : null);
           setLastAppliedRoutineId(readWorkoutDraftRoutineId(parsed.lastAppliedRoutineId));
           setLastAppliedRoutineName(typeof parsed.lastAppliedRoutineName === "string" ? parsed.lastAppliedRoutineName : null);
           setRecommendationUsage(parseRecommendationUsage(parsed.recommendationUsage));
@@ -2145,10 +2163,6 @@ export default function WorkoutLog() {
 
   const saveWorkout = async () => {
     if (saving) return;
-    if (feedbackQuestions.some(question => !feedbackAnswers[question.id])) {
-      showAppAlert("Quick questions", "Please answer the feedback questions before saving.");
-      return;
-    }
     const user = auth.currentUser;
     if (!user) {
       showAppAlert("Not signed in", "Please sign in again to save your workout.");
@@ -2259,6 +2273,7 @@ export default function WorkoutLog() {
       workoutSaveIdRef.current = saveId; setWorkoutSaveId(saveId);
       await AsyncStorage.setItem(getDraftKey(user.uid), serializeWorkoutDraft({ ...workoutDraftPayload, workoutSaveId: saveId }));
       await saveLinkedWorkout(user.uid, saveId, payload, programLink);
+      appGuide?.event("workout-saved");
       await removeParkedDraft(user.uid, workoutSlot);
       setProgramLink(null); setCompletedProgramWorkoutId(null); setDeloadBackup(null); setWorkoutSaveId(null); workoutSaveIdRef.current = null; setWorkoutSlot("single");
       setWorkoutView("choices");
@@ -2422,8 +2437,11 @@ export default function WorkoutLog() {
       if (targetRoutineId) {
         await setDoc(doc(db, "users", user.uid, "routines", targetRoutineId), payload, { merge: true });
       } else {
-        await addDoc(collection(db, "users", user.uid, "routines"), payload);
+        const created = await addDoc(collection(db, "users", user.uid, "routines"), payload);
+        // A restore failure can be retried without creating a second template.
+        if (routineBuilderReturnSlot && auth.currentUser?.uid === user.uid) setEditingRoutineId(created.id);
       }
+      if (auth.currentUser?.uid !== user.uid) return;
       if (programRoutineAssignment) {
         const assignment = programRoutineAssignment;
         const programSnapshot = await getDoc(doc(db, "users", user.uid, "workoutPrograms", assignment.programId));
@@ -2434,11 +2452,13 @@ export default function WorkoutLog() {
         await removeParkedDraft(user.uid, workoutSlot);
         setProgramManagerRequest({programId:assignment.programId,token:guidanceNowMs});
       }
+      if (routineBuilderReturnSlot) await returnFromStandaloneRoutine();
       setShowRoutineNameModal(false);
       setRoutineNameInput("");
       setEditingRoutineId(null);
       setRoutineBuilderMode(false);
       await loadRoutines();
+      appGuide?.event("routine-saved");
       setUiFeedback(editingRoutineId ? "Routine updated." : "Routine saved.");
     } catch (error) {
       console.log("Failed to save routine", error);
@@ -2627,6 +2647,7 @@ export default function WorkoutLog() {
 
   const handleApplyRoutine = (routine: Routine) => {
     applyRoutineToEditor(routine, "replace");
+    appGuide?.event("routine-loaded");
   };
 
   const openDeloadConfirm = (routine: Routine) => {
@@ -3006,7 +3027,7 @@ export default function WorkoutLog() {
   // Cache unchanged card JSX so navigation and background context updates don't rebuild every row.
   const exerciseCards = useWorkoutExerciseCards({ targetsEditorOpen: !!targetsExercise, exercises, exerciseUnits, getExerciseMode, distanceUnit, effortScale, previousExerciseSetsByName, findCatalogExercise, restTimerByExercise, replaceTarget, replaceSearch, replaceGroup, replacementOptions, replacementLimit, replacementPageKey, isTabletLayout, formatLastSetSummary, scrollNativeGesture, getExerciseZone, undoDeletedSet, cardActions, styles, colors, fontScale, editingSet, warmupTarget, cardioTimeTarget, cardioDistanceTarget, showCardioTimeModal, showCardioDistanceModal, setEditingSet, setReplacementPage });
 
-  const { cancelProgramRoutine, switchWorkoutPath, removeParkedDraft, openSavedDrafts } = useEventCallbacks({
+  const { returnFromStandaloneRoutine, cancelProgramRoutine, switchWorkoutPath, removeParkedDraft, openSavedDrafts } = useEventCallbacks({
   openSavedDrafts: async () => {
     const uid=activeUid;if(!uid)return;
     const request=++savedDraftPickerRequest.current;
@@ -3015,16 +3036,24 @@ export default function WorkoutLog() {
       const {raw,slots}=await loadWorkoutDraftCache(AsyncStorage,getDraftKey(uid),`workout-draft-slots-v1:${uid}`);
       const current=raw?JSON.parse(raw):null;
       const all={...slots};
-      if(current&&(current.exercises?.length||current.routineBuilderMode)){
+      if(current&&hasResumableWorkoutDraft(current)){
         const link=normalizeProgramLink(current.programLink);
         all[link?programDraftSlot(link.runId,link.ordinal):current.workoutSlot??"single"]=current;
       }
-      if(draftHydratedRef.current&&(workoutDraftPayload.exercises.length||workoutDraftPayload.routineBuilderMode))all[workoutSlot]=workoutDraftPayload;
+      if(draftHydratedRef.current&&hasResumableWorkoutDraft(workoutDraftPayload))all[workoutSlot]=workoutDraftPayload;
       const checked = await annotateCompletedProgramDrafts(uid, all);
       if(auth.currentUser?.uid===uid&&savedDraftPickerRequest.current===request){setParkedDraftSnapshot({uid,slots:checked});setSavedDraftPicker({uid,slots:resumableProgramDrafts(checked),error:null});}
     }catch {
       if(auth.currentUser?.uid===uid&&savedDraftPickerRequest.current===request)setSavedDraftPicker({uid,slots:null,error:"Couldn't load saved workouts. Your drafts are preserved."});
     }
+  },
+  returnFromStandaloneRoutine: async () => {
+    const uid=activeUid, slot=workoutSlot, destination=routineBuilderReturnSlot;
+    if (!uid || !destination) return;
+    await switchWorkoutPath(destination, { exercises: [], exerciseUnits: {}, sessionTitle: "", routineBuilderMode: false });
+    if (auth.currentUser?.uid !== uid) return;
+    await removeParkedDraft(uid,slot);
+    setWorkoutView("choices");
   },
   cancelProgramRoutine: async () => {
     const assignment=programRoutineAssignment,uid=activeUid,slot=workoutSlot;
@@ -3063,9 +3092,13 @@ export default function WorkoutLog() {
   }
   });
   useLayoutEffect(()=>{
-    routineBackRef.current=()=>showAppDialog({title:"Cancel routine?",message:"Restore your previous workout and return to program setup. The assigned routine stays unchanged.",buttons:[{text:"Keep editing",role:"cancel"},{text:"Cancel routine",onPress:()=>void cancelProgramRoutine()}]});
+    routineBackRef.current=()=>{
+      const discard = () => (programRoutineAssignment ? cancelProgramRoutine() : routineBuilderReturnSlot ? returnFromStandaloneRoutine() : Promise.resolve(setRoutineBuilderMode(false))).catch(()=>setUiFeedback("Couldn't restore your workout. Try again."));
+      if (!hasResumableWorkoutDraft(workoutDraftPayload)) { void discard(); return; }
+      showAppDialog({title:"Discard routine draft?",message:programRoutineAssignment ? "Restore your previous workout and return to program setup. The assigned routine stays unchanged." : "Return to Workout without saving this routine. Your previous workout stays saved.",buttons:[{text:"Keep editing",role:"cancel"},{text:"Discard draft",role:"destructive",onPress:()=>void discard()}]});
+    };
     return()=>{routineBackRef.current=null;};
-  },[cancelProgramRoutine]);
+  },[cancelProgramRoutine,returnFromStandaloneRoutine,programRoutineAssignment,routineBuilderReturnSlot,workoutDraftPayload]);
 
 
 
@@ -3077,7 +3110,8 @@ export default function WorkoutLog() {
         keyboardVerticalOffset={Platform.OS === "ios" ? insets.top : 0}
       >
         <View style={styles.scrollShell}>
-        <NotebookHeader compact={keyboardHeight > 0 && width > height} title={routineBuilderMode ? "Routine builder" : "Workout"} onBack={handleGoBack} right={!routineBuilderMode ? <SharingInboxButton /> : undefined} disabled={saving} />
+        <NotebookHeader compact={keyboardHeight > 0 && width > height} title={routineBuilderMode && workoutView === "editor" ? "Routine builder" : "Workout"} onBack={handleGoBack} right={!routineBuilderMode || workoutView === "choices" ? <SharingInboxButton /> : undefined} disabled={saving} />
+      <AppGuideNavigation />
         <GestureDetector gesture={scrollNativeGesture}>
           <ScrollView
             ref={noteScrollRef}
@@ -3091,7 +3125,9 @@ export default function WorkoutLog() {
             keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
             scrollEventThrottle={16}
           >
+      <WorkoutGuideNotes facts={{ programCompleted: displayedProgramDay?.status === "completed", programRest: displayedProgramDay?.type === "rest", hasCompletedSet: exercises.some(exercise => exercise.sets.some(set => set.done)), hasDraft: Object.keys(savedDrafts).length > 0, hasProgram: Boolean(programs.active), choices: workoutView === "choices", hasExercises: exercises.length > 0, builder: routineBuilderMode, routineLoaded: Boolean(lastAppliedRoutineId), workoutSaved: Boolean(appGuide?.state.events.includes("workout-saved")), routineSaved: Boolean(appGuide?.state.events.includes("routine-saved")), planApplied: guidanceApplied, planReady: Boolean(todayGuidance) && !guidanceStale }} />
       {activeUid ? <WorkoutProgramPanel effortScale={effortScale} key={activeUid} managerRequest={programManagerRequest ?? (routerParams.programAction ? {action:routerParams.programAction === "create" ? "create" : routerParams.programAction === "start" ? "start" : "library",programId:routerParams.sharedProgramId,token:0} : null)} onManagerOpened={() => { setProgramManagerRequest(null); if(routerParams.programAction)router.setParams({programAction:"",sharedProgramId:""}); }} uid={activeUid} data={workoutView === "choices" || programLink?.programId === programs.activeId ? programs : { ...programs, active: null, run: null }} routines={routines} choices={workoutView === "choices"} hasDraft={Object.keys(savedDrafts).length>0}
+        onStandaloneRoutine={() => switchWorkoutPath("builder:routine", { exercises: [], exerciseUnits: {}, sessionTitle: "", sessionDateText: toLocalDateKey(new Date()), elapsedSeconds: 0, routineBuilderMode: true, routineBuilderReturnSlot: routineBuilderReturnSlot ?? (workoutSlot === "builder:routine" ? "single" : workoutSlot), programLink: null })}
         onResume={() => void openSavedDrafts()}
         onRestDay={() => setWorkoutView("choices")}
         onStandalone={() => switchWorkoutPath("single", { exercises: [], exerciseUnits: {}, sessionTitle: "", sessionDateText: toLocalDateKey(new Date()), elapsedSeconds: 0, programLink: null })}
@@ -3102,6 +3138,7 @@ export default function WorkoutLog() {
         }} /> : null}
       {workoutView === "editor" && !completedProgramWorkoutId && !programCompletion.workoutId ? <>
       {exercises.length > 0 || routineBuilderMode ? <WorkoutSessionCard
+        routine={routineBuilderMode}
         title={sessionTitle}
         dateLabel={
           parseSessionDate(sessionDateText)?.toLocaleDateString(undefined, {
@@ -3211,8 +3248,8 @@ export default function WorkoutLog() {
         onDiscard={discardWorkout}
       /> : null}
       {routineBuilderMode ? <TouchableOpacity style={styles.textAction} onPress={() => {
-        if(programRoutineAssignment)void cancelProgramRoutine();else setRoutineBuilderMode(false);
-      }}><Text style={styles.linkText}>Cancel routine</Text></TouchableOpacity> : null}
+        if(programRoutineAssignment || routineBuilderReturnSlot)routineBackRef.current?.();else setRoutineBuilderMode(false);
+      }}><Text style={[styles.linkText, { color: colors.danger }]}>Discard routine draft</Text></TouchableOpacity> : null}
 
       {exerciseCards}
 
@@ -3277,6 +3314,7 @@ export default function WorkoutLog() {
         <View style={styles.modalBackdrop}>
           <AdaptiveModalCard style={styles.modalCard}>
             <Text style={styles.modalTitle}>My routines</Text>
+            <AppGuideTip inDialog topic="routines" id="routine-list" title="Templates for future workouts">Apply a routine to copy its exercises into this session. To make a template instead, close this dialog and use Create routine on the workout page. The three-dot menu contains editing and other actions.</AppGuideTip>
             {routines.length === 0 ? (
               <Text style={styles.modalText}>No routines saved yet.</Text>
             ) : (
@@ -3916,9 +3954,10 @@ export default function WorkoutLog() {
         <KeyboardAwareModalFrame style={styles.modalBackdrop}>
           <AdaptiveModalCard style={styles.modalCard}>
             <Text style={styles.modalTitle}>Finish workout</Text>
+            <AppGuideTip inDialog topic="workout" id="finish-real" title="Review before saving">Only completed sets will be saved to your account. Feedback is optional. Tap Save workout when ready. Cancel returns to your session without finishing it.</AppGuideTip>
             <Text style={styles.modalText}>{totalSets} sets planned. Only completed sets are saved.</Text>
             {feedbackQuestions.map(question => <View key={question.id}>
-              <Text style={[styles.modalText, { marginTop: 12 }]}>{question.label}</Text>
+              <Text style={[styles.modalText, { marginTop: 12 }]}>{question.label} (optional)</Text>
               <View style={styles.answerRow}>
                 {question.options.map(option => <TouchableOpacity
                   key={option.value}
@@ -3929,7 +3968,7 @@ export default function WorkoutLog() {
                   onPress={() => {
                     if (question.id === "followedRecommendation") setFollowedAnswer(option.value as FollowedAnswer);
                     else if (question.id === "helpful") setHelpfulAnswer(option.value as HelpfulAnswer);
-                    else setTodayPlanHelpful(option.value as HelpfulAnswer);
+                    else setTodayPlanHelpful(option.value as FeedbackAnswers["todayPlanHelpful"]);
                   }}>
                   <Text style={[styles.answerText, feedbackAnswers[question.id] === option.value && styles.answerTextActive]}>{option.label}</Text>
                 </TouchableOpacity>)}

@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="icon" href="data:,"><title>Lastrep · Getting started</title><link rel="stylesheet" href="./prototype.css"><link rel="stylesheet" href="./onboarding-intro.css"></head>
+<body data-study="onboarding-intro">
+<a class="skip" href="#preview">Skip to prototype</a>
+<aside class="workbench" aria-label="Review controls">
+ <div class="workbench-brand">Lastrep<span>Training notebook / Onboarding</span></div>
+ <h1>Learn by getting started.</h1><p>Three short introductions, followed by help where you need it.</p>
+ <nav aria-label="Screen studies"><a class="spec-link" href="./home.html">Review Home</a><a class="spec-link" href="./index.html">Review Workout</a><a class="spec-link" href="./nutrition.html">Review Nutrition</a><a class="spec-link" href="./sleep.html">Review Sleep</a><a class="spec-link" href="./profile.html">Review Profile</a><a class="spec-link" href="./settings.html">Review Settings</a><a class="spec-link" href="./auth.html">Review Sign in / Sign up</a></nav>
+ <label for="example">Review a state</label><select id="example"><option value="log">1 · Log your workout</option><option value="build">2 · Build your training</option><option value="picture">3 · See the bigger picture</option><option value="home">Home · New account</option><option value="choices">Workout · Choose how to start</option><option value="empty">Workout · First exercise</option><option value="sets">Workout · First sets</option><option value="help">Settings · Reopen introduction</option></select>
+ <label for="viewport">Viewport</label><select id="viewport"><option value="390,844">Phone / 390 × 844</option><option value="320,740">Compact / 320 × 740</option><option value="844,390">Landscape / 844 × 390</option><option value="800,1280">Tablet / 800 × 1280</option></select>
+ <div class="review-toggles"><label><input id="dark" type="checkbox"> Dark paper</label><label><input id="large" type="checkbox"> 200% text stress test</label></div><button id="reset" class="review-button">Reset example</button>
+ <div class="review-note"><strong>Proposed design, awaiting review.</strong><p>All examples are synthetic. Changes stay in this page's memory. No account, permission or app data is changed.</p><p>Try Next, Back, Skip intro, Start workout, Add exercise, set logging and reopening help.</p></div><a class="spec-link" href="./onboarding-setup.html">Previous setup study</a><a class="spec-link" href="./README.md">Scope and review guide</a>
+</aside>
+<main id="preview" tabindex="-1"><header class="review-heading"><div><p class="eyebrow">Getting started</p><h2 id="state-title">Log your workout</h2></div><span class="prototype-tag">Interactive study</span></header><p class="state-description">Review the introduction and the first workout together. Profile details and health connection can wait until users need them.</p><div id="stage" class="stage"></div><footer class="review-footer">Browser mockup only. Native onboarding, stored profile answers and health consent remain unchanged.</footer></main>
+<script type="module" src="./onboarding-intro.mjs"></script>
+</body></html>

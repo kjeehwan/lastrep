@@ -27,7 +27,7 @@ const paths = {
 
   calendar: '<rect x="4" y="5" width="16" height="16" rx="1"/><path d="M8 3v4M16 3v4M4 10h16M8 14h3M8 17h6"/>',
   settings: '<path d="M4 6h5M13 6h7M4 12h10M18 12h2M4 18h2M10 18h10"/><circle cx="11" cy="6" r="2"/><circle cx="16" cy="12" r="2"/><circle cx="8" cy="18" r="2"/>',
-  arrow: '<path d="M4 12h16m-6-6 6 6-6 6"/>', down: '<path d="m7 10 5 5 5-5"/>',
+  arrow: '<path d="M4 12h16m-6-6 6 6-6 6"/>', down: '<path d="m7 10 5 5 5-5"/>', up: '<path d="m7 14 5-5 5 5"/>',
   left: '<path d="m15 5-7 7 7 7"/>', right: '<path d="m9 5 7 7-7 7"/>',
   check: '<path d="m5 12 4 4L19 6"/>', heart: '<path d="M12 21 4 13C-3 5 7 0 12 7c5-7 15-2 8 6Z"/>',
   home: '<path d="m3 11 9-8 9 8M5 10v11h5v-7h4v7h5V10"/>',

@@ -6,6 +6,8 @@ import { Text, TextInput, TouchableOpacity, View } from "react-native";
 import { ElapsedTimerText } from "./TimerText";
 import { Play, Clock3, Pencil } from "lucide-react-native";
 type WorkoutSessionCardProps = {
+  titleEditable?: boolean;
+  routine?: boolean;
   title: string;
   dateLabel: string;
   elapsedSeconds: number;
@@ -20,6 +22,8 @@ type WorkoutSessionCardProps = {
   onChangePhase: () => void;
 };
 export function WorkoutSessionCard({
+  titleEditable = true,
+  routine = false,
   title,
   dateLabel,
   elapsedSeconds,
@@ -34,6 +38,7 @@ export function WorkoutSessionCard({
   onChangePhase,
 }: WorkoutSessionCardProps) {
   const { colors } = useNotebook();
+  const placeholder = routine ? "Your routine" : "Workout session";
   const titleRef = useRef<TextInput>(null);
   const [titleSelection, setTitleSelection] = useState<{ start: number; end: number }>();
   const styles = useNotebookStyles(createStyles);
@@ -47,10 +52,10 @@ export function WorkoutSessionCard({
     </View>
     <View style={styles.titleRow}>
       <View style={styles.titleField}>
-        <Text accessible={false} importantForAccessibility="no" style={[styles.sessionTitle, styles.titleMeasure]}>{title || "Workout session"}</Text>
-        <NotebookTextInput ref={titleRef} surface="canvas" disableFullscreenUI accessibilityLabel="Workout title" placeholder="Workout session" value={title} onChangeText={value => { setTitleSelection(undefined); onTitleChange(value); }} style={[styles.sessionTitle, styles.titleInput]} multiline selection={titleSelection} onTouchStart={() => setTitleSelection(undefined)} onBlur={() => setTitleSelection(undefined)} onSelectionChange={({ nativeEvent: { selection } }) => { if (titleSelection && selection.start === titleSelection.start && selection.end === titleSelection.end) setTitleSelection(undefined); }} />
+        <Text accessible={false} importantForAccessibility="no" style={[styles.sessionTitle, styles.titleMeasure]}>{title || placeholder}</Text>
+        <NotebookTextInput ref={titleRef} editable={titleEditable} surface="canvas" disableFullscreenUI accessibilityLabel={routine ? "Routine title" : "Workout title"} placeholder={placeholder} value={title} onChangeText={value => { setTitleSelection(undefined); onTitleChange(value); }} style={[styles.sessionTitle, styles.titleInput]} multiline selection={titleSelection} onTouchStart={() => setTitleSelection(undefined)} onBlur={() => setTitleSelection(undefined)} onSelectionChange={({ nativeEvent: { selection } }) => { if (titleSelection && selection.start === titleSelection.start && selection.end === titleSelection.end) setTitleSelection(undefined); }} />
       </View>
-      <TouchableOpacity accessibilityRole="button" accessibilityLabel="Edit workout title" style={styles.pencil} onPress={() => { titleRef.current?.focus(); setTitleSelection({ start: 0, end: title.length }); }}><Pencil size={18} strokeWidth={1.5} color={colors.muted} /></TouchableOpacity>
+      <TouchableOpacity disabled={!titleEditable} accessibilityRole="button" accessibilityLabel={routine ? "Edit routine title" : "Edit workout title"} style={styles.pencil} onPress={() => { titleRef.current?.focus(); setTitleSelection({ start: 0, end: title.length }); }}><Pencil size={18} strokeWidth={1.5} color={colors.muted} /></TouchableOpacity>
     </View>
     <View style={styles.sessionMeta}>
       <TouchableOpacity accessibilityRole="button" accessibilityLabel="Change training phase in Profile" onPress={onChangePhase} style={styles.phase}><Text style={styles.muted}>{trainingPhase}</Text></TouchableOpacity>

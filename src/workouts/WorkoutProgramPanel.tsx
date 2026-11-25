@@ -1,3 +1,4 @@
+import { AppGuideTip } from "../onboarding/live/AppGuide";
 import { useSharing } from "../sharing/SharingProvider";
 import { programToSharingPlan } from "../sharing/programSharingPlan";
 import React, { useEffect, useRef, useState } from "react";
@@ -24,7 +25,7 @@ type Programs = ReturnType<typeof useWorkoutPrograms>;
 type Props = { effortScale?: "rpe" | "rir"; uid: string; data: Programs; routines: Routine[]; choices: boolean; hasDraft: boolean;
   managerRequest?: {programId?:string;action?:"library"|"create"|"start";token:number}|null;
   onManagerOpened?: () => void;
-  onResume: () => void; onStandalone: () => Promise<void>;
+  onResume: () => void; onStandalone: () => Promise<void>; onStandaloneRoutine: () => Promise<void>;
   onRestDay: () => void;
   onWorkout: (routine: Routine, link: ProgramLink, draft?:Record<string,unknown>) => Promise<void>;
   onCreateRoutine: (program: ProgramRecord, day: number) => Promise<void> };
@@ -172,6 +173,7 @@ export function WorkoutProgramPanel(props: Props) {
     {props.choices ? <View>
       {props.hasDraft ? row("Resume workout", "Open saved workout drafts", props.onResume, true) : null}
       {active ? row("Continue program", `${active.name} · Day ${continueDay?.dayNumber ?? ordinal % active.days.length + 1}${continueDay?.status === "completed" ? " · Completed" : continueDay?.status === "skipped" ? " · Skipped" : ""}`, () => void execute(continueProgram), !props.hasDraft) : null}
+      {row("Create routine", "Build a reusable exercise template", () => void execute(props.onStandaloneRoutine))}
       {row("Create program", "Assign your routines to workout and rest days", newProgram)}
       {row("Start workout", "Choose a routine or build today's workout", () => void execute(props.onStandalone), !props.hasDraft && !active)}
       {row("My programs", props.data.programs.length ? `${props.data.programs.length} saved` : "Your saved programs", () => setPage("library"))}
@@ -195,6 +197,7 @@ export function WorkoutProgramPanel(props: Props) {
       </View> : null}
       {page === "library" ? <>{props.data.programs.map(program => row(program.name || "Untitled program", `${program.days.length} days${program.deleting ? " - Deletion unfinished" : program.id === props.data.activeId ? " · Active" : program.status === "draft" ? " · Draft" : ""}`, () => void execute(() => showDetails(program)),false,true,program.id))}{button("Create program", newProgram)}</> : null}
       {page === "edit" && draft ? <>
+        <AppGuideTip inDialog topic="programs" id="program-edit-real" title="Arrange your program">Name the program and choose its length. Open each day to assign a routine or Rest. Start program begins the cycle; Save program keeps it for later, including unfinished drafts. You can edit in any order.</AppGuideTip>
         <NotebookTextInput disableFullscreenUI accessibilityLabel="Program name" placeholder="Program name" value={draft.name} onChangeText={name => setDraft({ ...draft, name })} style={styles.input} maxLength={100} />
         <View style={styles.heading}><Text style={styles.rowTitle}>Days</Text><View style={styles.days}>{button("−", () => setDraft({ ...draft, days: draft.days.slice(0, Math.max(1, draft.days.length - 1)) }))}<Text style={styles.buttonText}>{draft.days.length}</Text>{button("+", () => setDraft({ ...draft, days: [...draft.days, ...emptyProgramDays(1)].slice(0,14) }))}</View></View>
         {draft.days.map((day, index) => row(`Day ${index + 1}`, day.title, () => { setSelectedDay(index); setPage("assign"); }))}
@@ -202,6 +205,7 @@ export function WorkoutProgramPanel(props: Props) {
         {!draft.runId ? button("Start program", () => { const problem = programSetupError(draft); if (problem) setError(problem); else startConfirmation("start"); }) : null}
       </> : null}
       {page === "assign" && draft ? <>
+        <AppGuideTip inDialog topic="programs" id="program-assignment-real" title="Assign this day">Choose an existing routine or Rest below. If you need a new routine, use Create routine; after saving it you return to program setup.</AppGuideTip>
         {row("Rest", "No workout planned", () => { setDraft({ ...draft, days: draft.days.map((day,index) => index === selectedDay ? { type: "rest", routineId: null, title: "Rest" } : day) }); setPage("edit"); })}
         {[...props.routines].sort((a,b) => a.name.localeCompare(b.name)).map(routine => row(routine.name, routine.exercises.map(exercise => exercise.name).join(" · "), () => { setDraft({ ...draft, days: draft.days.map((day,index) => index === selectedDay ? { type: "workout", routineId: routine.id, title: routine.name } : day) }); setPage("edit"); },false,false,routine.id))}
         <View style={{borderWidth:1,borderColor:colors.border,borderRadius:8,marginTop:16}}>{button("+ Create routine", () => void execute(async () => { await saveProgram(props.uid, draft); await props.onCreateRoutine(draft, selectedDay); setPage(null); }))}</View>
@@ -240,6 +244,7 @@ export function WorkoutProgramPanel(props: Props) {
         {historyEntries.map((item,index)=><View key={index} style={styles.detailRow}><Text style={styles.rowTitle}>Day {item.dayNumber} · {item.title}</Text><Text style={styles.muted}>{programDateLabel(item.dateKey)} · {item.status}</Text></View>)}
         {historyCursor&&selectedRun?button("Earlier days",()=>void execute(()=>loadRunHistory(selectedRun,true))):null}</> : null}
       {page === "schedule" && draft && selectedRun ? <>
+        <AppGuideTip inDialog topic="programs" id="program-schedule-real" title="Review your scheduled day">The numbered strip shows the schedule and completed days. Choose a day to inspect it. Use the help button beside Change schedule to compare Skip, Move, Swap and Tomorrow before changing dates.</AppGuideTip>
         {dayStrip(draft, selectedRun, selectedDay, true)}
         <Text style={styles.rowTitle}>Day {selectedOccurrence?.dayNumber} · {selectedOccurrence?.type === "rest" && selectedOccurrence.title === "Rest" ? "Rest day" : selectedOccurrence?.title}</Text>
         <Text style={styles.muted}>{programDateLabel(programOccurrence(draft, selectedRun, selectedDay).dateKey)}</Text>

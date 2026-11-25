@@ -20,7 +20,9 @@ export function performanceProgression(exercise: PlannedExerciseSummary, workout
   const repeat = (reason: string) => ({ candidate: null, reason });
   if (exercise.mode !== "resistance") return repeat("Keep the planned pace and duration.");
   const sets = exercise.sets.filter(set => set.setType !== "warmup");
-  if (!sets.length || sets.some(set => !normal(set) || set.done || set.rpe != null)) return repeat("Mixed prescriptions or recorded sets need individual review; keep the planned sets.");
+  if (!sets.length) return repeat("Add working sets to receive a progression suggestion.");
+  if (sets.some(set => set.done || set.rpe != null)) return repeat("This exercise is already in progress. Keep your planned sets; no progression increase is suggested.");
+  if (sets.some(set => !normal(set))) return repeat("The currently planned working sets include special set types. Review these sets individually; no uniform progression is suggested.");
   const first = sets[0];
   if (!(first.weightKg != null && first.weightKg > 0 && first.reps != null && first.reps > 0) || sets.some(set => set.weightKg !== first.weightKg || set.reps !== first.reps)) return repeat("The currently planned working sets are mixed. No uniform progression is suggested.");
   const targets = exercise.targets;

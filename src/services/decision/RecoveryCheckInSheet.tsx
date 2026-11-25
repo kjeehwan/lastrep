@@ -1,3 +1,4 @@
+import { AppGuideTip } from "../../onboarding/live/AppGuide";
 import React, { useEffect, useState } from "react";
 import { ActivityIndicator, Text, TouchableOpacity, View } from "react-native";
 import Slider from "@react-native-community/slider";
@@ -42,6 +43,7 @@ export function RecoveryCheckInSheet({ uid, plan = noPlan, onClose, onSaved, req
         setError("Couldn't save your check-in. Your changes are still here. Try again.");
       }).finally(() => setSaving(false));
     }}>
+    <AppGuideTip inDialog topic={["home", "plan"]} id="recovery-real" title="Record how you feel today">Adjust the ratings and add any pain areas or additional activity that may affect training. Save check-in updates today’s record, shared by Home and Today’s Plan. Cancel keeps the previous record.</AppGuideTip>
     {!loaded ? error ? <TouchableOpacity accessibilityRole="button" onPress={()=>{setError(null);setAttempt(value=>value+1);}}><Text style={{color:colors.accent,paddingVertical:16}}>Try again</Text></TouchableOpacity> : <ActivityIndicator color={colors.ink}/> : (["soreness", "fatigue", "motivation"] as const).map(key => <View key={key} style={{ paddingVertical: 12, gap: 8 }}>
       <Text style={{ color: requiredForReview && error && ratings[key] == null ? colors.danger : colors.ink, fontSize: 16 }}>{key[0].toUpperCase() + key.slice(1)}{requiredForReview && ratings[key] == null ? " (required)" : ""} · {ratings[key] == null ? "Not recorded" : `${ratings[key]}/10`}</Text>
       <Slider accessibilityLabel={key} minimumValue={0} maximumValue={10} step={1} value={ratings[key] ?? 5} disabled={saving}
