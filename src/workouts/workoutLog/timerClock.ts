@@ -30,6 +30,7 @@ export function advanceRest(clock: RestClock, nowMs: number): RestClock {
 }
 
 export function startRest(clock: RestClock | undefined, fallback: number, nowMs: number): RestClock {
+  if (fallback <= 0) return { remainingSec: 0, running: false };
   if (clock?.running) return advanceRest(clock, nowMs);
   const remainingSec = clock && clock.remainingSec > 0 ? clock.remainingSec : fallback;
   return { remainingSec, running: true, endsAtMs: nowMs + remainingSec * 1000 };

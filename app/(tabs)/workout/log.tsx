@@ -1,3 +1,4 @@
+import { WorkoutDisplayChoiceSheet } from "../../../src/workouts/workoutLog/WorkoutDisplayChoiceSheet";
 import { adjustmentSelectionKey } from "../../../src/services/decision/setGroupReview";
 import { hasResumableWorkoutDraft } from "../../../src/workouts/workoutLog/workoutDraftSlots";
 import { WorkoutGuideNotes } from "../../../src/onboarding/live/WorkoutGuideNotes";
@@ -37,6 +38,7 @@ onSnapshot,
 orderBy,
 query,
 setDoc,
+updateDoc,
 } from "firebase/firestore";
 import { useCallback,useEffect,useLayoutEffect,useMemo,useRef,useState } from "react";
 import {
@@ -161,6 +163,7 @@ export default function WorkoutLog() {
   const [warmupTarget, setWarmupTarget] = useState<{ uid: string; exercise: Exercise; unit: WarmupUnit; barbell: boolean } | null>(null);
   const [distanceUnit, setDistanceUnit] = useState<DistanceUnit>("km");
   const [effortScale, setEffortScale] = useState<EffortScale>("rpe");
+  const [displayChoice, setDisplayChoice] = useState<{ uid: string; kind: "weight" | "distance" | "effort"; exerciseId?: string } | null>(null);
   const [exerciseUnits, setExerciseUnits] = useState<Record<string, Unit>>({});
   const [favoriteExercises, setFavoriteExercises] = useState<string[]>([]);
   const [favoritesHydratedUid, setFavoritesHydratedUid] = useState<string | null>(null);
@@ -427,6 +430,7 @@ export default function WorkoutLog() {
       setActiveUid(user?.uid ?? null);
       setWorkoutView("choices"); setProgramLink(null); setCompletedProgramWorkoutId(null); setDeloadBackup(null); setRoutineBuilderMode(false); setRoutineBuilderReturnSlot(null); setWorkoutSlot("single");
       setWorkoutSaveId(null); workoutSaveIdRef.current = null; setProgramRoutineAssignment(null);
+      setDisplayChoice(null);
       setEffortScale("rpe"); setDistanceUnit("km");
       setSessionPhase("Hypertrophy");
       setLastAppliedRoutineId(null); setLastAppliedRoutineName(null);
@@ -622,6 +626,7 @@ export default function WorkoutLog() {
         name: trimmed,
         targets: mode === "cardio" ? null : normalizeExerciseTargets(previousExercise?.targets),
         groupTargets: normalizeGroupTargets(previousExercise?.groupTargets),
+        plannedRestSec: mode === "cardio" ? restPreferenceByName[trimmed.toLowerCase()] ?? previousExercise?.restSec ?? 0 : undefined,
         notes: "",
         tempo: mode === "cardio" ? String(previousSets.find((set) => set.zone)?.zone || "") : undefined,
         cardioSessionType: undefined,
@@ -629,7 +634,7 @@ export default function WorkoutLog() {
         sets,
       };
     },
-    [getExerciseModeByName, pastWorkouts]
+    [getExerciseModeByName, pastWorkouts, restPreferenceByName]
   );
 
   const addExercise = useCallback(
@@ -638,11 +643,12 @@ export default function WorkoutLog() {
       if (!trimmed) return;
       const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
       const mode = getExerciseModeByName(trimmed);
-      const restSeconds = getSavedRestPreference(trimmed);
+      const draft = buildExerciseDraft(trimmed, id);
+      const restSeconds = draft.plannedRestSec ?? getSavedRestPreference(trimmed);
       setExercises((prev) => {
         const exists = prev.some((e) => e.name.toLowerCase() === trimmed.toLowerCase());
         if (exists) return prev;
-        return [...prev, buildExerciseDraft(trimmed, id)];
+        return [...prev, draft];
       });
       // Cardio follows the Profile distance preference unless overridden per exercise.
       setExerciseUnits((prev) => ({ ...prev, [id]: mode === "cardio" ? distanceUnit : "kg" }));
@@ -1813,6 +1819,7 @@ export default function WorkoutLog() {
   };
 
   const setRestPreference = (exerciseId: string, seconds: number) => {
+    if (seconds === 0) restAlerts.cancel(exerciseId);
     setExercises(all => all.map(e => e.id === exerciseId && e.plannedRestSec != null ? { ...e, plannedRestSec: seconds } : e));
     setRestPreferenceByExercise((prev) => ({ ...prev, [exerciseId]: seconds }));
     const exerciseName = exercises.find((exercise) => exercise.id === exerciseId)?.name;
@@ -1824,7 +1831,7 @@ export default function WorkoutLog() {
     }
     setRestTimerByExercise((prev) => {
       const current = prev[exerciseId];
-      if (current?.running) return prev;
+      if (current?.running && seconds > 0) return prev;
       return { ...prev, [exerciseId]: { remainingSec: seconds, running: false } };
     });
   };
@@ -1842,8 +1849,9 @@ export default function WorkoutLog() {
   };
 
   const startRestTimer = (exerciseId: string) => {
-    void restAlerts.request();
     const fallback = restPreferenceByExercise[exerciseId] ?? 90;
+    if (fallback <= 0) return;
+    void restAlerts.request();
     const clock = startRest(restTimerByExercise[exerciseId], fallback, Date.now());
     restAlerts.start(exerciseId, exercises.find((exercise) => exercise.id === exerciseId)?.name ?? "Rest timer", clock.endsAtMs);
     setRestTimerByExercise((prev) => {
@@ -1983,11 +1991,10 @@ export default function WorkoutLog() {
     if (!trimmed) return;
     const target = exercises.find((ex) => ex.id === exerciseId);
     const doReplace = () => {
-      setExercises((prev) =>
-        prev.map((ex) => (ex.id === exerciseId ? buildExerciseDraft(trimmed, ex.id) : ex))
-      );
+      const draft = buildExerciseDraft(trimmed, exerciseId);
+      setExercises((prev) => prev.map(ex => ex.id === exerciseId ? draft : ex));
       const mode = getExerciseModeByName(trimmed);
-      const restSeconds = getSavedRestPreference(trimmed);
+      const restSeconds = draft.plannedRestSec ?? getSavedRestPreference(trimmed);
       setExerciseUnits((prev) => ({ ...prev, [exerciseId]: mode === "cardio" ? distanceUnit : "kg" }));
       setRestPreferenceByExercise((prev) => ({ ...prev, [exerciseId]: restSeconds }));
       setRestCustomInputByExercise((prev) => ({ ...prev, [exerciseId]: "" }));
@@ -3042,11 +3049,36 @@ export default function WorkoutLog() {
     return null;
   };
 
+  const changeExerciseUnit = (id: string) => {
+    const uid = activeUid;
+    if (!uid || auth.currentUser?.uid !== uid) return;
+    Keyboard.dismiss(); setEditingSet(null);
+    setDisplayChoice({ uid, kind: getExerciseMode(exercises.find(exercise => exercise.id === id)?.name ?? "") === "cardio" ? "distance" : "weight", exerciseId: id });
+  };
+  const changeEffortScale = () => {
+    const uid = activeUid;
+    if (!uid || auth.currentUser?.uid !== uid) return;
+    Keyboard.dismiss(); setEditingSet(null);
+    setDisplayChoice({ uid, kind: "effort" });
+  };
+  const chooseDisplayValue = async (value: string) => {
+    const choice = displayChoice;
+    if (!choice || auth.currentUser?.uid !== choice.uid) throw Error("Account changed");
+    if (choice.kind !== "effort") {
+      if (!choice.exerciseId || !exercises.some(exercise => exercise.id === choice.exerciseId) || !(choice.kind === "distance" ? value === "km" || value === "mi" : value === "kg" || value === "lbs")) throw Error("Exercise changed");
+      toggleExerciseUnit(choice.exerciseId, value as Unit);
+    } else {
+      if (value !== "RPE" && value !== "RIR") throw Error("Invalid effort scale");
+      const next = value === "RIR" ? "rir" : "rpe";
+      await updateDoc(doc(db, "users", choice.uid), { effortScale: next });
+      if (auth.currentUser?.uid === choice.uid) setEffortScale(next);
+    }
+  };
   const openExerciseTargets = (id: string) => { if (activeUid) { Keyboard.dismiss(); setEditingSet(null); setExerciseTargetsEditor({ uid: activeUid, id }); } };
   const targetsExercise = exerciseTargetsEditor?.uid === activeUid ? exercises.find(exercise => exercise.id === exerciseTargetsEditor.id) : null;
-  const cardActions = useEventCallbacks({ openExerciseTargets, openWarmup, revealNote: revealNote, openExerciseDemo, openExerciseHistory, openExerciseActions, setReplaceSearch, setReplaceGroup, closeReplacement: () => setReplaceTarget(null), replaceExercise, updateExerciseNotes, openTempoEditor, openRestTimerModal, updateSetWeight, updateSetReps, updateSetRpe, toggleSetDone, removeSetWithUndo, openSetMenu, copyLastSetToCurrent, openCardioTimeModal, openCardioDistanceModal, setExercises, updateCardioSessionType, updateCardioEffortLevel, addEmptySet, duplicateLastSet, undoRemoveSet });
+  const cardActions = useEventCallbacks({ changeExerciseUnit, changeEffortScale, openExerciseTargets, openWarmup, revealNote: revealNote, openExerciseDemo, openExerciseHistory, openExerciseActions, setReplaceSearch, setReplaceGroup, closeReplacement: () => setReplaceTarget(null), replaceExercise, updateExerciseNotes, openTempoEditor, openRestTimerModal, updateSetWeight, updateSetReps, updateSetRpe, toggleSetDone, removeSetWithUndo, openSetMenu, copyLastSetToCurrent, openCardioTimeModal, openCardioDistanceModal, setExercises, updateCardioSessionType, updateCardioEffortLevel, addEmptySet, duplicateLastSet, undoRemoveSet });
   // Cache unchanged card JSX so navigation and background context updates don't rebuild every row.
-  const exerciseCards = useWorkoutExerciseCards({ targetsEditorOpen: !!targetsExercise, exercises, exerciseUnits, getExerciseMode, distanceUnit, effortScale, previousExerciseSetsByName, findCatalogExercise, restTimerByExercise, replaceTarget, replaceSearch, replaceGroup, replacementOptions, replacementLimit, replacementPageKey, isTabletLayout, formatLastSetSummary, scrollNativeGesture, getExerciseZone, undoDeletedSet, cardActions, styles, colors, fontScale, editingSet, warmupTarget, cardioTimeTarget, cardioDistanceTarget, showCardioTimeModal, showCardioDistanceModal, setEditingSet, setReplacementPage });
+  const exerciseCards = useWorkoutExerciseCards({ targetsEditorOpen: !!targetsExercise || displayChoice?.uid === activeUid, exercises, exerciseUnits, getExerciseMode, distanceUnit, effortScale, previousExerciseSetsByName, findCatalogExercise, restTimerByExercise, replaceTarget, replaceSearch, replaceGroup, replacementOptions, replacementLimit, replacementPageKey, isTabletLayout, formatLastSetSummary, scrollNativeGesture, getExerciseZone, undoDeletedSet, cardActions, styles, colors, fontScale, editingSet, warmupTarget, cardioTimeTarget, cardioDistanceTarget, showCardioTimeModal, showCardioDistanceModal, setEditingSet, setReplacementPage });
 
   const { returnFromStandaloneRoutine, cancelProgramRoutine, switchWorkoutPath, removeParkedDraft, openSavedDrafts } = useEventCallbacks({
   openSavedDrafts: async () => {
@@ -3390,7 +3422,7 @@ export default function WorkoutLog() {
           <View style={styles.modalBackdrop}>
             <TouchableWithoutFeedback onPress={() => {}}>
               <AdaptiveModalCard style={styles.modalCard}>
-                <WorkoutExerciseActions openProgressionSettings={(name,unit) => setProgressionTarget({name,unit})} openExerciseTargets={openExerciseTargets} effortScale={effortScale} styles={styles} colors={colors} activeActionExercise={activeActionExercise} activeActionMode={activeActionMode} activeActionUnit={activeActionUnit} activeExerciseActionId={activeExerciseActionId} activeActionIndex={activeActionIndex} exercises={exercises} availableWeightsPreferences={availableWeightsPreferences} setAvailableWeightsTarget={setAvailableWeightsTarget} closeExerciseActions={closeExerciseActions} moveExercise={moveExercise} setReplaceTarget={setReplaceTarget} setReplaceSearch={setReplaceSearch} setReplaceGroup={setReplaceGroup} toggleFavoriteExercise={toggleFavoriteExercise} activeActionIsFavorite={activeActionIsFavorite} deleteExercise={deleteExercise} toggleExerciseUnit={toggleExerciseUnit} />
+                <WorkoutExerciseActions openProgressionSettings={(name,unit) => setProgressionTarget({name,unit})} openExerciseTargets={openExerciseTargets} effortScale={effortScale} styles={styles} colors={colors} activeActionExercise={activeActionExercise} activeActionMode={activeActionMode} activeActionUnit={activeActionUnit} activeExerciseActionId={activeExerciseActionId} activeActionIndex={activeActionIndex} exercises={exercises} availableWeightsPreferences={availableWeightsPreferences} setAvailableWeightsTarget={setAvailableWeightsTarget} closeExerciseActions={closeExerciseActions} moveExercise={moveExercise} setReplaceTarget={setReplaceTarget} setReplaceSearch={setReplaceSearch} setReplaceGroup={setReplaceGroup} toggleFavoriteExercise={toggleFavoriteExercise} activeActionIsFavorite={activeActionIsFavorite} deleteExercise={deleteExercise} />
               </AdaptiveModalCard>
             </TouchableWithoutFeedback>
           </View>
@@ -3844,6 +3876,9 @@ export default function WorkoutLog() {
         </KeyboardAwareModalFrame>
       </Modal>
 
+      {displayChoice?.uid === activeUid && (displayChoice.kind === "effort" || exercises.some(exercise => exercise.id === displayChoice.exerciseId)) ? <WorkoutDisplayChoiceSheet key={`${displayChoice.uid}:${displayChoice.kind}:${displayChoice.exerciseId ?? ""}`} kind={displayChoice.kind}
+        selected={displayChoice.kind === "effort" ? effortScale.toUpperCase() : exerciseDisplayUnit(displayChoice.kind === "distance" ? "cardio" : "resistance", exerciseUnits[displayChoice.exerciseId!], distanceUnit)}
+        onSelect={chooseDisplayValue} onClose={() => setDisplayChoice(null)} /> : null}
       {targetsExercise && exerciseTargetsEditor ? <GroupedTargetsSheet key={`${exerciseTargetsEditor.uid}:${targetsExercise.id}:${effortScale}`} name={targetsExercise.name} targets={targetsExercise.targets} groupTargets={targetsExercise.groupTargets} sets={targetsExercise.sets} effortScale={effortScale} onClose={() => setExerciseTargetsEditor(null)} onApply={values => { if (auth.currentUser?.uid !== exerciseTargetsEditor.uid) return; setExercises(before => before.map(exercise => exercise.id === targetsExercise.id ? { ...exercise, ...values } : exercise)); }} /> : null}
       {warmupTarget && activeUid === warmupTarget.uid ? <WarmupSetsSheet key={`${warmupTarget.uid}:${warmupTarget.exercise.id}`} uid={warmupTarget.uid} name={warmupTarget.exercise.name} sets={warmupTarget.exercise.sets} unit={warmupTarget.unit} barbell={warmupTarget.barbell} settings={availableWeightsPreferences.values[weightPreferenceKey(warmupTarget.exercise.name)]} onClose={() => { Keyboard.dismiss(); setWarmupTarget(null); }} onApply={applyWarmups} /> : null}
 

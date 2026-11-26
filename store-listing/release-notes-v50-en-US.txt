@@ -1,5 +1,5 @@
-- Label Top and Back-off sets and give each group its own target reps and effort.
-- Review progression suggestions for Top and Back-off sets in Today's Plan.
-- Preserve set types and targets when sharing workouts and programs.
+- Explore Lastrep with an app guide for workouts, routines, programs, recovery, nutrition, sleep and health sync.
+- Add Top and Back-off sets with separate targets and Today's Plan progression suggestions.
+- Share workouts and programs with set types and targets intact.
 - Keep previous workout values visible when changing set types.
-- Clearer training guidance and maintenance updates.
+- Improved startup, offline navigation and sharing feedback.

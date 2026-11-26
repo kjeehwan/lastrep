@@ -1,5 +1,6 @@
 import { AppGuideTip } from "../onboarding/live/AppGuide";
 import { SharingPlanPreview } from "./SharingPlanPreview";
+import type { SharingPreviewUnits } from "./sharingSetTable";
 import { SharingProgramPreview } from "./SharingProgramPreview";
 import { isSharedProgram, type SharedPlan } from "./sharingContract";
 import { NotebookInfoButton } from "../ui/notebook/NotebookInfoButton";
@@ -9,6 +10,7 @@ import * as Linking from "expo-linking";
 import { useRouter } from "expo-router";
 import {
   collection,
+  doc,
   documentId,
   query as firestoreQuery,
   limit,
@@ -16,7 +18,7 @@ import {
   orderBy,
   where,
 } from "firebase/firestore";
-import { Ban, Check, CheckCheck, CheckCircle2, ChevronRight, CircleAlert, Clock3, Copy, Mail, MessageCircle, MoreHorizontal, X } from "lucide-react-native";
+import { ChevronLeft, Ban, Check, CheckCheck, CheckCircle2, ChevronRight, CircleAlert, Clock3, Copy, Mail, MessageCircle, MoreHorizontal, X } from "lucide-react-native";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, Share, Switch, Text, View, useWindowDimensions } from "react-native";
 import { db } from "../config/firebaseConfig";
@@ -115,6 +117,18 @@ export function SharingDialogs({
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [feedback, setFeedback] = useState("");
+  const [previewPreferences, setPreviewPreferences] = useState<({ uid: string } & SharingPreviewUnits) | null>(null);
+  const previewUnits = previewPreferences?.uid === uid ? previewPreferences : undefined;
+  useEffect(() => {
+    if (!uid) return;
+    let active = true;
+    const unsubscribe = onSnapshot(doc(db, "users", uid), snapshot => {
+      if (!active) return;
+      const data = snapshot.data();
+      setPreviewPreferences({ uid, weightUnit: data?.weightUnit === "lbs" ? "lbs" : "kg", distanceUnit: data?.distanceUnit === "mi" ? "mi" : "km" });
+    }, () => { if (active) setPreviewPreferences(null); });
+    return () => { active = false; unsubscribe(); };
+  }, [uid]);
   const [programRoutineKey, setProgramRoutineKey] = useState<string | null>(null);
   const [savedProgram, setSavedProgram] = useState<{id:string;routineCount:number;hasRun?:boolean}|null>(null);
   const [pageSize, setPageSize] = useState(40),
@@ -408,6 +422,13 @@ export function SharingDialogs({
   const sentPreview = selectedItem && !("sender" in selectedItem);
   const programPlan = outgoing && isSharedProgram(outgoing) ? outgoing : null;
   const programRoutine = programPlan?.routines.find(r => r.key === programRoutineKey);
+  const receivedWorkout = step === "preview" && !!snapshot && !sentPreview && !programPlan;
+  const backToSharing = () => {
+    setSelectedItem(null);
+    setPlan(null);
+    setSnapshot(null);
+    setStep("center");
+  };
   const status = error || feedback || busy ? (
     <View style={{ gap: 14 }}>
       {!!error && <Text accessibilityRole="alert" style={{ color: colors.danger }}>{error}</Text>}
@@ -492,12 +513,18 @@ export function SharingDialogs({
       ) : (
         <>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flexShrink: 0 }}>
+            {receivedWorkout && screen === "center" && (
+              <Pressable accessibilityRole="button" accessibilityLabel="Back to Sharing" disabled={busy} onPress={backToSharing}
+                style={{ width: 44, height: 44, alignItems: "center", justifyContent: "center" }}>
+                <ChevronLeft color={colors.ink} size={22} strokeWidth={1.5} />
+              </Pressable>
+            )}
             <View style={{ flex: 1, flexDirection: "row", alignItems: "center" }}>
             <Text
               accessibilityRole="header"
               style={[styles.modalTitle, { flexShrink: 1, marginBottom: 0 }]}
             >
-              {title}
+              {receivedWorkout ? plan?.title : title}
             </Text>
             {(step === "center" || step === "preview" && !!programPlan) && (
               <NotebookInfoButton
@@ -918,21 +945,21 @@ export function SharingDialogs({
               }
             </>
           ) : step === "program-routine" && programRoutine ? (
-            <><SharingPlanPreview plan={programRoutine.plan} showTitle={false}/><SharingButton label="Back to program" onPress={()=>setStep("preview")} busy={busy}/></>
+            <><SharingPlanPreview plan={programRoutine.plan} showTitle={false} units={previewUnits}/><SharingButton label="Back to program" onPress={()=>setStep("preview")} busy={busy}/></>
           ) : step === "program-saved" && programPlan && savedProgram ? (
             <><View style={{gap:8}}><Text style={styles.sessionTitle}>{programPlan.title}</Text><Text style={styles.muted}>{programPlan.days.length}-day cycle · {savedProgram.routineCount} {savedProgram.routineCount === 1 ? "routine" : "routines"} saved</Text></View><View style={{gap:16,marginVertical:6}}><Text style={styles.modalText}>Saved to My programs and My routines. Changes by the sender will not change your copies.</Text><Text style={styles.muted}>Your current program and unfinished workout are unchanged.</Text></View><SharingButton label={savedProgram.hasRun ? "View program" : "Start program"} primary onPress={()=>openSavedProgram(!savedProgram.hasRun)} busy={busy}/><SharingButton label="View in My programs" onPress={()=>openSavedProgram()} busy={busy}/><SharingButton label="Done" onPress={onClose} busy={busy}/></>
           ) : plan ? (
             <>
               {screen === "send" || !snapshot ? <AppGuideTip inDialog topic="sharing" id={`share-${planWord}`} title={`Share your ${planWord}`}>Send it to someone in Lastrep, or create a link they can open.</AppGuideTip> : !sentPreview && programPlan ? <AppGuideTip inDialog topic="sharing" id="receive-program" title="Keep this program">Save to My programs adds your own copy. After saving, you can choose Start program when you are ready to use it.</AppGuideTip> : null}
               {snapshot && !sentPreview && !programPlan && (
-                <Text style={styles.muted}>
+                <Text style={[styles.muted, { fontSize: 14, lineHeight: 20 }]}>
                   From {snapshot.sender.nickname}
                   {snapshot.sender.username
                     ? ` · @${snapshot.sender.username}`
                     : ""}
                 </Text>
               )}
-              {outgoing && isSharedProgram(outgoing) ? <SharingProgramPreview plan={outgoing} sender={snapshot && !sentPreview ? snapshot.sender : undefined} onRoutine={(key)=>{setProgramRoutineKey(key);setStep("program-routine");}}/> : outgoing ? <SharingPlanPreview plan={outgoing}/> : null}
+              {outgoing && isSharedProgram(outgoing) ? <SharingProgramPreview plan={outgoing} sender={snapshot && !sentPreview ? snapshot.sender : undefined} onRoutine={(key)=>{setProgramRoutineKey(key);setStep("program-routine");}}/> : outgoing ? <SharingPlanPreview plan={outgoing} showTitle={!receivedWorkout} units={previewUnits}/> : null}
               {screen === "send" || !snapshot ? (
                 <>
                   <View
@@ -1035,7 +1062,7 @@ export function SharingDialogs({
                   )}
                 </>
               )}
-              {screen === "center" && (
+              {screen === "center" && !receivedWorkout && (
                 <SharingButton
                   label={"Back"}
                   onPress={() => {

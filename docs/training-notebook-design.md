@@ -57,6 +57,26 @@ the support address and distinct subjects. Omit extra email-draft and copy contr
 Shared target summaries use “Target 6–8 reps” without a colon. Place the Google
 Play icon beside its name, with both launch cards fitting one row on small screens.
 
+## Workout target chips and inline unit choices (November 26 follow-up)
+
+Workout target guidance reuses the same quiet rectangular chips as native sharing
+previews. Chips carry no selection state; the existing target-summary action opens
+the target editor. Maintain at least a 44 dp target for that action.
+Resistance kg/lbs and RPE/RIR column headings are underlined, tappable and centered
+over their existing input columns, with non-overlapping 44 dp targets. Unit choice
+applies to the exercise; effort choice explicitly applies across Lastrep and uses
+the same account preference as Profile. Canonical loads and effort ratings are
+preserved. Large-text layouts expose equivalent Load/Effort controls above rows.
+Read-only received-preview unit headings remain plain and non-interactive.
+Keep kg/lbs and cardio km/mi in their Workout column-header choices only,
+without duplicate selectors in the exercise three-dot menu. Cardio rows have a
+Set column with ordinary row numbers. Its Rest control stays compact when off;
+the timer sheet offers Off for both cardio and resistance, alongside durations.
+Off cancels an active timer and suppresses automatic rest after completion.
+Both exercise modes show the compact Rest label when off.
+New cardio without a saved rest prescription starts with rest off. Existing
+saved durations and running clocks are preserved unless the user changes them.
+
 ## Shared input surfaces (October 23 follow-up)
 
 All editable input fields across screens and popups use the Workout kg/Reps/RPE
@@ -3076,6 +3096,10 @@ counters are superseded; preserve their review history, not their presentation.
 - Keep targets above the set table. Show only roles currently in the exercise.
   Normal uses exercise defaults; Top and Back-off can override them through the
   existing Targets editor. Hiding a role does not erase its saved override.
+- Name the target selector rows Defaults, Top and Back-off. Use Default targets,
+  Top targets or Back-off targets as the editor title; keep the exercise name
+  unchanged rather than appending the group name to it. Use defaults restores
+  shared targets without changing recorded effort.
 - Keep one Today's Plan exercise heading, with separate group prescriptions,
   reasons and selectable changes beneath it. Align group text whether or not a
   checkbox is present. No additional per-exercise progression action is added.
@@ -3086,3 +3110,12 @@ counters are superseded; preserve their review history, not their presentation.
   set roles must not hide or shift previous values. Copy Last uses the same
   mapping. Showing history does not imply it qualifies for automatic progression;
   explain missing matching roles separately from missing recorded effort.
+
+#### Shared Top/Back-off preview rows (November 26)
+
+Keep each Top and Back-off set visible on its own row in shared-workout and
+program-day workout previews. Number repeated roles (Back-off 1, Back-off 2).
+Keep the existing compact summaries for identical ordinary sets. Separate the
+exercise heading, targets, rest/tempo, instructions and set rows with consistent
+gaps and retain text insets inside exercise blocks; use equal vertical padding
+above/below each exercise and each set row.

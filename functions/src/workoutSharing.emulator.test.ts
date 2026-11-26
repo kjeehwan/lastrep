@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { initializeApp, getApps } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
+import { refreshSharingNameIndex } from "./sharingSearchMigration";
 import {
   handleWorkoutSharing,
   deleteWorkoutSharingForAccount,
@@ -112,6 +113,36 @@ describe.skipIf(!enabled)("workout sharing Firestore transactions", () => {
     await call({ op: "respond", deliveryId: second.id, action: "read" }, two);
     expect(await states()).toEqual({ [one]: "viewed", [two]: "viewed" });
     await expect(call({ op: "respond", deliveryId: first.id, action: "read" }, two)).rejects.toMatchObject({ code: "not-found" });
+  });
+  it("finds any nickname word, deduplicates results and keeps opt-out behavior", async () => {
+    const uid=`word-search-${suffix}`;
+    await getFirestore().doc(`users/${uid}`).set({nickname:"Program QA Alex"});
+    await call({op:"username",username:`word.${suffix}`},uid);
+    await call({op:"enabled",enabled:true},uid);
+    for (const query of ["Alex","AL","QA Alex","Program"]) {
+      const result=await call({op:"search",query},a) as any;
+      expect(result.people.filter((person:any)=>person.uid===uid)).toHaveLength(1);
+    }
+    expect(((await call({op:"search",query:"lex"},a)) as any).people.some((person:any)=>person.uid===uid)).toBe(false);
+    await call({op:"enabled",enabled:false},uid);
+    expect(((await call({op:"search",query:"Alex"},a)) as any).people.some((person:any)=>person.uid===uid)).toBe(false);
+  });
+  it("refreshes existing opted-in directory entries without publishing disabled accounts", async () => {
+    const uid=`old-search-${suffix}`,off=`off-search-${suffix}`,db=getFirestore();
+    for(const [id,enabled] of [[uid,true],[off,false]] as const){
+      await db.doc(`users/${id}`).set({nickname:"Old QA Alex"});
+      await db.doc(`users/${id}/sharing/settings`).set({enabled,username:id});
+      await db.doc(`sharingDirectory/${id}`).set({uid:id,username:id,nickname:"Old QA Alex",nameKey:"old qa alex"});
+    }
+    await refreshSharingNameIndex(db);
+    expect((await db.doc(`sharingDirectory/${uid}`).get()).data()?.namePrefixes).toBeUndefined();
+    await refreshSharingNameIndex(db,true);
+    expect((await db.doc(`sharingDirectory/${uid}`).get()).data()?.namePrefixes).toContain("alex");
+    expect((await db.doc(`sharingDirectory/${off}`).get()).data()?.namePrefixes).toBeUndefined();
+    await db.doc(`sharingDirectory/${off}`).delete();
+    const result=await call({op:"search",query:"Alex"},a) as any;
+    expect(result.people.some((person:any)=>person.uid===uid)).toBe(true);
+    await db.doc(`sharingDirectory/${uid}`).delete();
   });
   it("defaults sharing off, keeps identity separate, and removes opted-out accounts from discovery", async () => {
     const uid = `fresh-${suffix}`;

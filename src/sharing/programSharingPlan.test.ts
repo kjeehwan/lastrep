@@ -2,12 +2,20 @@ import { describe, expect, it } from "vitest";
 import { parseSharedPlan, type SharedProgramPlan } from "./sharingContract";
 import { programToSharingPlan } from "./programSharingPlan";
 import { omitSharingWeights } from "./sharingPlan";
-import { sharingPrescriptionRows } from "./sharingPresentation";
+import { sharingSetTable } from "./sharingSetTable";
 import type { Routine } from "../workouts/workoutLog/workoutLogModel";
 
 const routine: Routine={id:"private-routine-id",name:"Chest",createdAt:null,updatedAt:null,exercises:[{name:"Bench press",notes:"private personal note",targets:{minReps:6,maxReps:8,targetRpe:8},tempo:"3-0-1-0",restSec:120,unit:"kg",sets:[{reps:"8",defaultWeightKg:80,targetRpe:8,setType:"normal"},{reps:"8",defaultWeightKg:80,targetRpe:8,setType:"normal"}]}]};
 const build=()=>programToSharingPlan({id:"private-program",name:"Cycle",runId:"private-run",status:"saved",updatedAt:123,days:[{type:"workout",routineId:routine.id,title:"Chest"},{type:"rest",routineId:null,title:"Rest"},{type:"workout",routineId:routine.id,title:"Chest again"}]},[routine],"rir");
 describe("program sharing boundary",()=>{
+  it("renders every shared program set individually without changing the snapshot",()=>{
+    const exercise=build().routines[0].plan.exercises[0];
+    exercise.sets=[{...exercise.sets[0],setType:"top"},{...exercise.sets[0],setType:"backoff"},{...exercise.sets[0],setType:"backoff"}];
+    const before=structuredClone(exercise);
+    expect(sharingSetTable(exercise,"rpe").rows.map(row=>row.marker)).toEqual(["T","B","B"]);
+    expect(exercise).toEqual(before);
+    expect(sharingSetTable(build().routines[0].plan.exercises[0],"rpe").rows).toHaveLength(2);
+  });
   it("preserves role targets in program routines",()=>{
     const copy=structuredClone(routine);copy.exercises[0].sets[0].setType="top";copy.exercises[0].sets[1].setType="backoff";
     copy.exercises[0].groupTargets={backoff:{minReps:8,maxReps:10,targetRpe:9}};
@@ -28,7 +36,11 @@ describe("program sharing boundary",()=>{
     const p=build();p.days=Array.from({length:15},()=>p.days[0]);expect(()=>parseSharedPlan(p)).toThrow();
     const long=build();long.routines=Array.from({length:14},(_,i)=>({key:`r${i}`,plan:{...long.routines[0].plan,exercises:Array.from({length:20},()=>long.routines[0].plan.exercises[0])}}));long.days=long.routines.map(r=>({type:"workout",title:"Day",routineKey:r.key}));expect(()=>parseSharedPlan(long)).toThrow(/too large/);
   });
-  it("groups identical prescriptions while keeping warm-up and different target effort separate",()=>{
-    const e=build().routines[0].plan.exercises[0];e.sets.unshift({...e.sets[0],setType:"warmup",weightKg:20,reps:"4"});expect(sharingPrescriptionRows(e,"rir")).toEqual(["Warm-up · 20 kg × 4 reps · Target RIR 2","2 sets · 80 kg × 8 reps · Target RIR 2"]);e.sets[2].targetRpe=9;expect(sharingPrescriptionRows(e,"rir")).toHaveLength(3);
+  it("keeps warm-up and ordinary sets individually visible with their target effort",()=>{
+    const exercise=build().routines[0].plan.exercises[0];
+    exercise.sets.unshift({...exercise.sets[0],setType:"warmup",weightKg:20,reps:"4"});
+    expect(sharingSetTable(exercise,"rir").rows.map(row=>row.marker)).toEqual(["W","1","2"]);
+    exercise.sets[2].targetRpe=9;
+    expect(sharingSetTable(exercise,"rir").rows[2].effort).toBe("1");
   });
 });

@@ -31,7 +31,6 @@ type Props = {
   toggleFavoriteExercise: (name: string) => void;
   activeActionIsFavorite: boolean;
   deleteExercise: (id: string) => void;
-  toggleExerciseUnit: (id: string, unit: Unit) => void;
 };
 export function WorkoutExerciseActions({
   openProgressionSettings,
@@ -55,7 +54,6 @@ export function WorkoutExerciseActions({
   toggleFavoriteExercise,
   activeActionIsFavorite,
   deleteExercise,
-  toggleExerciseUnit,
 }: Props) {
   return (
     <>
@@ -63,44 +61,7 @@ export function WorkoutExerciseActions({
         {activeActionExercise ? activeActionExercise.name : "Exercise Options"}
       </Text>
 
-      <View style={styles.exerciseOptionRow}>
-        <Ionicons
-          name={
-            activeActionMode === "cardio" ? "map-outline" : "barbell-outline"
-          }
-          size={18}
-          color={colors.muted}
-        />
-        <View style={styles.exerciseOptionUnits}>
-          {(activeActionMode === "cardio"
-            ? (["km", "mi"] as Unit[])
-            : (["kg", "lbs"] as Unit[])
-          ).map((option) => (
-            <TouchableOpacity
-              key={`unit-${option}`}
-              style={[
-                styles.answerChip,
-                styles.exerciseUnitChip,
-                activeActionUnit === option && styles.answerChipActive,
-              ]}
-              onPress={() =>
-                activeExerciseActionId
-                  ? toggleExerciseUnit(activeExerciseActionId, option)
-                  : undefined
-              }
-            >
-              <Text
-                style={[
-                  styles.answerText,
-                  activeActionUnit === option && styles.answerTextActive,
-                ]}
-              >
-                {option}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </View>
+
 
       {activeActionMode === "resistance" && activeActionExercise && openExerciseTargets ? <TouchableOpacity accessibilityRole="button" accessibilityLabel="Exercise targets" style={styles.exerciseOptionRow} onPress={() => { closeExerciseActions(); openExerciseTargets(activeActionExercise.id); }}>
         <Ionicons name="locate-outline" size={18} color={colors.muted} />
