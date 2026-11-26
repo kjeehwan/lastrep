@@ -368,3 +368,206 @@ backend access rules remain authoritative. Android 16 emulator checks with an
 intentional six-second local-only delay confirmed stable pending on/off positions,
 repeat-tap prevention, successful completion and rollback with feedback after a
 simulated failure. The emulator's delay routing and setting were restored afterward.
+
+## Nickname word search follow-up (November 26, 2026)
+
+The pending change adds bounded `namePrefixes` to sharingDirectory entries,
+allowing Alex or QA Alex to find Program QA Alex. Existing username/full-name
+prefix queries stay available during rollout; results are deduplicated and
+bounded by the existing limits. Sharing-off still removes the directory entry.
+Identity saves and the syncSharingNickname trigger both regenerate prefixes.
+
+Before rollout, build the backend and deploy workoutSharing plus
+syncSharingNickname. Refresh existing entries using operator credentials:
+
+```powershell
+node functions/scripts/refresh-sharing-name-index.js --project=lastrep-ebac5
+# Review aggregate dry-run counts, then apply the same refresh:
+node functions/scripts/refresh-sharing-name-index.js --project=lastrep-ebac5 --apply
+```
+
+The refresh only updates existing directory entries after transactionally checking
+current sharing consent, live account state and username identity. It does not
+create entries, enable sharing or alter workout/health records. It is repeatable
+and emits counts rather than identities. Single-field array indexing is used;
+no composite index is required. Existing privacy wording covers nickname search;
+there is no new provider or additional user input.
+
+Verification: three prefix-index unit tests and all 103 disposable Firebase
+boundary tests passed, including legacy-index refresh, dry-run, duplicate
+results, word/phrase prefixes and opt-out behavior. Backend build, application
+TypeScript and lint passed. Production deployment/index refresh remain pending.
+
+## Shared-plan readability and QA authorization (November 26, 2026)
+
+- Native workout previews render Top and Back-off sets separately, numbering
+  repeated roles. Identical ordinary sets retain their existing compact summary.
+  Exercise headings, target summaries, rest/tempo, instructions and set rows
+  use separate spaced groups, with additional space between exercises. Program day
+  workout previews reuse the same component. Hosted previews are unchanged.
+- The user authorized processing their incoming test-sharing requests on the
+  task-created QA accounts: accepting the request and inspecting its snapshot
+  and role/target data. This does not authorize processing unrelated requests or
+  importing/modifying personal workouts, routines or health records. Keep test
+  account credentials and delivery identifiers in ignored local fixtures.
+- Accepted the older pending sender request on the QA recipient. A newer send
+  attempt while a sender request is pending returns awaiting-acceptance without
+  a new delivery; the user was asked to resend after acceptance. After the user resent it, the incoming snapshot was verified: one Top and
+  two Back-off sets, exercise targets and a Back-off target override all
+  arrived intact. No personal workout was imported or changed.
+
+Connected-phone verification: the dev package rendered the received synthetic
+Top/Back-off workout using the updated component. Both Back-off rows were
+separate and readable after scrolling the preview; target/metadata/instruction
+groups were spaced apart. No workout or routine was imported. Target-editor
+labels have compile checks but no new phone editor review in this pass.
+
+### Received-workout layout follow-up
+
+The received workout uses its name once in the modal header, followed by the
+sender. Back to Sharing is a header control; Close still dismisses sharing.
+The footer keeps Use for a new workout and Save to My routines. Other sharing
+steps retain their existing navigation. Exercise blocks use the modal surface
+with fine separators, compact guidance and aligned read-only set labels and
+prescriptions. Instructions follow the sets; long instructions expand using an
+Instructions row. Enlarged text and narrow screens stack prescription fields.
+A structured presentation helper retains grouping, units and target effort;
+no snapshot, import or persistence contract changed.
+
+Verification: 13 focused sharing tests, TypeScript, affected-file lint and diff
+whitespace checks passed. On the connected Android 13 dev app, inspected the
+received synthetic workout, scrolled to its instructions, returned to Inbox,
+reopened it and opened/closed sender options. No workout/routine was imported
+or changed. Dark mode, enlarged text and long-instruction expansion were not
+newly checked on a device in this pass. These UI changes are not in v50.
+
+### Read-only set tables (November 26, 2026)
+
+Supersedes the compact grouped prescription rows above: every native preview set
+now has its own row. Numbered exercise headings precede target summaries,
+rest/tempo, instructions and the table. Resistance headers are Set / kg or lbs /
+Reps; cardio headers are Set / Duration / Distance (km or mi). Markers match the
+workout log: numbers, W, T, B, D and F. Each Set header opens the marker explanation when tapped; a dotted underline
+indicates this action without a separate help icon. Units are not tappable.
+
+The active account's user-document weightUnit and distanceUnit preferences drive
+presentation conversion only. The subscription is scoped to the dialog UID,
+cleared from view on account changes and unsubscribed on dismissal; a failed or
+unsigned preference read falls back to the snapshot's units. Snapshot and imported
+workout data are unchanged. A Target RPE/RIR column appears only for explicit set
+targets differing from applicable Normal/Top/Back-off guidance; missing set effort
+is not filled from that guidance. Long instructions remain expandable above the
+sets. Horizontal scrolling preserves columns on narrow/enlarged-text layouts.
+
+Validation: 17 focused sharing tests cover individual rows, markers, group target
+comparison, missing effort/load, unit conversion without source mutation and
+cardio duration/distance. TypeScript, affected-file lint and whitespace checks
+passed. Android 13 phone review used the six-exercise synthetic received workout:
+set help, numbered exercises, individual Normal/Top/Back-off/Drop rows and
+instruction expansion/collapse. No workout/routine was imported or edited.
+Alternate preferred units and enlarged text have model/code checks, not a new
+phone settings review. Hosted browser previews are unchanged.
+
+### Guidance chips and workout totals
+
+Target summaries use quiet rectangular chips with the notebook subtle background;
+rest and tempo form a separate wrapping row of chips. All table columns, including
+Set, have equal widths, with headers and numbers centered. Tapping Set is supported
+on every exercise. Instructions remain before the table.
+
+A summary above the first exercise shows working resistance-set count and planned
+load-times-reps volume in the recipient's preferred weight unit. Warm-ups and cardio
+are excluded from both totals. Any absent working-set weight suppresses the whole
+volume total and shows Weights not included; explicit zero loads remain zero.
+No shared snapshot, import or record is mutated by these presentation changes.
+Twenty focused tests passed, including totals, partial/missing weights, zero loads,
+canonical-unit conversion and source preservation. TypeScript and lint passed.
+Connected Android 13 dev-app review confirmed the six-exercise sample totals
+(14 working sets, 3,992.5 kg planned volume), guidance chips and the Set-header
+explanation opening/dismissing. No workout or routine was imported or modified.
+
+### Workout-screen follow-up
+
+Workout target summaries and sharing previews now reuse NotebookGuidanceChip.
+Workout kg/lbs headers open an exercise-specific unit choice using the existing
+canonical-weight display conversion and draft unit persistence. Effort headers
+open an RPE/RIR choice labeled as applying across Lastrep. This writes only the
+user effortScale field; existing profile subscriptions update the other screens.
+Opening and canceling either choice changes no preference. Keyboard dismissal
+precedes selection; duplicate effort saves are guarded and errors retain retry.
+Both selections check the signed-in account again before applying. No record,
+target or historical effort is rewritten; Sharing's read-only unit behavior stays
+unchanged. Alternate Load/Effort actions remain available with enlarged text.
+
+Verification: TypeScript and affected-file lint passed; 27 focused effort, target,
+set-presentation and sharing-table tests passed. Connected Android 13 review
+confirmed quiet target chips, column alignment and both weight/effort choices with cancellation.
+Actual unit/effort selection was not tested against the user's saved draft/profile;
+preferences and set values were left unchanged. Search deployment/index refresh
+remain pending, so Alex word search is not yet available in the deployed backend.
+
+The unit/effort header dialogs now use WorkoutDisplayChoiceSheet with the same
+WorkoutChoiceChips component as the exercise three-dot menu. Selection is conveyed
+by filled/background and contrasting text colors plus accessibility selected state;
+labels no longer append (current). Choices apply on selection, with Done closing
+the sheet. The effort sheet explains RPE 6-10 and RIR 0-4 and their endpoints.
+It retains account checks, disables repeat selection/dismissal while saving, and
+shows retryable errors inline. The modal is included in native set-edit suspension.
+Native Android 13 review confirmed selected/unselected colors and no (current)
+suffix in both new sheets, weight-sheet Done dismissal and the revised effort
+explanation. Preferences were left unchanged; actual selection writes were not
+exercised against the personal account. Twenty focused effort/target/set tests,
+TypeScript, affected-file lint and whitespace checks passed.
+
+### Cardio unit header, row numbers and optional rest
+
+Cardio km/mi opens the same exercise-specific choice sheet as resistance kg/lbs.
+All unit selectors are removed from the exercise three-dot menu. Shared-plan
+editing retains its isolated local unit-selector path through the same card
+headers; received previews remain read-only. Canonical distance values are
+unchanged by presentation-unit switches. Cardio displays ordinary numbered rows,
+including a single continuous bout as Set 1, without changing stored set types.
+
+Newly built cardio uses an explicit existing plannedRestSec value: remembered
+exercise rest or prior saved rest when available, otherwise zero. Existing drafts
+and routine prescriptions are not migrated. Cardio's timer sheet includes Off;
+zero rest shows Rest inline, disables Start and never requests/schedules an alert
+on completion. Switching an active timer to Off cancels it. Configured durations
+retain normal interval completion behavior. Resistance defaults remain unchanged.
+
+Verification: TypeScript, affected-file lint, whitespace checks and 36 focused
+workout/sharing tests passed, including disabled/stale rest-clock cases. The
+existing emulator failed ADB authorization and was stopped without restarting the
+phone's ADB server. Phone verification instead used a temporary isolated route
+mounting the real Workout card, unit, options and rest-sheet components with
+synthetic in-memory state and no Firebase/draft/notification writes. Verified
+numbered rows, km-to-mi display conversion, no menu unit selectors, Rest Off,
+configured Start, switching back Off and completion without starting rest, plus
+adding a third numbered row. This verifies native components, not a real saved
+workout's full persistence/background-alert flow. The route was removed after
+returning to normal Workout; source/screenshots remain ignored in .dev-tools.
+No personal workouts, health records, unit preferences or effort preferences were
+edited. Enlarged-text distance switching has code review, not a new device check.
+
+The Rest Off option is now shared by resistance and cardio. The timer sheet no
+longer gates Off by exercise mode. Existing zero-duration guards, alert cancellation
+and zero-clock tests apply to both; resistance default durations are unchanged.
+The compact Rest label is used for stopped zero-duration clocks in both modes.
+Nine timer tests, TypeScript, affected-file lint and whitespace checks passed.
+
+### Final delivery review ? November 26, 2026
+
+Final review removed the obsolete grouped-set formatter and moved its coverage to
+sharingSetTable, the model used by the active preview. All 1,047 unit tests passed;
+104 environment-gated tests were skipped in that run. The separate Firebase
+boundary run passed 103 tests without skips. Functions build, TypeScript, full
+lint, Android native verification and web export passed. One concurrent run timed
+out in an unchanged SVG raster test; the full standalone rerun passed.
+
+Architecture review confirmed canonical values and shared snapshots are preserved,
+exercise units remain draft-scoped, effort preference remains account-scoped, and
+nickname indexing respects existing sharing opt-in. Production rollout requires
+both workoutSharing and syncSharingNickname plus refreshing existing directory
+entries. The production dry run found seven existing entries requiring refresh;
+no directory writes occurred during that check. Device coverage and remaining
+persistence/background-alert limits are recorded above.

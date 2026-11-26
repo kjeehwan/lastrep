@@ -6,6 +6,7 @@ import {
   sharingHistoryMs,
 } from "./sharingRetention";
 import { createHash, randomBytes } from "node:crypto";
+import { sharingNamePrefixes } from "./sharingNameSearch";
 import {
   getFirestore,
   Timestamp,
@@ -139,6 +140,7 @@ async function saveIdentity(uid: string, input: Record<string, unknown>) {
       tx.set(directory, {
         ...p,
         nameKey: sharingSearchKey(p.nickname),
+        namePrefixes: sharingNamePrefixes(p.nickname),
         updatedAt: Timestamp.now(),
       });
     } else tx.delete(directory);
@@ -151,8 +153,7 @@ async function search(uid: string, input: Record<string, unknown>) {
   if (!defaults((await settings(uid).get()).data()).enabled)
     fail("permission-denied", "Enable sharing to find people.");
   await throttle(uid, "search", SHARING_LIMITS.searchPerMinute);
-  const results = await Promise.all(
-    ["username", "nameKey"].map((field) =>
+  const prefixQueries = ["username", "nameKey"].map((field) =>
       db()
         .collection("sharingDirectory")
         .orderBy(field)
@@ -160,8 +161,11 @@ async function search(uid: string, input: Record<string, unknown>) {
         .endAt(q + "\uf8ff")
         .limit(20)
         .get(),
-    ),
-  );
+    );
+  const results = await Promise.all([
+    ...prefixQueries,
+    db().collection("sharingDirectory").where("namePrefixes", "array-contains", q).limit(20).get(),
+  ]);
   const found = new Map<string, SharingPerson>();
   results.forEach((r) =>
     r.docs.forEach((doc) => {
@@ -885,6 +889,7 @@ export const syncSharingNickname = functions
       tx.set(db().doc(`sharingDirectory/${uid}`), {
         ...p,
         nameKey: sharingSearchKey(p.nickname),
+        namePrefixes: sharingNamePrefixes(p.nickname),
         updatedAt: Timestamp.now(),
       });
     });

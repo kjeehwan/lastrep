@@ -1,3 +1,4 @@
+import { NotebookGuidanceChip } from "../../ui/notebook/NotebookGuidanceChip";
 import { exerciseDisplayUnit, type DistanceUnit } from "./exercisePresentation";
 import { AndroidSetDeleteAction } from "./AndroidSetDeleteAction";
 import { CardioZoneControl } from "./CardioZoneControl";
@@ -16,7 +17,7 @@ import { Gesture } from "react-native-gesture-handler";
 import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import WorkoutGestureTextInput from "../../components/WorkoutGestureTextInput";
 import { NotebookTextInput } from "../../ui/notebook/NotebookTextInput";
-import { notebookRowHeight, notebookFonts } from "../../ui/notebook/tokens";
+import { notebookRowHeight } from "../../ui/notebook/tokens";
 import {
   effortInputValue,
   effortLabel,
@@ -90,6 +91,8 @@ export type WorkoutExerciseCardsProps = {
     set: SetEntry;
   } | null;
   cardActions: {
+    changeExerciseUnit?: (id: string, unit: Unit) => void;
+    changeEffortScale?: () => void;
     openExerciseTargets?: (id: string) => void;
     openWarmup: (id: string) => void;
     revealNote: () => void;
@@ -231,6 +234,7 @@ export function useWorkoutExerciseCards({
               ? "lbs"
               : "Weight";
         const repsLabel = isCardio ? "Time" : "Reps";
+        const targetChips = exerciseTargetSummaries(ex, effortScale);
         const rpeLabel = isCardio ? "Zone" : effortLabel(effortScale);
         const previousSets =
           previousExerciseSetsByName.get(normalizeExerciseName(ex.name)) ?? [];
@@ -415,7 +419,7 @@ export function useWorkoutExerciseCards({
                 accessibilityRole="button" accessibilityLabel={`${ex.name}, rest timer`}
               >
                 <Clock3 size={16} strokeWidth={1.5} color={colors.muted} />
-                {planMode ? (
+                {!restTimer.running && restTimer.remainingSec <= 0 ? <Text style={styles.restTimerInlineText}>Rest</Text> : planMode ? (
                   <Text style={styles.restTimerInlineText}>
                     {clockLabel(restTimer.remainingSec).padStart(5, "0")}
                   </Text>
@@ -454,7 +458,11 @@ export function useWorkoutExerciseCards({
                 style={[styles.input, styles.metaInput]}
               />
             </View>
-            {!isCardio && exerciseTargetSummaries(ex, effortScale).join("\n") ? <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Edit ${ex.name} targets`} onPress={() => cardActions.openExerciseTargets?.(ex.id)} style={{ minHeight: 44, justifyContent: "center", marginTop: 4 }}><Text style={[styles.muted, { fontFamily: notebookFonts.body, fontSize: 14, lineHeight: 20, includeFontPadding: false }]}>{exerciseTargetSummaries(ex, effortScale).join("\n")}</Text></TouchableOpacity> : null}
+            {!isCardio && targetChips.length ? <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Edit ${ex.name} targets`} onPress={() => cardActions.openExerciseTargets?.(ex.id)} style={{ minHeight: 44, justifyContent: "center", marginTop: 4 }}>
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, paddingVertical: 4 }}>
+                {targetChips.map(text => <NotebookGuidanceChip key={text} text={text.replace(/^(Normal|Top|Back-off) \u00b7 Target /, "$1 ")} />)}
+              </View>
+            </TouchableOpacity> : null}
             {!isCardio ? (
               <TouchableOpacity
                 accessibilityRole="button"
@@ -469,6 +477,10 @@ export function useWorkoutExerciseCards({
                 <Text style={styles.linkText}>+ Add warm-up</Text>
               </TouchableOpacity>
             ) : null}
+            {largeText && <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>
+              {!!cardActions.changeExerciseUnit && <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Change ${ex.name} ${isCardio ? "distance" : "weight"} unit, currently ${unit}`} onPress={() => cardActions.changeExerciseUnit?.(ex.id, isCardio ? unit === "km" ? "mi" : "km" : unit === "kg" ? "lbs" : "kg")} style={{ minHeight: 44, minWidth: 64, justifyContent: "center" }}><Text style={[styles.muted, { textDecorationLine: "underline" }]}>{isCardio ? "Distance" : "Load"}: {unit}</Text></TouchableOpacity>}
+              {!isCardio && !!cardActions.changeEffortScale && <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Change effort scale, currently ${rpeLabel}`} onPress={cardActions.changeEffortScale} style={{ minHeight: 44, minWidth: 64, justifyContent: "center" }}><Text style={[styles.muted, { textDecorationLine: "underline" }]}>Effort: {rpeLabel}</Text></TouchableOpacity>}
+            </View>}
             <View
               style={[
                 styles.setHeaderRow,
@@ -477,11 +489,7 @@ export function useWorkoutExerciseCards({
                 usesNativeSetRows && styles.nativeSetHeaderRow,
               ]}
             >
-              {!isCardio ? (
-                <Text style={[styles.setHeaderText, styles.setHeaderSet]}>
-                  Set
-                </Text>
-              ) : null}
+              <Text style={[styles.setHeaderText, styles.setHeaderSet]}>Set</Text>
               {!planMode ? (
                 <Text
                   style={[
@@ -499,37 +507,25 @@ export function useWorkoutExerciseCards({
                   usesNativeSetRows && styles.nativeSetHeaderInputsGroup,
                 ]}
               >
-                <Text
-                  style={[
-                    styles.setHeaderText,
-                    styles.setColReps,
-                    usesNativeSetRows && styles.nativeSetHeaderInput,
-                    planMode && usesNativeSetRows && { marginLeft: 12 },
-                  ]}
-                >
-                  {isCardio ? "Time" : weightLabel}
-                </Text>
-                <Text
-                  style={[
-                    styles.setHeaderText,
-                    styles.setColWeight,
-                    usesNativeSetRows && styles.nativeSetHeaderInput,
-                    planMode && usesNativeSetRows && { marginLeft: 12 },
-                  ]}
-                >
-                  {isCardio ? String(unit).toLowerCase() : repsLabel}
-                </Text>
+                {isCardio ? <Text style={[styles.setHeaderText, styles.setColReps, usesNativeSetRows && styles.nativeSetHeaderInput]}>Time</Text> :
+                  <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Change ${ex.name} ${isCardio ? "distance" : "weight"} unit, currently ${unit}`} disabled={!cardActions.changeExerciseUnit}
+                    onPress={() => cardActions.changeExerciseUnit?.(ex.id, isCardio ? unit === "km" ? "mi" : "km" : unit === "kg" ? "lbs" : "kg")}
+                    style={{ flex: 1, marginLeft: usesNativeSetRows ? planMode ? 12 : 4 : 0, minHeight: 44, justifyContent: "center", alignItems: "center" }}>
+                    <Text style={[styles.setHeaderText, cardActions.changeExerciseUnit && { textDecorationLine: "underline" }]}>{weightLabel}</Text>
+                  </TouchableOpacity>
+                }
+                {isCardio ? <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Change ${ex.name} distance unit, currently ${unit}`} disabled={!cardActions.changeExerciseUnit}
+                  onPress={() => cardActions.changeExerciseUnit?.(ex.id, unit === "km" ? "mi" : "km")}
+                  style={{ flex: 1, minHeight: 44, alignItems: "center", justifyContent: "center" }}>
+                  <Text style={[styles.setHeaderText, cardActions.changeExerciseUnit && { textDecorationLine: "underline" }]}>{unit}</Text>
+                </TouchableOpacity> : <Text style={[styles.setHeaderText, styles.setColWeight, usesNativeSetRows && styles.nativeSetHeaderInput, planMode && usesNativeSetRows && { marginLeft: 12 }]}>{repsLabel}</Text>}
+
                 {!isCardio ? (
-                  <Text
-                    style={[
-                      styles.setHeaderText,
-                      styles.setColRpe,
-                      usesNativeSetRows && styles.nativeSetHeaderInput,
-                      planMode && usesNativeSetRows && { marginLeft: 12 },
-                    ]}
-                  >
-                    {rpeLabel}
-                  </Text>
+                  <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Change effort scale, currently ${rpeLabel}`} disabled={!cardActions.changeEffortScale}
+                    onPress={cardActions.changeEffortScale}
+                    style={{ flex: usesNativeSetRows ? 1 : 0.8, marginLeft: usesNativeSetRows ? planMode ? 12 : 4 : 0, minHeight: 44, justifyContent: "center", alignItems: "center" }}>
+                    <Text style={[styles.setHeaderText, cardActions.changeEffortScale && { textDecorationLine: "underline" }]}>{rpeLabel}</Text>
+                  </TouchableOpacity>
                 ) : null}
               </View>
               {!planMode ? (
@@ -681,7 +677,7 @@ export function useWorkoutExerciseCards({
                             {getSetTypeMarker(s, idx, ex.sets)}
                           </Text>
                         </TouchableOpacity>
-                      ) : null}
+                      ) : <View style={styles.setLabelButton}><Text accessibilityLabel={`Set ${idx + 1}`} style={[styles.setLabel, isTabletLayout && styles.setLabelTablet]}>{idx + 1}</Text></View>}
                       {!planMode ? (
                         <TouchableOpacity
                           style={styles.lastSetButton}

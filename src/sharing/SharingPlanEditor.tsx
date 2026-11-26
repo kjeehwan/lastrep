@@ -1,3 +1,4 @@
+import { WorkoutDisplayChoiceSheet } from "../workouts/workoutLog/WorkoutDisplayChoiceSheet";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Keyboard,
@@ -104,6 +105,7 @@ export function SharingPlanEditor({
   } | null>(null);
   const [catalog, setCatalog] = useState(EXERCISE_CATALOG),
     [error, setError] = useState("");
+  const [unitTarget, setUnitTarget] = useState<string | null>(null);
   const [targetsId, setTargetsId] = useState<string | null>(null);
   const targetsExercise = exercises.find(exercise => exercise.id === targetsId);
   const openExerciseTargets = (id: string) => { Keyboard.dismiss(); setEditingSet(null); setTargetsId(id); };
@@ -218,6 +220,7 @@ export function SharingPlanEditor({
     setCustomExercise("");
   };
   const actions = useEventCallbacks({
+    changeExerciseUnit: (id: string) => { Keyboard.dismiss(); setEditingSet(null); setUnitTarget(id); },
     openWarmup: setWarmupId,
     revealNote: () => {},
     openExerciseDemo: async (name: string) => {
@@ -333,7 +336,7 @@ export function SharingPlanEditor({
   });
   const cards = useWorkoutExerciseCards({
     planMode: true,
-    targetsEditorOpen: !!targetsExercise,
+    targetsEditorOpen: !!targetsExercise || !!unitTarget,
     exercises,
     exerciseUnits,
     getExerciseMode: mode,
@@ -600,15 +603,15 @@ export function SharingPlanEditor({
           deleteExercise={(id) =>
             setExercises((all) => all.filter((e) => e.id !== id))
           }
-          toggleExerciseUnit={(id, unit) => {
-            change(id, (e) => ({
-              ...e,
-              sets: e.sets.map((s) => ({ ...s, weightText: undefined })),
-            }));
-            setExerciseUnits((all) => ({ ...all, [id]: unit }));
-          }}
+
         />
       </WorkoutModalShell>
+      {unitTarget && exercises.some(exercise => exercise.id === unitTarget) ? <WorkoutDisplayChoiceSheet kind={mode(exercises.find(exercise => exercise.id === unitTarget)!.name) === "cardio" ? "distance" : "weight"}
+        selected={exerciseUnits[unitTarget] ?? "kg"} onClose={() => setUnitTarget(null)} onSelect={async value => {
+          if (!["kg", "lbs", "km", "mi"].includes(value)) throw Error("Invalid unit");
+          change(unitTarget, exercise => ({ ...exercise, sets: exercise.sets.map(set => ({ ...set, weightText: undefined })) }));
+          setExerciseUnits(all => ({ ...all, [unitTarget]: value as Unit }));
+        }} /> : null}
       {warmup && (
         <WarmupSetsSheet
           key={warmup.id}

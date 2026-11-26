@@ -2,6 +2,12 @@ import { describe, expect, it } from "vitest";
 import { autoStartElapsed, advanceRest, elapsedAt, nextRestDeadlineDelay, pauseElapsed, pauseRest, startElapsed, startRest } from "./timerClock";
 
 describe("timestamp-based workout timers", () => {
+  it("keeps disabled rest timers stopped even when an old countdown remains", () => {
+    expect(startRest(undefined, 0, 100000)).toEqual({ remainingSec: 0, running: false });
+    expect(startRest({ remainingSec: 30, running: false }, 0, 100000)).toEqual({ remainingSec: 0, running: false });
+    expect(startRest({ remainingSec: 30, running: true, endsAtMs: 130000 }, 0, 100000)).toEqual({ remainingSec: 0, running: false });
+    expect(nextRestDeadlineDelay({ off: startRest(undefined, 0, 100000) }, 100000)).toBeNull();
+  });
   it("auto-starts only a never-started clock, preserving even a sub-second manual pause", () => {
     const initial = { elapsedSeconds: 0, startedAtMs: null };
     const started = autoStartElapsed(initial, 100000);

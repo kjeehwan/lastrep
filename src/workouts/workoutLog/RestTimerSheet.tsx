@@ -6,7 +6,7 @@ import { notebookFonts } from "../../ui/notebook/tokens";
 import { RestTimerText } from "./TimerText";
 import type { RestClock } from "./timerClock";
 
-const presets = { "60s": 60, "90s": 90, "120s": 120 } as const;
+const presets = { Off: 0, "60s": 60, "90s": 90, "120s": 120 } as const;
 
 /** Presentation only: the workout owns all duration, clock and dismissal state. */
 export function RestTimerSheet({ name, clock, preference, custom, onCustomChange, onPreset, onCustomApply, onReset, onToggle, onClose, needsPermission, onEnableAlerts }: {
@@ -25,7 +25,7 @@ export function RestTimerSheet({ name, clock, preference, custom, onCustomChange
     <View style={{ borderTopWidth: 1, borderTopColor: colors.rule, paddingTop: 12 }}>
       <View style={{ flexDirection: large ? "column" : "row", gap: 12 }}>
         <View style={{ flex: large ? undefined : 1 }}><ProfileAction label="Reset" onPress={onReset} /></View>
-        <View style={{ flex: large ? undefined : 1 }}><ProfileAction primary label={clock.running ? "Pause" : "Start"} onPress={onToggle} /></View>
+        <View style={{ flex: large ? undefined : 1 }}><ProfileAction primary label={clock.running ? "Pause" : "Start"} disabled={preference <= 0} onPress={onToggle} /></View>
       </View>
     </View>
   }>
